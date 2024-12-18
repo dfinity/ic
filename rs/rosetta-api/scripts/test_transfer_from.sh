@@ -17,6 +17,7 @@ NUM_OF_BATCHES=50
 NUM_OF_TRANSFERS_PER_BATCH=20 # 100 fails for some reason related to the testnet setup
 AMOUNT_PER_TRANSFER="1:nat"
 AMOUNT_PER_APPROVAL="1000000000:nat"
+export DFX_DISABLE_QUERY_VERIFICATION=1 # Query verification fails on dynamic testnets with recovered mainnet NNS state, so disable query verification
 
 dfx identity use "$NNS_TEST_ID"
 NNS_TEST_PRINCIPAL=$(dfx identity get-principal)

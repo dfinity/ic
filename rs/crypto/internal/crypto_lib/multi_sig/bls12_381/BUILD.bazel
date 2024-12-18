@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_crypto_internal_multi_sig_bls12381",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/secrets_containers",
@@ -27,6 +28,7 @@ rust_test(
     name = "bls12_381_test",
     crate = ":bls12_381",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/test_vectors",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:proptest",

@@ -3,15 +3,17 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
+    "//rs/crypto/ed25519",
     "//rs/types/types",
     "//rs/types/types_test_utils",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:rand",
 ]
 
 rust_library(
     name = "types",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_types",
     version = "0.9.0",
@@ -22,6 +24,7 @@ rust_test(
     name = "test_utilities_types_test",
     crate = ":types",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:bincode",
         "@crate_index//:serde_cbor",

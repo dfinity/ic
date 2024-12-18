@@ -23,6 +23,7 @@ pub mod nns_registry_replicator;
 pub mod registration;
 pub mod registry_client;
 pub mod state_manager;
+pub mod tracing;
 pub mod transport;
 
 pub use config::*;

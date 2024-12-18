@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bincode = "1.2.1"
+bincode = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces = { path = "../../interfaces" }

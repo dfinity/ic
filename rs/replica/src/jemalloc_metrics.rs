@@ -1,9 +1,9 @@
 //! This module exposes jemalloc statistics as prometheus metrics.
 
-use jemalloc_ctl::{epoch, stats};
 use prometheus::core::{Collector, Desc};
 use prometheus::proto::MetricFamily;
 use prometheus::IntGauge;
+use tikv_jemalloc_ctl::{epoch, stats};
 
 #[derive(Clone)]
 pub struct JemallocMetrics {

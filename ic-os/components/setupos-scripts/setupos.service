@@ -1,0 +1,15 @@
+[Unit]
+Description=SetupOS install process
+After=generate-network-config.service
+After=systemd-networkd-wait-online.service
+Wants=systemd-networkd-wait-online.service
+
+[Service]
+Type=idle
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setupos.sh
+StandardOutput=tty
+StandardError=tty
+
+[Install]
+WantedBy=multi-user.target

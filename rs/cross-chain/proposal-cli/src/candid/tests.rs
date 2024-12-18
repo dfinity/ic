@@ -14,7 +14,7 @@ fn should_encode_default_upgrade_args() {
         let upgrade_args = encode_upgrade_args(&path, canister.default_upgrade_args());
 
         assert_eq!(
-            upgrade_args.upgrade_args_hex(),
+            hex::encode(upgrade_args.upgrade_args_bin()),
             expected,
             "failed to encode default upgrade args for: {:?}",
             canister
@@ -29,12 +29,23 @@ fn should_encode_non_empty_ledger_upgrade_args() {
 
     let upgrade_args = encode_upgrade_args(&path, "(variant {Upgrade})");
 
-    assert_matches!(upgrade_args.upgrade_args_hex(), _string);
+    assert!(hex::encode(upgrade_args.upgrade_args_bin()).starts_with("4449444c"));
 }
 
 #[test]
 fn should_parse_constructor_parameters() {
     for canister in TargetCanister::iter() {
+        if canister == TargetCanister::IcpArchive1
+            || canister == TargetCanister::IcpArchive2
+            || canister == TargetCanister::IcpArchive3
+            //canister lives outside the monorepo
+            || canister == TargetCanister::EvmRpc
+            || canister == TargetCanister::CyclesLedger
+            || canister == TargetCanister::ExchangeRateCanister
+        {
+            continue;
+        }
+
         let path = repository_root().join(canister.candid_file());
 
         let (_env, constructor_args) = parse_constructor_args(&path);
@@ -44,8 +55,8 @@ fn should_parse_constructor_parameters() {
             (
                 TargetCanister::CkBtcArchive,
                 "(principal, nat64, opt nat64, opt nat64)"
-            ) | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
-                | (TargetCanister::CkBtcKyt, "(LifecycleArg)")
+            ) | (TargetCanister::BtcChecker, "(CheckArg)")
+                | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
                 | (TargetCanister::CkBtcLedger, "(LedgerArg)")
                 | (TargetCanister::CkBtcMinter, "(MinterArg)")
                 | (
@@ -55,6 +66,9 @@ fn should_parse_constructor_parameters() {
                 | (TargetCanister::CkEthIndex, "(opt IndexArg)")
                 | (TargetCanister::CkEthLedger, "(LedgerArg)")
                 | (TargetCanister::CkEthMinter, "(MinterArg)")
+                | (TargetCanister::IcpIndex, "(InitArg)")
+                | (TargetCanister::IcpLedger, "(LedgerCanisterPayload)")
+                | (TargetCanister::LedgerSuiteOrchestrator, "(OrchestratorArg)")
         );
     }
 }

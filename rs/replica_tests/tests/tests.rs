@@ -742,7 +742,7 @@ fn test_memory_access_between_min_and_max_ingress() {
 #[should_panic(expected = "heap out of bounds")]
 // Grow memory beyond the maximum limit. Should throw an exception
 // when attempting to write to it.
-fn test_update_available_memory_1() {
+fn test_try_grow_wasm_memory_1() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -766,7 +766,7 @@ fn test_update_available_memory_1() {
 // Grow memory beyond the maximum limit. Should throw an exception when
 // attempting to read from it.
 #[should_panic(expected = "heap out of bounds")]
-fn test_update_available_memory_2() {
+fn test_try_grow_wasm_memory_2() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -788,7 +788,7 @@ fn test_update_available_memory_2() {
 
 #[test]
 // Grow memory multiple times, including beyond limit.
-fn test_update_available_memory_3() {
+fn test_try_grow_wasm_memory_3() {
     utils::canister_test_async(|test| async move {
         let wat = r#"
         (module

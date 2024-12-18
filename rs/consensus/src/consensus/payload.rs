@@ -63,6 +63,48 @@ impl BatchPayloadSectionBuilder {
         proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
+        metrics: &PayloadBuilderMetrics,
+        logger: &ReplicaLogger,
+    ) -> NumBytes {
+        let byte_size = self.build_payload_impl(
+            payload,
+            height,
+            proposal_context,
+            max_size,
+            past_payloads,
+            payload_priority,
+            metrics,
+            logger,
+        );
+        metrics
+            .payload_section_size_bytes
+            .with_label_values(&[self.section()])
+            .observe(byte_size.get() as f64);
+        byte_size
+    }
+
+    /// Returns the name of this section, for use as e.g. a metric label value.
+    fn section(&self) -> &str {
+        match self {
+            Self::Ingress(_) => "ingress",
+            Self::XNet(_) => "xnet",
+            Self::SelfValidating(_) => "self_validating",
+            Self::CanisterHttp(_) => "canister_http",
+            Self::QueryStats(_) => "query_stats",
+        }
+    }
+
+    /// Internal implementation of `build_payload()`, to make it easier to
+    /// instrument the result.
+    fn build_payload_impl(
+        &self,
+        payload: &mut BatchPayload,
+        height: Height,
+        proposal_context: &ProposalContext,
+        max_size: NumBytes,
+        past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
         metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
@@ -162,6 +204,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context.validation_context,
                     &past_payloads,
                     max_size,
+                    payload_priority,
                 );
 
                 // As a safety measure, the payload is validated, before submitting it.
@@ -432,6 +475,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(4 * 1024 * 1024),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );
@@ -450,6 +494,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(20_000),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );

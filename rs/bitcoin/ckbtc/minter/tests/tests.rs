@@ -4,20 +4,19 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
+use ic_btc_checker::{
+    BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
+    UpgradeArg as CheckerUpgradeArg,
+};
 use ic_btc_interface::{Network, Txid};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{
-    BtcRetrievalStatusV2, Mode, ReimburseDepositTask, ReimbursedDeposit,
-    ReimbursementReason::{CallFailed, TaintedDestination},
-    RetrieveBtcStatus, RetrieveBtcStatusV2,
-};
+use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
-    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    ErrorCode, RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
 };
 use ic_ckbtc_minter::updates::update_balance::{
@@ -27,22 +26,41 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_state_machine_tests::{Cycles, StateMachine, StateMachineBuilder, WasmResult};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
+use regex::Regex;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
-const KYT_FEE: u64 = 2_000;
+const CHECK_FEE: u64 = 2_000;
 const TRANSFER_FEE: u64 = 10;
 const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
+
+#[allow(deprecated)]
+fn default_init_args() -> CkbtcMinterInitArgs {
+    CkbtcMinterInitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "master_ecdsa_public_key".into(),
+        retrieve_btc_min_amount: 2000,
+        ledger_id: CanisterId::from(0),
+        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
+        min_confirmations: Some(MIN_CONFIRMATIONS),
+        mode: Mode::GeneralAvailability,
+        check_fee: None,
+        btc_checker_principal: Some(CanisterId::from(0)),
+        kyt_principal: None,
+        kyt_fee: None,
+    }
+}
 
 fn ledger_wasm() -> Vec<u8> {
     let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -77,13 +95,15 @@ fn bitcoin_mock_wasm() -> Vec<u8> {
     )
 }
 
-fn kyt_wasm() -> Vec<u8> {
+fn btc_checker_wasm() -> Vec<u8> {
     load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
             .unwrap()
-            .join("kyt"),
-        "ic-ckbtc-kyt",
+            .parent()
+            .unwrap()
+            .join("checker"),
+        "ic-btc-checker",
         &[],
     )
 }
@@ -100,17 +120,8 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
 
 fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        // The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-        // a testing key for testnet and mainnet
-        ecdsa_key_name: "dfx_test_key".parse().unwrap(),
-        retrieve_btc_min_amount: 2000,
         ledger_id,
-        max_time_in_queue_nanos: 0,
-        min_confirmations: Some(1),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        kyt_principal: Some(CanisterId::from(0)),
+        ..default_init_args()
     };
     let minter_arg = MinterArg::Init(args);
     env.install_canister(minter_wasm(), Encode!(&minter_arg).unwrap(), None)
@@ -153,44 +164,36 @@ fn range_to_txid(range: std::ops::RangeInclusive<u8>) -> Txid {
     vec_to_txid(range.collect::<Vec<u8>>())
 }
 
+fn new_state_machine() -> StateMachine {
+    StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
+        .build()
+}
+
 #[test]
 fn test_install_ckbtc_minter_canister() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     install_minter(&env, ledger_id);
 }
 
 #[test]
 fn test_wrong_upgrade_parameter() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
 
     // wrong init args
 
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
         ecdsa_key_name: "".into(),
-        retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
-        min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: Some(1001),
-        kyt_principal: None,
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     if env.install_canister(minter_wasm(), args, None).is_ok() {
         panic!("init expected to fail")
     }
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "some_key".into(),
-        retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
-        min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: Some(1001),
-        kyt_principal: None,
+        btc_checker_principal: None,
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     if env.install_canister(minter_wasm(), args, None).is_ok() {
@@ -205,11 +208,9 @@ fn test_wrong_upgrade_parameter() {
 
     let upgrade_args = UpgradeArgs {
         retrieve_btc_min_amount: Some(100),
-        min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
-        kyt_principal: None,
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     if env
@@ -222,7 +223,7 @@ fn test_wrong_upgrade_parameter() {
 
 #[test]
 fn test_upgrade_read_only() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -232,12 +233,8 @@ fn test_upgrade_read_only() {
 
     // upgrade
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(2000),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
-        kyt_principal: Some(CanisterId::from(0)),
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -288,7 +285,7 @@ fn test_upgrade_read_only() {
 
 #[test]
 fn test_upgrade_restricted() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -302,12 +299,8 @@ fn test_upgrade_restricted() {
 
     // upgrade
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(2000),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
-        kyt_fee: None,
-        kyt_principal: Some(CanisterId::from(0)),
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -356,14 +349,7 @@ fn test_upgrade_restricted() {
     );
 
     // Test restricted BTC deposits.
-    let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(100),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
-        mode: Some(Mode::DepositsRestrictedTo(vec![authorized_principal])),
-        kyt_principal: Some(CanisterId::from(0)),
-        kyt_fee: None,
-    };
+    let upgrade_args = UpgradeArgs::default();
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
 
@@ -434,20 +420,25 @@ fn test_no_new_utxos() {
             }]),
             current_confirmations: Some(2),
             required_confirmations: 12,
+            suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
+        ); // no metrics for update call with new UTXOs
 }
 
 #[test]
 fn update_balance_should_return_correct_confirmations() {
     let ckbtc = CkBtcSetup::new();
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: None,
         min_confirmations: Some(3),
-        max_time_in_queue_nanos: None,
-        mode: None,
-        kyt_principal: None,
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     ckbtc
@@ -495,14 +486,23 @@ fn update_balance_should_return_correct_confirmations() {
         Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations: None,
             required_confirmations: 3,
-            pending_utxos: Some(vec![])
+            pending_utxos: Some(vec![]),
+            suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ); // exactly 1 match for an update call with new UTXOs
 }
 
 #[test]
 fn test_illegal_caller() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -555,17 +555,12 @@ pub fn get_btc_address(
 fn test_minter() {
     use bitcoin::Address;
 
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: Some(1001),
-        kyt_principal: Some(CanisterId::from(0)),
+        check_fee: Some(1001),
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
@@ -578,7 +573,7 @@ fn test_minter() {
             subaccount: None,
         },
     );
-    let address_1 = Address::from_str(&btc_address_1).expect("invalid bitcoin address");
+    let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
     let btc_address_2 = get_btc_address(
         &env,
         minter_id,
@@ -587,50 +582,59 @@ fn test_minter() {
             subaccount: Some([1; 32]),
         },
     );
-    let address_2 = Address::from_str(&btc_address_2).expect("invalid bitcoin address");
+    let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
     assert_ne!(address_1, address_2);
 }
 
-fn mainnet_bitcoin_canister_id() -> CanisterId {
+fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
     CanisterId::try_from(
-        PrincipalId::from_str(ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID)
-            .unwrap(),
+        PrincipalId::from_str(match btc_network {
+            Network::Testnet | Network::Regtest => {
+                ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID
+            }
+            Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
+        })
+        .unwrap(),
     )
     .unwrap()
 }
 
-fn install_bitcoin_mock_canister(env: &StateMachine) {
-    let args = Network::Mainnet;
-    let cid = mainnet_bitcoin_canister_id();
+fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
+    let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
 
-    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&args).unwrap())
+    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&btc_network).unwrap())
         .unwrap();
 }
 
 struct CkBtcSetup {
     pub env: StateMachine,
     pub caller: PrincipalId,
-    pub kyt_provider: PrincipalId,
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub kyt_id: CanisterId,
+    pub btc_checker_id: CanisterId,
 }
 
 impl CkBtcSetup {
     pub fn new() -> Self {
-        let bitcoin_id = mainnet_bitcoin_canister_id();
+        let retrieve_btc_min_amount = 100_000;
+        Self::new_with(Network::Mainnet, retrieve_btc_min_amount)
+    }
+
+    pub fn new_with(btc_network: Network, retrieve_btc_min_amount: u64) -> Self {
+        let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
+            .with_master_ecdsa_public_key()
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();
 
-        install_bitcoin_mock_canister(&env);
+        install_bitcoin_mock_canister(&env, btc_network);
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
-        let kyt_id = env.create_canister(None);
+        let btc_checker_id = env.create_canister(None);
 
         env.install_existing_canister(
             ledger_id,
@@ -651,34 +655,30 @@ impl CkBtcSetup {
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: Network::Mainnet.into(),
-                ecdsa_key_name: "master_ecdsa_public_key".to_string(),
-                retrieve_btc_min_amount: 100_000,
+                btc_network: btc_network.into(),
+                retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
-                min_confirmations: Some(MIN_CONFIRMATIONS),
-                mode: Mode::GeneralAvailability,
-                kyt_fee: Some(KYT_FEE),
-                kyt_principal: kyt_id.into(),
+                check_fee: Some(CHECK_FEE),
+                btc_checker_principal: btc_checker_id.into(),
+                ..default_init_args()
             }))
             .unwrap(),
         )
         .expect("failed to install the minter");
 
         let caller = PrincipalId::new_user_test_id(1);
-        let kyt_provider = PrincipalId::new_user_test_id(2);
 
         env.install_existing_canister(
-            kyt_id,
-            kyt_wasm(),
-            Encode!(&LifecycleArg::InitArg(KytInitArg {
-                minter_id: minter_id.into(),
-                maintainers: vec![kyt_provider.into()],
-                mode: KytMode::AcceptAll,
+            btc_checker_id,
+            btc_checker_wasm(),
+            Encode!(&CheckArg::InitArg(CheckerInitArg {
+                btc_network: CheckerBtcNetwork::Mainnet,
+                check_mode: CheckMode::AcceptAll,
             }))
             .unwrap(),
         )
-        .expect("failed to install the KYT canister");
+        .expect("failed to install the Bitcoin checker canister");
 
         env.execute_ingress(
             bitcoin_id,
@@ -687,25 +687,13 @@ impl CkBtcSetup {
         )
         .expect("failed to set fee percentiles");
 
-        env.execute_ingress_as(
-            kyt_provider,
-            kyt_id,
-            "set_api_key",
-            Encode!(&SetApiKeyArg {
-                api_key: "api key".to_string(),
-            })
-            .unwrap(),
-        )
-        .expect("failed to set api key");
-
         Self {
             env,
-            kyt_provider,
             caller,
             bitcoin_id,
             ledger_id,
             minter_id,
-            kyt_id,
+            btc_checker_id,
         }
     }
 
@@ -857,7 +845,7 @@ impl CkBtcSetup {
             utxo_status.unwrap(),
             vec![UtxoStatus::Minted {
                 block_index: 0,
-                minted_amount: utxo.value - KYT_FEE,
+                minted_amount: utxo.value - CHECK_FEE,
                 utxo,
             }]
         );
@@ -1242,6 +1230,10 @@ impl CkBtcSetup {
         .unwrap()
         .expect("minter self-check failed")
     }
+
+    pub fn check_minter_metrics(self) -> MetricsAssert {
+        MetricsAssert::from_querying_metrics(self.env, self.minter_id)
+    }
 }
 
 #[test]
@@ -1264,7 +1256,7 @@ fn test_transaction_finalization() {
 
     ckbtc.deposit_utxo(user, utxo.clone());
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     assert_eq!(ckbtc.get_known_utxos(user), vec![utxo]);
 
@@ -1312,7 +1304,7 @@ fn test_transaction_finalization() {
 }
 
 #[test]
-fn test_min_retrieval_amount() {
+fn test_min_retrieval_amount_default() {
     let ckbtc = CkBtcSetup::new();
 
     ckbtc.refresh_fee_percentiles();
@@ -1342,6 +1334,61 @@ fn test_min_retrieval_amount() {
 }
 
 #[test]
+fn test_min_retrieval_amount_custom() {
+    let min_amount = 12_345;
+    let ckbtc = CkBtcSetup::new_with(Network::Testnet, min_amount);
+
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, min_amount);
+
+    // The numbers used in this test have been re-computed using a python script using integers.
+    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, min_amount);
+
+    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 50_000 + min_amount);
+
+    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 50_000 + min_amount);
+
+    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 100_000 + min_amount);
+
+    // When fee becomes 0 again, it goes back to the initial setting
+    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, min_amount);
+
+    // Test changing min_retrieve_fee when upgrade
+    let min_amount = 123_456;
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: Some(min_amount),
+        ..Default::default()
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    assert!(ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap()
+        )
+        .is_ok());
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, min_amount);
+}
+
+#[test]
 fn test_transaction_resubmission_finalize_new() {
     let ckbtc = CkBtcSetup::new();
 
@@ -1361,7 +1408,7 @@ fn test_transaction_resubmission_finalize_new() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1436,7 +1483,7 @@ fn test_transaction_resubmission_finalize_old() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1504,7 +1551,7 @@ fn test_transaction_resubmission_finalize_middle() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1600,7 +1647,7 @@ fn test_taproot_transaction_finalization() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1657,7 +1704,7 @@ fn test_ledger_memo() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     let get_transaction_request = GetTransactionsRequest {
         start: 0_u8.into(),
@@ -1673,7 +1720,7 @@ fn test_ledger_memo() {
         MintMemo::Convert {
             txid: Some(&(1..=32).collect::<Vec<u8>>()),
             vout: Some(1),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: Some(CHECK_FEE),
         }
     );
 
@@ -1697,33 +1744,16 @@ fn test_ledger_memo() {
     use ic_ckbtc_minter::memo::{BurnMemo, Status};
 
     let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    // `retrieve_btc` incurs no check fee
     assert_eq!(
         decoded_data,
         BurnMemo::Convert {
             address: Some(&btc_address),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: Some(Status::Accepted),
         },
         "memo not found in burn"
     );
-
-    ckbtc
-        .env
-        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
-        .expect("failed to transfer funds");
-
-    let get_transaction_request = GetTransactionsRequest {
-        start: 3_u8.into(),
-        length: 1_u8.into(),
-    };
-    let res = ckbtc.get_transactions(get_transaction_request);
-    let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
-    assert_eq!(
-        ckbtc.kyt_provider,
-        res.transactions[0].mint.clone().unwrap().to.owner.into()
-    );
-    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
-    assert_eq!(decoded_data, MintMemo::Kyt);
 }
 
 #[test]
@@ -1813,7 +1843,7 @@ fn test_retrieve_btc_with_approval() {
     let user = Principal::from(ckbtc.caller);
 
     ckbtc.deposit_utxo(user, utxo);
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1838,7 +1868,7 @@ fn test_retrieve_btc_with_approval() {
         decoded_data,
         BurnMemo::Convert {
             address: Some(WITHDRAWAL_ADDRESS),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: None,
         },
         "memo not found in burn"
@@ -1897,7 +1927,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
     ckbtc.deposit_utxo(user_account, utxo);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE)
+        Nat::from(deposit_value - CHECK_FEE)
     );
 
     // Step 2: request a withdrawal
@@ -1927,7 +1957,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         decoded_data,
         BurnMemo::Convert {
             address: Some(WITHDRAWAL_ADDRESS),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: None,
         },
         "memo not found in burn"
@@ -2001,7 +2031,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.deposit_utxo(user_account, utxo);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE)
+        Nat::from(deposit_value - CHECK_FEE)
     );
 
     // Step 2: request a withdrawal with ledger stopped
@@ -2024,26 +2054,23 @@ fn test_retrieve_btc_with_approval_fail() {
     let start_canister_result = ckbtc.env.start_canister(ckbtc.ledger_id);
     assert_matches!(start_canister_result, Ok(_));
 
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
-    );
+    let deposited_value = deposit_value - CHECK_FEE - TRANSFER_FEE;
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    // Check that we reimburse ckBTC if the KYT check of the address fails
+    // Check that the correct error_code is returned if the check of the address fails
 
     ckbtc
         .env
         .upgrade_canister(
-            ckbtc.kyt_id,
-            kyt_wasm(),
-            Encode!(&LifecycleArg::UpgradeArg(ic_ckbtc_kyt::UpgradeArg {
-                minter_id: None,
-                maintainers: None,
-                mode: Some(KytMode::RejectAll),
-            }))
+            ckbtc.btc_checker_id,
+            btc_checker_wasm(),
+            Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
+                check_mode: Some(CheckMode::RejectAll),
+                ..CheckerUpgradeArg::default()
+            })))
             .unwrap(),
         )
-        .expect("failed to upgrade the KYT canister");
+        .expect("failed to upgrade the Bitcoin checker canister");
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
         WITHDRAWAL_ADDRESS.to_string(),
@@ -2052,27 +2079,15 @@ fn test_retrieve_btc_with_approval_fail() {
     );
     assert_matches!(
         retrieve_btc_result,
-        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+        Err(RetrieveBtcWithApprovalError::GenericError { error_code, .. })
+          if error_code == ErrorCode::TaintedAddress as u64
     );
     ckbtc.env.tick();
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
-    );
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    ckbtc
-        .env
-        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
-        .expect("failed to transfer funds");
+    // Check that the correct error_code is returned if the call to the Bitcoin checker canister fails
 
-    assert_eq!(
-        ckbtc.balance_of(Principal::from(ckbtc.kyt_provider)),
-        Nat::from(2 * KYT_FEE)
-    );
-
-    // Check that we reimburse ckBTC if the call to the KYT canister fails
-
-    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.btc_checker_id);
     assert_matches!(stop_canister_result, Ok(_));
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
@@ -2082,56 +2097,81 @@ fn test_retrieve_btc_with_approval_fail() {
     );
     assert_matches!(
         retrieve_btc_result,
-        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+        Err(RetrieveBtcWithApprovalError::GenericError { error_code, .. })
+          if error_code == ErrorCode::CheckCallFailed as u64
     );
 
-    let reimbursed_tx_block_index_2 = BtcRetrievalStatusV2 {
-        block_index: 2,
-        status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
-            account: user_account,
-            amount: withdrawal_amount,
-            reason: TaintedDestination {
-                kyt_provider: ckbtc.kyt_provider.into(),
-                kyt_fee: KYT_FEE,
-            },
-            mint_block_index: 3,
-        })),
-    };
-
+    // Balance should be unchanged
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
+    // No known reimbursement or pending status because the withdrawal is now rejected before burn.
     assert_eq!(
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
-        vec![
-            reimbursed_tx_block_index_2.clone(),
-            BtcRetrievalStatusV2 {
-                block_index: 5,
-                status_v2: Some(RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
-                    account: user_account,
-                    amount: withdrawal_amount,
-                    reason: CallFailed
-                }))
-            }
-        ]
+        vec![]
     );
+}
 
-    ckbtc.env.tick();
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
-    );
+pub struct MetricsAssert {
+    metrics: Vec<String>,
+}
 
-    assert_eq!(
-        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
-        vec![
-            reimbursed_tx_block_index_2,
-            BtcRetrievalStatusV2 {
-                block_index: 5,
-                status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
-                    account: user_account,
-                    amount: withdrawal_amount,
-                    reason: CallFailed,
-                    mint_block_index: 6
-                }))
-            }
-        ]
-    );
+impl MetricsAssert {
+    pub fn from_querying_metrics(state_machine: StateMachine, canister_id: CanisterId) -> Self {
+        use ic_canisters_http_types::{HttpRequest, HttpResponse};
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/metrics".to_string(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+        let response = Decode!(
+            &assert_reply(
+                state_machine
+                    .query(
+                        canister_id,
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to get metrics")
+            ),
+            HttpResponse
+        )
+        .unwrap();
+        assert_eq!(response.status_code, 200_u16);
+        let metrics = String::from_utf8_lossy(response.body.as_slice())
+            .trim()
+            .split('\n')
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+        Self { metrics }
+    }
+
+    pub fn assert_contains_metric_matching(self, pattern: &str) -> Self {
+        assert!(
+            !self.find_metrics_matching(pattern).is_empty(),
+            "Expected to find metric matching '{}', but none matched in:\n{:?}",
+            pattern,
+            self.metrics
+        );
+        self
+    }
+
+    pub fn assert_does_not_contain_metric_matching(self, pattern: &str) -> Self {
+        let matches = self.find_metrics_matching(pattern);
+        assert!(
+            matches.is_empty(),
+            "Expected not to find any metric matching '{}', but found the following matches:\n{:?}",
+            pattern,
+            matches
+        );
+        self
+    }
+
+    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
+        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
+        self.metrics
+            .iter()
+            .filter(|line| regex.is_match(line))
+            .cloned()
+            .collect()
+    }
 }

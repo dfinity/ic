@@ -1,28 +1,20 @@
-use std::{
-    backtrace::Backtrace,
-    collections::HashMap,
-    ops::Range,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
-use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::{TestConsensus, U64Artifact},
-    fully_connected_localhost_subnet,
+    fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, start_test_processor,
-        wait_for, wait_for_timeout, waiter_fut, PeerManagerAction,
+        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, wait_for,
+        wait_for_timeout, waiter_fut, PeerManagerAction,
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{node_test_id, NODE_1, NODE_2, NODE_3};
 use rand::{rngs::ThreadRng, Rng};
-use tokio::{runtime::Handle, sync::Notify, task::JoinSet};
+use tokio::{sync::Notify, task::JoinSet};
 use tokio_util::time::DelayQueue;
 use turmoil::Builder;
 
@@ -33,14 +25,14 @@ fn test_artifact_sent_to_other_peer() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
-        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
-        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 1024, false);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 2048, true);
 
         add_transport_to_sim(
             &mut sim,
@@ -90,14 +82,14 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
-        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
-        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 1024, false);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 2048, true);
 
         add_transport_to_sim(
             &mut sim,
@@ -139,7 +131,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
         wait_for(&mut sim, || processor_2.received_advert_once(1)).unwrap();
 
         // Node 3 joins the subnet
-        let processor_3 = TestConsensus::new(log.clone(), NODE_3);
+        let processor_3 = TestConsensus::new(log.clone(), NODE_3, 4096, false);
         add_transport_to_sim(
             &mut sim,
             log.clone(),
@@ -169,18 +161,18 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
 }
 
 #[test]
-fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
+fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
-        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
-        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 1024, false);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 2048, true);
 
         add_transport_to_sim(
             &mut sim,
@@ -239,33 +231,6 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
         exit_notify.notify_waiters();
         sim.run().unwrap();
     });
-}
-
-fn start_consensus_manager(
-    log: ReplicaLogger,
-    rt_handle: Handle,
-    processor: TestConsensus<U64Artifact>,
-) -> (
-    Box<dyn JoinGuard>,
-    ic_consensus_manager::ConsensusManagerBuilder,
-) {
-    let _enter = rt_handle.enter();
-    let pool = Arc::new(RwLock::new(processor));
-    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
-    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
-    let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
-        log,
-        rt_handle.clone(),
-        MetricsRegistry::default(),
-    );
-    cm1.add_client(
-        artifact_manager_event_rx,
-        pool,
-        pfn_producer,
-        artifact_sender,
-    );
-    (artifact_processor_jh, cm1)
 }
 
 async fn generate_consensus_events(
@@ -379,7 +344,7 @@ fn load_test(
     let mut cms = vec![];
     for i in 0..num_peers {
         let node = node_test_id(i);
-        let processor = TestConsensus::new(log.clone(), node);
+        let processor = TestConsensus::new(log.clone(), node, 256 * (i as usize + 1), i % 2 == 0);
         let (jh, mut cm) =
             start_consensus_manager(no_op_logger(), rt.handle().clone(), processor.clone());
         jhs.push(jh);
@@ -542,15 +507,15 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
-        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
-        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
-        let processor_3 = TestConsensus::new(log.clone(), NODE_3);
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 1024, false);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 2048, true);
+        let processor_3 = TestConsensus::new(log.clone(), NODE_3, 4096, true);
 
         add_transport_to_sim(
             &mut sim,
@@ -638,15 +603,15 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
-        let processor_1 = TestConsensus::new(log.clone(), NODE_1);
-        let processor_2 = TestConsensus::new(log.clone(), NODE_2);
-        let processor_3 = TestConsensus::new(log.clone(), NODE_3);
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 1024, false);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 2048, true);
+        let processor_3 = TestConsensus::new(log.clone(), NODE_3, 4096, false);
 
         add_transport_to_sim(
             &mut sim,
@@ -718,6 +683,75 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
 
         wait_for(&mut sim, || processor_2.received_advert_once(2))
             .expect("`NODE_2` should receive the advert from `NODE_1` after reconnecting.");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
+    });
+}
+
+/// Test that a node transmit a message that is latency sensitive.
+#[test]
+fn test_large_msgs() {
+    with_test_replica_logger(|log| {
+        let mut sim = Builder::new()
+            .max_message_latency(Duration::from_millis(0))
+            .udp_capacity(1024 * 1024)
+            .simulation_duration(Duration::from_secs(20 * 60))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+        let processor_1 = TestConsensus::new(log.clone(), NODE_1, 50 * 1024 * 1024, true);
+        let processor_2 = TestConsensus::new(log.clone(), NODE_2, 10 * 1024 * 1024, true);
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            Some(processor_1.clone()),
+            waiter_fut(),
+        );
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            Some(processor_2.clone()),
+            waiter_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        // ping pong advert
+        processor_1.push_advert(1);
+        wait_for(&mut sim, || processor_2.received_advert_once(1))
+            .expect("`NODE_2` should receive the advert from `NODE_1`.");
+        processor_2.push_advert(1);
+        wait_for(&mut sim, || processor_1.received_advert_once(1))
+            .expect("`NODE_2` should receive the advert from `NODE_1`.");
+        processor_1.push_advert(2);
+        wait_for(&mut sim, || processor_2.received_advert_once(2))
+            .expect("`NODE_2` should receive the advert from `NODE_1`.");
+        processor_2.push_advert(2);
+        wait_for(&mut sim, || processor_1.received_advert_once(2))
+            .expect("`NODE_2` should receive the advert from `NODE_1`.");
 
         exit_notify.notify_waiters();
         sim.run().unwrap();

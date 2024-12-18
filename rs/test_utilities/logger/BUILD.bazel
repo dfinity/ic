@@ -4,10 +4,12 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "logger",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_logger",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/monitoring/logger",
         "@crate_index//:slog",
         "@crate_index//:slog-scope",

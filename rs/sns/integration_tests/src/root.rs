@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterInstallMode;
@@ -20,7 +20,8 @@ use ic_sns_test_utils::{
         local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters, Scenario,
+        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests, Scenario,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -40,9 +41,9 @@ fn test_get_status() {
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
                 archive_canister_ids: vec![],
-                latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
+                timers: None,
             },
         )
         .await;
@@ -118,7 +119,7 @@ fn test_get_sns_canisters_summary() {
 
 #[test]
 fn test_register_dapp_canister() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -159,7 +160,7 @@ fn test_register_dapp_canister() {
 
 #[test]
 fn test_register_dapp_canisters() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -197,7 +198,7 @@ fn test_register_dapp_canisters() {
 
 #[test]
 fn test_register_dapp_canisters_removes_other_controllers() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -256,7 +257,7 @@ fn test_register_dapp_canisters_removes_other_controllers() {
 
 #[test]
 fn test_root_restarts_governance_on_stop_canister_timeout() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -285,7 +286,6 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         &state_machine,
         CanisterId::ic_00(),
         "uninstall_code",
-        candid_one,
         CanisterIdRecord::from(scenario.governance_canister_id),
         scenario.root_canister_id.get(),
     )
@@ -317,14 +317,12 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
-        query_allocation: None,
     };
 
     let _: () = update_with_sender(
         &state_machine,
         scenario.root_canister_id,
         "change_canister",
-        candid_one,
         proposal,
         scenario.governance_canister_id.get(),
     )

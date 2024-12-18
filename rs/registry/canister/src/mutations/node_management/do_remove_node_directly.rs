@@ -96,7 +96,7 @@ impl Registry {
 }
 
 /// The payload of an update request to remove a node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RemoveNodeDirectlyPayload {
     pub node_id: NodeId,
 }
@@ -111,10 +111,12 @@ mod tests {
     };
     use ic_registry_keys::make_node_operator_record_key;
     use ic_registry_transport::insert;
+    use ic_types::ReplicaVersion;
+    use prost::Message;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
-        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+        mutations::common::test::TEST_NODE_ID,
     };
 
     use super::*;
@@ -147,11 +149,11 @@ mod tests {
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
         // Add API BN to registry
         let api_bn = ApiBoundaryNodeRecord {
-            version: "version".into(),
+            version: ReplicaVersion::default().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(node_id),
-            encode_or_panic(&api_bn),
+            api_bn.encode_to_vec(),
         )]);
         let payload = RemoveNodeDirectlyPayload { node_id };
 
@@ -176,7 +178,7 @@ mod tests {
         let node_operator_record = NodeOperatorRecord::default();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let payload = RemoveNodeDirectlyPayload { node_id };
 

@@ -185,7 +185,7 @@ pub enum DerivedPublicKeyDeserializationError {
     InvalidPublicKey,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 /// A derived public key
 pub struct DerivedPublicKey {
     pt: G2Affine,
@@ -280,7 +280,7 @@ pub enum EncryptedKeyCombinationError {
     InvalidKeyShares(Vec<NodeIndex>),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// An encrypted key
 pub struct EncryptedKey {
     c1: G1Affine,
@@ -383,7 +383,7 @@ impl EncryptedKey {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// A share of an encrypted key
 pub struct EncryptedKeyShare {
     c1: G1Affine,
@@ -402,7 +402,7 @@ impl EncryptedKeyShare {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
-    ///
+    /// Create a new encrypted key share.
     pub fn create<R: RngCore + CryptoRng>(
         rng: &mut R,
         master_pk: &G2Affine,

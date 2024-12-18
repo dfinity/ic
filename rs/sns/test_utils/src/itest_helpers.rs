@@ -1,7 +1,11 @@
-use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
+use crate::{
+    state_test_helpers::state_machine_builder_for_sns_tests,
+    SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+};
 use candid::{types::number::Nat, Principal};
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
+use futures::FutureExt;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
@@ -12,6 +16,7 @@ use ic_icrc1_ledger::{
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -40,7 +45,6 @@ use ic_sns_governance::{
         NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
         ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
@@ -151,6 +155,7 @@ impl SnsTestsInitPayloadBuilder {
 
         let index_ng = Some(IndexArg::Init(InitArg {
             ledger_id: CanisterId::from_u64(0).into(),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
@@ -260,7 +265,6 @@ impl SnsTestsInitPayloadBuilder {
                 dissolve_delay_interval_seconds: 10_001,
             }),
             nns_proposal_id: Some(10),
-            neurons_fund_participants: None,
             neurons_fund_participation: Some(false),
             neurons_fund_participation_constraints: None,
             ..Default::default()
@@ -281,24 +285,14 @@ impl SnsTestsInitPayloadBuilder {
 }
 
 pub fn populate_canister_ids(
-    root_canister_id: CanisterId,
-    governance_canister_id: CanisterId,
-    ledger_canister_id: CanisterId,
-    swap_canister_id: CanisterId,
-    index_canister_id: CanisterId,
-    archive_canister_ids: Vec<CanisterId>,
+    root_canister_id: PrincipalId,
+    governance_canister_id: PrincipalId,
+    ledger_canister_id: PrincipalId,
+    swap_canister_id: PrincipalId,
+    index_canister_id: PrincipalId,
+    archive_canister_ids: Vec<PrincipalId>,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
-    let root_canister_id = PrincipalId::from(root_canister_id);
-    let governance_canister_id = PrincipalId::from(governance_canister_id);
-    let ledger_canister_id = PrincipalId::from(ledger_canister_id);
-    let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
-    let index_canister_id = Some(PrincipalId::from(index_canister_id));
-    let archive_canister_ids = archive_canister_ids
-        .into_iter()
-        .map(|c_id| c_id.get())
-        .collect();
-
     // Root.
     {
         let root = &mut sns_canister_init_payloads.root;
@@ -309,10 +303,10 @@ pub fn populate_canister_ids(
             root.ledger_canister_id = Some(ledger_canister_id);
         }
         if root.swap_canister_id.is_none() {
-            root.swap_canister_id = swap_canister_id;
+            root.swap_canister_id = Some(swap_canister_id);
         }
         if root.index_canister_id.is_none() {
-            root.index_canister_id = index_canister_id;
+            root.index_canister_id = Some(index_canister_id);
         }
         if root.archive_canister_ids.is_empty() {
             root.archive_canister_ids = archive_canister_ids;
@@ -324,7 +318,7 @@ pub fn populate_canister_ids(
         let governance = &mut sns_canister_init_payloads.governance;
         governance.ledger_canister_id = Some(ledger_canister_id);
         governance.root_canister_id = Some(root_canister_id);
-        governance.swap_canister_id = swap_canister_id;
+        governance.swap_canister_id = Some(swap_canister_id);
     }
 
     // Ledger
@@ -405,11 +399,11 @@ impl SnsCanisters<'_> {
         let index_canister_id = index.canister_id();
 
         populate_canister_ids(
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            index_canister_id,
+            root_canister_id.get(),
+            governance_canister_id.get(),
+            ledger_canister_id.get(),
+            swap_canister_id.get(),
+            index_canister_id.get(),
             vec![],
             &mut init_payloads,
         );
@@ -995,6 +989,12 @@ impl SnsCanisters<'_> {
             .await
     }
 
+    pub async fn run_periodic_tasks_now(&self) -> Result<(), String> {
+        self.governance
+            .update_("run_periodic_tasks_now", candid_one, ())
+            .await
+    }
+
     pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
@@ -1133,7 +1133,7 @@ impl SnsCanisters<'_> {
             if reward_event.end_timestamp_seconds.unwrap() > last_end_timestamp_seconds {
                 return reward_event;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
 
         panic!(
@@ -1152,7 +1152,7 @@ impl SnsCanisters<'_> {
             if proposal.reward_event_end_timestamp_seconds.is_some() {
                 return proposal;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
         panic!("Proposal {:?} was not rewarded", proposal_id);
     }
@@ -1179,7 +1179,7 @@ impl SnsCanisters<'_> {
                 return status;
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
         panic!(
             "Canister {} didn't reach the running state after upgrading",
@@ -1197,7 +1197,8 @@ impl SnsCanisters<'_> {
                 return proposal;
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
+
             proposal = self.get_proposal(*proposal_id).await;
         }
 
@@ -1307,19 +1308,27 @@ pub async fn install_rust_canister_with_memory_allocation(
         .collect::<Box<[String]>>();
 
     // Wrapping call to cargo_bin_* to avoid blocking current thread
-    let wasm: Wasm = tokio::runtime::Handle::current()
-        .spawn_blocking(move || {
-            println!(
-                "Compiling Wasm for {} in task on thread: {:?}",
-                binary_name_,
-                thread::current().id()
-            );
-            // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+    let wasm: Wasm = match canister.runtime() {
+        Runtime::Remote(_) | Runtime::Local(_) => {
+            tokio::runtime::Handle::current()
+                .spawn_blocking(move || {
+                    println!(
+                        "Compiling Wasm for {} in task on thread: {:?}",
+                        binary_name_,
+                        thread::current().id()
+                    );
+                    // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+                    let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
+                    Project::cargo_bin_maybe_from_env(&binary_name_, &features)
+                })
+                .await
+                .unwrap()
+        }
+        Runtime::StateMachine(_) => {
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
             Project::cargo_bin_maybe_from_env(&binary_name_, &features)
-        })
-        .await
-        .unwrap();
+        }
+    };
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
@@ -1335,6 +1344,20 @@ pub async fn install_rust_canister_with_memory_allocation(
         canister.canister_id(),
         binary_name.as_ref()
     );
+}
+
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+pub fn state_machine_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
+where
+    Fut: Future<Output = Result<Out, String>>,
+    F: FnOnce(Runtime) -> Fut + 'static,
+{
+    let state_machine = state_machine_builder_for_sns_tests().build();
+    // This is for easy conversion from existing tests, but nothing is actually async.
+    run(Runtime::StateMachine(state_machine))
+        .now_or_never()
+        .expect("Async call did not return from now_or_never")
+        .expect("state_machine_test_on_sns_subnet failed.")
 }
 
 /// Runs a local test on the sns subnetwork, so that the canister will be

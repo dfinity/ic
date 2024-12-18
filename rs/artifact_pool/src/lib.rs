@@ -3,8 +3,8 @@ pub mod certification_pool;
 pub mod consensus_pool;
 mod consensus_pool_cache;
 pub mod dkg_pool;
-pub mod ecdsa_pool;
 mod height_index;
+pub mod idkg_pool;
 pub mod ingress_pool;
 mod inmemory_pool;
 mod metrics;
@@ -16,9 +16,12 @@ pub mod backup;
 mod lmdb_iterator;
 mod lmdb_pool;
 
-#[cfg(feature = "rocksdb_backend")]
+// On macOS we have support for rocksdb in addition to lmdb as lmdb
+// historically caused issues.
+
+#[cfg(target_os = "macos")]
 mod rocksdb_iterator;
-#[cfg(feature = "rocksdb_backend")]
+#[cfg(target_os = "macos")]
 mod rocksdb_pool;
 
 use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};

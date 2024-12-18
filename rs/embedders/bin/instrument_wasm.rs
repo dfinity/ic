@@ -1,29 +1,58 @@
-use std::sync::Arc;
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use slog::Drain;
+use clap::{Parser, ValueEnum};
+use slog::{slog_o, Drain};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
+    wasm_utils::compile,
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
 };
 
-fn usage() {
-    println!(
-        r#"
-Usage: {} wasm_file
-
-  Validate and instrument the wasm_file and output the result to the stdout."#,
-        std::env::current_exe().unwrap().display()
-    );
+#[derive(Debug, Copy, Clone, ValueEnum)]
+pub enum Artifact {
+    /// In instrumented Wasm module.
+    InstrumentedWasm,
+    /// An instrumented Wasm module that has been compiled to machine code by
+    /// Wasmtime.
+    WasmtimeModule,
+    /// The full results of compilation as a bincode encoded
+    /// `ic_embedders::SerializedModule`.
+    SerializedModule,
 }
 
-#[cfg(build = "debug")]
+impl From<Artifact> for clap::builder::OsStr {
+    fn from(artifact: Artifact) -> clap::builder::OsStr {
+        format!("{:?}", artifact).into()
+    }
+}
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+pub struct Options {
+    /// Input Wasm.
+    input_file: PathBuf,
+
+    /// Write output to the given file (defaul is stdout).
+    #[arg(short, long, value_name = "OUTPUT_FILE")]
+    output_file: Option<PathBuf>,
+
+    /// Artifact to produce.
+    #[arg(value_enum, short, long, default_value = Artifact::InstrumentedWasm)]
+    artifact: Artifact,
+}
+
+#[cfg(debug_assertions)]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(slog_term::FullFormat::new(plain).build().fuse(), slog_o!())
 }
-#[cfg(not(build = "debug"))]
+#[cfg(not(debug_assertions))]
 fn get_logger() -> slog::Logger {
     use slog::slog_o;
 
@@ -37,40 +66,46 @@ fn get_logger() -> slog::Logger {
     )
 }
 
-fn instrument_wasm(filename: &str) -> std::io::Result<()> {
-    use std::io::Write;
-
-    let contents = std::fs::read(filename)?;
+fn process_wasm(filename: &Path, mut output_stream: Box<dyn std::io::Write>, artifact: Artifact) {
+    let contents = std::fs::read(filename)
+        .unwrap_or_else(|e| panic!("Failed to read input file {:?}: {e}", filename));
     let config = EmbeddersConfig::default();
-    let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
+    let decoded = decode_wasm(config.wasm_max_size, Arc::new(contents))
+        .expect("failed to decode canister module");
     let embedder = WasmtimeEmbedder::new(config, get_logger().into());
-    match validate_and_instrument_for_testing(&embedder, &decoded) {
-        Ok((_, output)) => std::io::stdout().write_all(output.binary.as_slice()),
-        Err(err) => {
-            eprintln!("Failed to instrument wasm file {}: {}", filename, err);
-            std::process::exit(1);
+    let result = match artifact {
+        Artifact::InstrumentedWasm => {
+            let (_validation, output) = validate_and_instrument_for_testing(&embedder, &decoded)
+                .expect("Failed to instrument wasm file");
+            output.binary.as_slice().to_vec()
         }
-    }
+        Artifact::WasmtimeModule => {
+            let (_, result) = compile(&embedder, &decoded);
+            let (_, serialized_module) = result.expect("Error compiling Wasm");
+            serialized_module.bytes.as_slice().to_vec()
+        }
+        Artifact::SerializedModule => {
+            let (_, result) = compile(&embedder, &decoded);
+            let (_, serialized_module) = result.expect("Error compiling Wasm");
+            bincode::serialize(&serialized_module).expect("Failed to serialize module")
+        }
+    };
+    output_stream
+        .write_all(&result)
+        .expect("Failed to write to output")
 }
 
 fn main() {
-    let args: Vec<_> = std::env::args().skip(1).collect();
-    let args_refs: Vec<_> = args.iter().map(|s| &s[..]).collect();
-    match &args_refs[..] {
-        ["--help"] | ["-h"] => {
-            usage();
-            std::process::exit(0);
-        }
-        [filename] => {
-            if let Err(err) = instrument_wasm(filename) {
-                eprintln!("Failed to read {}: {}", filename, err);
-                std::process::exit(1);
-            }
-        }
-        _ => {
-            usage();
-            eprint!("Expected a single argument, got: {:?}", args);
-            std::process::exit(1);
-        }
-    }
+    let options = Options::parse();
+
+    let output: Box<dyn std::io::Write> = if let Some(output_file) = options.output_file {
+        Box::new(
+            std::fs::File::create(&output_file)
+                .unwrap_or_else(|e| panic!("Error opening output file {:?}: {e}", output_file)),
+        )
+    } else {
+        Box::new(std::io::stdout())
+    };
+
+    process_wasm(&options.input_file, output, options.artifact)
 }

@@ -10,12 +10,6 @@ pub struct MetricsObservationsAssert {
     metrics_registry: MetricsRegistry,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct MetricsLabel {
-    name: String,
-    value: String,
-}
-
 impl MetricsObservationsAssert {
     pub fn assert_that(metrics_registry: MetricsRegistry) -> Self {
         Self { metrics_registry }

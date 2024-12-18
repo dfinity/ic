@@ -1,21 +1,21 @@
 use crate::utils::{expect_error, setup};
 use candid::{CandidType, Encode};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use ic_state_machine_tests::{
-    ErrorCode, IngressState, IngressStatus, MessageId, PrincipalId, StateMachine, UserError,
-    WasmResult,
-};
+use ic_base_types::PrincipalId;
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
 use serde::{Deserialize, Serialize};
 
 const KIB: usize = 1_024;
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestArgs {
     pub calls: u64,
     pub headers_number: u64,

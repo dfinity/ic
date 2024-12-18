@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_config",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/sys",
@@ -15,9 +16,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:json5",
         "@crate_index//:serde",
-        "@crate_index//:slog",
         "@crate_index//:tempfile",
-        "@crate_index//:url",
     ],
 )
 
@@ -25,9 +24,11 @@ rust_test(
     name = "ic_config_test",
     crate = ":config",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:proptest-derive",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:proptest",
     ],
 )

@@ -1,13 +1,22 @@
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
-use crate::state::transactions::EthWithdrawalRequest;
+use crate::numeric::LedgerBurnIndex;
+use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 pub mod ckerc20;
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct Eip1559TransactionPriceArg {
+    pub ckerc20_ledger_id: Principal,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
     pub max_fee_per_gas: Nat,
@@ -28,7 +37,7 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct CkErc20Token {
     pub ckerc20_token_symbol: String,
     pub erc20_contract_address: String,
@@ -45,27 +54,42 @@ impl From<crate::erc20::CkErc20Token> for CkErc20Token {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+pub struct Erc20Balance {
+    pub erc20_contract_address: String,
+    pub balance: Nat,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    #[deprecated(note = "use eth_helper_contract_address instead")]
+    pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
-    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
+    pub deposit_with_subaccount_helper_contract_address: Option<String>,
+    pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
     pub last_observed_block_number: Option<Nat>,
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
+    pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
+    pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
+    pub cketh_ledger_id: Option<Principal>,
+    pub evm_rpc_id: Option<Principal>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GasFeeEstimate {
     pub max_fee_per_gas: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub timestamp: u64,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
@@ -78,12 +102,20 @@ impl From<&SignedEip1559TransactionRequest> for EthTransaction {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+impl From<&TransactionReceipt> for EthTransaction {
+    fn from(receipt: &TransactionReceipt) -> Self {
+        Self {
+            transaction_hash: receipt.transaction_hash.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Debug, Default, Deserialize, Clone, Encode, Decode, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Decode, Deserialize, Encode)]
 #[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
@@ -105,12 +137,12 @@ pub enum CandidBlockTag {
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     fn from(value: EthWithdrawalRequest) -> Self {
         Self {
-            block_index: candid::Nat::from(value.ledger_burn_index.get()),
+            block_index: Nat::from(value.ledger_burn_index.get()),
         }
     }
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub enum RetrieveEthStatus {
     NotFound,
     Pending,
@@ -119,9 +151,12 @@ pub enum RetrieveEthStatus {
     TxFinalized(TxFinalizedStatus),
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub enum TxFinalizedStatus {
-    Success(EthTransaction),
+    Success {
+        transaction_hash: String,
+        effective_transaction_fee: Option<Nat>,
+    },
     PendingReimbursement(EthTransaction),
     Reimbursed {
         transaction_hash: String,
@@ -138,7 +173,9 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
             RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
-                TxFinalizedStatus::Success(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+                TxFinalizedStatus::Success {
+                    transaction_hash, ..
+                } => write!(f, "Confirmed({})", transaction_hash),
                 TxFinalizedStatus::PendingReimbursement(tx) => {
                     write!(f, "PendingReimbursement({})", tx.transaction_hash)
                 }
@@ -160,9 +197,10 @@ impl Display for RetrieveEthStatus {
 pub struct WithdrawalArg {
     pub amount: Nat,
     pub recipient: String,
+    pub from_subaccount: Option<Subaccount>,
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },
     InsufficientFunds { balance: Nat },
@@ -183,11 +221,60 @@ impl From<LedgerBurnError> for WithdrawalError {
             LedgerBurnError::InsufficientAllowance { allowance, .. } => {
                 Self::InsufficientAllowance { allowance }
             }
+            LedgerBurnError::AmountTooLow {
+                minimum_burn_amount,
+                failed_burn_amount,
+                ledger,
+            } => {
+                panic!("BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}")
+            }
         }
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum WithdrawalSearchParameter {
+    ByWithdrawalId(u64),
+    ByRecipient(String),
+    BySenderAccount(Account),
+}
+
+impl TryFrom<WithdrawalSearchParameter> for transactions::WithdrawalSearchParameter {
+    type Error = String;
+
+    fn try_from(parameter: WithdrawalSearchParameter) -> Result<Self, String> {
+        use WithdrawalSearchParameter::*;
+        match parameter {
+            ByWithdrawalId(index) => Ok(Self::ByWithdrawalId(LedgerBurnIndex::new(index))),
+            ByRecipient(address) => Ok(Self::ByRecipient(ic_ethereum_types::Address::from_str(
+                &address,
+            )?)),
+            BySenderAccount(account) => Ok(Self::BySenderAccount(account)),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct WithdrawalDetail {
+    pub withdrawal_id: u64,
+    pub recipient_address: String,
+    pub from: Principal,
+    pub from_subaccount: Option<[u8; 32]>,
+    pub token_symbol: String,
+    pub withdrawal_amount: Nat,
+    pub max_transaction_fee: Option<Nat>,
+    pub status: WithdrawalStatus,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub enum WithdrawalStatus {
+    Pending,
+    TxCreated,
+    TxSent(EthTransaction),
+    TxFinalized(TxFinalizedStatus),
+}
+
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddCkErc20Token {
     pub chain_id: Nat,
     pub address: String,
@@ -201,37 +288,49 @@ pub mod events {
     use candid::{CandidType, Deserialize, Nat, Principal};
     use serde_bytes::ByteBuf;
 
-    #[derive(CandidType, Deserialize, Debug, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsArg {
         pub start: u64,
         pub length: u64,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsResult {
         pub events: Vec<Event>,
         pub total_event_count: u64,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct Event {
         pub timestamp: u64,
         pub payload: EventPayload,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct EventSource {
         pub transaction_hash: String,
         pub log_index: Nat,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub enum ReimbursementIndex {
+        CkEth {
+            ledger_burn_index: Nat,
+        },
+        CkErc20 {
+            cketh_ledger_burn_index: Nat,
+            ledger_id: Principal,
+            ckerc20_ledger_burn_index: Nat,
+        },
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct AccessListItem {
         pub address: String,
         pub storage_keys: Vec<ByteBuf>,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct UnsignedTransaction {
         pub chain_id: Nat,
         pub nonce: Nat,
@@ -244,13 +343,13 @@ pub mod events {
         pub access_list: Vec<AccessListItem>,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum TransactionStatus {
         Success,
         Failure,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct TransactionReceipt {
         pub block_hash: String,
         pub block_number: Nat,
@@ -260,7 +359,7 @@ pub mod events {
         pub transaction_hash: String,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum EventPayload {
         Init(InitArg),
         Upgrade(UpgradeArg),
@@ -271,6 +370,7 @@ pub mod events {
             from_address: String,
             value: Nat,
             principal: Principal,
+            subaccount: Option<[u8; 32]>,
         },
         AcceptedErc20Deposit {
             transaction_hash: String,
@@ -280,6 +380,7 @@ pub mod events {
             value: Nat,
             principal: Principal,
             erc20_contract_address: String,
+            subaccount: Option<[u8; 32]>,
         },
         InvalidDeposit {
             event_source: EventSource,
@@ -290,6 +391,12 @@ pub mod events {
             mint_block_index: Nat,
         },
         SyncedToBlock {
+            block_number: Nat,
+        },
+        SyncedErc20ToBlock {
+            block_number: Nat,
+        },
+        SyncedDepositWithSubaccountToBlock {
             block_number: Nat,
         },
         AcceptedEthWithdrawalRequest {
@@ -322,7 +429,16 @@ pub mod events {
             reimbursed_amount: Nat,
             transaction_hash: Option<String>,
         },
+        ReimbursedErc20Withdrawal {
+            withdrawal_id: Nat,
+            burn_in_block: Nat,
+            reimbursed_in_block: Nat,
+            ledger_id: Principal,
+            reimbursed_amount: Nat,
+            transaction_hash: Option<String>,
+        },
         SkippedBlock {
+            contract_address: Option<String>,
             block_number: Nat,
         },
         AddedCkErc20Token {
@@ -337,16 +453,29 @@ pub mod events {
             erc20_contract_address: String,
             destination: String,
             cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_id: Principal,
             ckerc20_ledger_burn_index: Nat,
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
             created_at: u64,
+        },
+        FailedErc20WithdrawalRequest {
+            withdrawal_id: Nat,
+            reimbursed_amount: Nat,
+            to: Principal,
+            to_subaccount: Option<[u8; 32]>,
         },
         MintedCkErc20 {
             event_source: EventSource,
             mint_block_index: Nat,
             ckerc20_token_symbol: String,
             erc20_contract_address: String,
+        },
+        QuarantinedDeposit {
+            event_source: EventSource,
+        },
+        QuarantinedReimbursement {
+            index: ReimbursementIndex,
         },
     }
 }

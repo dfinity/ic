@@ -4,6 +4,7 @@ Hold manifest common to all SetupOS variants.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("//ic-os/components:setupos.bzl", "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -23,48 +24,53 @@ def image_deps(mode, _malicious = False):
     """
 
     deps = {
-        "base_dockerfile": "//ic-os/setupos:rootfs/Dockerfile.base",
+        "base_dockerfile": "//ic-os/setupos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/setupos/context:Dockerfile",
 
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-            "//publish/binaries:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
+            "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/setupos:rootfs-files"),
+        "container_context_files": Label("//ic-os/setupos/context:context-files"),
+        "component_files": component_files,
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/setupos:grub.cfg"),
-        "extra_boot_args": Label("//ic-os/setupos:rootfs/extra_boot_args"),
+        "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda: (_custom_partitions)(mode),
     }
 
-    # Add extra files depending on image variant
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-dev": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-prod": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     return deps
 
@@ -74,11 +80,11 @@ def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
-        nns_url = "https://dfinity.org"
+        nns_url = "https://wiki.internetcomputer.org"
     elif mode == "local-base-dev":
         guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
-        nns_url = "https://dfinity.org"
+        nns_url = "https://wiki.internetcomputer.org"
     elif mode == "local-base-prod":
         guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
@@ -111,7 +117,7 @@ def _custom_partitions(mode):
         Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
     }
 
-    if mode == "dev":
+    if "dev" in mode:
         config_dict[Label("//ic-os/setupos:config/node_operator_private_key.pem")] = "node_operator_private_key.pem"
 
     pkg_tar(
@@ -123,7 +129,7 @@ def _custom_partitions(mode):
     )
 
     fat32_image(
-        name = "partition-config.tar",
+        name = "partition-config.tzst",
         src = "config_tar",
         label = "CONFIG",
         partition_size = "50M",
@@ -156,7 +162,7 @@ def _custom_partitions(mode):
     )
 
     ext4_image(
-        name = "partition-data.tar",
+        name = "partition-data.tzst",
         src = "data_tar",
         partition_size = "1750M",
         subdir = "data",
@@ -167,6 +173,6 @@ def _custom_partitions(mode):
     )
 
     return [
-        ":partition-config.tar",
-        ":partition-data.tar",
+        ":partition-config.tzst",
+        ":partition-data.tzst",
     ]

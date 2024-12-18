@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types",
     "@crate_index//:mockall",
     "@crate_index//:thiserror",
@@ -14,10 +15,10 @@ ALIASES = {}
 
 rust_library(
     name = "root_of_trust",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_root_of_trust",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

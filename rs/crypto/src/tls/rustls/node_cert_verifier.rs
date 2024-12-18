@@ -1,18 +1,18 @@
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion, Time};
-use std::{sync::Arc, time::SystemTime};
-use tokio_rustls::rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedName, Error as TLSError, ServerName,
+use rustls::{
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    server::danger::{ClientCertVerified, ClientCertVerifier},
+    CertificateError, DigitallySignedStruct, DistinguishedName, Error as TLSError, OtherError,
+    SignatureScheme,
 };
+use std::{fmt, sync::Arc};
 
 #[cfg(test)]
 mod tests;
@@ -53,6 +53,16 @@ impl NodeServerCertVerifier {
     }
 }
 
+impl fmt::Debug for NodeServerCertVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "NodeServerCertVerifier{{ allowed_nodes: {:?}, registry_version: {} }}",
+            self.allowed_nodes, self.registry_version
+        )
+    }
+}
+
 /// Implements `ClientCertVerifier`. The peer
 /// certificate is considered trusted if the following conditions hold:
 /// * No intermediate certificates.
@@ -72,6 +82,16 @@ pub struct NodeClientCertVerifier {
     allowed_nodes: SomeOrAllNodes,
     registry_client: Arc<dyn RegistryClient>,
     registry_version: RegistryVersion,
+}
+
+impl fmt::Debug for NodeClientCertVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "NodeClientCertVerifier{{ allowed_nodes: {:?}, registry_version: {} }}",
+            self.allowed_nodes, self.registry_version
+        )
+    }
 }
 
 impl NodeClientCertVerifier {
@@ -96,12 +116,11 @@ impl NodeClientCertVerifier {
 impl ServerCertVerifier for NodeServerCertVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        _server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ServerCertVerified, TLSError> {
         verify_node_cert(
             end_entity,
@@ -109,30 +128,47 @@ impl ServerCertVerifier for NodeServerCertVerifier {
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
-            system_time_to_ic_time(now)?,
+            unix_time_to_ic_time(now)?,
         )
         .map(|_| ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Err(TLSError::PeerIncompatible(
+            rustls::PeerIncompatible::Tls12NotOffered,
+        ))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ED25519]
     }
 }
 
 impl ClientCertVerifier for NodeClientCertVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        true
-    }
-
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
-        &[]
-    }
-
     fn verify_client_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        now: SystemTime,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
     ) -> Result<ClientCertVerified, TLSError> {
         verify_node_cert(
             end_entity,
@@ -140,43 +176,83 @@ impl ClientCertVerifier for NodeClientCertVerifier {
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
-            system_time_to_ic_time(now)?,
+            unix_time_to_ic_time(now)?,
         )
         .map(|()| ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Err(TLSError::PeerIncompatible(
+            rustls::PeerIncompatible::Tls12NotOffered,
+        ))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ED25519]
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &[]
     }
 }
 
 fn verify_node_cert(
-    end_entity_der: &Certificate,
-    intermediates: &[Certificate],
+    end_entity_der: &CertificateDer,
+    intermediates: &[CertificateDer],
     allowed_nodes: &SomeOrAllNodes,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
     current_time: Time,
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
-    let end_entity = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity_der))?;
-    let end_entity_node_id = node_id_from_cert_subject_common_name(&end_entity).map_err(|e| {
-        TLSError::General(format!(
-            "The presented certificate subject CN could not be parsed as node ID: {:?}",
-            e
-        ))
-    })?;
+    let end_entity_node_id =
+        node_id_from_certificate_der(end_entity_der.as_ref()).map_err(|err| match err {
+            NodeIdFromCertificateDerError::InvalidCertificate(_) => {
+                TLSError::InvalidCertificate(CertificateError::BadEncoding)
+            }
+            NodeIdFromCertificateDerError::UnexpectedContent(e) => TLSError::InvalidCertificate(
+                CertificateError::Other(OtherError(Arc::from(Box::from(e)))),
+            ),
+        })?;
+
     ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
     let node_cert_from_registry =
         node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;
-    ensure_certificates_equal(end_entity, end_entity_node_id, node_cert_from_registry)?;
+    ensure_certificates_equal(
+        end_entity_der.as_ref(),
+        end_entity_node_id,
+        node_cert_from_registry.as_der(),
+    )?;
     // It's important to do the validity check after checking equality to the
     // registry cert because the cert validation uses a different parser
     // (`x509_parser` as opposed to OpenSSL that is used above) and it is safer
     // to not just pass any untrusted data to it. We consider the DER here trusted
     // because it is equal to the certificate DER stored in the registry, as checked
     // above.
-    ensure_node_certificate_is_valid(end_entity_der.0.clone(), end_entity_node_id, current_time)?;
+    ensure_node_certificate_is_valid(end_entity_der.to_vec(), end_entity_node_id, current_time)?;
     Ok(())
 }
 
-fn ensure_intermediate_certs_empty(intermediates: &[Certificate]) -> Result<(), TLSError> {
+fn ensure_intermediate_certs_empty(intermediates: &[CertificateDer]) -> Result<(), TLSError> {
     if !intermediates.is_empty() {
         return Err(TLSError::General(format!(
             "The peer must send exactly one self signed certificate, but it sent {} certificates.",
@@ -213,9 +289,9 @@ fn node_cert_from_registry(
 }
 
 fn ensure_certificates_equal(
-    end_entity_cert: TlsPublicKeyCert,
+    end_entity_cert: &[u8],
     node_id: NodeId,
-    node_cert_from_registry: TlsPublicKeyCert,
+    node_cert_from_registry: &Vec<u8>,
 ) -> Result<(), TLSError> {
     if node_cert_from_registry != end_entity_cert {
         return Err(TLSError::General(
@@ -239,12 +315,7 @@ fn ensure_node_certificate_is_valid(
     Ok(())
 }
 
-fn system_time_to_ic_time(now: SystemTime) -> Result<Time, TLSError> {
-    let nanos = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| TLSError::FailedToGetCurrentTime)?
-        .as_nanos();
-    Ok(Time::from_nanos_since_unix_epoch(
-        u64::try_from(nanos).map_err(|_| TLSError::FailedToGetCurrentTime)?,
-    ))
+fn unix_time_to_ic_time(now: UnixTime) -> Result<Time, TLSError> {
+    let secs = now.as_secs();
+    Time::from_secs_since_unix_epoch(secs).map_err(|_| TLSError::FailedToGetCurrentTime)
 }

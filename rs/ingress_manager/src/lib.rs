@@ -2,6 +2,7 @@
 //! The ingress manager crate implements the selection and validation of
 //! ingresses on the internet computer block chain.
 
+pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
 
@@ -45,7 +46,7 @@ use std::{
 /// tuple (Height, HashOfBatchPayload) for two reasons:
 /// 1. We want to purge this cache by height, for those below certified height.
 /// 2. There could be more than one payloads at a given height due to blockchain
-/// branching.
+///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 
@@ -83,21 +84,31 @@ impl IngressManagerMetrics {
     }
 }
 
-/// A custom RandomState we can use to control the randomness of a hashmap. By default
-/// random.
-#[derive(Clone)]
-pub enum CustomRandomState {
-    /// Seeds a HashMap with the default [`std::collections::hash_map::RandomState`].
-    Random(RandomState),
-    /// Makes a hash map deterministic, by seeding it with the non-random default hasher.
-    /// Use it for testing purposes, to create a repeatable element order.
+/// The kind of RandomState you want to generate.
+pub enum RandomStateKind {
+    /// Creates random states using the default [`std::collections::hash_map::RandomState`].
+    Random,
+    /// Creates a deterministic default random state. Use it for testing purposes,
+    /// to create a repeatable element order.
     Deterministic,
 }
 
-impl Default for CustomRandomState {
-    fn default() -> Self {
-        CustomRandomState::Random(RandomState::new())
+impl RandomStateKind {
+    /// Creates a custom random state of the given kind, which can be used
+    /// to seed data structures like hashmaps.
+    fn create_state(&self) -> CustomRandomState {
+        match self {
+            Self::Random => CustomRandomState::Random(RandomState::new()),
+            Self::Deterministic => CustomRandomState::Deterministic,
+        }
     }
+}
+
+/// A custom RandomState we can use to control the randomness of a hashmap.
+#[derive(Clone)]
+enum CustomRandomState {
+    Random(RandomState),
+    Deterministic,
 }
 
 impl BuildHasher for CustomRandomState {
@@ -134,8 +145,8 @@ pub struct IngressManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
 
     /// A determinism flag for testing. Used for making hashmaps in the ingress selector
-    /// deterministic. Set to `false` in production.
-    random_state: CustomRandomState,
+    /// deterministic. Set to `RandomStateKind::Random` in production.
+    random_state: RandomStateKind,
 }
 
 impl IngressManager {
@@ -154,7 +165,7 @@ impl IngressManager {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
-        random_state: CustomRandomState,
+        random_state: RandomStateKind,
     ) -> Self {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
@@ -292,6 +303,7 @@ pub(crate) mod tests {
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
         consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
+        ingress_pool_max_count: Option<usize>,
         run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
     ) {
         let ingress_hist_reader = ingress_hist_reader.unwrap_or_else(|| {
@@ -315,7 +327,7 @@ pub(crate) mod tests {
             ),
         ));
         with_test_replica_logger(|log| {
-            with_test_pool_config(|pool_config| {
+            with_test_pool_config(|mut pool_config| {
                 let metrics_registry = MetricsRegistry::new();
                 const VALIDATOR_NODE_ID: u64 = 42;
                 let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
@@ -326,6 +338,9 @@ pub(crate) mod tests {
                         .with_subnet_id(subnet_id)
                         .build(),
                 );
+                if let Some(ingress_pool_max_count) = ingress_pool_max_count {
+                    pool_config.ingress_pool_max_count = ingress_pool_max_count;
+                }
                 let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
                     node_test_id(VALIDATOR_NODE_ID),
                     pool_config,
@@ -348,7 +363,7 @@ pub(crate) mod tests {
                         Arc::new(state_manager),
                         cycles_account_manager,
                         MaliciousFlags::default(),
-                        CustomRandomState::default(),
+                        RandomStateKind::Random,
                     ),
                     ingress_pool,
                 )
@@ -357,7 +372,9 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn setup(run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>)) {
-        setup_with_params(None, None, None, None, run)
+        setup_with_params(
+            None, None, None, None, /*ingress_pool_max_count=*/ None, run,
+        )
     }
 
     /// This function takes a lock on the ingress pool and allows the closure to access it.

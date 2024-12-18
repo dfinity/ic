@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 /// The source of the unix domain socket to be used for inter-process
 /// communication.
 pub enum IncomingSource {

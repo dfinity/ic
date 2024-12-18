@@ -8,6 +8,7 @@ rust_library(
         "src/lib.rs",
     ],
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
@@ -15,5 +16,6 @@ rust_library(
         "@crate_index//:ic-agent",
         "@crate_index//:ic-cbor",
         "@crate_index//:ic-certification",
+        "@crate_index//:leb128",
     ],
 )

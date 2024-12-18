@@ -1,0 +1,56 @@
+# SetupOS - Base Image
+#
+# Build steps:
+# - `docker build -t dfinity/setupos-base:<tag> -f Dockerfile.base .`
+# - `docker push/pull dfinity/setupos-base:<tag>`
+# - `docker build -t dfinity/setupos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
+# - `docker push/pull dfinity/setupos-base-dev:<tag>`
+#
+# First build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
+#
+# NOTE! If you edit this file, you will need to perform the following
+# operations to get your changes deployed.
+#
+# 1. Get your MR approved and merged into master
+# 2. On the next hourly master pipeline, click the "deploy-setup-os-baseimg" job
+# 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
+FROM ubuntu:24.04
+
+USER root:root
+
+ENV SOURCE_DATE_EPOCH=0
+ENV TZ=UTC
+
+# For the prod image, just use packages.common to define the packages installed
+# on target.
+# For the dev image, use both "packages.common" and "packages.dev" -- this can
+# be set via docker build args (see above).
+ARG PACKAGE_FILES=packages.common
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY packages.* /tmp/
+RUN apt-get -y update && \
+    apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    rm /tmp/packages.*
+
+# Install kernel modified to support sev-snp. Link the resulting kernel as the default.
+# Then clean up old kernel to save space
+# In the future this will change. Either:
+# - the mainline kernel will get SEV-SNP or
+# - AMDSEV repo might get built as part of this dockerfile
+# This sev-snp kernel is only used to check hardware capability.
+ARG MODIFIED_KERNEL_DEB="linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb"
+RUN curl -LsSf --remote-name https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/${MODIFIED_KERNEL_DEB} \
+    && dpkg -i ${MODIFIED_KERNEL_DEB} \
+    && rm ${MODIFIED_KERNEL_DEB} \
+    && ln -sf vmlinuz-6.1.0-rc4-snp-host-93fa8c5918a4 /boot/vmlinuz \
+    && ln -sf initrd.img-6.1.0-rc4-snp-host-93fa8c5918a4 /boot/initrd.img \
+    && find /boot -name "*.old" | xargs -L 1 unlink \
+    && find /boot -name "initrd*generic" \
+    -o -name "vmlinuz*generic" \
+    -o -name "config*generic" \
+    -o -name "System*generic" \
+    | xargs rm \
+    && find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf

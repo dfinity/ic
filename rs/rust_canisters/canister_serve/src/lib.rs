@@ -172,11 +172,11 @@ pub fn serve_logs(
 ///
 /// This does two main things:
 ///
-///   1. Tries to convert from a generic CanisterHttpRequestArgument
-///     (via impl From<CanisterHttpRequestArgument>).
+/// 1. Tries to convert from a generic CanisterHttpRequestArgument
+///    (via impl From<CanisterHttpRequestArgument>).
 ///
-///   2. Renders JSON (via LogsRequest::render_json). Of course, this needs to
-///      be fed logs.
+///2. Renders JSON (via LogsRequest::render_json). Of course, this needs to
+///   be fed logs.
 struct LogsRequest {
     severity: LogSeverity,
     time: u64,
@@ -188,10 +188,10 @@ impl LogsRequest {
     /// This is not entirely straightforward because this needs to do two
     /// things
     ///
-    ///   a. Merge INFO and ERROR logs (in the future, adding more severity levels
-    ///        is would be pretty straightforward).
+    /// a. Merge INFO and ERROR logs (in the future, adding more severity levels
+    ///    is would be pretty straightforward).
     ///
-    ///   b. Implement the filtering specified by the query parameters.
+    /// b. Implement the filtering specified by the query parameters.
     fn render_json(&self, info_logs: &LogBuffer, error_logs: &LogBuffer) -> String {
         let mut info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
         let mut error_logs =
@@ -345,7 +345,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,

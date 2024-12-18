@@ -1,11 +1,15 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
+use ic_protobuf::{
+    proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto,
+    types::v1::RejectCode as RejectCodeProto,
+};
 use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum_macros::EnumIter;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
 }
@@ -15,19 +19,20 @@ pub enum TryFromError {
 /// handling, not for end-users. They are also used for classification
 /// of user-facing errors.
 ///
-/// See <https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes>
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
+/// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#reject-codes>
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
     DestinationInvalid = 3,
     CanisterReject = 4,
     CanisterError = 5,
+    SysUnknown = 6,
 }
 
-impl ToString for RejectCode {
-    fn to_string(&self) -> String {
-        self.to_str().to_owned()
+impl std::fmt::Display for RejectCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
     }
 }
 
@@ -39,6 +44,39 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "DESTINATION_INVALID",
             RejectCode::CanisterReject => "CANISTER_REJECT",
             RejectCode::CanisterError => "CANISTER_ERROR",
+            RejectCode::SysUnknown => "SYS_UNKNOWN",
+        }
+    }
+}
+
+impl From<RejectCode> for RejectCodeProto {
+    fn from(value: RejectCode) -> Self {
+        match value {
+            RejectCode::SysFatal => RejectCodeProto::SysFatal,
+            RejectCode::SysTransient => RejectCodeProto::SysTransient,
+            RejectCode::DestinationInvalid => RejectCodeProto::DestinationInvalid,
+            RejectCode::CanisterReject => RejectCodeProto::CanisterReject,
+            RejectCode::CanisterError => RejectCodeProto::CanisterError,
+            RejectCode::SysUnknown => RejectCodeProto::SysUnknown,
+        }
+    }
+}
+
+impl TryFrom<RejectCodeProto> for RejectCode {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: RejectCodeProto) -> Result<Self, Self::Error> {
+        match value {
+            RejectCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "RejectCode",
+                err: format!("Unexpected value for reject code {:?}", value),
+            }),
+            RejectCodeProto::SysFatal => Ok(RejectCode::SysFatal),
+            RejectCodeProto::SysTransient => Ok(RejectCode::SysTransient),
+            RejectCodeProto::DestinationInvalid => Ok(RejectCode::DestinationInvalid),
+            RejectCodeProto::CanisterReject => Ok(RejectCode::CanisterReject),
+            RejectCodeProto::CanisterError => Ok(RejectCode::CanisterError),
+            RejectCodeProto::SysUnknown => Ok(RejectCode::SysUnknown),
         }
     }
 }
@@ -52,6 +90,7 @@ impl TryFrom<u64> for RejectCode {
             3 => Ok(RejectCode::DestinationInvalid),
             4 => Ok(RejectCode::CanisterReject),
             5 => Ok(RejectCode::CanisterError),
+            6 => Ok(RejectCode::SysUnknown),
             _ => Err(TryFromError::ValueOutOfRange(code)),
         }
     }
@@ -75,8 +114,10 @@ impl From<ErrorCode> for RejectCode {
             CanisterOutOfCycles => SysTransient,
             CertifiedStateUnavailable => SysTransient,
             CanisterInstallCodeRateLimited => SysTransient,
+            CanisterHeapDeltaRateLimited => SysTransient,
             // Invalid destination errors.
             CanisterNotFound => DestinationInvalid,
+            CanisterSnapshotNotFound => DestinationInvalid,
             // Explicit reject errors.
             InsufficientCyclesForCreateCanister => CanisterReject,
             InsufficientMemoryAllocation => CanisterReject,
@@ -114,12 +155,15 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInMemoryGrow => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            ReservedCyclesLimitIsTooLow => CanisterError,
             InsufficientCyclesInMessageMemoryGrow => CanisterError,
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
-            CanisterSnapshotNotFound => DestinationInvalid,
-            CanisterHeapDeltaRateLimited => SysTransient,
+            CanisterWasmMemoryLimitExceeded => CanisterError,
+            // Response unknown (best-effort calls only).
+            DeadlineExpired => SysUnknown,
+            ResponseDropped => SysUnknown,
         }
     }
 }
@@ -131,7 +175,7 @@ impl From<ErrorCode> for RejectCode {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -150,9 +194,6 @@ pub enum ErrorCode {
     CanisterHeapDeltaRateLimited = 210,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    // 302 (previously `CanisterMethodNotFound`)
-    // 303 (previously `CanisterAlreadyInstalled`)
-    // 304 (previously `CanisterWasmModuleNotFound`)
     CanisterSnapshotNotFound = 305,
     // 4xx -- `RejectCode::CanisterReject`
     // 401
@@ -164,7 +205,6 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     // 5xx -- `RejectCode::CanisterError`
-    // 501 (previously `CanisterOutOfCycles`)
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -178,15 +218,10 @@ pub enum ErrorCode {
     CanisterInvalidController = 512,
     CanisterFunctionNotFound = 513,
     CanisterNonEmpty = 514,
-    // 515 (previously `CertifiedStateUnavailable`)
-    // 516 (previously `CanisterRejectedMessage`)
     QueryCallGraphLoopDetected = 517,
-    // 518 (previously `UnknownManagementMessage`)
-    // 519 (previously `InvalidManagementPayload`)
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
-    // 523 (previously `CanisterInstallCodeRateLimited`)
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
@@ -202,81 +237,202 @@ pub enum ErrorCode {
     CanisterMethodNotFound = 536,
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
+    CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
+    // 6xx -- `RejectCode::SysUnknown`
+    DeadlineExpired = 601,
+    ResponseDropped = 602,
 }
 
-impl TryFrom<u64> for ErrorCode {
-    type Error = TryFromError;
-    fn try_from(err: u64) -> Result<ErrorCode, Self::Error> {
-        match err {
-            // 1xx -- `RejectCode::SysFatal`
-            101 => Ok(ErrorCode::SubnetOversubscribed),
-            102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            // 2xx -- `RejectCode::SysTransient`
-            201 => Ok(ErrorCode::CanisterQueueFull),
-            202 => Ok(ErrorCode::IngressMessageTimeout),
-            203 => Ok(ErrorCode::CanisterQueueNotEmpty),
-            204 => Ok(ErrorCode::IngressHistoryFull),
-            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
-            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
-            207 => Ok(ErrorCode::CanisterOutOfCycles),
-            208 => Ok(ErrorCode::CertifiedStateUnavailable),
-            209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
-            210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
-            // 3xx -- `RejectCode::DestinationInvalid`
-            301 => Ok(ErrorCode::CanisterNotFound),
-            // 302 (previously `CanisterMethodNotFound`)
-            // 303 (previously `CanisterAlreadyInstalled`)
-            // 304 (previously `CanisterWasmModuleNotFound`)
-            305 => Ok(ErrorCode::CanisterSnapshotNotFound),
-            // 4xx -- `RejectCode::CanisterReject`
-            // 401
-            402 => Ok(ErrorCode::InsufficientMemoryAllocation),
-            403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
-            404 => Ok(ErrorCode::SubnetNotFound),
-            405 => Ok(ErrorCode::CanisterNotHostedBySubnet),
-            406 => Ok(ErrorCode::CanisterRejectedMessage),
-            407 => Ok(ErrorCode::UnknownManagementMessage),
-            408 => Ok(ErrorCode::InvalidManagementPayload),
-            // 5xx -- `RejectCode::CanisterError`
-            // 501 (previously `CanisterOutOfCycles`)
-            502 => Ok(ErrorCode::CanisterTrapped),
-            503 => Ok(ErrorCode::CanisterCalledTrap),
-            504 => Ok(ErrorCode::CanisterContractViolation),
-            505 => Ok(ErrorCode::CanisterInvalidWasm),
-            506 => Ok(ErrorCode::CanisterDidNotReply),
-            507 => Ok(ErrorCode::CanisterOutOfMemory),
-            508 => Ok(ErrorCode::CanisterStopped),
-            509 => Ok(ErrorCode::CanisterStopping),
-            510 => Ok(ErrorCode::CanisterNotStopped),
-            511 => Ok(ErrorCode::CanisterStoppingCancelled),
-            512 => Ok(ErrorCode::CanisterInvalidController),
-            513 => Ok(ErrorCode::CanisterFunctionNotFound),
-            514 => Ok(ErrorCode::CanisterNonEmpty),
-            // 515 (previously `CertifiedStateUnavailable`)
-            // 516 (previously `CanisterRejectedMessage`)
-            517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            // 518 (previously `UnknownManagementMessage`)
-            // 519 (previously `InvalidManagementPayload`)
-            520 => Ok(ErrorCode::InsufficientCyclesInCall),
-            521 => Ok(ErrorCode::CanisterWasmEngineError),
-            522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            // 523 (previously `CanisterInstallCodeRateLimited`)
-            524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
-            525 => Ok(ErrorCode::QueryCallGraphTooDeep),
-            526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
-            527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
-            528 => Ok(ErrorCode::QueryTimeLimitExceeded),
-            529 => Ok(ErrorCode::QueryCallGraphInternal),
-            530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
-            531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
-            532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
-            533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
-            534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
-            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
-            536 => Ok(ErrorCode::CanisterMethodNotFound),
-            537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
-            538 => Ok(ErrorCode::CanisterAlreadyInstalled),
-            _ => Err(TryFromError::ValueOutOfRange(err)),
+impl TryFrom<ErrorCodeProto> for ErrorCode {
+    type Error = ProxyDecodeError;
+    fn try_from(code: ErrorCodeProto) -> Result<ErrorCode, Self::Error> {
+        match code {
+            ErrorCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "ErrorCode",
+                err: format!("Unexpected value of error code: {:?}", code),
+            }),
+            ErrorCodeProto::SubnetOversubscribed => Ok(ErrorCode::SubnetOversubscribed),
+            ErrorCodeProto::MaxNumberOfCanistersReached => {
+                Ok(ErrorCode::MaxNumberOfCanistersReached)
+            }
+            ErrorCodeProto::CanisterQueueFull => Ok(ErrorCode::CanisterQueueFull),
+            ErrorCodeProto::IngressMessageTimeout => Ok(ErrorCode::IngressMessageTimeout),
+            ErrorCodeProto::CanisterQueueNotEmpty => Ok(ErrorCode::CanisterQueueNotEmpty),
+            ErrorCodeProto::IngressHistoryFull => Ok(ErrorCode::IngressHistoryFull),
+            ErrorCodeProto::CanisterIdAlreadyExists => Ok(ErrorCode::CanisterIdAlreadyExists),
+            ErrorCodeProto::StopCanisterRequestTimeout => Ok(ErrorCode::StopCanisterRequestTimeout),
+            ErrorCodeProto::CanisterOutOfCycles => Ok(ErrorCode::CanisterOutOfCycles),
+            ErrorCodeProto::CertifiedStateUnavailable => Ok(ErrorCode::CertifiedStateUnavailable),
+            ErrorCodeProto::CanisterInstallCodeRateLimited => {
+                Ok(ErrorCode::CanisterInstallCodeRateLimited)
+            }
+            ErrorCodeProto::CanisterHeapDeltaRateLimited => {
+                Ok(ErrorCode::CanisterHeapDeltaRateLimited)
+            }
+            ErrorCodeProto::CanisterNotFound => Ok(ErrorCode::CanisterNotFound),
+            ErrorCodeProto::CanisterSnapshotNotFound => Ok(ErrorCode::CanisterSnapshotNotFound),
+            ErrorCodeProto::InsufficientMemoryAllocation => {
+                Ok(ErrorCode::InsufficientMemoryAllocation)
+            }
+            ErrorCodeProto::InsufficientCyclesForCreateCanister => {
+                Ok(ErrorCode::InsufficientCyclesForCreateCanister)
+            }
+            ErrorCodeProto::SubnetNotFound => Ok(ErrorCode::SubnetNotFound),
+            ErrorCodeProto::CanisterNotHostedBySubnet => Ok(ErrorCode::CanisterNotHostedBySubnet),
+            ErrorCodeProto::CanisterRejectedMessage => Ok(ErrorCode::CanisterRejectedMessage),
+            ErrorCodeProto::UnknownManagementMessage => Ok(ErrorCode::UnknownManagementMessage),
+            ErrorCodeProto::InvalidManagementPayload => Ok(ErrorCode::InvalidManagementPayload),
+            ErrorCodeProto::CanisterTrapped => Ok(ErrorCode::CanisterTrapped),
+            ErrorCodeProto::CanisterCalledTrap => Ok(ErrorCode::CanisterCalledTrap),
+            ErrorCodeProto::CanisterContractViolation => Ok(ErrorCode::CanisterContractViolation),
+            ErrorCodeProto::CanisterInvalidWasm => Ok(ErrorCode::CanisterInvalidWasm),
+            ErrorCodeProto::CanisterDidNotReply => Ok(ErrorCode::CanisterDidNotReply),
+            ErrorCodeProto::CanisterOutOfMemory => Ok(ErrorCode::CanisterOutOfMemory),
+            ErrorCodeProto::CanisterStopped => Ok(ErrorCode::CanisterStopped),
+            ErrorCodeProto::CanisterStopping => Ok(ErrorCode::CanisterStopping),
+            ErrorCodeProto::CanisterNotStopped => Ok(ErrorCode::CanisterNotStopped),
+            ErrorCodeProto::CanisterStoppingCancelled => Ok(ErrorCode::CanisterStoppingCancelled),
+            ErrorCodeProto::CanisterInvalidController => Ok(ErrorCode::CanisterInvalidController),
+            ErrorCodeProto::CanisterFunctionNotFound => Ok(ErrorCode::CanisterFunctionNotFound),
+            ErrorCodeProto::CanisterNonEmpty => Ok(ErrorCode::CanisterNonEmpty),
+            ErrorCodeProto::QueryCallGraphLoopDetected => Ok(ErrorCode::QueryCallGraphLoopDetected),
+            ErrorCodeProto::InsufficientCyclesInCall => Ok(ErrorCode::InsufficientCyclesInCall),
+            ErrorCodeProto::CanisterWasmEngineError => Ok(ErrorCode::CanisterWasmEngineError),
+            ErrorCodeProto::CanisterInstructionLimitExceeded => {
+                Ok(ErrorCode::CanisterInstructionLimitExceeded)
+            }
+            ErrorCodeProto::CanisterMemoryAccessLimitExceeded => {
+                Ok(ErrorCode::CanisterMemoryAccessLimitExceeded)
+            }
+            ErrorCodeProto::QueryCallGraphTooDeep => Ok(ErrorCode::QueryCallGraphTooDeep),
+            ErrorCodeProto::QueryCallGraphTotalInstructionLimitExceeded => {
+                Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded)
+            }
+            ErrorCodeProto::CompositeQueryCalledInReplicatedMode => {
+                Ok(ErrorCode::CompositeQueryCalledInReplicatedMode)
+            }
+            ErrorCodeProto::QueryTimeLimitExceeded => Ok(ErrorCode::QueryTimeLimitExceeded),
+            ErrorCodeProto::QueryCallGraphInternal => Ok(ErrorCode::QueryCallGraphInternal),
+            ErrorCodeProto::InsufficientCyclesInComputeAllocation => {
+                Ok(ErrorCode::InsufficientCyclesInComputeAllocation)
+            }
+            ErrorCodeProto::InsufficientCyclesInMemoryAllocation => {
+                Ok(ErrorCode::InsufficientCyclesInMemoryAllocation)
+            }
+            ErrorCodeProto::InsufficientCyclesInMemoryGrow => {
+                Ok(ErrorCode::InsufficientCyclesInMemoryGrow)
+            }
+            ErrorCodeProto::ReservedCyclesLimitExceededInMemoryAllocation => {
+                Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation)
+            }
+            ErrorCodeProto::ReservedCyclesLimitExceededInMemoryGrow => {
+                Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow)
+            }
+            ErrorCodeProto::InsufficientCyclesInMessageMemoryGrow => {
+                Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow)
+            }
+            ErrorCodeProto::CanisterMethodNotFound => Ok(ErrorCode::CanisterMethodNotFound),
+            ErrorCodeProto::CanisterWasmModuleNotFound => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            ErrorCodeProto::CanisterAlreadyInstalled => Ok(ErrorCode::CanisterAlreadyInstalled),
+            ErrorCodeProto::CanisterWasmMemoryLimitExceeded => {
+                Ok(ErrorCode::CanisterWasmMemoryLimitExceeded)
+            }
+            ErrorCodeProto::ReservedCyclesLimitIsTooLow => {
+                Ok(ErrorCode::ReservedCyclesLimitIsTooLow)
+            }
+            ErrorCodeProto::DeadlineExpired => Ok(ErrorCode::DeadlineExpired),
+            ErrorCodeProto::ResponseDropped => Ok(ErrorCode::ResponseDropped),
+        }
+    }
+}
+
+impl From<ErrorCode> for ErrorCodeProto {
+    fn from(item: ErrorCode) -> Self {
+        match item {
+            ErrorCode::SubnetOversubscribed => ErrorCodeProto::SubnetOversubscribed,
+            ErrorCode::MaxNumberOfCanistersReached => ErrorCodeProto::MaxNumberOfCanistersReached,
+            ErrorCode::CanisterQueueFull => ErrorCodeProto::CanisterQueueFull,
+            ErrorCode::IngressMessageTimeout => ErrorCodeProto::IngressMessageTimeout,
+            ErrorCode::CanisterQueueNotEmpty => ErrorCodeProto::CanisterQueueNotEmpty,
+            ErrorCode::IngressHistoryFull => ErrorCodeProto::IngressHistoryFull,
+            ErrorCode::CanisterIdAlreadyExists => ErrorCodeProto::CanisterIdAlreadyExists,
+            ErrorCode::StopCanisterRequestTimeout => ErrorCodeProto::StopCanisterRequestTimeout,
+            ErrorCode::CanisterOutOfCycles => ErrorCodeProto::CanisterOutOfCycles,
+            ErrorCode::CertifiedStateUnavailable => ErrorCodeProto::CertifiedStateUnavailable,
+            ErrorCode::CanisterInstallCodeRateLimited => {
+                ErrorCodeProto::CanisterInstallCodeRateLimited
+            }
+            ErrorCode::CanisterHeapDeltaRateLimited => ErrorCodeProto::CanisterHeapDeltaRateLimited,
+            ErrorCode::CanisterNotFound => ErrorCodeProto::CanisterNotFound,
+            ErrorCode::CanisterSnapshotNotFound => ErrorCodeProto::CanisterSnapshotNotFound,
+            ErrorCode::InsufficientMemoryAllocation => ErrorCodeProto::InsufficientMemoryAllocation,
+            ErrorCode::InsufficientCyclesForCreateCanister => {
+                ErrorCodeProto::InsufficientCyclesForCreateCanister
+            }
+            ErrorCode::SubnetNotFound => ErrorCodeProto::SubnetNotFound,
+            ErrorCode::CanisterNotHostedBySubnet => ErrorCodeProto::CanisterNotHostedBySubnet,
+            ErrorCode::CanisterRejectedMessage => ErrorCodeProto::CanisterRejectedMessage,
+            ErrorCode::UnknownManagementMessage => ErrorCodeProto::UnknownManagementMessage,
+            ErrorCode::InvalidManagementPayload => ErrorCodeProto::InvalidManagementPayload,
+            ErrorCode::CanisterTrapped => ErrorCodeProto::CanisterTrapped,
+            ErrorCode::CanisterCalledTrap => ErrorCodeProto::CanisterCalledTrap,
+            ErrorCode::CanisterContractViolation => ErrorCodeProto::CanisterContractViolation,
+            ErrorCode::CanisterInvalidWasm => ErrorCodeProto::CanisterInvalidWasm,
+            ErrorCode::CanisterDidNotReply => ErrorCodeProto::CanisterDidNotReply,
+            ErrorCode::CanisterOutOfMemory => ErrorCodeProto::CanisterOutOfMemory,
+            ErrorCode::CanisterStopped => ErrorCodeProto::CanisterStopped,
+            ErrorCode::CanisterStopping => ErrorCodeProto::CanisterStopping,
+            ErrorCode::CanisterNotStopped => ErrorCodeProto::CanisterNotStopped,
+            ErrorCode::CanisterStoppingCancelled => ErrorCodeProto::CanisterStoppingCancelled,
+            ErrorCode::CanisterInvalidController => ErrorCodeProto::CanisterInvalidController,
+            ErrorCode::CanisterFunctionNotFound => ErrorCodeProto::CanisterFunctionNotFound,
+            ErrorCode::CanisterNonEmpty => ErrorCodeProto::CanisterNonEmpty,
+            ErrorCode::QueryCallGraphLoopDetected => ErrorCodeProto::QueryCallGraphLoopDetected,
+            ErrorCode::InsufficientCyclesInCall => ErrorCodeProto::InsufficientCyclesInCall,
+            ErrorCode::CanisterWasmEngineError => ErrorCodeProto::CanisterWasmEngineError,
+            ErrorCode::CanisterInstructionLimitExceeded => {
+                ErrorCodeProto::CanisterInstructionLimitExceeded
+            }
+            ErrorCode::CanisterMemoryAccessLimitExceeded => {
+                ErrorCodeProto::CanisterMemoryAccessLimitExceeded
+            }
+            ErrorCode::QueryCallGraphTooDeep => ErrorCodeProto::QueryCallGraphTooDeep,
+            ErrorCode::QueryCallGraphTotalInstructionLimitExceeded => {
+                ErrorCodeProto::QueryCallGraphTotalInstructionLimitExceeded
+            }
+            ErrorCode::CompositeQueryCalledInReplicatedMode => {
+                ErrorCodeProto::CompositeQueryCalledInReplicatedMode
+            }
+            ErrorCode::QueryTimeLimitExceeded => ErrorCodeProto::QueryTimeLimitExceeded,
+            ErrorCode::QueryCallGraphInternal => ErrorCodeProto::QueryCallGraphInternal,
+            ErrorCode::InsufficientCyclesInComputeAllocation => {
+                ErrorCodeProto::InsufficientCyclesInComputeAllocation
+            }
+            ErrorCode::InsufficientCyclesInMemoryAllocation => {
+                ErrorCodeProto::InsufficientCyclesInMemoryAllocation
+            }
+            ErrorCode::InsufficientCyclesInMemoryGrow => {
+                ErrorCodeProto::InsufficientCyclesInMemoryGrow
+            }
+            ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation => {
+                ErrorCodeProto::ReservedCyclesLimitExceededInMemoryAllocation
+            }
+            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => {
+                ErrorCodeProto::ReservedCyclesLimitExceededInMemoryGrow
+            }
+            ErrorCode::InsufficientCyclesInMessageMemoryGrow => {
+                ErrorCodeProto::InsufficientCyclesInMessageMemoryGrow
+            }
+            ErrorCode::CanisterMethodNotFound => ErrorCodeProto::CanisterMethodNotFound,
+            ErrorCode::CanisterWasmModuleNotFound => ErrorCodeProto::CanisterWasmModuleNotFound,
+            ErrorCode::CanisterAlreadyInstalled => ErrorCodeProto::CanisterAlreadyInstalled,
+            ErrorCode::CanisterWasmMemoryLimitExceeded => {
+                ErrorCodeProto::CanisterWasmMemoryLimitExceeded
+            }
+            ErrorCode::ReservedCyclesLimitIsTooLow => ErrorCodeProto::ReservedCyclesLimitIsTooLow,
+            ErrorCode::DeadlineExpired => ErrorCodeProto::DeadlineExpired,
+            ErrorCode::ResponseDropped => ErrorCodeProto::ResponseDropped,
         }
     }
 }
@@ -287,7 +443,7 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct UserError {
     code: ErrorCode,
     description: String,
@@ -393,14 +549,30 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
-            | ErrorCode::CanisterHeapDeltaRateLimited => false,
+            | ErrorCode::CanisterHeapDeltaRateLimited
+            | ErrorCode::CanisterWasmMemoryLimitExceeded
+            | ErrorCode::DeadlineExpired
+            | ErrorCode::ResponseDropped => false,
         }
     }
 
     pub fn count_bytes(&self) -> usize {
         std::mem::size_of_val(self) + self.description.len()
+    }
+
+    /// Panics if the error doesn't have the expected code and description.
+    /// Useful for tests to avoid matching exact error messages.
+    pub fn assert_contains(&self, code: ErrorCode, description: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.description.contains(description),
+            "Error matching description \"{}\" with \"{}\"",
+            self.description,
+            description
+        );
     }
 }
 
@@ -430,13 +602,65 @@ mod tests {
     }
 
     #[test]
-    fn can_decode_error_code_from_u64() {
-        for code in ErrorCode::iter() {
-            let int_code = code as u64;
-            match ErrorCode::try_from(int_code) {
-                Ok(decoded_code) => assert_eq!(code, decoded_code),
-                Err(err) => panic!("Could not decode {} to an ErrorCode: {:?}.", int_code, err),
-            }
+    fn error_code_round_trip() {
+        for initial in ErrorCode::iter() {
+            let encoded = ErrorCodeProto::from(initial);
+            let round_trip = ErrorCode::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn compatibility_for_error_code() {
+        // If this fails, you are making a potentially incompatible change to `ErrorCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            ErrorCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [
+                101, 102,
+                201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                301, 305,
+                402, 403, 404, 405, 406, 407, 408,
+                502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
+                517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
+                533, 534, 535, 536, 537, 538, 539, 540,
+                601, 602,
+            ]
+        );
+    }
+
+    #[test]
+    fn reject_code_round_trip() {
+        for initial in RejectCode::iter() {
+            let encoded = RejectCodeProto::from(initial);
+            let round_trip = RejectCode::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_reject_code() {
+        // If this fails, you are making a potentially incompatible change to `RejectCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            RejectCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3, 4, 5, 6]
+        );
+    }
+
+    #[test]
+    fn reject_code_from_error_code() {
+        // If this fails, you are making a change to `RejectCode` which violates the property
+        // that the reject code can be derived from the leading digit of an error code.
+        for error_code in ErrorCode::iter() {
+            let reject_code: RejectCode = error_code.into();
+            let error_code_as_u64: u64 = error_code as u64;
+            assert!((100..700).contains(&error_code_as_u64));
+            let derived_reject_code: RejectCode = (error_code_as_u64 / 100).try_into().unwrap();
+            assert_eq!(reject_code, derived_reject_code);
         }
     }
 }

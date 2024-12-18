@@ -1,6 +1,3 @@
-mod queue_id_builder;
-pub use queue_id_builder::QueueIdBuilder;
-
 mod stream_slice;
 pub use stream_slice::StreamSliceBuilder;
 

@@ -5,6 +5,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
     "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
     "//rs/crypto/test_utils",

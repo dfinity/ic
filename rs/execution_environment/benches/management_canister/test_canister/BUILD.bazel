@@ -10,6 +10,7 @@ rust_canister(
     service_file = "candid.did",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",

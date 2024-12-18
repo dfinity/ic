@@ -35,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifyCombinedSignatureError,
     ThresholdEcdsaVerifySigShareError, ThresholdSchnorrCombineSigSharesError,
     ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifyCombinedSigError,
     ThresholdSchnorrVerifySigShareError,
@@ -109,7 +109,7 @@ use std::collections::{BTreeMap, HashSet};
 ///
 /// * Dealers: all the nodes in a subnet.
 /// * Receivers: same nodes as the set of dealers.
-/// The nodes run two instances of the IDKG protocol in sequence:
+///   The nodes run two instances of the IDKG protocol in sequence:
 /// 1. Run IDKG protocol to generate a [`Random`] secret key. Since the commitment used here is masking, the nodes do
 ///    not yet know the corresponding public key, but only a share of it.
 /// 2. Run IDKG protocol to do a [`ReshareOfMasked`] secret key generated in the previous protocol instance. Since the
@@ -123,7 +123,7 @@ use std::collections::{BTreeMap, HashSet};
 /// * Dealers: nodes that were receivers in the IDKG instance that generated the key to be re-shared.
 /// * Receivers: all nodes in the subnet with the new topology (which may include new nodes and exclude nodes that were
 ///   removed).
-/// The nodes re-share a key by running a single IDKG protocol instance:
+///   The nodes re-share a key by running a single IDKG protocol instance:
 /// 1. Run IDKG protocol to do a [`ReshareOfUnmasked`] key that was previously generated.
 ///
 /// ## XNet Key Re-sharing
@@ -275,7 +275,7 @@ pub trait IDkgProtocol {
     /// Performs the following on each dealing:
     /// * Checks consistency with the params
     /// * Checks that the multisignature was computed by at least
-    /// `IDkgTranscriptParams::verification_threshold` receivers
+    ///   `IDkgTranscriptParams::verification_threshold` receivers
     /// * Verifies the (combined) multisignature
     ///
     /// # Errors
@@ -553,10 +553,10 @@ pub trait ThresholdEcdsaSigner {
     ///   [`IDkgProtocol::load_transcript`] may be necessary.
     /// * [`ThresholdEcdsaSignShareError::TransientInternalError`] if there was a transient internal
     ///   error, e.g., when communicating with the remote CSP vault.
-    fn sign_share(
+    fn create_sig_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError>;
 }
 
 /// A Crypto Component interface to perform public operations during the online phase of the
@@ -586,6 +586,8 @@ pub trait ThresholdEcdsaSigVerifier {
     ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
 
     /// Combine the given threshold ECDSA signature shares into a conventional ECDSA signature.
+    ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdEcdsaSigInputs
     ///
     /// The signature is returned as raw bytes.
     ///
@@ -642,16 +644,16 @@ pub trait ThresholdSchnorrSigner {
     /// using the method [`IDkgProtocol::load_transcript`].
     ///
     /// # Errors
-    /// * [`ThresholdSchnorrSigShareError::InternalError`] if there was an internal error creating the
+    /// * [`ThresholdSchnorrCreateSigShareError::InternalError`] if there was an internal error creating the
     ///   signature share, likely due to invalid input.
-    /// * [`ThresholdSchnorrSigShareError::NotAReceiver`] if the caller isn't in the
+    /// * [`ThresholdSchnorrCreateSigShareError::NotAReceiver`] if the caller isn't in the
     ///   transcripts' receivers. Only receivers can create signature shares.
-    /// * [`ThresholdSchnorrSigShareError::SerializationError`] if there was an error deserializing the
+    /// * [`ThresholdSchnorrCreateSigShareError::SerializationError`] if there was an error deserializing the
     ///   transcripts or serializing the signature share.
-    /// * [`ThresholdSchnorrSigShareError::SecretSharesNotFound`] if the secret shares necessary
+    /// * [`ThresholdSchnorrCreateSigShareError::SecretSharesNotFound`] if the secret shares necessary
     ///   for creating the dealing could not be found in the canister secret key store. Calling
     ///   [`IDkgProtocol::load_transcript`] may be necessary.
-    /// * [`ThresholdSchnorrSigShareError::TransientInternalError`] if there was a transient internal
+    /// * [`ThresholdSchnorrCreateSigShareError::TransientInternalError`] if there was a transient internal
     ///   error, e.g., when communicating with the remote vault.
     fn create_sig_share(
         &self,
@@ -687,6 +689,8 @@ pub trait ThresholdSchnorrSigVerifier {
 
     /// Combine the given threshold Schnorr signature shares into a conventional Schnorr signature.
     ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdSchnorrSigInputs
+    ///
     /// The signature is returned as raw bytes.
     ///
     /// # Errors
@@ -700,7 +704,7 @@ pub trait ThresholdSchnorrSigVerifier {
     ///   not eligible according to the key transcript.
     fn combine_sig_shares(
         &self,
-        inputs: ThresholdSchnorrSigInputs,
+        inputs: &ThresholdSchnorrSigInputs,
         shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
     ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>;
 

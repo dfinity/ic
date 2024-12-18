@@ -11,8 +11,7 @@ submit registration requests and query the status of these requests:
 * `/registrations/<id>` (PUT): update the canister behind the domain.
 * `/registrations/<id>` (DELETE): delete registration (domain-to-canister mapping, certificate and keys).
 
-In addition, it provides a private endpoint for the `certificate_syncer` to obtain
-the certificates:
+In addition, it provides a private endpoint to obtain the certificates:
 
 * `/certificates`: obtain all registered domains and their corresponding certificates.
 
@@ -28,12 +27,11 @@ certificate authority.
 
 The following three files are used to setup and start the service on the boundary node:
 
-* [setup-certificate-issuer.service](../../../ic-os/boundary-guestos/rootfs/etc/systemd/system/setup-certificate-issuer.service)
-* [setup-certificate-issuer.sh](../../../ic-os/boundary-guestos/rootfs/opt/ic/bin/setup-certificate-issuer.sh)
-* [certificate-issuer.service](../../../ic-os/boundary-guestos/rootfs/etc/systemd/system/certificate-issuer.service)
+* [setup-certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
+* [setup-certificate-issuer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
+* [certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-issuer.service)
 
-The `/registration` endpoint needs to be publicly accessible. To this end, the
-`nginx` configuration needs to expose and endpoint, which is routed to the certificate issuer.
+The `/registration` endpoint needs to be publicly accessible.
 
 ## Changelog
 

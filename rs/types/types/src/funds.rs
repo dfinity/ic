@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::{From, TryFrom};
 
 /// A struct to hold various types of funds.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct Funds {
     cycles: Cycles,
 }

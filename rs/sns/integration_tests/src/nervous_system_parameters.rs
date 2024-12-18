@@ -1,16 +1,14 @@
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
     TEST_USER5_KEYPAIR,
 };
-use ic_sns_governance::{
-    pb::v1::{
-        proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList,
-        NeuronPermissionType, Proposal,
-    },
-    types::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
+use ic_sns_governance::pb::v1::{
+    proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
+    Proposal,
 };
 use ic_sns_test_utils::{
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},
@@ -172,7 +170,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 assert_eq!(proposal.executed_timestamp_seconds, 0);
                 // There should be a vote for yes (since voting `yes` for a
                 // proposal you created is automatic)
-                assert!(proposal.latest_tally.clone().unwrap().yes > 0);
+                assert!(proposal.latest_tally.unwrap().yes > 0);
                 assert_eq!(proposal.latest_tally.unwrap().no, 0);
             }
 
@@ -192,9 +190,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 assert_eq!(proposal.decided_timestamp_seconds, 0);
                 assert_eq!(proposal.executed_timestamp_seconds, 0);
                 // `yes` should be winning because we gave user_1 more voting weight than user_2.
-                assert!(
-                    proposal.latest_tally.clone().unwrap().yes > proposal.latest_tally.unwrap().no
-                );
+                assert!(proposal.latest_tally.unwrap().yes > proposal.latest_tally.unwrap().no);
             }
 
             // Let's reduce the voting period in the sns parameters.
@@ -266,15 +262,18 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                     .vote(&user_5, &user_5_subaccount, proposal_id, true)
                     .await;
 
+                sns_canisters
+                    .run_periodic_tasks_now()
+                    .await
+                    .expect("Expected run_periodic_tasks_now to succeed");
+
                 // Assert that the proposal has been accepted and executed.
                 let proposal = sns_canisters.get_proposal(proposal_id).await;
-                println!("{:#?}", proposal.latest_tally);
                 assert_ne!(proposal.decided_timestamp_seconds, 0);
                 assert_ne!(proposal.executed_timestamp_seconds, 0);
                 // assert that it didn't just end because we got an absolute majority
                 assert!(
-                    proposal.latest_tally.clone().unwrap().yes * 2
-                        < proposal.latest_tally.unwrap().total
+                    proposal.latest_tally.unwrap().yes * 2 < proposal.latest_tally.unwrap().total
                 );
             }
 

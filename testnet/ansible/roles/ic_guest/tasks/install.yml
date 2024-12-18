@@ -5,7 +5,7 @@
   loop: "{{ groups['nns'] }}"
   loop_control:
     label:
-  tags: ["ic_guest"]
+  tags: [ic_guest]
 
 - name: Check if the initial neuron config exists
   stat:
@@ -16,12 +16,12 @@
   run_once: true
 
 - debug:
-    msg: "Using the initial neuron configuration from {{ inventory_file | dirname }}/initial-neurons.csv"
+    msg: Using the initial neuron configuration from {{ inventory_file | dirname }}/initial-neurons.csv
   delegate_to: localhost
   run_once: true
   when: stat_result.stat.exists
 
-- name: "Set initial_neurons to path to csv file it is exists and is not set already"
+- name: Set initial_neurons to path to csv file it is exists and is not set already
   set_fact:
     initial_neurons: "{{ stat_result.stat.path }}"
   delegate_to: localhost
@@ -29,8 +29,9 @@
   become: false
   when: stat_result.stat.exists and initial_neurons is undefined
 
-- name: "Print value of initial_neurons"
-  debug: var=initial_neurons
+- name: Print value of initial_neurons
+  debug:
+    var: initial_neurons
   delegate_to: localhost
   run_once: true
   become: false
@@ -40,19 +41,20 @@
     set -exuo pipefail
       echo "Media path: {{ ic_media_path }}"
       echo "Adding canisters from '{{ custom_canister_dir }}'"
-      cp "{{ custom_canister_dir }}"/*.wasm "{{ ic_media_path }}/canisters/"
-      sha256sum "{{ ic_media_path }}"/canisters/*.wasm
+      cp "{{ custom_canister_dir }}"/*.wasm.gz "{{ ic_media_path }}/canisters/"
+      sha256sum "{{ ic_media_path }}"/canisters/*.wasm.gz
   register: nns_canisters
   delegate_to: localhost
   run_once: true
-  changed_when: "script_res.stdout | default('')"
+  changed_when: script_res.stdout | default('')
   become: false
   args:
     executable: /bin/bash
-  tags: ["ic_guest"]
+  tags: [ic_guest]
   when: custom_canister_dir is defined
 
-- debug: var=nns_canisters.stdout_lines
+- debug:
+    var: nns_canisters.stdout_lines
   when: custom_canister_dir is defined
 
 - name: Install NNS canisters
@@ -117,18 +119,19 @@
   delegate_to: localhost
   run_once: true
   register: script_res
-  changed_when: "script_res.stdout | default('')"
+  changed_when: script_res.stdout | default('')
   become: false
   args:
     executable: /bin/bash
-  tags: ["ic_guest"]
+  tags: [ic_guest]
 
 - name: Wait for all nodes to listen on port 8080
   include_tasks:
     file: url_waitfor_connect.yml
   when:
-    - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
+    - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names
+      and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
   loop: "{{ groups['nodes'] }}"
   loop_control:
     label:
-  tags: ["ic_guest"]
+  tags: [ic_guest]

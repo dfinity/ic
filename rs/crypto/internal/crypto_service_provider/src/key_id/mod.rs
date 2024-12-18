@@ -1,6 +1,8 @@
 use crate::CspPublicKey;
 use hex::FromHex;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType, MEGaPublicKey, PolynomialCommitment,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
@@ -26,7 +28,7 @@ mod tests;
 /// It is a critical system invariant that the generated `KeyId` remains stable.
 /// This means that the same inputs should *always* produce instances of `KeyId` with the same value.
 /// This should be ensured via testing, especially if an external library is involved in generating those inputs.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct KeyId([u8; 32]);
 ic_crypto_internal_types::derive_serde!(KeyId, 32);
 
@@ -60,7 +62,7 @@ impl From<[u8; 32]> for KeyId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum KeyIdInstantiationError {
     InvalidArguments(String),
 }

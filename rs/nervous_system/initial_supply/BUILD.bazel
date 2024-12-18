@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types",
+    "//rs/nervous_system/runtime",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
+]
+
+PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tokio",
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["src/**/*tests*"],
+)
+
+rust_library(
+    name = "initial_supply",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_initial_supply",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "initial_supply_test",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)

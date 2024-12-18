@@ -138,13 +138,18 @@ where
     }
 
     fn check_invariants(&self) {
-        debug_assert_eq!(
-            self.size,
-            self.cache
-                .iter()
-                .map(|(key, value)| key.count_bytes() + value.count_bytes())
-                .sum::<usize>()
-        );
+        // Iterating over random memory locations is expensive and slows down some tests,
+        // so the debug assert is limited to 1k cache entries.
+        #[cfg(debug_assertions)]
+        if self.len() < 1_000 {
+            debug_assert_eq!(
+                self.size,
+                self.cache
+                    .iter()
+                    .map(|(key, value)| key.count_bytes() + value.count_bytes())
+                    .sum::<usize>()
+            );
+        }
         debug_assert!(self.size <= self.capacity);
     }
 }
@@ -153,7 +158,7 @@ where
 mod tests {
     use super::*;
 
-    #[derive(Debug, Eq, Hash, PartialEq)]
+    #[derive(Eq, PartialEq, Hash, Debug)]
     struct ValueSize(u32, usize);
 
     impl CountBytes for ValueSize {
@@ -162,7 +167,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Eq, Hash, PartialEq)]
+    #[derive(Eq, PartialEq, Hash, Debug)]
     struct Key(u32);
 
     impl CountBytes for Key {

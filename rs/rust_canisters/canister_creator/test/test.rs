@@ -2,7 +2,10 @@ use canister_test::*;
 use ic_state_machine_tests::StateMachine;
 
 // This constant has been obtained empirically by running the tests.
-const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 1_820_000;
+// The old value of the const was 1_820_000.
+// Since, we updated the default stack size for Wasm from 1MiB to 3MiB
+// The new memory usage is 1_820_000 - 1_048_576 + 3_145_728 = 3_917_152
+const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 3_917_152;
 
 const HELLO_WORLD_WAT: &str = r#"
 (module
@@ -99,10 +102,10 @@ fn install_code_works() {
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
 
     // Assert there are 1_001 canisters running with the memory usage below the
-    // subnet storage capacity, which is currently 700 GiB.
+    // subnet storage capacity, which is currently 1 TiB
     assert_eq!(env.num_running_canisters(), 1_001);
     assert!(
-        env.canister_memory_usage_bytes() < 700 * 1024 * 1024 * 1024,
+        env.canister_memory_usage_bytes() < 1024 * 1024 * 1024 * 1024,
         "Actual: {} bytes",
         env.canister_memory_usage_bytes()
     );

@@ -1,0 +1,30 @@
+[package]
+name = "ic-sns-governance-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+bytes = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+comparable = { version = "0.5", features = ["derive"] }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-nns-common = { path = "../../../nns/common" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-types = { path = "../../../types/types" }
+ic-utils = { path = "../../../utils" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+itertools = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

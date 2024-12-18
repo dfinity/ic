@@ -1,0 +1,17 @@
+[package]
+name = "cloner-canister-types"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+crate-type = ["lib"]
+path = "src/cloner_canister.rs"
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }

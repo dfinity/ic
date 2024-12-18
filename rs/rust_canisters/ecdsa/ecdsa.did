@@ -1,2 +1,2 @@
-type Options = record { derivation_path : vec vec nat8; key_name : text };
+type Options = record { derivation_path : vec blob; key_name : text };
 service : { get_sig : (Options) -> () }

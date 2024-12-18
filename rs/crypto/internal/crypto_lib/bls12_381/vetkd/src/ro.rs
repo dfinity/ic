@@ -1,5 +1,5 @@
 use ic_crypto_internal_bls12_381_type::Scalar;
-use ic_crypto_sha3::Shake256;
+use ic_sha3::Shake256;
 
 #[derive(Clone)]
 pub(crate) struct RandomOracle {

@@ -1,0 +1,34 @@
+# This file contains ignores rule violations for ansible-lint
+
+# All plays should be named.
+testnet/ansible/icos_network_redeploy.yml name[play]
+testnet/ansible/ic_p8s_service_discovery_destroy.yml name[play]
+testnet/ansible/ic_p8s_service_discovery_install.yml name[play]
+testnet/ansible/roles/ic_guest_prod/playbook.yml name[play]
+
+# All tasks should be named.
+testnet/ansible/roles/ic_guest/tasks/install.yml name[missing]
+testnet/ansible/roles/ic_guest/tasks/shutdown.yml name[missing]
+
+# Variables names from within roles should use <prefix> as a prefix.
+testnet/ansible/roles/ic_guest/defaults/main.yml var-naming[no-role-prefix]
+testnet/ansible/roles/ic_guest_prod/defaults/main.yml var-naming[no-role-prefix]
+
+# Avoid using paths when importing roles.
+testnet/ansible/roles/ic_guest_prod/playbook.yml role-name[path]
+
+# Line too long
+testnet/ansible/roles/ic_guest/tasks/shutdown.yml yaml[line-length]
+
+# Commands should not change things if nothing needs doing.
+testnet/ansible/roles/ic_guest/tasks/create.yml no-changed-when
+testnet/ansible/roles/ic_guest/tasks/shutdown.yml no-changed-when
+testnet/ansible/roles/ic_guest/tasks/start.yml no-changed-when
+testnet/ansible/roles/ic_guest/tasks/stop.yml no-changed-when
+
+# Use failed_when and specify error conditions instead of using ignore_errors.
+testnet/ansible/roles/ic_guest/tasks/create.yml ignore-errors
+testnet/ansible/roles/ic_guest/tasks/shutdown.yml ignore-errors
+
+# service used in place of service module
+testnet/ansible/roles/ic_guest/tasks/create.yml command-instead-of-module

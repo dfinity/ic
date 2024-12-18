@@ -3,7 +3,9 @@
 mod bls12_381_sig_cache;
 
 use ic_metrics::MetricsRegistry;
-use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
 use std::ops::Add;
 use std::time::Instant;
 use strum::IntoEnumIterator;
@@ -94,6 +96,16 @@ impl CryptoMetrics {
                     &format!("{}", result),
                 ])
                 .observe(start_time.elapsed().as_secs_f64());
+
+            if method_name == "verify_dealing_private" {
+                metrics
+                    .crypto_fine_grained_verify_dealing_private_duration_seconds
+                    .observe(start_time.elapsed().as_secs_f64());
+            } else if method_name == "verify_dealing_public" {
+                metrics
+                    .crypto_fine_grained_verify_dealing_public_duration_seconds
+                    .observe(start_time.elapsed().as_secs_f64());
+            }
         }
     }
 
@@ -328,7 +340,7 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyType {
@@ -338,7 +350,7 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
@@ -350,11 +362,12 @@ pub enum MetricsDomain {
     TlsConfig,
     IdkgProtocol,
     ThresholdEcdsa,
+    ThresholdSchnorr,
     PublicSeed,
     KeyManagement,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsScope {
@@ -362,7 +375,7 @@ pub enum MetricsScope {
     Local,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsResult {
@@ -379,7 +392,7 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyRotationResult {
@@ -394,7 +407,7 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
@@ -402,7 +415,7 @@ pub enum ServiceType {
     Server,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
@@ -418,7 +431,7 @@ pub enum MessageType {
 ///    in the local public key store. For keys that may have multiple revisions, e.g., the iDKG
 ///    dealing encryption public keys, at most one is included in the `pk_local` count
 ///  - `sk_local`: The number of node secret keys stored in the local secret key store
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct KeyCounts {
     pk_registry: u32,
     pk_local: u32,
@@ -504,6 +517,12 @@ struct Metrics {
     /// The 'domain' label indicates the domain, e.g., `MetricsDomain::BasicSignature`.
     pub crypto_duration_seconds: HistogramVec,
 
+    /// Histogram with fine-grained buckets for IDKG's verify dealing private call time.
+    crypto_fine_grained_verify_dealing_private_duration_seconds: Histogram,
+
+    /// Histogram with fine-grained buckets for IDKG's verify dealing public call time.
+    crypto_fine_grained_verify_dealing_public_duration_seconds: Histogram,
+
     /// Histograms of canister signature verification call time.
     ///
     /// The 'result' label indicates if the result of the operation was an `Ok(_)`
@@ -522,11 +541,13 @@ struct Metrics {
     ///  - NI-DKG keys
     ///  - iDKG keys
     ///  - TLS certificates and secret keys
+    ///
     /// The above keys are not kept track of separately, merely a total number of stored keys.
     /// The counters keep track of which locations these keys are stored in:
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
+    ///
     /// Additionally, the number of iDKG dealing encryption public keys that are stored locally are
     /// also kept track of in the gauge vector.
     pub crypto_key_counts: IntGaugeVec,
@@ -591,6 +612,22 @@ impl Metrics {
             ic_metrics::buckets::decimal_buckets(-4, 1),
             &["method_name", "scope", "domain", "result"],
         );
+        let crypto_fine_grained_verify_dealing_private_duration_seconds = r.histogram(
+            "crypto_fine_grained_verify_dealing_private_duration_seconds",
+            "Histogram of a verify dealing private call durations in seconds",
+            // The buckets are from 350 us to 1329 us (0.00035 * 1.1^14), which is
+            // slightly larger than the range observed in the experiments for
+            // subnets with 13 to 40 nodes.
+            ic_metrics::buckets::exponential_buckets(0.00035, 1.1, 15),
+        );
+        let crypto_fine_grained_verify_dealing_public_duration_seconds = r.histogram(
+            "crypto_fine_grained_verify_dealing_public_duration_seconds",
+            "Histogram of a verify dealing private call durations in seconds",
+            // The buckets are from 400 us to 1518 us (0.004 * 1.1^14), which is
+            // slightly larger than the range observed in the experiments for
+            // subnets with 13 to 40 nodes.
+            ic_metrics::buckets::exponential_buckets(0.0004, 1.1, 15),
+        );
         let idkg_dealing_encryption_pubkey_count = r.int_gauge_vec(
             "crypto_idkg_dealing_encryption_pubkey_count",
             "Number of iDKG dealing encryption public keys stored locally",
@@ -636,6 +673,8 @@ impl Metrics {
                 &["name", "access"],
             ),
             crypto_duration_seconds: durations,
+            crypto_fine_grained_verify_dealing_private_duration_seconds,
+            crypto_fine_grained_verify_dealing_public_duration_seconds,
             crypto_iccsa_verification_duration_seconds: r.histogram_vec(
                 "crypto_iccsa_verification_duration_seconds",
                 "Histogram of a canister signature verification call durations in seconds",

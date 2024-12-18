@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_crypto_getrandom_for_wasm",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:getrandom",
     ],
 )

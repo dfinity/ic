@@ -16,6 +16,17 @@ pub const PAGE_SIZE: usize = 16384;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 pub const PAGE_SIZE: usize = 4096;
 
+/// The size of a huge page on x86_64 on Linux.
+/// Used for a huge page allocation as a memory optimization as
+/// it reduces the number of page faults and improves performance.
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+pub const HUGE_PAGE_SIZE: usize = 2 * 1024 * 1024;
+
+/// Set this to the same value as `PAGE_SIZE` for MacOS.
+/// There is no huge page performance optimization on this platform.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+pub const HUGE_PAGE_SIZE: usize = PAGE_SIZE;
+
 pub struct PageIndexTag;
 /// 0-based index of an OS page in the Wasm instance memory.
 /// Do not confuse this with a 64KiB Wasm memory page, which

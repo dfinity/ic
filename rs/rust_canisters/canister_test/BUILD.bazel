@@ -3,12 +3,15 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/config",
+    "//rs/crypto/sha2",
     "//rs/registry/transport",
     "//rs/replica_tests",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/on_wire",
+    "//rs/state_machine_tests",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:backoff",
@@ -27,7 +30,8 @@ ALIASES = {}
 
 rust_library(
     name = "canister_test",
-    srcs = glob(["src/**"]),
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "canister_test",
     proc_macro_deps = MACRO_DEPENDENCIES,

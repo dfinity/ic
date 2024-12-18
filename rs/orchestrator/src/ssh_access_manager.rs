@@ -1,12 +1,16 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::{metrics::OrchestratorMetrics, registry_helper::RegistryHelper};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    registry_helper::RegistryHelper,
+};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
-use ic_types::{RegistryVersion, SubnetId};
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use ic_types::{NodeId, RegistryVersion, SubnetId};
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+    sync::{Arc, RwLock},
+};
 
 #[derive(Default)]
 pub(crate) struct SshAccessParameters {
@@ -20,6 +24,7 @@ pub(crate) struct SshAccessParameters {
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
+    node_id: NodeId,
     logger: ReplicaLogger,
     last_applied_parameters: Arc<RwLock<SshAccessParameters>>,
 }
@@ -28,20 +33,22 @@ impl SshAccessManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
+        node_id: NodeId,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             registry,
             metrics,
+            node_id,
             logger,
             last_applied_parameters: Default::default(),
         }
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
-    pub(crate) async fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
+    pub(crate) fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
-        let last_applied_parameters = self.last_applied_parameters.read().await;
+        let last_applied_parameters = self.last_applied_parameters.read().unwrap();
         if last_applied_parameters.registry_version == registry_version
             && last_applied_parameters.subnet_id == subnet_id
         {
@@ -70,7 +77,7 @@ impl SshAccessManager {
 
         // Update the readonly & backup keys. If it fails, log why.
         if self.update_access_keys(&new_readonly_keys, &new_backup_keys) {
-            *self.last_applied_parameters.write().await = SshAccessParameters {
+            *self.last_applied_parameters.write().unwrap() = SshAccessParameters {
                 registry_version,
                 subnet_id,
             };
@@ -133,13 +140,22 @@ impl SshAccessManager {
         match subnet_id {
             None => match self
                 .registry
-                .registry_client
-                .get_unassigned_nodes_config(version)
-                .map_err(OrchestratorError::RegistryClientError)?
+                .get_api_boundary_node_record(self.node_id, version)
             {
-                // Unassigned nodes do not need backup keys
-                Some(record) => Ok((record.ssh_readonly_access, vec![])),
-                None => Ok((vec![], vec![])),
+                // API boundary nodes (for now) do not have readonly or backup keys
+                Ok(_) => Ok((vec![], vec![])),
+                // If it is not an API boundary node, it is an unassigned node
+                Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => match self
+                    .registry
+                    .registry_client
+                    .get_unassigned_nodes_config(version)
+                    .map_err(OrchestratorError::RegistryClientError)?
+                {
+                    // Unassigned nodes do not need backup keys
+                    Some(record) => Ok((record.ssh_readonly_access, vec![])),
+                    None => Ok((vec![], vec![])),
+                },
+                Err(err) => Err(err),
             },
             Some(subnet_id) => {
                 self.registry

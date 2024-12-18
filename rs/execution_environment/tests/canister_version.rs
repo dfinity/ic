@@ -1,4 +1,5 @@
 use ic00::CanisterSettingsArgsBuilder;
+use ic_base_types::PrincipalId;
 use ic_config::execution_environment;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
@@ -6,10 +7,8 @@ use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    IngressState, IngressStatus, PrincipalId, StateMachine, StateMachineBuilder,
-    StateMachineConfig, UserError,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 
@@ -41,7 +40,7 @@ fn execute_ingress_with_dts(
                 state: IngressState::Completed(result),
                 ..
             } => {
-                assert!(dts == (tick > 0));
+                assert_eq!(dts, 0 < tick);
                 return Ok(result);
             }
             IngressStatus::Known {
@@ -126,7 +125,6 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
             vec![],
             None,
             None,
-            None,
         )
         .encode(),
         dts_install,
@@ -147,8 +145,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
             user_id,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None, None)
-                .encode(),
+            InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None).encode(),
             dts,
         )
         .unwrap();

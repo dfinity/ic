@@ -3,6 +3,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
+use ic_interfaces::time_source::system_time_now;
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -12,6 +13,7 @@ use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use tokio::sync::mpsc::Sender;
 
 /// Struct that implements the ingress history reader trait. Consumers of this
 /// trait can use this to inspect the ingress history.
@@ -81,18 +83,47 @@ pub struct IngressHistoryWriterImpl {
     // Wrapped in a RwLock for interior mutability, otherwise &self in methods
     // has to be &mut self.
     received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
+    message_state_transition_received_duration_seconds: Histogram,
+    message_state_transition_processing_duration_seconds: Histogram,
+    message_state_transition_received_to_processing_duration_seconds: Histogram,
     message_state_transition_completed_ic_duration_seconds: Histogram,
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
     message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
+    completed_execution_messages_tx: Sender<(MessageId, Height)>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl IngressHistoryWriterImpl {
-    pub fn new(config: Config, log: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        config: Config,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+        completed_execution_messages_tx: Sender<(MessageId, Height)>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    ) -> Self {
         Self {
             config,
             log,
             received_time: RwLock::new(HashMap::new()),
+            message_state_transition_received_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_duration_seconds",
+                "Per-ingress-message wall-clock duration between block maker and ingress queue",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_processing_duration_seconds",
+                "Per-ingress-message wall-clock duration between block maker and completed (message, not call) execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_to_processing_duration_seconds",
+                "Per-ingress-message wall-clock duration between induction and completed (message, not call) execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
             message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_completed_ic_duration_seconds",
                 "The IC time taken for a message to transition from the Received state to Completed state",
@@ -126,7 +157,9 @@ impl IngressHistoryWriterImpl {
                 // The `user_error_code` label is internal information that provides more
                 // detail about the reason for rejection.
                 &["reject_code", "user_error_code"],
-            )
+            ),
+            completed_execution_messages_tx,
+            state_reader
         }
     }
 }
@@ -134,7 +167,12 @@ impl IngressHistoryWriterImpl {
 impl IngressHistoryWriter for IngressHistoryWriterImpl {
     type State = ReplicatedState;
 
-    fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus) {
+    fn set_status(
+        &self,
+        state: &mut Self::State,
+        message_id: MessageId,
+        status: IngressStatus,
+    ) -> Arc<IngressStatus> {
         let time = state.time();
         let current_status = state.get_ingress_status(&message_id);
 
@@ -148,8 +186,48 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 status
             );
         }
+
         use IngressState::*;
         use IngressStatus::*;
+
+        // Latency instrumentation.
+        match (&current_status, &status) {
+            // Newly received message: observe its induction latency.
+            (
+                Unknown,
+                Known {
+                    state: Received, ..
+                },
+            ) => {
+                // Wall clock duration since the message was included into a block.
+                let duration_since_block_made = system_time_now().saturating_duration_since(time);
+                self.message_state_transition_received_duration_seconds
+                    .observe(duration_since_block_made.as_secs_f64());
+            }
+
+            // Message popped from ingress queue: observe its processing latencies.
+            (
+                Known {
+                    state: Received, ..
+                },
+                Known { state, .. },
+            ) if state != &Received => {
+                if let Some(timer) = self.received_time.read().unwrap().get(&message_id) {
+                    // Wall clock duration since the message was included into a block.
+                    let duration_since_block_made =
+                        system_time_now().saturating_duration_since(timer.ic_time);
+                    // Wall clock duration since the message was inducted.
+                    let duration_since_induction =
+                        Instant::now().saturating_duration_since(timer.system_time);
+                    self.message_state_transition_processing_duration_seconds
+                        .observe(duration_since_block_made.as_secs_f64());
+                    self.message_state_transition_received_to_processing_duration_seconds
+                        .observe(duration_since_induction.as_secs_f64());
+                }
+            }
+            _ => {}
+        }
+
         match &status {
             Known {
                 state: Received, ..
@@ -199,11 +277,29 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             _ => {}
         };
 
+        if let IngressStatus::Known { state, .. } = &status {
+            if state.is_terminal() {
+                // We want to send the height of the replicated state where
+                // ingress message went into a terminal state.
+                //
+                // latest_state_height() will return the height of the last committed state, `H`.
+                // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
+                let last_committed_height = self.state_reader.latest_state_height();
+                let completed_execution_and_updated_to_terminal_state: Height =
+                    last_committed_height + Height::from(1);
+
+                let _ = self.completed_execution_messages_tx.try_send((
+                    message_id.clone(),
+                    completed_execution_and_updated_to_terminal_state,
+                ));
+            }
+        };
+
         state.set_ingress_status(
             message_id,
             status,
             self.config.ingress_history_memory_capacity,
-        );
+        )
     }
 }
 
@@ -258,7 +354,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterTrapped => "Canister Trapped",
         CanisterCalledTrap => "Canister Called Trap",
         CanisterContractViolation => "Canister Contract Violation",
-        CanisterInvalidWasm => "Canister Invalid WASM",
+        CanisterInvalidWasm => "Canister Invalid Wasm",
         CanisterDidNotReply => "Canister Did Not Reply",
         CanisterOutOfMemory => "Canister Out Of Memory",
         CanisterStopped => "Canister Stopped",
@@ -301,11 +397,17 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         ReservedCyclesLimitExceededInMemoryGrow => {
             "Canister cannot grow memory due to its reserved cycles limit"
         }
+        ReservedCyclesLimitIsTooLow => {
+            "Canister cannot set the reserved cycles limit below the reserved cycles balance"
+        }
         InsufficientCyclesInMessageMemoryGrow => {
             "Canister does not have enough cycles to grow message memory"
         }
         CanisterMethodNotFound => "Canister Method Not Found",
-        CanisterWasmModuleNotFound => "Canister WASM Module Not Found",
+        CanisterWasmModuleNotFound => "Canister Wasm Module Not Found",
         CanisterAlreadyInstalled => "Canister Already Installed",
+        CanisterWasmMemoryLimitExceeded => "Canister exceeded its Wasm memory limit",
+        DeadlineExpired => "Best-effort call deadline has expired",
+        ResponseDropped => "Best-effort response was dropped",
     }
 }

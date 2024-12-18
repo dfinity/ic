@@ -52,7 +52,7 @@ pub(crate) async fn state_sync_chunk_handler<T: 'static>(
         tokio::task::spawn_blocking(
             move || match state.state_sync.chunk(&artifact_id, chunk_id) {
                 Some(data) => {
-                    let pb_chunk = pb::StateSyncChunkResponse { data };
+                    let pb_chunk = pb::StateSyncChunkResponse { data: data.take() };
                     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
                     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
                     let raw = raw.freeze();
@@ -123,7 +123,7 @@ pub(crate) fn parse_chunk_handler_response(
                     }
                 })?;
 
-            Ok(pb.data)
+            Ok(pb.data.into())
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),

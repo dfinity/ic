@@ -13,5 +13,5 @@ ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "../../internal/crypto_
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils = { path = ".." }
 ic-types = { path = "../../../types/types" }
-rand = "0.8.3"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }

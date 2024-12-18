@@ -1,14 +1,18 @@
-use ic_base_types::SubnetId;
+use ic_base_types::{subnet_id_try_from_option, SubnetId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::{messaging::xnet::v1 as messaging_pb, types::v1 as pb};
+use ic_protobuf::{
+    messaging::xnet::v1 as messaging_pb,
+    proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 use crate::{xnet::CertifiedStreamSlice, CountBytes};
 
 /// Payload that contains XNet messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct XNetPayload {
     pub stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
@@ -32,7 +36,8 @@ impl From<&XNetPayload> for pb::XNetPayload {
 }
 
 impl TryFrom<pb::XNetPayload> for XNetPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(payload: pb::XNetPayload) -> Result<Self, Self::Error> {
         Ok(Self {
             stream_slices: payload
@@ -40,21 +45,14 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
                 .into_iter()
                 .map(|subnet_stream_slice| {
                     Ok((
-                        crate::subnet_id_try_from_protobuf(
-                            subnet_stream_slice.subnet_id.ok_or_else(|| {
-                                String::from("Error: stream_slices missing subnet_id")
-                            })?,
-                        )
-                        .map_err(|e| format!("{:?}", e))?,
-                        CertifiedStreamSlice::try_from(
-                            subnet_stream_slice.stream_slice.ok_or_else(|| {
-                                String::from("Error: stream_slices missing from XNetPayload")
-                            })?,
-                        )
-                        .map_err(|e| format!("{:?}", e))?,
+                        subnet_id_try_from_option(subnet_stream_slice.subnet_id)?,
+                        try_from_option_field(
+                            subnet_stream_slice.stream_slice,
+                            "XNetPayload::subnet_stream_slices::stream_slice",
+                        )?,
                     ))
                 })
-                .collect::<Result<BTreeMap<SubnetId, CertifiedStreamSlice>, String>>()?,
+                .collect::<Result<BTreeMap<SubnetId, CertifiedStreamSlice>, Self::Error>>()?,
         })
     }
 }

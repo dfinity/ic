@@ -15,6 +15,20 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
             .expect("Error decoding from stable"),
     );
 
+    // Registry data migrations should be implemented as follows:
+    // let mutation_batches_due_to_data_migrations = {
+    //     let mutations = registry.compute_mutations_from_my_data_migration();
+    //     if mutations.is_empty() {
+    //         0 // No mutations required for this data migration.
+    //     } else {
+    //         registry.maybe_apply_mutation_internal(mutations);
+    //         1 // Single batch of mutations due to this data migration.
+    //     }
+    // };
+    //
+    // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
+    let mutation_batches_due_to_data_migrations = 0;
+
     registry.check_global_state_invariants(&[]);
     // Registry::from_serializable_from guarantees this always passes in this function
     // because it fills in missing versions to maintain that invariant
@@ -29,7 +43,7 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
         let pre_upgrade_version = registry_storage.pre_upgrade_version.unwrap();
 
         assert_eq!(
-            pre_upgrade_version,
+            pre_upgrade_version + mutation_batches_due_to_data_migrations,
             registry.latest_version(),
             "The serialized last version watermark doesn't match what's found in the records. \
                      Watermark: {:?}, Last version: {:?}",

@@ -1,0 +1,15 @@
+[Unit]
+Description=VSOCK agent daemon
+
+[Service]
+User=root
+Group=root
+ExecStart=/opt/ic/bin/vsock_host
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=60
+
+[Install]
+WantedBy=multi-user.target

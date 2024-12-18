@@ -1,0 +1,19 @@
+[Unit]
+Description=IC Crypto Service Provider
+After=generate-ic-config.service
+Wants=generate-ic-config.service
+Requires=ic-crypto-csp.socket
+StartLimitBurst=5
+StartLimitIntervalSec=5
+
+[Service]
+UMask=066
+User=ic-csp-vault
+Environment=RUST_BACKTRACE=1
+ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic.json5
+NotifyAccess=main
+Restart=always
+
+[Install]
+WantedBy=ic-replica.service
+Also=ic-crypto-csp.socket

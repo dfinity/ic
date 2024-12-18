@@ -7,7 +7,7 @@ use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_metrics::fetch_histogram_stats;
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::Cycles;
 use std::collections::VecDeque;
 
@@ -17,13 +17,12 @@ impl CallTreeTestFixture {
     /// Creates a new state machine with a specific number of 'downstream-calls-test-canisters`
     /// installed and started.
     fn with_num_canisters(num_canisters: u64) -> (Self, Vec<CanisterId>) {
-        let subnet_id = subnet_test_id(1);
         let env = StateMachineBuilder::new()
-            .with_subnet_id(subnet_id)
+            .with_subnet_id(SUBNET_0)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table({
                 let mut routing_table = RoutingTable::new();
-                routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+                routing_table_insert_subnet(&mut routing_table, SUBNET_0).unwrap();
                 routing_table
             })
             .build();

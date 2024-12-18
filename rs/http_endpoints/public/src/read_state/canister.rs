@@ -1,68 +1,78 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_principal_id},
-    receive_request_body,
-    state_reader_executor::StateReaderExecutor,
-    validator_executor::ValidatorExecutor,
+    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
-use axum::body::Body;
+use axum::{
+    body::Body,
+    extract::{DefaultBodyLimit, State},
+    response::{IntoResponse, Response},
+    Router,
+};
 use crossbeam::atomic::AtomicCell;
 use http::Request;
-use hyper::{Response, StatusCode};
+use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::ReplicaLogger;
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, SignedRequestBytes,
-        EXPECTED_MESSAGE_ID_LENGTH,
+        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
     },
+    time::current_time,
     CanisterId, PrincipalId, UserId,
 };
-use ic_validator::CanisterIdSet;
-use std::convert::{Infallible, TryFrom};
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll};
-use tower::Service;
+use ic_validator::{CanisterIdSet, HttpRequestVerifier};
+use std::{
+    convert::{Infallible, TryFrom},
+    sync::Arc,
+};
+use tokio::sync::OnceCell;
+use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    state_reader_executor: StateReaderExecutor,
-    validator_executor: ValidatorExecutor<ReadState>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
 pub struct CanisterReadStateServiceBuilder {
-    log: Option<ReplicaLogger>,
+    log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
+impl CanisterReadStateService {
+    pub(crate) fn route() -> &'static str {
+        "/api/v2/canister/:effective_canister_id/read_state"
+    }
+}
+
 impl CanisterReadStateServiceBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ) -> Self {
         Self {
-            log: None,
+            log,
             health_status: None,
             malicious_flags: None,
             delegation_from_nns,
@@ -70,11 +80,6 @@ impl CanisterReadStateServiceBuilder {
             ingress_verifier,
             registry_client,
         }
-    }
-
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
     }
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
@@ -90,165 +95,136 @@ impl CanisterReadStateServiceBuilder {
         self
     }
 
-    pub fn build(self) -> CanisterReadStateService {
-        let log = self.log.unwrap_or(no_op_logger());
-        CanisterReadStateService {
-            log: log.clone(),
+    pub(crate) fn build_router(self) -> Router {
+        let state = CanisterReadStateService {
+            log: self.log,
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
-            state_reader_executor: StateReaderExecutor::new(self.state_reader),
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client.clone(),
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            state_reader: self.state_reader,
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
-        }
+        };
+        Router::new().route(
+            CanisterReadStateService::route(),
+            axum::routing::post(canister_read_state)
+                .with_state(state)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+        )
+    }
+
+    pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
+        let router = self.build_router();
+        BoxCloneService::new(router.into_service())
     }
 }
 
-impl Service<Request<Body>> for CanisterReadStateService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+pub(crate) async fn canister_read_state(
+    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
+    State(CanisterReadStateService {
+        log,
+        health_status,
+        delegation_from_nns,
+        state_reader,
+        validator,
+        registry_client,
+    }): State<CanisterReadStateService>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
+) -> impl IntoResponse {
+    if health_status.load() != ReplicaHealthStatus::Healthy {
+        let status = StatusCode::SERVICE_UNAVAILABLE;
+        let text = format!(
+            "Replica is unhealthy: {:?}. Check the /api/v2/status for more information.",
+            health_status.load(),
+        );
+        return (status, text).into_response();
     }
 
-    fn call(&mut self, request: Request<Body>) -> Self::Future {
-        if self.health_status.load() != ReplicaHealthStatus::Healthy {
-            let res = make_plaintext_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!(
-                    "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
-                    self.health_status.load(),
-                ),
-            );
-            return Box::pin(async move { Ok(res) });
+    let delegation_from_nns = delegation_from_nns.get().cloned();
+
+    // Convert the message to a strongly-typed struct.
+    let request = match HttpRequest::<ReadState>::try_from(request) {
+        Ok(request) => request,
+        Err(e) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = format!("Malformed request: {:?}", e);
+            return (status, text).into_response();
         }
-        let (mut parts, body) = request.into_parts();
-        // By removing the principal id we get ownership and avoid having to clone it when creating the future.
-        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
-            Ok(canister_id) => canister_id,
-            Err(res) => {
-                error!(
-                    self.log,
-                    "Effective principal ID is not attached to read state request. This is a bug."
-                );
-                return Box::pin(async move { Ok(res) });
+    };
+    let read_state = request.content().clone();
+    let registry_version = registry_client.get_latest_version();
+
+    let make_service_unavailable_response = || {
+        let status = StatusCode::SERVICE_UNAVAILABLE;
+        let text = "Certified state is not available yet. Please try again...".to_string();
+        (status, text).into_response()
+    };
+    let root_of_trust_provider =
+        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    // Since spawn blocking requires 'static we can't use any references
+    let request_c = request.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        let targets =
+            match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
+                Ok(targets) => targets,
+                Err(err) => {
+                    let http_err = validation_error_to_http_error(request.id(), err, &log);
+                    return (http_err.status, http_err.message).into_response();
+                }
+            };
+
+        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
+            Some(reader) => reader,
+            None => return make_service_unavailable_response(),
+        };
+
+        // Verify authorization for requested paths.
+        if let Err(HttpError { status, message }) = verify_paths(
+            certified_state_reader.get_state(),
+            &read_state.source,
+            &read_state.paths,
+            &targets,
+            effective_canister_id.into(),
+        ) {
+            return (status, message).into_response();
+        }
+
+        // Create labeled tree. This may be an expensive operation and by
+        // creating the labeled tree after verifying the paths we know that
+        // the depth is max 4.
+        // Always add "time" to the paths even if not explicitly requested.
+        let mut paths: Vec<Path> = read_state.paths;
+        paths.push(Path::from(Label::from("time")));
+        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+            Ok(tree) => tree,
+            Err(TooLongPathError) => {
+                let status = StatusCode::BAD_REQUEST;
+                let text = "Failed to parse requested paths: path is too long.".to_string();
+                return (status, text).into_response();
             }
         };
 
-        let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
+        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
+        {
+            Some(r) => r,
+            None => return make_service_unavailable_response(),
+        };
 
-        let registry_version = self.registry_client.get_latest_version();
-        let state_reader_executor = self.state_reader_executor.clone();
-        let validator_executor = self.validator_executor.clone();
-        Box::pin(async move {
-            let body = match receive_request_body(body).await {
-                Ok(bytes) => bytes,
-                Err(e) => return Ok(e),
-            };
-            let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-                &SignedRequestBytes::from(body.to_vec()),
-            ) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Could not parse body as read request: {}", e),
-                    );
-                    return Ok(res);
-                }
-            };
-
-            // Convert the message to a strongly-typed struct.
-            let request = match HttpRequest::<ReadState>::try_from(request) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Malformed request: {:?}", e),
-                    );
-                    return Ok(res);
-                }
-            };
-            let read_state = request.content().clone();
-            let targets_fut =
-                validator_executor.validate_request(request.clone(), registry_version);
-
-            let targets = match targets_fut.await {
-                Ok(targets) => targets,
-                Err(http_err) => {
-                    let res = make_plaintext_response(http_err.status, http_err.message);
-                    return Ok(res);
-                }
-            };
-            let make_service_unavailable_response = || {
-                make_plaintext_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "Certified state is not available yet. Please try again...".to_string(),
-                )
-            };
-            let certified_state_reader =
-                match state_reader_executor.get_certified_state_snapshot().await {
-                    Ok(Some(reader)) => reader,
-                    Ok(None) => return Ok(make_service_unavailable_response()),
-                    Err(HttpError { status, message }) => {
-                        return Ok(make_plaintext_response(status, message))
-                    }
-                };
-
-            // Verify authorization for requested paths.
-            if let Err(HttpError { status, message }) = verify_paths(
-                certified_state_reader.get_state(),
-                &read_state.source,
-                &read_state.paths,
-                &targets,
-                effective_principal_id,
-            ) {
-                return Ok(make_plaintext_response(status, message));
-            }
-
-            // Create labeled tree. This may be an expensive operation and by
-            // creating the labeled tree after verifying the paths we know that
-            // the depth is max 4.
-            // Always add "time" to the paths even if not explicitly requested.
-            let mut paths: Vec<Path> = read_state.paths;
-            paths.push(Path::from(Label::from("time")));
-            let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-                Ok(tree) => tree,
-                Err(TooLongPathError) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        "Failed to parse requested paths: path is too long.".to_string(),
-                    );
-                    return Ok(res);
-                }
-            };
-
-            let (tree, certification) =
-                match certified_state_reader.read_certified_state(&labeled_tree) {
-                    Some(r) => r,
-                    None => return Ok(make_service_unavailable_response()),
-                };
-
-            let signature = certification.signed.signature.signature.get().0;
-            let res = HttpReadStateResponse {
-                certificate: Blob(into_cbor(&Certificate {
-                    tree,
-                    signature: Blob(signature),
-                    delegation: delegation_from_nns,
-                })),
-            };
-            let (resp, _body_size) = cbor_response(&res);
-            Ok(resp)
-        })
+        let signature = certification.signed.signature.signature.get().0;
+        let res = HttpReadStateResponse {
+            certificate: Blob(into_cbor(&Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation: delegation_from_nns,
+            })),
+        };
+        Cbor(res).into_response()
+    })
+    .await;
+    match response {
+        Ok(res) => res,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -260,7 +236,7 @@ fn verify_paths(
     targets: &CanisterIdSet,
     effective_principal_id: PrincipalId,
 ) -> Result<(), HttpError> {
-    let mut request_status_id: Option<MessageId> = None;
+    let mut last_request_status_id: Option<MessageId> = None;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -303,51 +279,44 @@ fn verify_paths(
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
-                // Verify that the request was signed by the same user.
-                if let Ok(message_id) = MessageId::try_from(*request_id) {
-                    if let Some(request_status_id) = request_status_id {
-                        if request_status_id != message_id {
-                            return Err(HttpError {
+                let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
+                    status: StatusCode::BAD_REQUEST,
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                })?;
+
+                if let Some(x) = last_request_status_id {
+                    if x != message_id {
+                        return Err(HttpError {
                                 status: StatusCode::BAD_REQUEST,
-                                message:
-                                    "Can only request a single request ID in request_status paths."
-                                        .to_string(),
+                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
+                                   x, message_id),
                             });
-                        }
                     }
+                }
+                last_request_status_id = Some(message_id.clone());
 
-                    let ingress_status = state.get_ingress_status(&message_id);
-                    if let Some(ingress_user_id) = ingress_status.user_id() {
-                        if let Some(receiver) = ingress_status.receiver() {
-                            if ingress_user_id != *user {
-                                return Err(HttpError {
+                // Verify that the request was signed by the same user.
+                let ingress_status = state.get_ingress_status(&message_id);
+                if let Some(ingress_user_id) = ingress_status.user_id() {
+                    if ingress_user_id != *user {
+                        return Err(HttpError {
+                            status: StatusCode::FORBIDDEN,
+                            message:
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                        });
+                    }
+                }
+
+                if let Some(receiver) = ingress_status.receiver() {
+                    if !targets.contains(&receiver) {
+                        return Err(HttpError {
                                     status: StatusCode::FORBIDDEN,
                                     message:
-                                        "Request IDs must be for requests signed by the caller."
+                                        "The user tries to access request IDs for canisters not belonging to sender delegation targets."
                                             .to_string(),
                                 });
-                            }
-
-                            if !targets.contains(&receiver) {
-                                return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
-                                    message:
-                                        "Request IDs must be for requests to canisters belonging to sender delegation targets."
-                                            .to_string(),
-                                });
-                            }
-                        }
                     }
-
-                    request_status_id = Some(message_id);
-                } else {
-                    return Err(HttpError {
-                        status: StatusCode::BAD_REQUEST,
-                        message: format!(
-                            "Request IDs must be {} bytes in length.",
-                            EXPECTED_MESSAGE_ID_LENGTH
-                        ),
-                    });
                 }
             }
             _ => {

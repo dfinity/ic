@@ -79,13 +79,9 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.remove(id)
     }
 
-    fn retain<F: 'static>(
-        &mut self,
-        filter: F,
-        scope: Scope,
-    ) -> Result<(), SecretKeyStoreWriteError>
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
-        F: Fn(&KeyId, &CspSecretKey) -> bool,
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
         self.store.retain(filter, scope)
     }

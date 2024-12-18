@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "tokens_u64",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icrc1_tokens_u64",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/common/ledger_core",
+        "@crate_index//:candid",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:minicbor",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "test",
+    srcs = ["tests/tests.rs"],
+    deps = [
+        # Keep sorted.
+        ":tokens_u64",
+        "//rs/ledger_suite/common/ledger_core",
+        "@crate_index//:ciborium",
+        "@crate_index//:proptest",
+    ],
+)

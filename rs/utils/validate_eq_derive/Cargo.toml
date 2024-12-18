@@ -1,0 +1,18 @@
+[package]
+name = "ic-validate-eq-derive"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_validate_eq_derive"
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+

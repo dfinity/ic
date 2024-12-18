@@ -40,7 +40,7 @@ type CompletionFunction = Box<dyn FnOnce(ExecId, CompletionResult) + Sync + Send
 /// is presumed to be in progress on the sandbox process (it could
 /// be that it is "about to be started" or that we have not received
 /// and processed its completion yet).
-struct ActiveExecutionState {
+pub(crate) struct ActiveExecutionState {
     /// Closure to call on completing execution. This will be set
     /// on initialization, and cleared once the completion for this
     /// execution has been called (it is not legal to receive two
@@ -98,6 +98,11 @@ impl ActiveExecutionStateRegistry {
         } else {
             None
         }
+    }
+
+    pub(crate) fn take_all(&self) -> HashMap<ExecId, ActiveExecutionState> {
+        let mut mut_states = self.states.lock().unwrap();
+        std::mem::take(&mut *mut_states)
     }
 }
 

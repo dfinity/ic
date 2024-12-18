@@ -11,6 +11,7 @@ rust_library(
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
+        # Keep sorted.
         "//rs/types/types",
         "@crate_index//:hex",
         "@crate_index//:simple_asn1",

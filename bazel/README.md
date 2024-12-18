@@ -29,10 +29,10 @@ package with native package managers such as apt get, homebrew, etc..
 
 To build Rust and IC-OS code will require a minimal set of packages. On a Linux
 host the
-`[Dockerfile](https://github.com/dfinity/ic/blob/master/gitlab-ci/container/Dockerfile)`
+`[Dockerfile](https://github.com/dfinity/ic/blob/master/ci/container/Dockerfile)`
 serves as a reference for the minimal apt installation set. Developers may
 develop inside the build and development container with
-`./gitlab-ci/container/container-run.sh`.
+`./ci/container/container-run.sh`.
 
 ```bash
 bazel test //rs/crypto/sha2:all
@@ -40,7 +40,7 @@ bazel test //rs/crypto/sha2:all
 
 Most targets should build on the host machine. However, the IC-OS image only
 builds inside the canonical container (`ic-build-bazel:$TAG`). To enter this
-docker container run `./gitlab-ci/container/conatiner-run.sh`. This container
+docker container run `./ci/container/conatiner-run.sh`. This container
 is only available in x86-64 environments.
 
 # Building Blocks
@@ -229,7 +229,7 @@ Note that if a module is defined with a package dependency, then the test does n
 
 Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
 
-To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/gitlab-ci/src/docs/HowTo-Developer.adoc).
+To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/ci/src/docs/HowTo-Developer.adoc).
 
 
 ## Target Labels
@@ -406,7 +406,7 @@ let rdr = Reader::from_path(
 Run `./bin/bazel-pin.sh` from the root of the repo to recalculate
 `Cargo.Bazel.*.lock` files (should take about a minute or three)
 
-You may run it inside of `./gitlab-ci/container/container-run.sh` if you don’t
+You may run it inside of `./ci/container/container-run.sh` if you don’t
 have `bazel` commands installed locally.
 
 ### rustfmt

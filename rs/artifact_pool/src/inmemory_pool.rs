@@ -76,6 +76,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
                 PurgeableArtifactType::FinalizationShare => {
                     purge!(finalization_share, FinalizationShare);
                 }
+                PurgeableArtifactType::EquivocationProof => {
+                    purge!(equivocation_proof, EquivocationProof);
+                }
             }
         } else {
             purge!(random_beacon, RandomBeacon);
@@ -89,6 +92,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
             purge!(random_tape_share, RandomTapeShare);
             purge!(catch_up_package, CatchUpPackage);
             purge!(catch_up_package_share, CatchUpPackageShare);
+            purge!(equivocation_proof, EquivocationProof);
         }
 
         purged
@@ -117,9 +121,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
     /// Get a consensus message by its hash
     pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.remove(hash).map(|artifact| {
+        self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
-            artifact
         })
     }
 
@@ -176,7 +179,6 @@ where
 
         // returning the iterator directly isn't trusted due to the use of `self` in the
         // closure
-        #[allow(clippy::needless_collect)]
         let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
         Box::new(vec.into_iter())
     }
@@ -215,7 +217,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     for InMemoryPoolSection<T>
 {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.artifacts.get(msg_id.hash.digest()).is_some()
+        self.artifacts.contains_key(msg_id.hash.digest())
     }
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
@@ -263,6 +265,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
         self
     }
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
+        self
+    }
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
         self
     }
 }
@@ -331,7 +336,7 @@ pub mod test {
             || {
                 let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
-                let max = Height::from(std::u64::MAX);
+                let max = Height::from(u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 

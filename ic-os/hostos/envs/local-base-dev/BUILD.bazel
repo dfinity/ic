@@ -1,8 +1,6 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
 
-exports_files(["build_container_filesystem_config.txt"])
-
 # The macro contains several targets.
 # Check
 #       //ic-os/hostos/BUILD.bazel for examples
@@ -14,6 +12,6 @@ icos_build(
     image_deps_func = image_deps,
     tags = ["manual"],
     upload_prefix = None,  # Do not upload locally built base images
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
 )

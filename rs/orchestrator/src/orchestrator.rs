@@ -1,37 +1,43 @@
-use crate::args::OrchestratorArgs;
-use crate::boundary_node::BoundaryNodeManager;
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::dashboard::{Dashboard, OrchestratorDashboard};
-use crate::firewall::Firewall;
-use crate::hostos_upgrade::HostosUpgrader;
-use crate::ipv4_network::Ipv4Configurator;
-use crate::metrics::OrchestratorMetrics;
-use crate::process_manager::ProcessManager;
-use crate::registration::NodeRegistration;
-use crate::registry_helper::RegistryHelper;
-use crate::ssh_access_manager::SshAccessManager;
-use crate::upgrade::Upgrade;
+use crate::{
+    args::OrchestratorArgs,
+    boundary_node::BoundaryNodeManager,
+    catch_up_package_provider::CatchUpPackageProvider,
+    dashboard::{Dashboard, OrchestratorDashboard},
+    firewall::Firewall,
+    hostos_upgrade::HostosUpgrader,
+    ipv4_network::Ipv4Configurator,
+    metrics::OrchestratorMetrics,
+    process_manager::ProcessManager,
+    registration::NodeRegistration,
+    registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessManager,
+    upgrade::Upgrade,
+};
+use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::hostos_version::HostosVersion;
-use ic_types::{ReplicaVersion, SubnetId};
+use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::{convert::TryFrom, thread, time::Duration};
-use tokio::sync::watch::{self, Receiver, Sender};
-use tokio::{sync::RwLock, task::JoinHandle};
+use std::{
+    convert::TryFrom,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::Duration,
+};
+use tokio::{
+    sync::watch::{self, Receiver, Sender},
+    task::JoinHandle,
+};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -56,7 +62,7 @@ pub struct Orchestrator {
     ipv4_configurator: Option<Ipv4Configurator>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum OrchestratorInstantiationError {
     /// If an error occurs during key generation
     KeyGenerationError(String),
@@ -117,8 +123,12 @@ impl Orchestrator {
             1,
         );
 
+        UtilityCommand::notify_host("\nONBOARDING NOT YET COMPLETE:\nPlease wait for a 'Join request successful!' message confirming a successful onboarding...\n", 3);
+
         let version = replica_version.clone();
         thread::spawn(move || loop {
+            // Sleep early because IPv4 takes several minutes to configure
+            thread::sleep(Duration::from_secs(10 * 60));
             let (ipv4, ipv6) = Self::get_ip_addresses();
 
             let message = indoc::formatdoc!(
@@ -132,7 +142,6 @@ impl Orchestrator {
             );
 
             UtilityCommand::notify_host(&message, 1);
-            thread::sleep(Duration::from_secs(15 * 60));
         });
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
@@ -178,13 +187,8 @@ impl Orchestrator {
         .unwrap();
 
         let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) = Self::get_metrics(
-            metrics_addr,
-            &slog_logger,
-            &metrics_registry,
-            registry.get_registry_client(),
-            Arc::clone(&crypto) as _,
-        );
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
         let metrics = Arc::new(metrics);
 
         metrics
@@ -212,6 +216,7 @@ impl Orchestrator {
         let cup_provider = Arc::new(CatchUpPackageProvider::new(
             Arc::clone(&registry),
             args.cup_dir.clone(),
+            Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
@@ -272,6 +277,7 @@ impl Orchestrator {
             replica_version.clone(),
             node_id,
             ic_binary_directory.clone(),
+            config.crypto.clone(),
             logger.clone(),
         );
 
@@ -280,6 +286,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.boundary_node_firewall.clone(),
             cup_provider.clone(),
             logger.clone(),
         );
@@ -291,8 +298,12 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let ssh_access_manager =
-            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone());
+        let ssh_access_manager = SshAccessManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            node_id,
+            logger.clone(),
+        );
 
         let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
 
@@ -334,22 +345,22 @@ impl Orchestrator {
     /// Starts four asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
-    /// replica version and executes the upgrade to this version if such a
-    /// CUP was found.
+    ///    replica version and executes the upgrade to this version if such a
+    ///    CUP was found.
     ///
     /// 2. Second task is doing two things sequentially. First, it  monitors the
-    /// registry for new SSH readonly keys and deploys the detected keys
-    /// into OS. Second, it monitors the registry for new data centers. If a
-    /// new data center is added, orchestrator will generate a new firewall
-    /// configuration allowing access from the IP range specified in the DC
-    /// record.
+    ///    registry for new SSH readonly keys and deploys the detected keys
+    ///    into OS. Second, it monitors the registry for new data centers. If a
+    ///    new data center is added, orchestrator will generate a new firewall
+    ///    configuration allowing access from the IP range specified in the DC
+    ///    record.
     ///
     /// 3. Third task starts listening for incoming requests to the orchestrator
-    /// dashboard.
+    ///    dashboard.
     ///
-    /// 4. Fourth task checks if this node is part of an tECDSA subnet. If so,
-    /// and it is also time to rotate the iDKG encryption key, instruct crypto
-    /// to do the rotation and attempt to register the rotated key.
+    /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
+    ///    and it is also time to rotate the iDKG encryption key, instruct crypto
+    ///    to do the rotation and attempt to register the rotated key.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
@@ -365,7 +376,7 @@ impl Orchestrator {
                 .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout, |r| async {
                     match r {
                         Ok(Ok(val)) => {
-                            *maybe_subnet_id.write().await = val;
+                            *maybe_subnet_id.write().unwrap() = val;
                             metrics.failed_consecutive_upgrade_checks.reset();
                         }
                         e => {
@@ -391,14 +402,27 @@ impl Orchestrator {
             // registry some time to catch up, after starting.
             tokio::time::sleep(Duration::from_secs(60)).await;
 
-            // Run the HostOS upgrade loop with a 15 minute timeout, waiting 1
-            // minute between checks. This timeout is a last resort trying to
-            // revive the upgrade monitoring in case it gets stuck in an
-            // unexpected situation.
-            let interval = Duration::from_secs(60);
-            let timeout = Duration::from_secs(60 * 15);
+            // Run the HostOS upgrade loop with an exponential backoff. A 15
+            // minute liveness timeout will restart the loop if no progress is
+            // made, to ensure the upgrade loop does not get stuck.
+            //
+            // The exponential backoff between retries starts at 1 minute, and
+            // increases by a factor of 1.75, maxing out at two hours.
+            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
+            //
+            // Additionally, there's a random +=50% range added to each delay, for jitter.
+            let backoff = ExponentialBackoffBuilder::new()
+                .with_initial_interval(Duration::from_secs(60))
+                .with_randomization_factor(0.5)
+                .with_multiplier(1.75)
+                .with_max_interval(Duration::from_secs(2 * 60 * 60))
+                .with_max_elapsed_time(None)
+                .build();
+            let liveness_timeout = Duration::from_secs(15 * 60);
 
-            upgrade.upgrade_loop(exit_signal, interval, timeout).await;
+            upgrade
+                .upgrade_loop(exit_signal, backoff, liveness_timeout)
+                .await;
             info!(log, "Shut down the HostOS upgrade loop");
         }
 
@@ -418,14 +442,15 @@ impl Orchestrator {
             info!(log, "Shut down the boundary node management loop");
         }
 
-        async fn tecdsa_key_rotation_check(
+        async fn key_rotation_check(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             registration: NodeRegistration,
             mut exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
-                if let Some(subnet_id) = *maybe_subnet_id.read().await {
+                let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
+                if let Some(subnet_id) = maybe_subnet_id {
                     registration
                         .check_all_keys_registered_otherwise_register(subnet_id)
                         .await;
@@ -436,7 +461,7 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the tECDSA key rotation loop");
+            info!(log, "Shut down the key rotation loop");
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
@@ -449,11 +474,9 @@ impl Orchestrator {
         ) {
             while !*exit_signal.borrow() {
                 // Check if new SSH keys need to be deployed
-                ssh_access_manager
-                    .check_for_keyset_changes(*maybe_subnet_id.read().await)
-                    .await;
+                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
                 // Check and update the firewall rules
-                firewall.check_and_update().await;
+                firewall.check_and_update();
                 // Check and update the network configuration
                 ipv4_configurator.check_and_update().await;
                 tokio::select! {
@@ -533,14 +556,13 @@ impl Orchestrator {
             )));
         }
         if let Some(registration) = self.registration.take() {
-            info!(self.logger, "Spawning the tECDSA key rotation loop");
-            self.task_handles
-                .push(tokio::spawn(tecdsa_key_rotation_check(
-                    Arc::clone(&self.subnet_id),
-                    registration,
-                    self.exit_signal.clone(),
-                    self.logger.clone(),
-                )));
+            info!(self.logger, "Spawning the key rotation loop");
+            self.task_handles.push(tokio::spawn(key_rotation_check(
+                Arc::clone(&self.subnet_id),
+                registration,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
         }
     }
 
@@ -565,8 +587,6 @@ impl Orchestrator {
         metrics_addr: SocketAddr,
         logger: &slog::Logger,
         metrics_registry: &MetricsRegistry,
-        registry_client: Arc<dyn RegistryClient>,
-        crypto: Arc<dyn TlsHandshake + Send + Sync>,
     ) -> (OrchestratorMetrics, MetricsHttpEndpoint) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -577,8 +597,6 @@ impl Orchestrator {
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
-            registry_client,
-            crypto,
             logger,
         );
 

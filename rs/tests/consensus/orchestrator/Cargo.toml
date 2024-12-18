@@ -1,0 +1,61 @@
+[package]
+name = "consensus-orchestrator-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-nns-common = { path = "../../../nns/common" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-recovery = { path = "../../../recovery" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+registry-canister = { path = "../../../registry/canister" }
+slog = { workspace = true }
+ssh2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[[bin]]
+name = "ic-systest-cup-compatibility"
+path = "cup_compatibility_test.rs"
+
+[[bin]]
+name = "ic-systest-node-reassignment-test"
+path = "node_reassignment_test.rs"
+
+[[bin]]
+name = "ic-systest-ssh-access-to-nodes-test"
+path = "ssh_access_to_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-node-registration-test"
+path = "node_registration_test.rs"
+
+[[bin]]
+name = "ic-systest-rotate-ecdsa-idkg-key"
+path = "rotate_ecdsa_idkg_key_test.rs"
+
+[[bin]]
+name = "ic-systest-unstuck-subnet"
+path = "unstuck_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-node-assign-test"
+path = "node_assign_test.rs"

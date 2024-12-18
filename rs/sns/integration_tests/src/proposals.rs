@@ -2,7 +2,7 @@ use canister_test::Canister;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::i2d;
+use ic_nervous_system_common::{i2d, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -22,10 +22,11 @@ use ic_sns_governance::{
         PROPOSAL_URL_CHAR_MAX,
     },
     reward,
-    types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
 };
 use ic_sns_test_utils::{
-    itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo},
+    itest_helpers::{
+        state_machine_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+    },
     now_seconds,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -47,7 +48,7 @@ const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParamete
 /// Assert that Motion proposals can be submitted, voted on, and executed
 #[test]
 fn test_motion_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -133,7 +134,7 @@ fn test_motion_proposal_execution() {
 /// Assert that ManageNervousSystemParameters proposals can be submitted, voted on, and executed
 #[test]
 fn test_manage_nervous_system_parameters_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -230,7 +231,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             .as_secs_f64()
     }
 
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -390,7 +391,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
 
 #[test]
 fn test_bad_proposal_id_candid_type() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -420,7 +421,7 @@ fn test_bad_proposal_id_candid_type() {
 
 #[test]
 fn test_bad_proposal_id_candid_encoding() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -436,8 +437,14 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
+            let expected_error = "failed to decode";
             match res {
-                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Err(e) => assert!(
+                    e.contains(expected_error),
+                    "Expected error string \"{}\" not present in actual error. Error was: {:?}",
+                    expected_error,
+                    e
+                ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
             Ok(())
@@ -447,7 +454,7 @@ fn test_bad_proposal_id_candid_encoding() {
 
 #[test]
 fn test_non_existent_proposal_id_is_not_a_bad_input() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -482,7 +489,7 @@ fn test_non_existent_proposal_id_is_not_a_bad_input() {
 
 #[test]
 fn test_list_proposals_determinism() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -595,7 +602,7 @@ async fn list_all_proposals_through_pagination(
 
 #[test]
 fn test_proposal_format_validation() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
 
@@ -696,7 +703,7 @@ fn test_proposal_format_validation() {
 
 #[test]
 fn test_neuron_configuration_needed_for_proposals() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -816,7 +823,7 @@ fn test_neuron_configuration_needed_for_proposals() {
 
 #[test]
 fn test_ballots_set_for_multiple_neurons() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let params = NervousSystemParameters {
@@ -905,7 +912,7 @@ fn test_ballots_set_for_multiple_neurons() {
 
 #[test]
 fn test_vote_on_non_existent_proposal() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -952,7 +959,7 @@ fn test_vote_on_non_existent_proposal() {
 
 #[test]
 fn test_ineligible_neuron_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -1008,7 +1015,7 @@ fn test_ineligible_neuron_voting_fails() {
 
 #[test]
 fn test_repeated_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let yes_voter = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let no_voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
 
@@ -1108,7 +1115,7 @@ fn test_repeated_voting_fails() {
 //          D
 #[test]
 fn test_following_and_voting() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1236,7 +1243,7 @@ fn test_following_and_voting() {
 //   B <- C
 #[test]
 fn test_following_and_voting_from_non_proposer() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1327,7 +1334,7 @@ fn test_following_and_voting_from_non_proposer() {
 //   C
 #[test]
 fn test_following_multiple_neurons_reach_majority() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1438,7 +1445,7 @@ fn test_following_multiple_neurons_reach_majority() {
 
 #[test]
 fn test_proposal_rejection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -1558,7 +1565,7 @@ fn assert_voting_error(
 
 #[test]
 fn test_proposal_garbage_collection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will make proposals
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1628,6 +1635,11 @@ fn test_proposal_garbage_collection() {
             .await
             .expect("Expected set_time_warp to succeed");
 
+        sns_canisters
+            .run_periodic_tasks_now()
+            .await
+            .expect("Expected run_periodic_tasks_now to succeed");
+
         // Proposals should have been garbage_collected. Get all the proposals kept in the current
         // SNS
         let proposals_after_gc = list_all_proposals_through_pagination(
@@ -1656,7 +1668,7 @@ fn test_proposal_garbage_collection() {
 
 #[test]
 fn test_change_voting_rewards_round_duration() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will make proposals
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize the ledger with an account for a user who will vote so we can control when
@@ -1759,7 +1771,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1793,7 +1805,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1930,9 +1942,28 @@ fn test_change_voting_rewards_round_duration() {
 /// Test that when there are no proposals submitted during reward_distribution_period_seconds,
 /// that RewardEvents are still generated, proposals can still be processed afterwards, and
 /// that garbage collection can still take place.
+///
+/// Narrative Outline:
+///
+///     1. Three proposals are made and immediately voted in, one after another.
+///
+///     2. Between the first two proposals, there is a "long dry spell" (i.e. the period
+///        between the first two proposals is much greater than one reward round).
+///
+///     3. Because of the retention policy, the first proposal gets garbage
+///        collected some time after the third proposal.
+///
+///  After each proposal, the fact that they are rewarded is verified by inspecting
+///
+///      1. their reward_event_* fields, and
+///
+///      2. the settled_proposals field of latest_reward_event, which should contain just the
+///         ID of the most recent proposal.
 #[test]
 fn test_intermittent_proposal_submission() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
+        // Chapter 0: Prepare the world.
+
         // Initialize the ledger with an account for a user who will make proposals
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize the ledger with an account for a user who will vote so we can control when
@@ -1977,34 +2008,37 @@ fn test_intermittent_proposal_submission() {
             .await;
 
         // Stake and claim a neuron for the voter
-        sns_canisters
+        let voter_neuron_id = sns_canisters
             .stake_and_claim_neuron_with_tokens(&voter.sender, Some(ONE_YEAR_SECONDS as u32), 100)
             .await;
 
-        // Phase 1: First, test that submitting a proposal works as expected
-        let proposal = Proposal {
+        // Chapter 1: The first proposal is made.
+        //
+        // (Incidentally, this occurs very early in the life of the SNS. The
+        // story really begins here.)
+
+        // Make the first proposal, and vote it in (immediately).
+        let motion_proposal = Proposal {
             action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
-
-        // Submit a motion proposal using the proposer
         let p1_id = sns_canisters
-            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .make_proposal(
+                &proposer.sender,
+                &proposer.subaccount,
+                motion_proposal.clone(),
+            )
             .await
             .unwrap();
-
-        // Vote on that proposal using the voter. This should result in the majority being
-        // reached for that proposal
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p1_id, true)
             .await;
 
-        // Verify that the proposal state is as expected
+        // Verify that the proposal was voted in.
         let proposal_data = sns_canisters.get_proposal(p1_id).await;
         assert!(proposal_data.decided_timestamp_seconds > 0);
         assert!(proposal_data.executed_timestamp_seconds > 0);
-        // Even though the proposal is executed, it still accepts votes until the
-        // initial_voting_period_seconds is reached and the proposal is considered ReadyToSettle.
+        // Even though the proposal is executed, it still accepts votes.
         assert_eq!(proposal_data.reward_event_end_timestamp_seconds, None);
         assert_eq!(proposal_data.reward_event_round, 0);
         assert_eq!(
@@ -2013,148 +2047,193 @@ fn test_intermittent_proposal_submission() {
         );
 
         // Advance time to when the proposal's voting period is over.
-        let mut delta_s = (initial_voting_period_seconds) as i64;
+        let mut delta_s = initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // reward_event_end_timestamp_seconds should still not be set (due to a
-        // period not elapsing), but since the initial_voting_period_seconds of
-        // the proposal has passed, it should be considered ReadyToSettle.
+        // Now that voting is over, the proposal CAN now be rewarded.
         let proposal_data = sns_canisters.get_proposal(p1_id).await;
-        assert_eq!(proposal_data.reward_event_end_timestamp_seconds, None);
-        assert_eq!(proposal_data.reward_event_round, 0);
         assert_eq!(
             proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
             ProposalRewardStatus::ReadyToSettle
         );
+        // It has not been rewarded yet though, because a reward round has not yet elapsed.
+        assert_eq!(proposal_data.reward_event_end_timestamp_seconds, None);
+        assert_eq!(proposal_data.reward_event_round, 0);
 
-        // Since there hasn't been enough time since genesis for a reward period to complete,
-        // the round of the latest reward event should be 0.
-        let reward_event = sns_canisters.get_latest_reward_event().await;
-        assert_eq!(reward_event.round, 0);
-        let (last_end_timestamp_seconds, last_reward_round) = {
-            let RewardEvent {
-                end_timestamp_seconds,
-                round,
-                ..
-            } = reward_event;
-            (end_timestamp_seconds.unwrap(), round)
-        };
+        // Since no reward rounds have elapsed yet, the round of the latest
+        // reward event should (still) be 0.
+        let genesis_reward_event = sns_canisters.get_latest_reward_event().await;
+        assert_eq!(genesis_reward_event.round, 0);
 
-        // Warping time again should allow for a single reward period to complete.
+        // Advance time by a reward round.
         delta_s = reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // RewardEvents occur on heartbeat. Allow some buffer for the heartbeat to occur to reduce
-        // flakiness.
-        let next_reward_event = sns_canisters
-            .await_reward_event_after(last_end_timestamp_seconds)
+        // Wait for the first real RewardEvent.
+        let current_reward_event = sns_canisters
+            .await_reward_event_after(genesis_reward_event.end_timestamp_seconds.unwrap())
             .await;
-        assert_eq!(next_reward_event.settled_proposals, vec![p1_id]);
-        let next_end_timestamp_seconds = next_reward_event.end_timestamp_seconds.unwrap();
-        let delay_seconds = next_end_timestamp_seconds - last_end_timestamp_seconds;
-        assert_eq!(
-            delay_seconds % reward_round_duration_seconds,
-            0,
-            "next_end_timestamp_seconds = {}, \
-             last_end_timestamp_seconds = {}, \
-             reward_round_duration_seconds = {}",
-            next_end_timestamp_seconds,
-            last_end_timestamp_seconds,
-            reward_round_duration_seconds,
-        );
-        assert!(
-            // Normally, just one reward round passes, but we have some
-            // nondeterminism in our tests. Therefore, we relax this requirement
-            // to avoid flakes.
-            delay_seconds / reward_round_duration_seconds <= 3,
-            "next_end_timestamp_seconds = {}, \
-             last_end_timestamp_seconds = {}, \
-             reward_round_duration_seconds = {}",
-            next_end_timestamp_seconds,
-            last_end_timestamp_seconds,
-            reward_round_duration_seconds,
-        );
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        let (last_end_timestamp_seconds, last_reward_round) = {
-            let RewardEvent {
-                end_timestamp_seconds,
-                round,
-                ..
-            } = next_reward_event;
-            (end_timestamp_seconds.unwrap(), round)
-        };
+        // It should include the first proposal.
+        assert_eq!(current_reward_event.settled_proposals, vec![p1_id]);
+
+        // Asserts that current is more advanced than previous. Inspects the
+        // round and end_timestamp_seconds fields.
+        let assert_reward_event_incremented =
+            |previous_reward_event: &RewardEvent, current_reward_event: &RewardEvent| {
+                let delay_seconds = current_reward_event.end_timestamp_seconds.unwrap()
+                    - previous_reward_event.end_timestamp_seconds.unwrap();
+
+                // The delay between reward events should be a whole number of rounds.
+                assert_eq!(
+                    delay_seconds % reward_round_duration_seconds,
+                    0,
+                    "current_reward_event = {:#?}\n\
+                 previous_reward_event = {:#?}\n\
+                 reward_round_duration_seconds = {}",
+                    current_reward_event,
+                    previous_reward_event,
+                    reward_round_duration_seconds,
+                );
+
+                let delay_rounds = delay_seconds / reward_round_duration_seconds;
+                assert!(
+                    // Normally, just one reward round passes, but we have some
+                    // nondeterminism in our tests. Therefore, we relax this requirement
+                    // to avoid flakes.
+                    0 < delay_rounds && delay_rounds <= 3,
+                    "current_reward_event = {:#?}\n
+                 previous_reward_event = {:#?}\n
+                 reward_round_duration_seconds = {}",
+                    current_reward_event,
+                    previous_reward_event,
+                    reward_round_duration_seconds,
+                );
+
+                // Assert that the round field in RewardEvent is consistent with the
+                // end_timestamp_seconds field.
+                assert_eq!(
+                    current_reward_event.round,
+                    previous_reward_event.round + delay_rounds
+                );
+            };
+
+        assert_reward_event_incremented(&genesis_reward_event, &current_reward_event);
 
         // Along with RewardEvents, the proposal should be updated with what RewardEvent
         // distributed its voting rewards.
-        let updated_proposal = sns_canisters.await_proposal_rewarding(p1_id).await;
+        let proposal = sns_canisters.await_proposal_rewarding(p1_id).await;
         assert_eq!(
-            updated_proposal.reward_event_end_timestamp_seconds.unwrap(),
-            last_end_timestamp_seconds
+            proposal.reward_event_end_timestamp_seconds.unwrap(),
+            current_reward_event.end_timestamp_seconds.unwrap(),
         );
-        assert_eq!(updated_proposal.reward_event_round, last_reward_round);
+        assert_eq!(proposal.reward_event_round, current_reward_event.round);
+        let mut previous_reward_event = current_reward_event;
 
-        // Phase 2: Test that reward periods can occur without any proposals. In
-        // this case, RewardEvents are not generated. This is so that voting
-        // rewards roll over when there are no voting rewards within a reward
-        // period.
-        delta_s += reward_round_duration_seconds as i64; // Add a reward_round to the running time warp
-        sns_canisters.set_time_warp(delta_s).await?;
+        // Chapter 2: The second proposal is made after a long hiatus.
+        //
+        // Even when there are no proposals, RewardEvents are still generated.
+        // Furthermore, rewards are rolled over via the
+        // total_available_e8s_equivalent field in RewardEvent.
 
-        // Phase 3: Given that no Proposals were submitted in the last reward period, all periodic
-        // tasks should still succeed.
+        for i in 0..7 {
+            // Advance time by a reward round.
+            delta_s += reward_round_duration_seconds as i64;
+            sns_canisters.set_time_warp(delta_s).await?;
 
-        // Create another motion proposal and make sure its lifecycle works as normal.
+            let current_reward_event = sns_canisters
+                .await_reward_event_after(previous_reward_event.end_timestamp_seconds.unwrap())
+                .await;
+
+            // Assert rewards are rolled over during empty reward rounds. This
+            // does not apply in the first iteration, because the RewardEvent
+            // before this loop actually has a proposal, and therefore, does not
+            // contribute any roll over.
+            if i != 0 {
+                assert!(
+                    current_reward_event.total_available_e8s_equivalent
+                        > previous_reward_event.total_available_e8s_equivalent,
+                    "current_reward_event = {:#?}\n
+                     previous_reward_event = {:#?}",
+                    current_reward_event,
+                    previous_reward_event,
+                );
+            }
+
+            assert_eq!(current_reward_event.settled_proposals, vec![]);
+
+            assert_reward_event_incremented(&previous_reward_event, &current_reward_event);
+
+            previous_reward_event = current_reward_event;
+        }
+
+        // Record maturity of voter so that we can later see that it is indeed
+        // rewarded for their voting.
+        let voter_maturity_e8s_equivalent_before = sns_canisters
+            .get_neuron(&voter_neuron_id)
+            .await
+            .maturity_e8s_equivalent;
+
+        // Now that the SNS has experienced a hiatus in proposals, make and
+        // immediately vote in the second proposal.
         let p2_id = sns_canisters
-            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .make_proposal(
+                &proposer.sender,
+                &proposer.subaccount,
+                motion_proposal.clone(),
+            )
             .await
             .unwrap();
-
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p2_id, true)
             .await;
-
-        // Now warp time to the middle of the next reward period.
+        // Advance time past the voting deadline of the second proposal.
         delta_s += initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
+        // Assert that the second proposal has been executed (like the first).
+        let proposal = sns_canisters.get_proposal(p2_id).await;
+        assert!(proposal.decided_timestamp_seconds > 0);
+        assert!(proposal.executed_timestamp_seconds > 0);
 
-        // Assert that the periodic proposal processing still works
-        let proposal_data = sns_canisters.get_proposal(p2_id).await;
-        assert!(proposal_data.decided_timestamp_seconds > 0);
-        assert!(proposal_data.executed_timestamp_seconds > 0);
-
-        // Advance time well into the next reward period.
+        // Advance time to the middle of the next reward period.
         delta_s += reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // A new RewardEvent should have taken place.
-        let next_reward_event = sns_canisters
-            .await_reward_event_after(last_end_timestamp_seconds)
-            .await;
-        assert_eq!(
-            next_reward_event.end_timestamp_seconds.unwrap(),
-            last_end_timestamp_seconds + reward_round_duration_seconds,
-        );
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        let (last_end_timestamp_seconds, last_reward_round) = {
-            let RewardEvent {
-                end_timestamp_seconds,
-                round,
-                ..
-            } = next_reward_event;
-            (end_timestamp_seconds.unwrap(), round)
-        };
-
-        // And the last proposal should have been Rewarded.
+        // The second proposal should have been rewarded (and a new RewardEvent recorded).
         let proposal = sns_canisters.await_proposal_rewarding(p2_id).await;
+
+        let current_reward_event = sns_canisters
+            .await_reward_event_after(proposal.reward_event_end_timestamp_seconds.unwrap() - 1)
+            .await;
+        assert_eq!(current_reward_event.settled_proposals, vec![p2_id]);
+        assert_reward_event_incremented(&previous_reward_event, &current_reward_event);
+
+        // Inspect proposal 2, comparing it against current_reward_event.
         assert_eq!(
             proposal.reward_event_end_timestamp_seconds.unwrap(),
-            last_end_timestamp_seconds
+            current_reward_event.end_timestamp_seconds.unwrap(),
+            "proposal:\n{:#?}\n***\nRewardEvent:\n{:#?}",
+            proposal,
+            current_reward_event,
         );
-        assert_eq!(next_reward_event.settled_proposals, vec![p2_id]);
-        assert_eq!(proposal.reward_event_round, last_reward_round);
+        assert_eq!(proposal.reward_event_round, current_reward_event.round);
 
-        // Now, adjust the garbage collection parameter via proposal to make sure
-        // garbage collection still works
+        // Assert that voter has been rewarded.
+        let voter_maturity_e8s_equivalent_after = sns_canisters
+            .get_neuron(&voter_neuron_id)
+            .await
+            .maturity_e8s_equivalent;
+        assert!(
+            voter_maturity_e8s_equivalent_after > voter_maturity_e8s_equivalent_before,
+            "{} vs. {}",
+            voter_maturity_e8s_equivalent_after,
+            voter_maturity_e8s_equivalent_before,
+        );
+
+        // Chapter 3: Make and pass the third proposal, causing proposal 1 to be
+        // garbage collected.
+
+        // Adjust the GC policy via proposal. This should result in the demise
+        // of proposal 1 (verified later).
         let proposal = Proposal {
             title: "Change max_proposals_to_keep_per_action".into(),
             action: Some(Action::ManageNervousSystemParameters(
@@ -2165,38 +2244,36 @@ fn test_intermittent_proposal_submission() {
             )),
             ..Default::default()
         };
-
         let p3_id = sns_canisters
             .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
             .await
             .unwrap();
 
-        // Assert that there are 3 proposals pre acceptance of the proposal via the voter user
+        // Assert that there are 3 proposals. (The third one has not been voted in yet.)
         let mut proposals = sns_canisters.list_proposals(&proposer.sender).await;
         let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
         assert_eq!(proposal_ids, vec![p3_id, p2_id, p1_id]);
 
+        // Vote in the GC policy change.
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p3_id, true)
             .await;
 
-        // Garbage collection happens once every 24 hours, so advance time to when it could occur
+        // Advance time such that GC is performed.
         delta_s += ONE_DAY_SECONDS as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // Wait for a heartbeat to trigger a GC round.
-        for _ in 0..25 {
+        // Wait for the number of proposals to decrease.
+        for _ in 0..250 {
             proposals = sns_canisters.list_proposals(&proposer.sender).await;
             if proposals.len() < 3 {
                 // GC occurred
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            runtime.tick().await;
         }
 
-        // Assert that there are now 2 proposals. p1_id should have been garbage collected
-        // as it was the "older" proposal of Action::Motion
-        let proposals = sns_canisters.list_proposals(&proposer.sender).await;
+        // Assert that proposal 1 has disappeared.
         let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
         assert_eq!(proposal_ids, vec![p3_id, p2_id]);
 

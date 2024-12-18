@@ -203,7 +203,7 @@ fn should_return_correct_config_values() {
     let resharing_transcript = Some(transcript());
 
     let config_data = NiDkgConfigData {
-        dkg_id,
+        dkg_id: dkg_id.clone(),
         max_corrupt_dealers,
         dealers: dealers.clone(),
         max_corrupt_receivers,
@@ -215,7 +215,7 @@ fn should_return_correct_config_values() {
 
     let config = NiDkgConfig::new(config_data).unwrap();
 
-    assert_eq!(config.dkg_id(), dkg_id);
+    assert_eq!(config.dkg_id(), &dkg_id);
     assert_eq!(config.max_corrupt_dealers(), max_corrupt_dealers);
     assert_eq!(config.dealers().get(), &dealers);
     assert_eq!(config.max_corrupt_receivers(), max_corrupt_receivers);
@@ -286,7 +286,7 @@ fn should_return_correct_collection_threshold_when_resharing() {
 // applicable.
 //
 // The format of the subnet ids is specified in the interface spec:
-// https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids
+// https://internetcomputer.org/docs/current/references/ic-interface-spec#textual-ids
 fn should_correctly_format_config_display_message() {
     let config = NiDkgConfig::new(valid_dkg_config_data());
 

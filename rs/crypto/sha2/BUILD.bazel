@@ -19,6 +19,7 @@ rust_test(
     name = "sha224_test",
     srcs = ["tests/sha224.rs"],
     deps = [
+        # Keep sorted.
         ":sha2",
     ],
 )
@@ -27,6 +28,7 @@ rust_test(
     name = "sha256_test",
     srcs = ["tests/sha256.rs"],
     deps = [
+        # Keep sorted.
         ":sha2",
     ],
 )

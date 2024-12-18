@@ -43,12 +43,12 @@ Arguments:
        --nns_urls=                      specify a file that lists on each line a nns url of the form `http://[ip]:port` this file will override nns urls derived from input json file
        --replicas-ipv6=                 specify a file that lists on each line an ipv6 firewall rule to allow replicas of the form `ipv6-addr/prefix-length` (# comments and trailing whitespace will be stripped)
        --denylist=                      a deny list of canisters
-       --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
        --ic-boundary-config             specify a path to the ic-boundary config file
+       --ic-boundary-ratelimits         specify a path to the ic-boundary ratelimits file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
@@ -101,9 +101,6 @@ for argument in "${@}"; do
         --denylist=*)
             DENY_LIST="${argument#*=}"
             ;;
-        --prober-identity=*)
-            PROBER_IDENTITY="${argument#*=}"
-            ;;
         --geolite2-country-db=*)
             GEOLITE2_COUNTRY_DB="${argument#*=}"
             ;;
@@ -118,6 +115,9 @@ for argument in "${@}"; do
             ;;
         --ic-boundary-config=*)
             IC_BOUNDARY_CONFIG="${argument#*=}"
+            ;;
+        --ic-boundary-ratelimits=*)
+            IC_BOUNDARY_RATELIMITS="${argument#*=}"
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
@@ -202,20 +202,18 @@ VALUES=$(echo ${CONFIG} \
     .ipv6_gateway,
     .ipv4_gateway,
     .ipv4_address,
-    .prober,
     .hostname,
     .subnet_type,
     .subnet_idx,
     .node_idx,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx type; do
+while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address hostname subnet_type subnet_idx node_idx type; do
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_address']=$ipv6_address
         ['ipv6_gateway']=$ipv6_gateway
-	['ipv4_gateway']=$ipv4_gateway
+	    ['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
-        ['prober']=$prober
         ['hostname']=$hostname
         ['subnet_type']=$subnet_type
         ['subnet_idx']=$subnet_idx
@@ -370,28 +368,6 @@ function generate_network_config() {
     done
 }
 
-function generate_prober_config() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local hostname=${NODE["hostname"]}
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-            local prober=${NODE["prober"]}
-
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-
-            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
-
-            # copy prober identity if enabled
-            if [[ -f "${PROBER_IDENTITY:-}" && "${prober:-}" == "true" ]]; then
-                echo "Using prober identity ${PROBER_IDENTITY}"
-                cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober_identity.pem"
-            fi
-        fi
-    done
-}
-
 function copy_ssh_keys() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -525,7 +501,7 @@ EOF
 
 function copy_ic_boundary_config() {
     if [[ -z "${IC_BOUNDARY_CONFIG:-}" ]]; then
-        err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
+        err "ic-boundary config file has not been provided, proceeding without copying it"
         return
     fi
 
@@ -541,6 +517,27 @@ function copy_ic_boundary_config() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
         cp "${IC_BOUNDARY_CONFIG}" "${CONFIG_DIR}/${NODE_PREFIX}/ic_boundary.conf"
+    done
+}
+
+function copy_ic_boundary_ratelimits() {
+    if [[ -z "${IC_BOUNDARY_RATELIMITS:-}" ]]; then
+        err "ratelimits file has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_RATELIMITS}" "${CONFIG_DIR}/${NODE_PREFIX}/canister-ratelimit.yml"
     done
 }
 
@@ -653,12 +650,12 @@ function main() {
     create_tarball_structure
     generate_boundary_node_config
     generate_network_config
-    generate_prober_config
     copy_ssh_keys
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
     copy_ic_boundary_config
+    copy_ic_boundary_ratelimits
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
     copy_logging_credentials

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::sign::tests::{
     dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,
@@ -49,9 +47,8 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == 0
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == 0
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
@@ -307,9 +304,8 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == expected_index
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == expected_index
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
@@ -487,15 +483,8 @@ mod verify_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_verify_dealing()
             .withf(
-                move |algorithm_id,
-                      dkg_id,
-                      dealer_index,
-                      threshold,
-                      epoch_,
-                      receiver_keys,
-                      dealing| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == 0
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys, dealing| {
+                    *dealer_index == 0
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
@@ -718,13 +707,7 @@ mod verify_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_verify_dealing()
             .withf(
-                move |_algorithm_id,
-                      _dkg_id,
-                      _dealer_index,
-                      _threshold,
-                      _epoch,
-                      receiver_keys,
-                      _dealing| {
+                move |_algorithm_id, _dealer_index, _threshold, _epoch, receiver_keys, _dealing| {
                     println!("{:?}", receiver_keys);
                     *receiver_keys == expected_receiver_keys
                 },
@@ -775,15 +758,13 @@ mod verify_dealing_with_resharing_transcript {
         csp.expect_verify_resharing_dealing()
             .withf(
                 move |algorithm_id,
-                      dkg_id,
                       dealer_resharing_index,
                       threshold,
                       epoch_,
                       receiver_keys,
                       dealing,
                       resharing_pub_coeffs| {
-                    *dkg_id == DKG_ID
-                        && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
+                    *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
                         && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])

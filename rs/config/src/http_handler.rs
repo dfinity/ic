@@ -10,7 +10,7 @@ const DEFAULT_PORT: u16 = 8080u16;
 /// The internal configuration -- any historical warts from the external
 /// configuration are removed. Anything using this struct can trust that it
 /// has been validated.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     /// IP address and port to listen on
@@ -39,11 +39,6 @@ pub struct Config {
     /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
     pub max_delegation_certificate_size_bytes: u64,
 
-    /// If the request body is not received/parsed within
-    /// `max_request_receive_seconds`, then the request will be rejected and
-    /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
-    pub max_request_receive_seconds: u64,
-
     /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`.
     pub max_read_state_concurrent_requests: usize,
 
@@ -64,6 +59,12 @@ pub struct Config {
 
     /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
     pub max_pprof_concurrent_requests: usize,
+
+    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoint `/api/v3/call`.
+    pub ingress_message_certificate_timeout_seconds: u64,
+
+    /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
+    pub max_tracing_flamegraph_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -76,10 +77,9 @@ impl Default for Config {
             port_file_path: None,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
-            http_max_concurrent_streams: 256,
+            http_max_concurrent_streams: 1000,
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
-            max_request_receive_seconds: 300,        // 5 min
             max_read_state_concurrent_requests: 100,
             max_catch_up_package_concurrent_requests: 100,
             max_dashboard_concurrent_requests: 100,
@@ -87,6 +87,8 @@ impl Default for Config {
             max_call_concurrent_requests: 50,
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
             max_pprof_concurrent_requests: 5,
+            ingress_message_certificate_timeout_seconds: 10,
+            max_tracing_flamegraph_concurrent_requests: 5,
         }
     }
 }

@@ -150,21 +150,26 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
 /// NNS canisters, and sets an environment variable pointing at each of them so
 /// that they can be found later.
 pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
-    for canister in &NNS_CANISTER_WASMS {
-        // Can it be found?
-        let file_part = format!("{}.wasm", canister);
-        let mut path = wasm_dir.as_ref().to_path_buf();
-        path.push(file_part.as_str());
-        assert!(
-            path.is_file(),
-            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but it misses {}",
+    'outer: for canister in &NNS_CANISTER_WASMS {
+        // Can either .wasm.gz or .wasm be found?
+        for ext in &[".wasm.gz", ".wasm"] {
+            let file_part = format!("{}{}", canister, ext);
+            let mut path = wasm_dir.as_ref().to_path_buf();
+            path.push(file_part.as_str());
+            if path.is_file() {
+                // Sets up the env var following the pattern expected by
+                // WASM::from_location_specified_by_env_var
+                std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap());
+                continue 'outer;
+            }
+        }
+        // if no file is found, panic!
+        panic!(
+            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but there is {}.wasm.gz or {}.wasm",
             wasm_dir.as_ref().display(),
-            file_part
+            canister,
+            canister
         );
-
-        // Sets up the env var following the pattern expected by
-        // WASM::from_location_specified_by_env_var
-        std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap());
     }
 }
 

@@ -4,11 +4,18 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/rust_canisters/dfn_core",
+    # Keep sorted.
     "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
     "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_library(
@@ -27,6 +34,7 @@ rust_doc_test(
 rust_canister(
     name = "xnet-test-canister",
     srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":xnet_test.did",
     deps = DEPENDENCIES + [":xnet_test"],
 )

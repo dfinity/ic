@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
-use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::wasm_executor::{
@@ -355,6 +355,10 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
+            .canister_log
+            .append(&mut output.canister_log);
+        self.canister
+            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -415,7 +419,7 @@ impl ResponseHelper {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
                 instructions_available,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                 original,
                 round,
                 round_limits,
@@ -438,17 +442,40 @@ impl ResponseHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
+            .canister_log
+            .append(&mut output.canister_log);
+
+        // The ingress induction debit can interfere with cycles changes that happened concurrently
+        // during the cleanup callback execution. If the balance of the canister is not enough to
+        // cover the debit + the amount of removed cycles during execution, the canister might end
+        // up with an incorrect balance. To avoid this, we check if the balance is enough to cover
+        // the debit + the removed cycles to ensure that the cycles change can be performed.
+        //
+        // This allows the cleanup callback to always succeed at the expense of some ingress
+        // messages being inducted for free in this edge case. This is acceptable because the cleanup
+        // callback is expected to always run and allow the canister to perform important cleanup tasks,
+        // like releasing locks or undoing other state changes.
+        if let Some(state_changes) = &canister_state_changes {
+            let ingress_induction_cycles_debit =
+                self.canister.system_state.ingress_induction_cycles_debit();
+            let removed_cycles = state_changes.system_state_changes.removed_cycles();
+            if self.canister.system_state.balance()
+                < ingress_induction_cycles_debit + removed_cycles
+            {
+                self.canister
+                    .system_state
+                    .remove_charge_from_ingress_induction_cycles_debit(
+                        ingress_induction_cycles_debit - removed_cycles,
+                    );
+            }
+        }
+        self.canister
+            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
                 round.counters.charging_from_balance_error,
             );
-
-        if let Some(state_changes) = &canister_state_changes {
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // A cleanup callback cannot accept and send cycles.
-            assert_eq!(requested.get(), 0);
-        }
 
         apply_canister_state_changes(
             canister_state_changes,
@@ -472,7 +499,7 @@ impl ResponseHelper {
                 self.finish(
                     Err(callback_err),
                     output.num_instructions_left,
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                    NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                     original,
                     round,
                     round_limits,
@@ -519,14 +546,13 @@ impl ResponseHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .on_canister_result(
                 original.call_context_id,
                 Some(original.callback_id),
                 result,
                 instructions_used,
-            );
+            )
+            .unwrap();
         let response = action_to_response(
             &self.canister,
             action,
@@ -536,6 +562,12 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -543,6 +575,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            is_wasm64_execution.into(),
             round.log,
         );
 
@@ -747,6 +780,10 @@ impl PausedExecution for PausedResponseExecution {
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+    }
 }
 
 /// Struct used to hold necessary information for the
@@ -840,6 +877,10 @@ impl PausedExecution for PausedCleanupExecution {
         let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
     }
 }
 
@@ -1027,6 +1068,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
@@ -1100,8 +1142,8 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1195,8 +1237,8 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);

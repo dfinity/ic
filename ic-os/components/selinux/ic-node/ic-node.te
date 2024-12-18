@@ -1,0 +1,397 @@
+policy_module(ic-node, 1.0.0)
+
+# Orchestrator process & executable domain type
+type ic_orchestrator_t;
+type ic_orchestrator_exec_t;
+
+# Replica process & executable domain type
+type ic_replica_t;
+type ic_replica_exec_t;
+
+type ic_canister_sandbox_t;
+type ic_canister_sandbox_exec_t;
+
+type ic_http_adapter_t;
+type ic_http_adapter_exec_t;
+
+# On-disk state types.
+type ic_crypto_store_t;
+type ic_data_t;
+type ic_canister_mem_t;
+
+permissive ic_orchestrator_t;
+permissive ic_replica_t;
+permissive ic_http_adapter_t;
+
+###############################################################################
+# System integration bits
+
+# These are managed as separate mount points, allow mounting these.
+files_mountpoint(ic_data_t)
+files_mountpoint(ic_crypto_store_t)
+files_mountpoint(ic_canister_mem_t)
+
+# Type for the root volatile data directory at /run/ic-node.
+type ic_var_run_t;
+files_type(ic_var_run_t)
+systemd_tmpfilesd_managed(ic_var_run_t, dir)
+
+# To dynamically create /var, need right to read the template fs tree
+require { type fsadm_t; }
+allow fsadm_t ic_crypto_store_t : dir { read };
+allow fsadm_t ic_data_t : dir { read };
+allow fsadm_t ic_canister_mem_t : dir { read };
+
+# We need to bind-mount various things in order to support read-only root
+# filesystem.
+require { type mount_t, initrc_var_run_t, net_conf_t, etc_t; }
+# Origin of bind mounts is /run/ic-node/etc, needs to be accessible.
+allow mount_t initrc_var_run_t : file { getattr };
+# Allow /etc/hostname to be bind-mounted
+allow mount_t net_conf_t : file { mounton };
+# Allow /etc/ssh and /etc/node_exporter to be bind-mounted
+allow mount_t etc_t : dir { mounton };
+
+# Allow basic permissions around umounting
+allow mount_t ic_data_t : filesystem { getattr };
+allow mount_t ic_canister_mem_t : filesystem { getattr };
+
+# Allow to mount /var/lib/ic/backup using correct label.
+allow mount_t ic_data_t : filesystem { relabelfrom };
+allow mount_t ic_canister_mem_t : filesystem { relabelfrom };
+
+# Allow to mount the old var partition overriding all stored labels.
+require { type var_t; }
+allow mount_t var_t : filesystem { relabelfrom };
+
+###############################################################################
+# Orchestrator, basic process stuff
+
+application_domain(ic_orchestrator_t, ic_orchestrator_exec_t)
+
+# Allow it to be spawned from init scripts.
+init_daemon_domain(ic_orchestrator_t, ic_orchestrator_exec_t)
+
+# Allow launching replica
+domain_auto_transition_pattern(ic_orchestrator_t, ic_replica_exec_t, ic_replica_t)
+
+# Allow orchestrator to call into the manageboot script. This allows the
+# orchestrator to trigger upgrade installs, reboots etc.
+ic_call_manageboot(ic_orchestrator_t)
+# Grant access to the upgrade images written by orchestrator.
+ic_manageboot_read_upgrade_image(var_lib_t)
+ic_manageboot_read_upgrade_image(ic_data_t)
+
+# Manage relevant files
+ic_rw_data(ic_orchestrator_t)
+
+# Manage files that back canister memory
+ic_rw_canister_mem(ic_replica_t)
+
+# For some reason, it wants to read this
+kernel_read_vm_overcommit_sysctl(ic_orchestrator_t)
+
+# Needs to read replica config.
+ic_read_replica_config(ic_orchestrator_t)
+
+corenet_tcp_bind_generic_node(ic_orchestrator_t)
+corenet_tcp_bind_all_unreserved_ports(ic_orchestrator_t)
+corenet_tcp_connect_http_cache_port(ic_orchestrator_t)
+allow ic_orchestrator_t self:tcp_socket create_stream_socket_perms;
+allow ic_orchestrator_t self:tcp_socket rw_stream_socket_perms;
+
+# wants to read openssl config and public certs
+miscfiles_read_generic_certs(ic_orchestrator_t)
+
+# Allow using locales
+miscfiles_read_localization(ic_orchestrator_t)
+
+# wants to read /opt/ic/share/version.txt
+read_files_pattern(ic_orchestrator_t, usr_t, usr_t)
+
+# Wants to read /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+fs_read_cgroup_files(ic_orchestrator_t)
+
+# Wants to set process group
+allow ic_orchestrator_t self : process { getsched setpgid };
+
+# Create a fifo to communicate with updater process.
+allow ic_orchestrator_t self : fifo_file { getattr ioctl read write };
+
+# Allow creating arbitrary temporary files: For some reason the use of /tmp is hard-coded
+# in some places in the binary, so cannot divert this to a safer place.
+require { type tmp_t; }
+rw_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+create_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+delete_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+list_dirs_pattern(ic_orchestrator_t, tmp_t, tmp_t)
+
+###############################################################################
+# Replica, basic process stuff
+
+application_domain(ic_replica_t, ic_replica_exec_t)
+
+# Describe replica_t as daemon domain: Quite similar to what init_daemon_domain does.
+# This would all look a lot simpler if init were to start replica directly
+# (instead of orchestrator being there as an intermediary -- in some sense,
+# orchestrator has the role of "init", so we need similar policy).
+typeattribute ic_replica_t daemon;
+domain_type(ic_replica_t)
+domain_entry_file(ic_replica_t, ic_replica_exec_t)
+role system_r types ic_replica_t;
+init_dontaudit_use_fds(ic_replica_t)
+term_dontaudit_use_console(ic_replica_t)
+init_use_script_ptys(ic_replica_t)
+allow ic_orchestrator_t ic_replica_t : process rlimitinh;
+
+# Use inherited file descriptors.
+allow ic_replica_t ic_orchestrator_t : fd use;
+
+# Manage relevant files
+ic_rw_data(ic_replica_t)
+
+# wants to read openssl config and public certs
+miscfiles_read_generic_certs(ic_replica_t)
+
+# Allow using locales
+miscfiles_read_localization(ic_replica_t)
+
+# Allow to turn anonymous memory executable (required for the native code
+# compiled from wasm inside the process). This is obviously not desirable
+# from security POV.
+allow ic_replica_t self : process { execmem };
+
+# Wants to set process group
+allow ic_replica_t self : process { getsched setpgid signal };
+
+# For some reason, it wants to read this
+kernel_read_vm_overcommit_sysctl(ic_replica_t)
+
+# Needs to read replica config.
+ic_read_replica_config(ic_replica_t)
+
+# Networking
+corenet_tcp_bind_generic_node(ic_replica_t)
+corenet_tcp_bind_all_unreserved_ports(ic_replica_t)
+corenet_tcp_bind_http_port(ic_replica_t)
+corenet_tcp_bind_websm_port(ic_replica_t)
+corenet_tcp_connect_all_unreserved_ports(ic_replica_t)
+allow ic_replica_t self:tcp_socket create_stream_socket_perms;
+allow ic_replica_t self:tcp_socket rw_stream_socket_perms;
+
+# Rocksdb wants to read /sys/kernel/mm/transparent_hugepage/enabled
+# Maybe deny and dev_dontaudit_read_sysfs(ic_replica_t) instead?
+dev_read_sysfs(ic_replica_t)
+
+# for some reasons, it wants to search /bin
+corecmd_search_bin(ic_replica_t)
+
+# Wants to read /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+fs_read_cgroup_files(ic_replica_t)
+
+# Allow creating arbitrary temporary files: For some reason the use of /tmp is hard-coded
+# in some places in the binary, so cannot divert this to a safer place.
+require { type tmp_t; }
+rw_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
+create_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
+
+# Replica creates and reads/writes to/from internal unix domain socket,
+# as well as the socket connecting it to the sandbox.
+# It also uses setsockopt to configure socket timeouts.
+allow ic_replica_t self : unix_stream_socket { create setopt read write };
+
+# Replica uses an internal fifo file
+allow ic_replica_t ic_replica_t : fifo_file { read };
+
+require { type fs_t; }
+# It is not clear why replica needs this.
+allow ic_replica_t fs_t : filesystem { getattr };
+
+# Wants to read /proc/sys/kernel/osrelease
+kernel_read_kernel_sysctls(ic_replica_t)
+
+# Allow managing ic data.
+rw_dirs_pattern(ic_replica_t, ic_data_t, ic_data_t)
+create_dirs_pattern(ic_replica_t, ic_data_t, ic_data_t)
+rw_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
+create_files_pattern(ic_replica_t, ic_data_t, ic_data_t)
+
+# Allow managing the dirs where page deltas are stored
+rw_dirs_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+create_dirs_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+rw_files_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+create_files_pattern(ic_replica_t, ic_canister_mem_t, ic_canister_mem_t)
+
+### Replica interaction with sandbox.
+
+# Allow launching canister sandbox
+domain_auto_transition_pattern(ic_replica_t, ic_canister_sandbox_exec_t, ic_canister_sandbox_t)
+
+# Allow inspecting sandbox process /proc files to collect metrics.
+read_files_pattern(ic_replica_t, ic_canister_sandbox_t, ic_canister_sandbox_t)
+
+###############################################################################
+# Config file handling
+
+# The generated ic replica config file at /run/ic-node/config/ic.json5
+type ic_replica_conffile_t;
+files_type(ic_replica_conffile_t)
+
+# Allow tmpfilesd to manage the directory
+systemd_tmpfilesd_managed(ic_replica_conffile_t, dir)
+require { type systemd_tmpfiles_t; }
+list_dirs_pattern(systemd_tmpfiles_t, ic_replica_conffile_t, ic_replica_conffile_t)
+
+###############################################################################
+# Dynamic nftables handling
+
+# Type for the nftables ruleset at /run/ic-node/nftables-ruleset and
+# the nftables.conf file stored there.
+type ic_nftables_ruleset_t;
+files_type(ic_nftables_ruleset_t)
+
+# Allow tmpfiles to set this up for us.
+systemd_tmpfilesd_managed(ic_nftables_ruleset_t, dir)
+systemd_tmpfilesd_managed(ic_nftables_ruleset_t, file)
+require { type systemd_tmpfiles_t; }
+create_files_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+list_dirs_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+write_files_pattern(systemd_tmpfiles_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+# Allow nftables to access this. Needs access to all parts of the path.
+require { type iptables_t; }
+search_dirs_pattern(iptables_t, var_run_t, ic_var_run_t)
+search_dirs_pattern(iptables_t, ic_var_run_t, ic_nftables_ruleset_t)
+read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+# Allow orchestrator to write nftables ruleset
+manage_files_pattern(ic_orchestrator_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+
+###############################################################################
+# Canister sandbox
+
+role system_r types ic_canister_sandbox_t;
+
+require {
+    type ld_so_cache_t, ld_so_t, lib_t, root_t, usr_t, cpu_online_t, proc_t, sysfs_t, null_device_t;
+    attribute unconfined_domain_type;
+}
+
+allow ic_canister_sandbox_t etc_t:dir { getattr ioctl lock open read search };
+allow ic_canister_sandbox_t ld_so_cache_t:file { getattr ioctl lock map open read };
+allow ic_canister_sandbox_t ld_so_t:file { execute getattr map open read };
+allow ic_canister_sandbox_t ld_so_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t lib_t:dir { getattr lock open read search };
+allow ic_canister_sandbox_t lib_t:file { execute getattr map open read };
+allow ic_canister_sandbox_t lib_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t root_t:dir { getattr read search };
+allow ic_canister_sandbox_t root_t:lnk_file { getattr read };
+allow ic_canister_sandbox_t unconfined_domain_type:association recvfrom;
+allow ic_canister_sandbox_t usr_t:dir { getattr open search };
+allow ic_canister_sandbox_t ic_canister_sandbox_exec_t:file { entrypoint execute map read };
+allow ic_canister_sandbox_t ic_canister_sandbox_t:process { fork getsched };
+
+allow ic_canister_sandbox_t ic_canister_sandbox_exec_t : file { entrypoint execute map read };
+
+# Allow to turn anonymous memory executable (required for the native code
+# compiled from wasm inside the process). This is obviously not desirable
+# from security POV.
+allow ic_canister_sandbox_t self : process { execmem };
+
+# Allow to get own scheduler -- that's harmless, obviously.
+allow ic_canister_sandbox_t ic_canister_sandbox_t : process { getsched };
+
+# Allow to communicate with replica. We should have the sockets explicitly
+# labeled by replica such that we precisely identify this as the "allowed"
+# communication channel (and such that there is no "accidental" use of any
+# differently labeled channel.
+allow ic_canister_sandbox_t ic_replica_t : fd use;
+allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { setopt read write };
+
+# Allow to access the shared memory area set up by replica. NB this should be
+# labelled differently eventually because allowing tmpfs is fairly broad.
+require { type tmpfs_t; }
+allow ic_canister_sandbox_t tmpfs_t : file { map read write getattr };
+# Also allow read-only access to checkpoint files (also given passed via
+# file descriptor from replica).
+allow ic_canister_sandbox_t ic_data_t : file { map read getattr };
+# Allow read/write access to files that back the heap delta for both sandbox and replica
+# The workflow is that the replica creates the files but passes a file descriptor to the sandbox
+# We explicitly do not allow the sandbox to open files because they should only be open by the replica
+allow ic_canister_sandbox_t ic_canister_mem_t : file { map read write getattr };
+allow ic_replica_t ic_canister_mem_t : file { map read write getattr };
+
+# Wants to read its own control group. Should deny that.
+require { type cgroup_t; }
+dontaudit ic_canister_sandbox_t cgroup_t : dir { search };
+dontaudit ic_canister_sandbox_t cgroup_t : file { open read getattr };
+
+# There is a leaked epoll descriptor from orchestrator!
+dontaudit ic_canister_sandbox_t ic_orchestrator_t : fd { use };
+
+# Allow to use the logging file descriptor inherited from init.
+# This should actually not be allowed, logs should be routed through
+# replica.
+allow ic_canister_sandbox_t init_t : fd { use };
+allow ic_canister_sandbox_t init_t : unix_stream_socket { setopt read write };
+
+# Deny access to system information as well as own proc file (would
+# also allow accessing proc files of *other* sandboxes).
+dontaudit ic_canister_sandbox_t sysfs_t : dir { search };
+dontaudit ic_canister_sandbox_t cpu_online_t : file { open read };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : dir { search };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : file { getattr open read };
+allow ic_canister_sandbox_t null_device_t : chr_file { read };
+dontaudit ic_canister_sandbox_t proc_t : dir { search };
+dontaudit ic_canister_sandbox_t proc_t : lnk_file { read };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : lnk_file { read };
+
+# There is a pipe used by libunwind to probe memory when generating stack traces.
+# The `anyhow` crate since 1.0.77 is generating stack traces for all errors, not only panics.
+# For now, we silently deny this, until RUST_LIB_BACKTRACE=0 is rolled out and reduces the noise.
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : fifo_file { read write };
+
+# Deny accessing system information (tries to access "/proc/sys/kernel/osrelease" for unspecified reasons).
+dontaudit ic_canister_sandbox_t sysctl_kernel_t : dir { search };
+dontaudit ic_canister_sandbox_t sysctl_kernel_t : file { getattr open read };
+dontaudit ic_canister_sandbox_t sysctl_t : dir { search };
+# Runtime wants to read the global memory overcommit settings. Not clear
+# why, it is not supposed to care.
+require { type sysctl_vm_overcommit_t, sysctl_vm_t; }
+dontaudit ic_canister_sandbox_t sysctl_vm_t : dir { search };
+dontaudit ic_canister_sandbox_t sysctl_vm_overcommit_t : file { open read };
+
+# Allow our unconfined domain to debug this process
+allow unconfined_domain_type ic_canister_sandbox_t : dir *;
+allow unconfined_domain_type ic_canister_sandbox_t : file *;
+allow unconfined_domain_type ic_canister_sandbox_t : lnk_file *;
+allow unconfined_domain_type ic_canister_sandbox_t : process *;
+
+# Allow journald to access sandbox proc files. Logger wants
+# to enrich log messages with process information, but it can
+# only do that if it has access to the proc files.
+# Long-term, the logging structure should be different, but make
+# policy reflect reality for now.
+require { type syslogd_t; }
+allow syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
+allow syslogd_t ic_canister_sandbox_t : file { open read getattr ioctl};
+allow syslogd_t ic_canister_sandbox_t : lnk_file { open read getattr ioctl};
+allow syslogd_t ic_canister_sandbox_t : process { getattr };
+
+# Allow interacting with our own executable.
+require {
+    type bin_t;
+}
+search_dirs_pattern(ic_canister_sandbox_t, bin_t, bin_t)
+read_files_pattern(ic_canister_sandbox_t, ic_canister_sandbox_exec_t, ic_canister_sandbox_exec_t)
+
+# Do not allow self signaling, as this also allows signaling other sandboxes.
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
+
+# Forbid the sandbox from checking certs
+dontaudit ic_canister_sandbox_t cert_t : file { read };
+
+###############################################################################
+# ic-https-outcalls-adapter
+
+application_domain(ic_http_adapter_t, ic_http_adapter_exec_t)

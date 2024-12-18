@@ -1,5 +1,5 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{candid, candid_one, candid_one_with_config};
 use dfn_core::{
     api::caller,
     endpoint::{over, over_async},
@@ -24,7 +24,10 @@ use ic_nervous_system_root::{
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
+use ic_nns_common::{
+    access_control::{check_caller_is_governance, check_caller_is_sns_w},
+    types::CallCanisterProposal,
+};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
@@ -35,6 +38,7 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -44,7 +48,7 @@ use dfn_core::println;
 thread_local! {
     // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
     // a reasonable balance.
-    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = RefCell::new(167);
+    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = const { RefCell::new(167) };
 }
 
 fn new_management_canister_client() -> impl ManagementCanisterClient {
@@ -111,10 +115,13 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
 fn submit_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterRequest)| {
+        |(expected_governance_wasm_sha, proposal): (
+            serde_bytes::ByteBuf,
+            ChangeCanisterRequest,
+        )| {
             ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
                 caller(),
-                expected_governance_wasm_sha,
+                expected_governance_wasm_sha.to_vec(),
                 proposal,
             )
         },
@@ -125,11 +132,15 @@ fn submit_root_proposal_to_upgrade_governance_canister() {
 fn vote_on_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(proposer, wasm_sha256, ballot): (PrincipalId, Vec<u8>, RootProposalBallot)| {
+        |(proposer, wasm_sha256, ballot): (
+            PrincipalId,
+            serde_bytes::ByteBuf,
+            RootProposalBallot,
+        )| {
             ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
                 caller(),
                 proposer,
-                wasm_sha256,
+                wasm_sha256.to_vec(),
                 ballot,
             )
         },
@@ -164,7 +175,17 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
 
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
-    let future = change_canister::<DfnRuntime>(request);
+    let future = async move {
+        let change_canister_result = change_canister::<DfnRuntime>(request).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+            }
+            Err(err) => {
+                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
+            }
+        };
+    };
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
@@ -224,6 +245,7 @@ fn call_canister() {
 /// by SNS-W.
 #[export_name = "canister_update change_canister_controllers"]
 fn change_canister_controllers() {
+    check_caller_is_sns_w();
     over_async(candid_one, change_canister_controllers_)
 }
 
@@ -235,7 +257,25 @@ async fn change_canister_controllers_(
 ) -> ChangeCanisterControllersResponse {
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
-        caller(),
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[export_name = "canister_update update_canister_settings"]
+fn update_canister_settings() {
+    check_caller_is_governance();
+    over_async(candid_one, update_canister_settings_);
+}
+
+#[candid_method(update, rename = "update_canister_settings")]
+async fn update_canister_settings_(
+    update_settings: UpdateCanisterSettingsRequest,
+) -> UpdateCanisterSettingsResponse {
+    canister_management::update_canister_settings(
+        update_settings,
         &mut new_management_canister_client(),
     )
     .await
@@ -244,7 +284,7 @@ async fn change_canister_controllers_(
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister
@@ -275,67 +315,4 @@ fn main() {
 fn main() {}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
-    use lazy_static::lazy_static;
-    use pretty_assertions::assert_eq;
-    use std::{env::var_os, path::PathBuf};
-
-    lazy_static! {
-        static ref DECLARED_INTERFACE: String = {
-            let cargo_manifest_dir =
-                var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined");
-
-            let path = PathBuf::from(cargo_manifest_dir).join("canister/root.did");
-
-            let contents = std::fs::read(path).unwrap();
-            String::from_utf8(contents).unwrap()
-        };
-        static ref IMPLEMENTED_INTERFACE: String = {
-            candid::export_service!();
-            __export_service()
-        };
-    }
-
-    /// Makes sure that ./root.did is up to date with the implementation.
-    #[test]
-    fn check_candid_interface_definition_file() {
-        assert_eq!(
-            *DECLARED_INTERFACE, *IMPLEMENTED_INTERFACE,
-            "Generated candid definition does not match canister/root.did. \
-             Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) in \
-             rs/sns/root to update canister/root.did."
-        );
-    }
-
-    /// This is redundant vs. the previous test. The purpose of this is to show
-    /// what the world would look like if we adopted the recommendation that [we
-    /// use .did files as our source of truth][use-did-file], instead of
-    /// generating them (what we do now).
-    ///
-    ///   [use-did-file]: https://mmapped.blog/posts/01-effective-rust-canisters.html#canister-interfaces
-    #[test]
-    fn test_implementation_conforms_to_declared_interface() {
-        let result = service_equal(
-            CandidSource::Text(&IMPLEMENTED_INTERFACE),
-            CandidSource::Text(&DECLARED_INTERFACE),
-        );
-
-        if let Err(err) = result {
-            panic!(
-                "Implemented interface:\n\
-                 {}\n\
-                 \n\
-                 Declared interface:\n\
-                 {}\n\
-                 \n\
-                 Error:\n\
-                 {}n\
-                 \n\
-                 The Candid service implementation does not comply with the declared interface.",
-                *IMPLEMENTED_INTERFACE, *DECLARED_INTERFACE, err,
-            );
-        }
-    }
-}
+mod tests;

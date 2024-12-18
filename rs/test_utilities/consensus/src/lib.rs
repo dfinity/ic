@@ -1,4 +1,3 @@
-#![allow(clippy::ptr_arg)]
 pub mod batch;
 pub mod fake;
 
@@ -9,7 +8,7 @@ use ic_interfaces::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId},
+    consensus::idkg::{IDkgBlockReader, IDkgStats, RequestId},
     consensus::{
         dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
         HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
@@ -48,7 +47,10 @@ macro_rules! matches_pattern {
 }
 
 pub fn assert_result_invalid<P, T>(result: ValidationResult<ValidationError<P, T>>) {
-    assert!(matches_pattern!(result, Err(ValidationError::Permanent(_))));
+    assert!(matches_pattern!(
+        result,
+        Err(ValidationError::InvalidArtifact(_))
+    ));
 }
 
 pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, msg: &T) {
@@ -136,15 +138,21 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     // created.
     let registry_version = summary.registry_version;
     let height = summary.height;
-    let low_dkg_id = summary.current_transcript(&NiDkgTag::LowThreshold).dkg_id;
-    let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id;
+    let low_dkg_id = summary
+        .current_transcript(&NiDkgTag::LowThreshold)
+        .dkg_id
+        .clone();
+    let high_dkg_id = summary
+        .current_transcript(&NiDkgTag::HighThreshold)
+        .dkg_id
+        .clone();
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
         Payload::new(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
-                ecdsa: None,
+                idkg: None,
             }),
         ),
         height,
@@ -176,10 +184,10 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     }
 }
 
-pub struct EcdsaStatsNoOp {}
-impl EcdsaStats for EcdsaStatsNoOp {
-    fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn update_active_quadruples(&self, _block_reader: &dyn EcdsaBlockReader) {}
+pub struct IDkgStatsNoOp {}
+impl IDkgStats for IDkgStatsNoOp {
+    fn update_active_transcripts(&self, _block_reader: &dyn IDkgBlockReader) {}
+    fn update_active_pre_signatures(&self, _block_reader: &dyn IDkgBlockReader) {}
     fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
     fn record_support_aggregation(
         &self,

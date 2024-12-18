@@ -8,7 +8,7 @@ use serde::Serialize;
 ///     response : http_response;
 ///     context : blob;
 /// }`
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransformArgs {
     pub response: CanisterHttpResponsePayload,
     #[serde(with = "serde_bytes")]
@@ -25,7 +25,7 @@ candid::define_function!(pub TransformFunc : (TransformArgs) -> (CanisterHttpRes
 //       function : func (record {response : http_response; context : blob}) -> (http_response) query;
 //       context : blob;
 //   }`
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
     pub function: TransformFunc,
@@ -71,11 +71,12 @@ pub type BoundedHttpHeaders = BoundedVec<
 //       context : blob;
 //     };
 //   })`
-#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
@@ -245,7 +246,7 @@ fn test_http_headers_max_element_size() {
 /// name: text;
 /// value: text;
 /// })`;
-#[derive(CandidType, Clone, Deserialize, Debug, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
@@ -281,7 +282,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,
@@ -298,7 +299,7 @@ pub enum HttpMethod {
 ///     headers: vec http_header;
 ///     body: blob;
 /// })`;
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u128,
     pub headers: Vec<HttpHeader>,

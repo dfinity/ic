@@ -1,6 +1,7 @@
+use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
@@ -11,44 +12,50 @@ use ic_management_canister_types::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
+use ic_replicated_state::canister_state::execution_state::{
+    CustomSection, CustomSectionType, WasmMetadata,
+};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+};
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
+use ic_replicated_state::replicated_state::{
+    MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
-    replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
+    SystemState,
 };
-use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_state::{arb_replicated_state_with_output_queues, ExecutionStateBuilder};
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::RejectContext;
-use ic_types::{
-    messages::{
-        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
-    },
-    time::UNIX_EPOCH,
-    CountBytes, Cycles, MemoryAllocation, Time,
+use ic_types::messages::{CallbackId, RejectContext};
+use ic_types::messages::{
+    CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
 };
+use ic_types::time::CoarseTime;
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{CountBytes, Cycles, MemoryAllocation, Time};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
-fn request_from(canister_id: CanisterId) -> RequestOrResponse {
+fn request_from(canister_id: CanisterId) -> Request {
     RequestBuilder::default()
         .sender(canister_id)
         .receiver(CANISTER_ID)
         .build()
-        .into()
 }
 
 fn request_to(canister_id: CanisterId) -> Request {
@@ -116,7 +123,7 @@ impl ReplicatedStateFixture {
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.state
             .push_input(msg, &mut SUBNET_AVAILABLE_MEMORY.clone())
     }
@@ -158,8 +165,8 @@ impl ReplicatedStateFixture {
         self.state.memory_taken()
     }
 
-    fn message_memory_taken(&self) -> NumBytes {
-        self.state.message_memory_taken()
+    fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        self.state.guaranteed_response_message_memory_taken()
     }
 
     fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
@@ -168,7 +175,7 @@ impl ReplicatedStateFixture {
             .unwrap()
             .system_state
             .queues()
-            .get_remote_subnet_input_schedule()
+            .remote_sender_schedule()
     }
 
     fn local_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
@@ -177,7 +184,7 @@ impl ReplicatedStateFixture {
             .unwrap()
             .system_state
             .queues()
-            .get_local_subnet_input_schedule()
+            .local_sender_schedule()
     }
 }
 
@@ -191,11 +198,11 @@ fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &Replicated
 fn assert_message_memory_taken(queues_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.memory_taken().messages().get()
+        fixture.memory_taken().guaranteed_response_messages().get()
     );
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.message_memory_taken().get()
+        fixture.guaranteed_response_message_memory_taken().get()
     );
 }
 
@@ -242,13 +249,13 @@ fn memory_taken_by_canister_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into a canister input queue.
-    fixture
+    assert!(fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -293,13 +300,13 @@ fn memory_taken_by_subnet_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_to(SUBNET_ID.into()).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -376,13 +383,13 @@ fn memory_taken_by_wasm_custom_sections() {
     assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
 
     // Push a request into a canister input queue.
-    fixture
+    assert!(fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
@@ -464,13 +471,13 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_to(SUBNET_ID.into()).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -519,20 +526,42 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    fixture.push_input(request_from(OTHER_CANISTER_ID)).unwrap();
+    assert!(fixture
+        .push_input(request_from(OTHER_CANISTER_ID).into())
+        .unwrap());
     assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    fixture.push_input(request_from(CANISTER_ID)).unwrap();
+    assert!(fixture
+        .push_input(request_from(CANISTER_ID).into())
+        .unwrap());
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
-    fixture
-        .push_input(request_from(CanisterId::unchecked_from_principal(
-            SUBNET_ID.get(),
-        )))
-        .unwrap();
+    assert!(fixture
+        .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
+        .unwrap());
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
+}
+
+#[test]
+fn subnet_queue_push_input_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    let response = response_to(SUBNET_ID.into());
+    assert_eq!(
+        state.push_input(
+            response.clone().into(),
+            &mut SUBNET_AVAILABLE_MEMORY.clone()
+        ),
+        Err((
+            StateError::non_matching_response(
+                "Management canister does not accept canister responses",
+                &response
+            ),
+            response.into()
+        ))
+    );
 }
 
 #[test]
@@ -582,7 +611,7 @@ fn insert_bitcoin_response() {
         .unwrap();
 
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
     );
 }
@@ -616,7 +645,7 @@ fn insert_bitcoin_get_successor_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
@@ -649,29 +678,32 @@ fn insert_bitcoin_send_transaction_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
 
 #[test]
-fn time_out_requests_updates_subnet_input_schedules_correctly() {
+fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
-    // Push 3 requests into the canister with id `local_canister_id1`:
+    // Enqueue 3 outgoing requests for `CANISTER_ID`:
     // - one to self.
     // - one to a another local canister.
     // - one to a remote canister.
     let remote_canister_id = CanisterId::from_u64(123);
-    for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
-        fixture
-            .push_output_request(request_to(receiver), UNIX_EPOCH)
-            .unwrap();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.sender_reply_callback = CallbackId::from(i as u64);
+        fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!(3, fixture.state.time_out_requests());
+    assert_eq!(3, fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
@@ -683,6 +715,105 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
     );
+}
+
+#[test]
+fn time_out_messages_in_subnet_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+
+    // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
+    for i in 0..2 {
+        let mut request = request_to(SUBNET_ID.into());
+        request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
+        assert!(fixture.push_input(request.into()).unwrap());
+    }
+
+    // Time out the first request.
+    let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
+    fixture.state.metadata.batch_time = second_request_deadline.into();
+    assert_eq!(1, fixture.state.time_out_messages());
+
+    // Second request should still be in the queue.
+    assert_matches!(
+        fixture.state.pop_subnet_input(),
+        Some(CanisterMessage::Request(request)) if request.deadline == second_request_deadline
+    );
+    assert_eq!(None, fixture.state.pop_subnet_input());
+}
+
+#[test]
+fn enforce_best_effort_message_limit() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Enqueue 4 best-effort incoming requests of increasing sizes for
+    // `CANISTER_ID`, `OTHER_CANISTER_ID` and `own_subnet_id` (i.e. subnet queues).
+    let own_subnet_id = CanisterId::from(fixture.state.metadata.own_subnet_id);
+    let mut message_sizes = Vec::new();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID, own_subnet_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.deadline = SOME_DEADLINE;
+        request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        message_sizes.push(NumBytes::from(request.count_bytes() as u64));
+        assert!(fixture.push_input(request.into()).unwrap());
+    }
+
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(u64::MAX.into()),
+    );
+
+    let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(best_effort_memory_usage),
+    );
+
+    // Enforce a limit equal to the mean message size. This should shed everything
+    // but the first message we enqueued.
+    let mean_message_size = best_effort_memory_usage / 4;
+    assert_eq!(
+        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
+    // A second identical call should be a no-op.
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
+    // Pop the remaining message.
+    assert!(fixture.pop_input().is_some());
+
+    // There should now be no more inbound or outbound messages left.
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.state.output_into_iter().next().is_none());
+}
+
+#[test]
+fn push_best_effort_response_for_non_existent_canister_succeeds() {
+    // A replicated state with no canisters installed.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[]);
+
+    // Pushing a guaranteed response fails.
+    let response = response_to(CANISTER_ID);
+    assert!(fixture.push_input(response.into()).is_err());
+
+    // Pushing a best-effort response succeeds (i.e. dropped silently).
+    let mut best_effort_response = response_to(CANISTER_ID);
+    best_effort_response.deadline = SOME_DEADLINE;
+    assert_eq!(Ok(false), fixture.push_input(best_effort_response.into()));
 }
 
 #[test]
@@ -738,7 +869,7 @@ fn split() {
     fixture.state.metadata.ingress_history = make_ingress_history(&CANISTERS);
 
     // Subnet queues. Should be preserved on subnet A' only.
-    fixture
+    assert!(fixture
         .push_input(
             RequestBuilder::default()
                 .sender(CANISTER_1)
@@ -746,12 +877,12 @@ fn split() {
                 .build()
                 .into(),
         )
-        .unwrap();
+        .unwrap());
 
     // Set up input schedules. Add a couple of input messages to each canister.
     for sender in CANISTERS {
         for receiver in CANISTERS {
-            fixture
+            assert!(fixture
                 .push_input(
                     RequestBuilder::default()
                         .sender(sender)
@@ -759,7 +890,7 @@ fn split() {
                         .build()
                         .into(),
                 )
-                .unwrap();
+                .unwrap());
         }
     }
     for canister in CANISTERS {
@@ -845,22 +976,44 @@ fn split() {
     assert_eq!(expected, state_b);
 }
 
+#[test]
+fn input_source_roundtrip() {
+    use ic_protobuf::state::queues::v1::canister_queues as pb;
+
+    for initial in InputSource::iter() {
+        let encoded = pb::NextInputQueue::from(&initial);
+        let round_trip = InputSource::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_input_source() {
+    // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        InputSource::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+        [0, 1, 2]
+    );
+}
+
 proptest! {
     #[test]
     fn peek_and_next_consistent(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8))
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5))
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut num_requests = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             num_requests += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
         }
 
         drop(output_iter);
-        assert_eq!(total_requests, num_requests);
-        assert_eq!(replicated_state.output_message_count(), 0);
+        prop_assert_eq!(total_requests, num_requests);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 
     /// Replicated state with multiple canisters, each with multiple output queues
@@ -869,8 +1022,8 @@ proptest! {
     /// Expect consumed + excluded to equal initial size. Expect the messages in
     /// excluded queues to be left in the state.
     #[test]
-    fn peek_and_next_consistent_with_ignore(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None),
+    fn peek_and_next_consistent_with_exclude_queue(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
         start in 0..=1,
         exclude_step in 2..=5,
     ) {
@@ -879,38 +1032,38 @@ proptest! {
         let mut i = start;
         let mut excluded = 0;
         let mut consumed = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 excluded += 1;
             } else {
-                assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+                prop_assert_eq!(Some(msg.clone()), output_iter.next());
                 consumed += 1;
             }
         }
 
         drop(output_iter);
-        assert_eq!(total_requests, excluded + consumed);
-        assert_eq!(replicated_state.output_message_count(), excluded);
+        prop_assert_eq!(total_requests, excluded + consumed);
+        prop_assert_eq!(replicated_state.output_message_count(), excluded);
     }
 
     #[test]
     fn iter_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None),
+       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
-        for (_, msg) in &mut output_iter {
+        for msg in &mut output_iter {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
             }
 
             if let Some(raw_msg) = requests.pop_front() {
-                assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+                prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
             } else {
-                panic!("Pop yielded an element that was not contained in the respective queue");
+                prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
             }
 
             raw_requests.push_back(requests);
@@ -918,13 +1071,13 @@ proptest! {
 
         drop(output_iter);
         // Ensure that actually all elements have been consumed.
-        assert_eq!(raw_requests.iter().map(|requests| requests.len()).sum::<usize>(), 0);
-        assert_eq!(replicated_state.output_message_count(), 0);
+        prop_assert_eq!(raw_requests.iter().map(|requests| requests.len()).sum::<usize>(), 0);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 
     #[test]
-    fn iter_with_ignore_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 10, 10, None),
+    fn iter_with_exclude_queue_yields_correct_elements(
+       (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
         start in 0..=1,
         ignore_step in 2..=5,
     ) {
@@ -935,7 +1088,7 @@ proptest! {
             let mut output_iter = replicated_state.output_into_iter();
 
             let mut i = start;
-            while let Some((_, msg)) = output_iter.peek() {
+            while let Some(msg) = output_iter.peek() {
 
                 let mut requests = raw_requests.pop_front().unwrap();
                 while requests.is_empty() {
@@ -947,7 +1100,7 @@ proptest! {
                     // Popping the front of the requests will amount to the same as ignoring as
                     // we use queues of size one in this test.
                     let popped = requests.pop_front().unwrap();
-                    assert_eq!(*msg, popped);
+                    prop_assert_eq!(msg, &popped);
                     output_iter.exclude_queue();
                     ignored_requests.push(popped);
                     // We push the queue to the front as the canister gets another chance if one
@@ -956,12 +1109,12 @@ proptest! {
                     continue;
                 }
 
-                let (_, msg) = output_iter.next().unwrap();
+                let msg = output_iter.next().unwrap();
                 if let Some(raw_msg) = requests.pop_front() {
                     consumed += 1;
-                    assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+                    prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
                 } else {
-                    panic!("Pop yielded an element that was not contained in the respective queue");
+                    prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
                 }
 
                 raw_requests.push_back(requests);
@@ -970,8 +1123,8 @@ proptest! {
 
         let remaining_output = replicated_state.output_message_count();
 
-        assert_eq!(remaining_output, total_requests - consumed);
-        assert_eq!(remaining_output, ignored_requests.len());
+        prop_assert_eq!(remaining_output, total_requests - consumed);
+        prop_assert_eq!(remaining_output, ignored_requests.len());
 
         for raw in ignored_requests {
             let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender()) {
@@ -981,27 +1134,15 @@ proptest! {
             };
 
             let msg = queues.pop_canister_output(&raw.receiver()).unwrap();
-            assert_eq!(raw, msg);
+            prop_assert_eq!(raw, msg);
         }
 
-        assert_eq!(replicated_state.output_message_count(), 0);
-
-    }
-
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        while output_iter.peek().is_some() {
-            output_iter.next();
-        }
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 
     #[test]
     fn ignore_leaves_state_untouched(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
     ) {
         let expected_state = replicated_state.clone();
         {
@@ -1012,12 +1153,12 @@ proptest! {
             }
         }
 
-        assert_eq!(expected_state, replicated_state);
+        prop_assert_eq!(expected_state, replicated_state);
     }
 
     #[test]
-    fn peek_next_loop_with_ignores_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+    fn peek_next_loop_with_exclude_queue_terminates(
+        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
         start in 0..=1,
         ignore_step in 2..=5,
     ) {
@@ -1032,5 +1173,48 @@ proptest! {
             }
             output_iter.next();
         }
+    }
+
+    #[test]
+    fn iter_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
+        batch_time_seconds in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        // Just consume all output messages.
+        //
+        // We cannot check the exact ordering because timing out some messages messes it
+        // up, both across canisters and across a cainster's output queues.
+        let output_messages = replicated_state.output_into_iter().count();
+
+        // All messages have either been timed out or output.
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
+    }
+
+    #[test]
+    fn peek_next_loop_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
+        batch_time in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        let mut output_iter = replicated_state.output_into_iter();
+
+        let mut output_messages = 0;
+        while let Some(msg) = output_iter.peek() {
+            output_messages += 1;
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+        }
+        drop(output_iter);
+
+        // All messages have either been timed out or output.
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 }

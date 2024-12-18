@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::{cell::RefCell, convert::AsRef};
 
 thread_local! {
-    static CERT_TREE: RefCell<RbTree<Id, ICHash>> = RefCell::new(RbTree::new());
+    static CERT_TREE: RefCell<RbTree<Id, ICHash>> = const { RefCell::new(RbTree::new()) };
 }
 
 pub fn init_cert_tree() {

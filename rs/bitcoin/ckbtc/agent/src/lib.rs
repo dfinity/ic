@@ -175,7 +175,7 @@ fn parse_metric(line: &str) -> Option<(String, f64, i64)> {
     None
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct Metric {
     pub value: f64,
     pub timestamp: i64,

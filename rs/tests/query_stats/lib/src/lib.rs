@@ -1,14 +1,12 @@
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::{
-    consensus::catch_up_test::await_node_certified_height,
-    driver::{
-        ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
-    },
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
 use ic_types::{epoch_from_height, Height};
 use ic_universal_canister::wasm;
@@ -30,6 +28,7 @@ pub fn query_stats_config(env: TestEnv) {
                 .with_unit_delay(Duration::from_millis(200))
                 .with_initial_notary_delay(Duration::from_millis(200))
                 .with_dkg_interval_length(Height::from(99))
+                .with_random_height()
                 .with_query_stats_epoch_length(QUERY_STATS_TEST_EPOCH_LENGTH)
                 .add_nodes(4),
         )

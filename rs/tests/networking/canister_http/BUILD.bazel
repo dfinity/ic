@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:system_tests.bzl", "oci_tar", "uvm_config_image")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+exports_files([
+    "universal_vm_activation.sh",
+])
+
+rust_library(
+    name = "canister_http",
+    testonly = True,
+    srcs = ["canister_http.rs"],
+    crate_name = "canister_http",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+oci_tar(
+    name = "minica.tar",
+    image = "@minica",
+    repo_tags = ["minica:image"],
+)
+
+uvm_config_image(
+    name = "http_uvm_config_image",
+    srcs = [
+        ":minica.tar",
+        ":universal_vm_activation.sh",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
+        "//rs/tests/httpbin-rs:httpbin.tar",
+    ],
+    remap_paths = {
+        "universal_vm_activation.sh": "activate",
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)

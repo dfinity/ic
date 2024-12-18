@@ -5,7 +5,10 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::QueryStats, ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId,
+    batch::QueryStats,
+    ingress::WasmResult,
+    messages::{Query, QuerySource},
+    CountBytes, Cycles, PrincipalId, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
@@ -125,7 +128,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -143,10 +146,13 @@ impl CountBytes for EntryKey {
     }
 }
 
-impl From<&UserQuery> for EntryKey {
-    fn from(query: &UserQuery) -> Self {
+impl From<&Query> for EntryKey {
+    fn from(query: &Query) -> Self {
         Self {
-            source: query.source,
+            source: match query.source {
+                QuerySource::User { user_id, .. } => user_id,
+                QuerySource::Anonymous => UserId::from(PrincipalId::default()),
+            },
             receiver: query.receiver,
             method_name: query.method_name.clone(),
             method_payload: query.method_payload.clone(),

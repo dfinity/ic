@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
+    neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
-        Neuron,
+        neuron::DissolveState,
+        Neuron as NeuronProto,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -12,6 +14,9 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
+#[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::{self as sns_init_pb};
@@ -19,6 +24,8 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod neurons_fund;
+mod node_provider_rewards;
 mod stake_maturity;
 
 #[test]
@@ -130,6 +137,84 @@ mod settle_neurons_fund_participation_request_tests {
 } // end mod settle_neurons_fund_participation_request_tests
 
 #[cfg(feature = "test")]
+mod settle_neurons_fund_participation_mem_tests {
+    use crate::{
+        governance::MAX_NEURONS_FUND_PARTICIPANTS,
+        neurons_fund::{
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            NeuronsFundSnapshot,
+        },
+        pb::v1 as gov_pb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+
+    fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
+        NeuronsFundNeuronPortion {
+            id: Default::default(),
+            hotkeys: Default::default(),
+            controller: Default::default(),
+            amount_icp_e8s: 1_000_000_000,
+            maturity_equivalent_icp_e8s: 1_000_000_000,
+            is_capped: false,
+        }
+    }
+
+    /// This test ensures that the number of bytes representing the response payload of
+    /// `NnsGov.settle_neurons_fund_participation` is (worst-case) within IC ingress message limits.
+    /// See https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_pass() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                hotkeys,
+                id: NeuronId { id },
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        assert!(bytes.len() < 2_000_000);
+    }
+
+    /// This test may be adjusted slightly; it is here to help monitor the potentially unbounded
+    /// `NnsGov.settle_neurons_fund_participation` response payload byte size.
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_worst_case_bound() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                id: NeuronId { id },
+                hotkeys,
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        // The following bound is obtained experimentally.
+        let expected_bytes_cap = 620_113;
+        assert!(
+            bytes.len() < expected_bytes_cap,
+            "The bytes.len() = {}, expected_bytes_cap = {}",
+            bytes.len(),
+            expected_bytes_cap
+        );
+    }
+}
+
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
@@ -165,9 +250,10 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())
-                .unwrap();
+        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+        ))
+        .unwrap();
 
         // Step 3: Inspect the result.
 
@@ -196,7 +282,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 initial_token_distribution: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
-                neurons_fund_participants: None,
                 nns_proposal_id: None,
                 neuron_basket_construction_parameters: None,
                 ..converted
@@ -293,7 +378,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 // We'll examine these later
                 initial_token_distribution: None,
                 neuron_basket_construction_parameters: None,
-                neurons_fund_participants: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
@@ -396,7 +480,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
 
         assert_eq!(converted.nns_proposal_id, None);
-        assert_eq!(converted.neurons_fund_participants, None);
         assert_eq!(converted.swap_start_timestamp_seconds, None);
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
@@ -418,7 +501,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             });
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(original);
+        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(original));
 
         // Step 3: Inspect the result: Err must contain "wait for quiet".
         match converted {
@@ -429,7 +512,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 #[cfg(feature = "test")]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
+mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
@@ -467,23 +550,52 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                    .clone(),
-                proposal_id,
-                random_swap_start_time: GlobalTimeOfDay {
+        // Step 2: Call the code under test.
+        let converted = {
+            let create_service_nervous_system =
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+            // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+            // is inlined from `Governance::make_sns_init_payload`.
+            let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+                let random_swap_start_time = GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
-                },
+                };
+
+                let start_time = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.start_time);
+
+                let duration = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.duration);
+
+                CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                    start_time.unwrap_or(random_swap_start_time),
+                    duration.unwrap_or_default(),
+                    current_timestamp_seconds,
+                )
+                .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
+            };
+
+            let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+                create_service_nervous_system,
+            ))
+            .unwrap();
+
+            SnsInitPayload {
                 neurons_fund_participation_constraints: Some(
                     NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
                 ),
-            };
+                nns_proposal_id: Some(proposal_id),
+                swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+                swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+                ..sns_init_payload
+            }
+        };
 
-        // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+        converted.validate_post_execution().unwrap();
 
         // Step 3: Inspect the result.
 
@@ -603,7 +715,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
@@ -733,6 +844,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 
 mod metrics_tests {
 
+    use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
 
     use crate::{
@@ -747,6 +859,7 @@ mod metrics_tests {
     #[test]
     fn test_metrics_total_voting_power() {
         let proposal_1 = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::Motion(Motion {
@@ -764,6 +877,7 @@ mod metrics_tests {
         };
 
         let proposal_2 = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::default())),
@@ -812,6 +926,7 @@ mod metrics_tests {
         });
 
         let open_proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("open_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -821,6 +936,7 @@ mod metrics_tests {
         };
 
         let rejected_proposal = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("rejected_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -831,6 +947,7 @@ mod metrics_tests {
         };
 
         let motion_proposal = ProposalData {
+            id: Some(ProposalId { id: 3 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(motion_action.clone()),
@@ -886,7 +1003,10 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::pb::v1::{neuron::DissolveState, Neuron};
+    use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use icp_ledger::Subaccount;
     use proptest::proptest;
 
     #[test]
@@ -894,31 +1014,31 @@ mod neuron_archiving_tests {
         const NOW: u64 = 123_456_789;
 
         // Dissolved in the distant past.
-        let model_neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-            ..Default::default()
-        };
+        let model_neuron = NeuronBuilder::new(
+            NeuronId { id: 1 },
+            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            PrincipalId::new_user_test_id(1),
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 42,
+            },
+            NOW,
+        )
+        .build();
         assert!(model_neuron.is_inactive(NOW), "{:#?}", model_neuron);
 
         // Case Some(positive): Active.
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: Some(42),
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = Some(42);
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case Some(0): Inactive.
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: Some(0),
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = Some(0);
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case None: Same as Some(0), i.e. Inactive
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: None,
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = None;
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // This is just so that clone is always called in all of the above cases.
@@ -929,44 +1049,44 @@ mod neuron_archiving_tests {
     fn test_neuron_is_inactive_based_on_dissolve_state() {
         const NOW: u64 = 123_456_789;
 
-        // Case 0: None: Active
-        let neuron = Neuron::default();
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+        let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                dissolve_state_and_age,
+                NOW,
+            )
+            .build()
+        };
 
         // Case 1a: Dissolved in the "distant" past: Inactive. This is the only case where
         // "inactive" is the expected result.
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-            ..Default::default()
-        };
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 42,
+            });
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case 1b: Dissolved right now: Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW)),
-            ..Default::default()
-        };
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW,
+            });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        // Case 1c: Dissolved right now: Active (again).
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW + 42)),
-            ..Default::default()
-        };
+        // Case 1c: Soon to be dissolved: Active (again).
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 42,
+            });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        // Case 2a: DissolveDelay(0): Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
-            ..Default::default()
-        };
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
-
-        // Case 2b: DissolveDelay(positive): Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
-            ..Default::default()
-        };
+        // Case 2: DissolveDelay(positive): Active
+        let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 42,
+            aging_since_timestamp_seconds: NOW,
+        });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
     }
 
@@ -992,16 +1112,19 @@ mod neuron_archiving_tests {
             let now = 123_456_789;
 
             let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
-            let neuron = Neuron {
-                cached_neuron_stake_e8s,
-                staked_maturity_e8s_equivalent,
-                neuron_fees_e8s,
-                maturity_e8s_equivalent,
-
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-
-                ..Default::default()
-            };
+            let mut neuron = NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: 42,
+                },
+                now,
+            ).build();
+            neuron.cached_neuron_stake_e8s = cached_neuron_stake_e8s;
+            neuron.neuron_fees_e8s = neuron_fees_e8s;
+            neuron.maturity_e8s_equivalent = maturity_e8s_equivalent;
+            neuron.staked_maturity_e8s_equivalent = staked_maturity_e8s_equivalent;
 
             assert_eq!(
                 neuron.is_inactive(now),
@@ -1017,239 +1140,19 @@ mod neuron_archiving_tests {
     } // end proptest
 }
 
-mod cast_vote_and_cascade_follow {
-    use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
-        neuron_store::NeuronStore,
-        pb::v1::{
-            neuron::{DissolveState, Followees},
-            Ballot, Neuron, Topic, Vote,
-        },
-    };
-    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-    use maplit::hashmap;
-    use std::collections::{BTreeMap, HashMap};
-
-    const E8S: u64 = 100_000_000;
-
-    fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
-        Ballot {
-            voting_power,
-            vote: vote as i32,
-        }
-    }
-
-    fn make_test_neuron_with_followees(
-        id: u64,
-        topic: Topic,
-        followees: Vec<u64>,
-        aging_since_timestamp_seconds: u64,
-    ) -> Neuron {
-        Neuron {
-            id: Some(NeuronId { id }),
-            followees: hashmap! {
-                topic as i32 => Followees {
-                    followees: followees.into_iter().map(|id| NeuronId { id }).collect()
-                }
-            },
-            cached_neuron_stake_e8s: E8S, // clippy doesn't like 1 * E8S
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-            )),
-            aging_since_timestamp_seconds,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management() {
-        let now = 1000;
-        let topic = Topic::NeuronManagement;
-
-        let make_neuron = |id: u64, followees: Vec<u64>| {
-            make_test_neuron_with_followees(id, topic, followees, now)
-        };
-
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
-                                      ballots: &mut HashMap<u64, Ballot>,
-                                      id: u64,
-                                      followees: Vec<u64>,
-                                      vote: Vote| {
-            let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
-            neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
-        };
-
-        let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
-            };
-
-        let mut heap_neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-        for id in 1..=5 {
-            // Each neuron follows all neurons with a lower id
-            let followees = (1..id).collect();
-
-            add_neuron_with_ballot(
-                &mut heap_neurons,
-                &mut ballots,
-                id,
-                followees,
-                Vote::Unspecified,
-            );
-        }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(
-            &mut heap_neurons,
-            &mut ballots,
-            6,
-            vec![1, 7],
-            Vote::Unspecified,
-        );
-
-        // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
-
-        let mut neuron_store = NeuronStore::new(heap_neurons);
-
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-            &mut neuron_store,
-        );
-
-        assert_eq!(
-            ballots,
-            hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-            }
-        );
-    }
-
-    #[test]
-    fn test_cast_vote_and_cascade_works() {
-        let now = 1000;
-        let topic = Topic::NetworkCanisterManagement;
-
-        let make_neuron = |id: u64, followees: Vec<u64>| {
-            make_test_neuron_with_followees(id, topic, followees, now)
-        };
-
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
-                                      ballots: &mut HashMap<u64, Ballot>,
-                                      id: u64,
-                                      followees: Vec<u64>,
-                                      vote: Vote| {
-            let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
-            neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
-        };
-
-        let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
-            };
-
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-        for id in 1..=5 {
-            // Each neuron follows all neurons with a lower id
-            let followees = (1..id).collect();
-
-            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
-        }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
-
-        // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
-
-        let mut neuron_store = NeuronStore::new(neurons);
-
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-            &mut neuron_store,
-        );
-
-        assert_eq!(
-            ballots,
-            hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-            }
-        );
-    }
-}
-
-#[test]
-fn governance_remove_neuron_updates_followee_index_correctly() {
-    let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 => Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    followees: hashmap! {
-                         2 => Followees {
-                            followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }]
-                        }
-                    },
-                    ..Default::default()
-                },
-            },
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![NeuronId { id: 1 }]);
-
-    let neuron = governance
-        .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-        .unwrap();
-    governance.remove_neuron(neuron).unwrap();
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![]);
-}
-
 #[test]
 fn test_pre_and_post_upgrade_first_time() {
-    let neuron1 = Neuron {
+    let neuron1 = NeuronProto {
         id: Some(NeuronId { id: 1 }),
+        controller: Some(PrincipalId::new_user_test_id(1)),
         followees: hashmap! {
             2 => Followees {
                 followees: vec![NeuronId { id : 3}]
             }
         },
         account: vec![0; 32],
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+        aging_since_timestamp_seconds: 1,
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };
@@ -1271,6 +1174,8 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );
+
+    assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
     let mut extracted_proto = governance.take_heap_proto();
 
@@ -1285,7 +1190,6 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     );
 
-    assert_eq!(extracted_proto.neurons.len(), 1);
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 
     // We now simulate the post_upgrade
@@ -1296,6 +1200,7 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubCMC {}),
     );
 
+    assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
@@ -1320,11 +1225,20 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 
     governance
         .neuron_store
-        .add_neuron(Neuron {
-            id: Some(NeuronId { id: 1 }),
-            spawn_at_timestamp_seconds: Some(99),
-            ..Default::default()
-        })
+        .add_neuron(
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 42,
+                    aging_since_timestamp_seconds: 1,
+                },
+                123_456_789,
+            )
+            .with_spawn_at_timestamp_seconds(99)
+            .build(),
+        )
         .unwrap();
 
     governance.heap_data.spawning_neurons = Some(true);
@@ -1339,6 +1253,257 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 }
 
 #[test]
+fn test_validate_execute_nns_function() {
+    let governance = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            node_providers: vec![NodeProvider {
+                id: Some(PrincipalId::new_node_test_id(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        Box::new(MockEnvironment::new(vec![], 100)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let test_execute_nns_function_error =
+        |execute_nns_function: ExecuteNnsFunction, error_message: String| {
+            let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+            let expected_result = Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                error_message,
+            ));
+            assert_eq!(actual_result, expected_result);
+        };
+
+    let error_test_cases = vec![
+        (
+            ExecuteNnsFunction {
+                nns_function: i32::MAX,
+                payload: vec![],
+            },
+            "Invalid NnsFunction id: 2147483647".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::CreateSubnet as i32,
+                payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+            },
+            format!(
+                "The maximum NNS function payload size in a proposal action is {} bytes, \
+                 this payload is: {} bytes",
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1,
+            ),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: vec![],
+            },
+            "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: \
+             Cannot parse header "
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
+                    xdr_permyriad_per_icp: 0,
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The proposed rate 0 is below the minimum allowable rate".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: vec![],
+            },
+            "The payload could not be decoded into a AddNodeOperatorPayload: \
+             Cannot parse header "
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: Encode!(&AddNodeOperatorPayload {
+                    node_provider_principal_id: None,
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The payload's node_provider_principal_id field was None".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: Encode!(&AddNodeOperatorPayload {
+                    node_provider_principal_id: Some(PrincipalId::new_node_test_id(2)),
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The node provider specified in the payload is not registered".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddOrRemoveDataCenters as i32,
+                payload: Encode!(&AddOrRemoveDataCentersProposalPayload {
+                    data_centers_to_add: vec![DataCenterRecord {
+                        id: "a".repeat(1000),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The given AddOrRemoveDataCentersProposalPayload is invalid: id must not be longer \
+             than 255 characters"
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateNodesHostosVersion as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION proposal is obsolete".to_string(),
+        ),
+    ];
+
+    for (execute_nns_function, error_message) in error_test_cases {
+        test_execute_nns_function_error(execute_nns_function, error_message);
+    }
+
+    let ok_test_cases = vec![
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::CreateSubnet as i32,
+            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::IcpXdrConversionRate as i32,
+            payload: Encode!(&UpdateIcpXdrConversionRatePayload {
+                xdr_permyriad_per_icp: 101,
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::AssignNoid as i32,
+            payload: Encode!(&AddNodeOperatorPayload {
+                node_provider_principal_id: Some(PrincipalId::new_node_test_id(1)),
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::AddOrRemoveDataCenters as i32,
+            payload: Encode!(&AddOrRemoveDataCentersProposalPayload {
+                data_centers_to_add: vec![DataCenterRecord {
+                    id: "a".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployGuestosToSomeApiBoundaryNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployGuestosToAllUnassignedNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::ReviseElectedHostosVersions as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployHostosToSomeNodes as i32,
+            payload: vec![],
+        },
+    ];
+
+    for execute_nns_function in ok_test_cases {
+        let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+        assert_eq!(actual_result, Ok(()));
+    }
+}
+
+#[test]
+fn test_deciding_voting_power_adjustment_factor() {
+    let voting_power_economics = VotingPowerEconomics {
+        start_reducing_voting_power_after_seconds: Some(60),
+        clear_following_after_seconds: Some(30),
+    };
+
+    let deciding_voting_power = |seconds_since_refresh| {
+        let time_since_refresh = Duration::from_secs(seconds_since_refresh);
+        voting_power_economics.deciding_voting_power_adjustment_factor(time_since_refresh)
+    };
+
+    // 100% at first.
+    for seconds_since_refresh in 0..=60 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(1),
+        );
+    }
+
+    // Slowly ramp down.
+    for seconds_since_refresh in 60..=90 {
+        let expected_value = Decimal::from(90 - seconds_since_refresh) / Decimal::from(30);
+
+        assert_eq!(deciding_voting_power(seconds_since_refresh), expected_value);
+    }
+    assert_eq!(deciding_voting_power(75), Decimal::try_from(0.5).unwrap());
+
+    // Stuck at 0% after a "very" long time.
+    for seconds_since_refresh in 90..200 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(0),
+        );
+    }
+}
+
+#[test]
 fn topic_min_max_test() {
     use strum::IntoEnumIterator;
 
@@ -1346,4 +1511,178 @@ fn topic_min_max_test() {
         assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
         assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
     }
+}
+
+#[cfg(feature = "test")]
+#[test]
+fn test_update_neuron_errors_out_expectedly() {
+    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
+        NeuronProto {
+            account,
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            followees: hashmap! {
+                2 => Followees {
+                    followees: vec![NeuronId { id : 3}]
+                }
+            },
+            aging_since_timestamp_seconds: 1,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            ..Default::default()
+        }
+    }
+
+    let neuron1_subaccount_blob = vec![1; 32];
+    let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
+    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neurons = btreemap! { 1 => neuron1 };
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    assert_eq!(
+        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Cannot change the subaccount {} of a neuron.",
+                neuron1_subaccount
+            ),
+        )),
+    );
+}
+
+#[test]
+fn test_compute_ballots_for_new_proposal() {
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+
+    fn new_neuron(i: u64) -> NeuronProto {
+        let controller = PrincipalId::new_user_test_id(i);
+        let d = i / 10_u64.pow(i.ilog10());
+
+        NeuronBuilder::new(
+            NeuronId { id: i },
+            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
+            controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+            CREATED_TIMESTAMP_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(i * E8)
+        .build()
+        .into_proto(
+            &VotingPowerEconomics::DEFAULT,
+            CREATED_TIMESTAMP_SECONDS + 999,
+        )
+    }
+
+    let mut neuron_10 = new_neuron(10);
+    neuron_10.followees = hashmap! {
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![
+                NeuronId { id: 10 },
+                NeuronId { id: 201 },
+                NeuronId { id: 202 },
+                NeuronId { id: 203 },
+                NeuronId { id: 204 },
+                NeuronId { id: 205 },
+                NeuronId { id: 206 },
+            ]
+        }
+    };
+    let neurons = btreemap! {10 => neuron_10, 200 => new_neuron(200), 3_000 => new_neuron(3_000)};
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
+        id: Some(NeuronId { id: 10 }),
+        neuron_id_or_subaccount: None,
+        command: None,
+    }));
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+
+    let expected = 7; // 7 followees
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+        10 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        201 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        202 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        203 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        204 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        205 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        206 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    let motion_action = Action::Motion(Default::default());
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    // Similar to previous; this time though, Action::ManageNeuron, the weird
+    // special case.
+    let expected_potential_voting_power: u64 =
+        governance.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+                .sum()
+        });
+
+    let deciding_vote = |g: &Governance, id, now| {
+        g.neuron_store
+            .with_neuron(&NeuronId { id }, |n| {
+                n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+            })
+            .unwrap()
+    };
+    assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    // Not affected by refresh.
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
+
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
+        iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+            .sum()
+    });
+
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
+    );
 }

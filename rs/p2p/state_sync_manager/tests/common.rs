@@ -27,7 +27,7 @@ fn is_manifest_chunk(chunk_id: ChunkId) -> bool {
     chunk_id.get() > (u32::MAX >> 2)
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct StateInner {
     height: Height,
     /// Chunks part of this state. The actual chunks always consist of zeros for this
@@ -35,7 +35,7 @@ struct StateInner {
     chunks: BTreeMap<ChunkId, usize>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct State(Arc<Mutex<StateInner>>);
 
 impl Default for State {
@@ -193,7 +193,7 @@ impl StateSyncClient for FakeStateSync {
         }
     }
 
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
@@ -206,7 +206,7 @@ impl StateSyncClient for FakeStateSync {
         None
     }
 
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
         if !self.uses_global() {
             self.global_state.height() > id.height + Height::from(1)
         } else {
@@ -220,10 +220,10 @@ impl StateSyncClient for FakeStateSync {
         }
 
         if is_manifest_chunk(chunk_id) {
-            return Some(vec![0; 100]);
+            return Some(vec![0; 100].into());
         }
 
-        self.global_state.chunk(chunk_id)
+        self.global_state.chunk(chunk_id).map(Chunk::from)
     }
 }
 
@@ -286,7 +286,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
 
         // Add chunk to state if not part of manifest
         if !is_manifest_chunk(chunk_id) {
-            self.local_state.add_chunk(chunk_id, chunk.len())
+            self.local_state.add_chunk(chunk_id, chunk.as_bytes().len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
@@ -296,10 +296,6 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
         }
 
         Ok(())
-    }
-
-    fn completed(&self) -> bool {
-        self.is_completed
     }
 }
 
@@ -338,18 +334,14 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
     }
-
-    fn completed(&self) -> bool {
-        self.mock.lock().unwrap().completed()
-    }
 }
 
 #[derive(Clone, Default)]
 pub struct SharableMockStateSync {
     mock: Arc<Mutex<MockStateSync<StateSyncMessage>>>,
     available_states_calls: Arc<AtomicUsize>,
-    start_state_sync_calls: Arc<AtomicUsize>,
-    should_cancel_calls: Arc<AtomicUsize>,
+    maybe_start_state_sync_calls: Arc<AtomicUsize>,
+    cancel_if_running_calls: Arc<AtomicUsize>,
     chunk_calls: Arc<AtomicUsize>,
 }
 
@@ -363,13 +355,13 @@ impl SharableMockStateSync {
     pub fn get_mut(&self) -> MutexGuard<'_, MockStateSync<StateSyncMessage>> {
         self.mock.lock().unwrap()
     }
-    pub fn start_state_sync_calls(&self) -> usize {
-        self.start_state_sync_calls.load(Ordering::SeqCst)
+    pub fn maybe_start_state_sync_calls(&self) -> usize {
+        self.maybe_start_state_sync_calls.load(Ordering::SeqCst)
     }
     pub fn clear(&self) {
         self.available_states_calls.store(0, Ordering::SeqCst);
-        self.start_state_sync_calls.store(0, Ordering::SeqCst);
-        self.should_cancel_calls.store(0, Ordering::SeqCst);
+        self.maybe_start_state_sync_calls.store(0, Ordering::SeqCst);
+        self.cancel_if_running_calls.store(0, Ordering::SeqCst);
         self.chunk_calls.store(0, Ordering::SeqCst);
     }
 }
@@ -381,16 +373,17 @@ impl StateSyncClient for SharableMockStateSync {
         self.available_states_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().available_states()
     }
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
-        self.start_state_sync_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().start_state_sync(id)
+        self.maybe_start_state_sync_calls
+            .fetch_add(1, Ordering::SeqCst);
+        self.mock.lock().unwrap().maybe_start_state_sync(id)
     }
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
-        self.should_cancel_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().should_cancel(id)
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
+        self.cancel_if_running_calls.fetch_add(1, Ordering::SeqCst);
+        self.mock.lock().unwrap().cancel_if_running(id)
     }
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         self.chunk_calls.fetch_add(1, Ordering::SeqCst);

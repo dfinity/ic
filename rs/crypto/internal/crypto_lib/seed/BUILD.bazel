@@ -6,6 +6,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "@crate_index//:hex",
     "@crate_index//:rand",

@@ -1,12 +1,13 @@
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
+use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
 use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    Certificate, CertificateError, Error as RustlsError, ServerName,
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    crypto::{verify_tls12_signature, verify_tls13_signature},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    CertificateError, DigitallySignedStruct, Error as RustlsError,
 };
 use x509_parser::{
     prelude::{FromDer, X509Certificate},
@@ -15,6 +16,7 @@ use x509_parser::{
 
 use crate::snapshot::RegistrySnapshot;
 
+#[derive(Debug)]
 pub struct TlsVerifier {
     rs: Arc<ArcSwapOption<RegistrySnapshot>>,
     skip_verification: bool,
@@ -35,12 +37,11 @@ impl TlsVerifier {
 impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ServerCertVerified, RustlsError> {
         if self.skip_verification {
             return Ok(ServerCertVerified::assertion());
@@ -54,14 +55,17 @@ impl ServerCertVerifier for TlsVerifier {
         }
 
         // Check if the CommonName in the certificate can be parsed into a Principal
-        let end_entity_cert = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity))?;
-        let node_id = node_id_from_cert_subject_common_name(&end_entity_cert).map_err(|e| {
-            RustlsError::General(format!(
-                "The presented certificate subject CN could not be parsed as node ID: {:?}",
-                e
-            ))
-        })?;
-
+        let node_id =
+            node_id_from_certificate_der(end_entity.as_ref()).map_err(|err| match err {
+                NodeIdFromCertificateDerError::InvalidCertificate(_) => {
+                    RustlsError::InvalidCertificate(CertificateError::BadEncoding)
+                }
+                NodeIdFromCertificateDerError::UnexpectedContent(e) => {
+                    RustlsError::InvalidCertificate(CertificateError::Other(rustls::OtherError(
+                        Arc::from(Box::from(anyhow!("unexpected certificate content: {e:#}"))),
+                    )))
+                }
+            })?;
         // Load a routing table if we have one
         let rs = self
             .rs
@@ -106,7 +110,7 @@ impl ServerCertVerifier for TlsVerifier {
         let (_, node_cert) = X509Certificate::from_der(&node.tls_certificate).unwrap();
 
         // Parse the certificate provided by server
-        let (_, provided_cert) = X509Certificate::from_der(&end_entity.0)
+        let (_, provided_cert) = X509Certificate::from_der(end_entity)
             .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
 
         // Verify the provided self-signed certificate using the public key from registry
@@ -118,35 +122,65 @@ impl ServerCertVerifier for TlsVerifier {
                 .data,
         )
         .map_err(|e| {
-            RustlsError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(format!(
-                "node cert: invalid Ed25519 public key: {e:?}",
-            )))))
+            RustlsError::InvalidCertificate(CertificateError::Other(rustls::OtherError(Arc::from(
+                Box::from(anyhow!("node cert: invalid Ed25519 public key: {e:?}")),
+            ))))
         })?;
 
-        let provided_cert_sig =
-            <[u8; 64]>::try_from(provided_cert.signature_value.data.as_ref()).map_err(|e| {
-                RustlsError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(
-                    format!("node cert: invalid Ed25519 signature: {:?}", e),
-                ))))
-            })?;
+        let provided_cert_sig = <[u8; 64]>::try_from(provided_cert.signature_value.data.as_ref())
+            .map_err(|e| {
+            RustlsError::InvalidCertificate(CertificateError::Other(rustls::OtherError(Arc::from(
+                Box::from(anyhow!("node cert: invalid Ed25519 signature: {:?}", e)),
+            ))))
+        })?;
 
         node_tls_pubkey_from_registry
             .verify_signature(provided_cert.tbs_certificate.as_ref(), &provided_cert_sig)
             .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
 
         // Check if the certificate is valid at provided `now` time
-        if !provided_cert.validity.is_valid_at(
-            ASN1Time::from_timestamp(
-                now.duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64,
-            )
-            .unwrap(),
-        ) {
+        if !provided_cert
+            .validity
+            .is_valid_at(ASN1Time::from_timestamp(now.as_secs() as i64).unwrap())
+        {
             return Err(RustlsError::InvalidCertificate(CertificateError::Expired));
         }
 
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
 

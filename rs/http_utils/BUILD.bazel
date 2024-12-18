@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/monitoring/logger",
     "@crate_index//:flate2",
@@ -12,9 +13,11 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tar",
     "@crate_index//:tokio",
+    "@crate_index//:zstd",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/in_memory_logger",
     "@crate_index//:assert_matches",
     "@crate_index//:mockito",

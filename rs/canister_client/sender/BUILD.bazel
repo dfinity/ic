@@ -3,8 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/ecdsa_secp256k1",
+    # Keep sorted.
     "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",

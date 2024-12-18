@@ -13,6 +13,7 @@ rust_library(
         "src/lib.rs",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:serde",

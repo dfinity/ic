@@ -1,0 +1,28 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "infogetty_bin",
+    srcs = [
+        "infogetty-cpp/infogetty.cc",
+        "infogetty-cpp/network_info.cc",
+        "infogetty-cpp/network_info.h",
+    ],
+    copts = ["-std=c++17"],
+    linkopts = [
+        "-lsystemd",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+genrule(
+    name = "infogetty_cleaned",
+    srcs = ["infogetty_bin"],
+    outs = ["infogetty"],
+    cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+    executable = True,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)

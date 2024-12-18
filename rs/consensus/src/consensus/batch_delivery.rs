@@ -7,10 +7,10 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    ecdsa::utils::{get_ecdsa_subnet_public_key, get_quadruple_ids_to_deliver},
+    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -24,16 +24,18 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
-        ecdsa::{self, CompletedSignature},
-        Block,
+        idkg::{self, CompletedSignature},
+        Block, HasVersion,
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
-    messages::{CallbackId, Payload, RejectContext, Response, NO_DEADLINE},
-    CanisterId, Cycles, Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
+    crypto::threshold_sig::{
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ThresholdSigPublicKey,
+    },
+    messages::{CallbackId, Payload, RejectContext},
+    Height, PrincipalId, Randomness, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -47,7 +49,6 @@ pub fn deliver_batches(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    current_replica_version: ReplicaVersion,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -90,14 +91,16 @@ pub fn deliver_batches(
             );
             break;
         };
+        let replica_version = block.version().clone();
+        let block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
             log,
             "Finalized height";
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
-                hash: Some(get_block_hash_string(&block)),
-                replica_version: Some(String::from(current_replica_version.clone()))
+                hash: Some(block_stats.block_hash.clone()),
+                replica_version: Some(String::from(&replica_version))
             }
         );
 
@@ -132,7 +135,8 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let ecdsa_subnet_public_keys = match get_ecdsa_subnet_public_key(&block, pool, log) {
+        // TODO(CON-1419): Add vetKD keys to this map as well
+        let chain_key_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
             Ok(keys) => keys,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,
@@ -146,7 +150,6 @@ pub fn deliver_batches(
             }
         };
 
-        let block_stats = BlockStats::from(&block);
         let mut batch_stats = BatchStats::new(height);
 
         // Compute consensus' responses to subnet calls.
@@ -215,27 +218,25 @@ pub fn deliver_batches(
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
         let next_checkpoint_height = dkg_summary.get_next_start_height();
+        let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
             batch_number: height,
-            next_checkpoint_height: Some(next_checkpoint_height),
+            batch_summary: Some(BatchSummary {
+                next_checkpoint_height,
+                current_interval_length,
+            }),
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            ecdsa_subnet_public_keys,
-            ecdsa_quadruple_ids: get_quadruple_ids_to_deliver(&block),
+            chain_key_subnet_public_keys,
+            idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,
             blockmaker_metrics,
+            replica_version,
         };
 
-        debug!(
-            log,
-            "replica {:?} delivered batch {:?} for block_hash {:?}",
-            current_replica_version,
-            batch_stats.batch_height,
-            block_stats.block_hash
-        );
         let result = message_routing.deliver_batch(batch);
         if let Some(f) = result_processor {
             f(&result, block_stats, batch_stats);
@@ -253,14 +254,14 @@ pub fn deliver_batches(
 /// This function creates responses to the system calls that are redirected to
 /// consensus. There are two types of calls being handled here:
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
-/// - Threshold ECDSA signature creation, where a response may come from from data payloads.
+/// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
 pub fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
     let block_payload = &block.payload;
     if block_payload.is_summary() {
         let summary = block_payload.as_ref().as_summary();
@@ -270,13 +271,15 @@ pub fn generate_responses_to_subnet_calls(
             summary.dkg.configs.keys().collect::<Vec<_>>()
         );
         consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
-            &summary.dkg.transcripts_for_new_subnets_with_callback_ids,
+            &summary.dkg.transcripts_for_remote_subnets,
             log,
         ))
     } else {
         let block_payload = block_payload.as_ref().as_data();
-        if let Some(payload) = &block_payload.ecdsa {
-            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(payload));
+        if let Some(payload) = &block_payload.idkg {
+            consensus_responses.append(&mut generate_responses_to_signature_request_contexts(
+                payload,
+            ));
             consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
         }
 
@@ -296,17 +299,17 @@ struct TranscriptResults {
 /// This function creates responses to the SetupInitialDKG system calls with the
 /// computed DKG key material for remote subnets, without needing values from the state.
 pub fn generate_responses_to_setup_initial_dkg_calls(
-    transcripts_for_new_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+    transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
 
     let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
 
-    for (id, callback_id, transcript) in transcripts_for_new_subnets.iter() {
+    for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
         let add_transcript = |transcript_results: &mut TranscriptResults| {
             let value = Some(transcript.clone());
-            match id.dkg_tag {
+            match &id.dkg_tag {
                 NiDkgTag::LowThreshold => {
                     if transcript_results.low_threshold.is_some() {
                         error!(
@@ -325,6 +328,15 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
                     }
                     transcript_results.high_threshold = value;
                 }
+                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                    /////////////////////////////////////
+                    // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
+                    /////////////////////////////////////
+                    error!(
+                        log,
+                        "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
+                    );
+                }
             }
         };
         match transcripts.get_mut(callback_id) {
@@ -340,23 +352,14 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
         };
     }
 
-    for (callback_id, transcript_results) in transcripts.into_iter() {
+    for (callback, transcript_results) in transcripts.into_iter() {
         let payload = generate_dkg_response_payload(
             transcript_results.low_threshold.as_ref(),
             transcript_results.high_threshold.as_ref(),
             log,
         );
-        if let Some(response_payload) = payload {
-            consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: Cycles::zero(),
-                response_payload,
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: NO_DEADLINE,
-            });
+        if let Some(payload) = payload {
+            consensus_responses.push(ConsensusResponse::new(callback, payload));
         }
     }
     consensus_responses
@@ -434,13 +437,13 @@ fn generate_dkg_response_payload(
     }
 }
 
-/// Creates responses to `SignWithECDSA` system calls with the computed
+/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
 /// signature.
-pub fn generate_responses_to_sign_with_ecdsa_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    for completed in ecdsa_payload.signature_agreements.values() {
+pub fn generate_responses_to_signature_request_contexts(
+    idkg_payload: &idkg::IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for completed in idkg_payload.signature_agreements.values() {
         if let CompletedSignature::Unreported(response) = completed {
             consensus_responses.push(response.clone());
         }
@@ -448,14 +451,14 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
     consensus_responses
 }
 
-/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
+/// Creates responses to `ComputeInitialIDkgDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
-        if let ecdsa::CompletedReshareRequest::Unreported(response) = agreement {
+    idkg_payload: &idkg::IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for agreement in idkg_payload.xnet_reshare_agreements.values() {
+        if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());
         }
     }

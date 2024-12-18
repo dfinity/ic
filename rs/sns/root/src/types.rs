@@ -1,5 +1,9 @@
+use std::fmt::{self, Display, Formatter};
+
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
+use serde::{Deserialize, Serialize};
+
 /// A general trait for the environment in which governance is running.
 #[async_trait]
 pub trait Environment: Send + Sync {
@@ -19,4 +23,30 @@ pub trait Environment: Send + Sync {
         method_name: &str,
         arg: Vec<u8>,
     ) -> Result</* reply: */ Vec<u8>, (/* error_code: */ i32, /* message: */ String)>;
+}
+
+/// Different from the SnsCanisterType in SNS-W because it includes Dap
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub enum SnsCanisterType {
+    Root,
+    Governance,
+    Ledger,
+    Swap,
+    Archive,
+    Index,
+    Dapp,
+}
+
+impl Display for SnsCanisterType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SnsCanisterType::Root => write!(f, "root"),
+            SnsCanisterType::Governance => write!(f, "governance"),
+            SnsCanisterType::Ledger => write!(f, "ledger"),
+            SnsCanisterType::Swap => write!(f, "swap"),
+            SnsCanisterType::Dapp => write!(f, "dapp"),
+            SnsCanisterType::Archive => write!(f, "archive"),
+            SnsCanisterType::Index => write!(f, "index"),
+        }
+    }
 }

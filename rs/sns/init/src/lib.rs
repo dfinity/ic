@@ -1,7 +1,6 @@
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
-    FractionalDeveloperVotingPower as FractionalDVP, NeuronsFundParticipants, SnsInitPayload,
-    SwapDistribution,
+    FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload, SwapDistribution,
 };
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -9,7 +8,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{ledger_validation, DEFAULT_TRANSFER_FEE, E8};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -24,7 +23,6 @@ use ic_sns_governance::{
         Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
         VotingRewardsParameters,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::{
@@ -36,8 +34,7 @@ use ic_sns_swap::{
 };
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
-use lazy_static::lazy_static;
-use maplit::{btreemap, hashset};
+use maplit::btreemap;
 use pb::v1::DappCanisters;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -47,20 +44,9 @@ use std::{
     string::ToString,
 };
 
+mod create_service_nervous_system;
 pub mod distributions;
 pub mod pb;
-
-/// The maximum number of characters allowed for token symbol.
-pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
-
-/// The minimum number of characters allowed for token symbol.
-pub const MIN_TOKEN_SYMBOL_LENGTH: usize = 3;
-
-/// The maximum number of characters allowed for token name.
-pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
-
-/// The minimum number of characters allowed for token name.
-pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
 /// The maximum count of dapp canisters that can be initially decentralized.
 pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
@@ -79,8 +65,14 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 
 /// The maximum amount of ICP that can be directly contributed to a
 /// decentralization swap.
-/// Aka, the ceiling for the value `max_direct_icp`.
+/// Aka, the ceiling for the value `max_direct_participation_icp_e8s`.
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
+
+/// Minimum allowed number of SNS neurons per neuron basket.
+pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
+
+/// Maximum allowed number of SNS neurons per neuron basket.
+pub const MAX_SNS_NEURONS_PER_BASKET: u64 = 10;
 
 pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
 
@@ -99,12 +91,13 @@ enum MinDirectParticipationThresholdValidationError {
     },
 }
 
-impl ToString for MinDirectParticipationThresholdValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for MinDirectParticipationThresholdValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "MinDirectParticipationThresholdValidationError: ";
         match self {
             Self::Unspecified => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s must be specified.",
                     prefix
                 )
@@ -113,7 +106,8 @@ impl ToString for MinDirectParticipationThresholdValidationError {
                 min_direct_participation_threshold_icp_e8s,
                 min_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s ({}) should be greater \
                     than or equal min_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -125,7 +119,8 @@ impl ToString for MinDirectParticipationThresholdValidationError {
                 min_direct_participation_threshold_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s ({}) should be less \
                     than or equal max_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -152,12 +147,13 @@ enum MaxNeuronsFundParticipationValidationError {
     },
 }
 
-impl ToString for MaxNeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for MaxNeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "MaxNeuronsFundParticipationValidationError: ";
         match self {
             Self::Unspecified => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s must be specified.",
                     prefix
                 )
@@ -166,7 +162,8 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
                 max_neurons_fund_participation_icp_e8s,
                 min_participant_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s ({} > 0) \
                     should be greater than or equal min_participant_icp_e8s ({}).",
                     prefix, max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
@@ -176,7 +173,8 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
                 max_neurons_fund_participation_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s ({}) \
                     should be less than or equal max_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -200,25 +198,28 @@ enum NeuronsFundParticipationConstraintsValidationError {
     Local(neurons_fund::NeuronsFundParticipationConstraintsValidationError),
 }
 
-impl ToString for NeuronsFundParticipationConstraintsValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationConstraintsValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
-            Self::SetBeforeProposalExecution => format!(
-                "{}neurons_fund_participation_constraints must not be set before \
-                the CreateServiceNervousSystem proposal is executed.",
-                prefix
-            ),
+            Self::SetBeforeProposalExecution => {
+                write!(
+                    f,
+                    "{}neurons_fund_participation_constraints must not be set before \
+                    the CreateServiceNervousSystem proposal is executed.",
+                    prefix
+                )
+            }
             Self::RelatedFieldUnspecified(related_field_name) => {
-                format!("{}{} must be specified.", prefix, related_field_name,)
+                write!(f, "{}{} must be specified.", prefix, related_field_name,)
             }
             Self::MinDirectParticipationThresholdValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::MaxNeuronsFundParticipationValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
-            Self::Local(error) => format!("{}{}", prefix, error.to_string()),
+            Self::Local(error) => write!(f, "{}{}", prefix, error),
         }
     }
 }
@@ -242,8 +243,8 @@ impl RestrictedCountriesValidationError {
     }
 }
 
-impl ToString for RestrictedCountriesValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for RestrictedCountriesValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::EmptyList => {
                 "must either be None or include at least one country code".to_string()
@@ -262,7 +263,8 @@ impl ToString for RestrictedCountriesValidationError {
                 format!("must not contain duplicates, found '{item}'")
             }
         };
-        format!("{} {msg}", Self::field_name())
+
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 
@@ -272,11 +274,12 @@ impl From<RestrictedCountriesValidationError> for Result<(), String> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronBasketConstructionParametersValidationError {
     ExceedsMaximalDissolveDelay(u64),
     ExceedsU64,
-    InadequateBasketSize,
+    BasketSizeTooSmall,
+    BasketSizeTooBig,
     InadequateDissolveDelay,
     UnexpectedInLegacyFlow,
 }
@@ -287,8 +290,8 @@ impl NeuronBasketConstructionParametersValidationError {
     }
 }
 
-impl ToString for NeuronBasketConstructionParametersValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronBasketConstructionParametersValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::ExceedsMaximalDissolveDelay(max_dissolve_delay_seconds) => {
                 format!(
@@ -296,7 +299,14 @@ impl ToString for NeuronBasketConstructionParametersValidationError {
                     < SnsInitPayload.max_dissolve_delay_seconds = {max_dissolve_delay_seconds}"
                 )
             }
-            Self::InadequateBasketSize => "basket count must be at least 2".to_string(),
+            Self::BasketSizeTooSmall => format!(
+                "basket count must be at least {}",
+                MIN_SNS_NEURONS_PER_BASKET
+            ),
+            Self::BasketSizeTooBig => format!(
+                "basket count must be at most {}",
+                MAX_SNS_NEURONS_PER_BASKET
+            ),
             Self::InadequateDissolveDelay => {
                 "dissolve_delay_interval_seconds must be at least 1".to_string()
             }
@@ -311,7 +321,7 @@ impl ToString for NeuronBasketConstructionParametersValidationError {
                 "must not be set with the legacy flow for SNS decentralization swaps".to_string()
             }
         };
-        format!("{} {msg}", Self::field_name())
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 
@@ -321,22 +331,7 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
     }
 }
 
-impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipants {
-    fn from(value: NeuronsFundParticipants) -> Self {
-        Self {
-            cf_participants: value
-                .participants
-                .iter()
-                .map(|cf_participant| ic_sns_swap::pb::v1::CfParticipant {
-                    hotkey_principal: cf_participant.hotkey_principal.clone(),
-                    cf_neurons: cf_participant.cf_neurons.clone(),
-                })
-                .collect(),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronsFundParticipationValidationError {
     Unspecified,
 }
@@ -347,12 +342,12 @@ impl NeuronsFundParticipationValidationError {
     }
 }
 
-impl ToString for NeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::Unspecified => "must be specified".to_string(),
         };
-        format!("{} {msg}", Self::field_name())
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 
@@ -362,22 +357,8 @@ impl From<NeuronsFundParticipationValidationError> for Result<(), String> {
     }
 }
 
-// Token Symbols that can not be used.
-lazy_static! {
-    static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
-        "ICP", "DFINITY"
-    };
-}
-
-// Token Names that can not be used.
-lazy_static! {
-    static ref BANNED_TOKEN_NAMES: HashSet<&'static str> = hashset! {
-        "internetcomputer", "internetcomputerprotocol"
-    };
-}
-
 /// The canister IDs of all SNS canisters
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,
@@ -452,7 +433,6 @@ impl SnsInitPayload {
             confirmation_text: None,
             restricted_countries: None,
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }
@@ -465,7 +445,6 @@ impl SnsInitPayload {
     pub fn with_valid_values_for_testing_pre_execution() -> Self {
         Self {
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
             neurons_fund_participation_constraints: None,
@@ -476,7 +455,7 @@ impl SnsInitPayload {
     /// This gives us some values that work for testing but would not be useful
     /// in a real world scenario. They are only meant to validate, not be sensible.
     /// These values are "post-execution", meaning they can be used to
-    /// immediately create an SNS.  
+    /// immediately create an SNS.
     pub fn with_valid_values_for_testing_post_execution() -> Self {
         Self {
             token_symbol: Some("TEST".to_string()),
@@ -536,13 +515,12 @@ impl SnsInitPayload {
                     ),
                 }),
             }),
-            neurons_fund_participants: None,
             ..SnsInitPayload::with_default_values()
         }
     }
 
     /// Build all the SNS canister's init payloads given the state of the SnsInitPayload, the
-    /// provided SnsCanisterIds, and the version being deployed.  
+    /// provided SnsCanisterIds, and the version being deployed.
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -583,25 +561,6 @@ impl SnsInitPayload {
             .map_err(|e| format!("Could not create initialization parameters {}", e))?;
 
         Ok(governance)
-    }
-
-    #[cfg(feature = "test")]
-    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
-        // Testing has hardcoded the public key of principal
-        // jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe
-        // for the button to retrieve tokens.
-        let tester = "jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe";
-        let principal = PrincipalId::from_str(tester).unwrap().0;
-        let account = Account {
-            owner: principal,
-            subaccount: None,
-        };
-        vec![(account, /* 10k tokens */ 10_000 * /* E8 */ 100_000_000)]
-    }
-
-    #[cfg(not(feature = "test"))]
-    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
-        vec![]
     }
 
     /// Construct the params used to initialize a SNS Ledger canister.
@@ -653,9 +612,6 @@ impl SnsInitPayload {
         for (account, amount) in self.get_all_ledger_accounts(sns_canister_ids)? {
             payload_builder = payload_builder.with_initial_balance(account, amount);
         }
-        for (account, amount) in self.maybe_test_balances() {
-            payload_builder = payload_builder.with_initial_balance(account, amount);
-        }
         Ok(LedgerArgument::Init(payload_builder.build()))
     }
 
@@ -663,6 +619,7 @@ impl SnsInitPayload {
     fn index_ng_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id: Principal::from(sns_canister_ids.ledger),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         }))
     }
 
@@ -687,9 +644,9 @@ impl SnsInitPayload {
             swap_canister_id: Some(sns_canister_ids.swap),
             dapp_canister_ids,
             archive_canister_ids: vec![],
-            latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
+            timers: None,
         }
     }
 
@@ -729,17 +686,13 @@ impl SnsInitPayload {
             swap_start_timestamp_seconds: self.swap_start_timestamp_seconds,
             swap_due_timestamp_seconds: self.swap_due_timestamp_seconds,
             sns_token_e8s: sns_tokens_e8s,
-            neuron_basket_construction_parameters: self
-                .neuron_basket_construction_parameters
-                .clone(),
+            neuron_basket_construction_parameters: self.neuron_basket_construction_parameters,
             nns_proposal_id: self.nns_proposal_id,
             should_auto_finalize: Some(true),
             neurons_fund_participation_constraints: self
                 .neurons_fund_participation_constraints
                 .clone(),
             neurons_fund_participation: self.neurons_fund_participation,
-            // This field must not be set at Swap initialization time.
-            neurons_fund_participants: None,
         })
     }
 
@@ -821,7 +774,6 @@ impl SnsInitPayload {
             swap_due_timestamp_seconds: _,
             neuron_basket_construction_parameters: _,
             nns_proposal_id: _,
-            neurons_fund_participants: _,
             token_logo: _,
             neurons_fund_participation_constraints: _,
             neurons_fund_participation: _,
@@ -871,8 +823,10 @@ impl SnsInitPayload {
             self.validate_token_name(),
             self.validate_token_logo(),
             self.validate_token_distribution(),
+            self.validate_participation_constraints(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
+            self.validate_neuron_basket_construction_params(),
             self.validate_proposal_reject_cost_e8s(),
             self.validate_transaction_fee_e8s(),
             self.validate_fallback_controller_principal_ids(),
@@ -892,22 +846,16 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(),
-            self.validate_min_participants(),
-            self.validate_min_direct_participation_icp_e8s(),
-            self.validate_max_direct_participation_icp_e8s(),
-            self.validate_min_icp_e8s(),
-            self.validate_max_icp_e8s(),
-            self.validate_min_participant_icp_e8s(),
-            self.validate_max_participant_icp_e8s(),
             // Ensure that the values that can only be known after the execution
             // of the CreateServiceNervousSystem proposal are not set.
             self.validate_nns_proposal_id_pre_execution(),
-            self.validate_neurons_fund_participants_pre_execution(),
             self.validate_swap_start_timestamp_seconds_pre_execution(),
             self.validate_swap_due_timestamp_seconds_pre_execution(),
             self.validate_neurons_fund_participation_constraints(true),
             self.validate_neurons_fund_participation(),
+            // Obsolete fields are not set
+            self.validate_min_icp_e8s(),
+            self.validate_max_icp_e8s(),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -919,8 +867,10 @@ impl SnsInitPayload {
             self.validate_token_name(),
             self.validate_token_logo(),
             self.validate_token_distribution(),
+            self.validate_participation_constraints(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
+            self.validate_neuron_basket_construction_params(),
             self.validate_proposal_reject_cost_e8s(),
             self.validate_transaction_fee_e8s(),
             self.validate_fallback_controller_principal_ids(),
@@ -941,20 +891,14 @@ impl SnsInitPayload {
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
             self.validate_all_post_execution_swap_parameters_are_set(),
-            self.validate_neuron_basket_construction_params(),
-            self.validate_min_participants(),
-            self.validate_min_icp_e8s(),
-            self.validate_max_icp_e8s(),
-            self.validate_min_direct_participation_icp_e8s(),
-            self.validate_max_direct_participation_icp_e8s(),
-            self.validate_min_participant_icp_e8s(),
-            self.validate_max_participant_icp_e8s(),
             self.validate_nns_proposal_id(),
-            self.validate_neurons_fund_participants(),
             self.validate_swap_start_timestamp_seconds(),
             self.validate_swap_due_timestamp_seconds(),
             self.validate_neurons_fund_participation_constraints(false),
             self.validate_neurons_fund_participation(),
+            // Obsolete fields are not set
+            self.validate_min_icp_e8s(),
+            self.validate_max_icp_e8s(),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -991,31 +935,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token-symbol must be specified".to_string())?;
 
-        if token_symbol.len() > MAX_TOKEN_SYMBOL_LENGTH {
-            return Err(format!(
-                "Error: token-symbol must be fewer than {} characters, given character count: {}",
-                MAX_TOKEN_SYMBOL_LENGTH,
-                token_symbol.len()
-            ));
-        }
-
-        if token_symbol.len() < MIN_TOKEN_SYMBOL_LENGTH {
-            return Err(format!(
-                "Error: token-symbol must be greater than {} characters, given character count: {}",
-                MIN_TOKEN_SYMBOL_LENGTH,
-                token_symbol.len()
-            ));
-        }
-
-        if token_symbol != token_symbol.trim() {
-            return Err("Token symbol must not have leading or trailing whitespaces".to_string());
-        }
-
-        if BANNED_TOKEN_SYMBOLS.contains::<str>(&token_symbol.clone().to_uppercase()) {
-            return Err("Banned token symbol, please chose another one.".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_symbol(token_symbol)
     }
 
     fn validate_token_name(&self) -> Result<(), String> {
@@ -1024,37 +944,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token-name must be specified".to_string())?;
 
-        if token_name.len() > MAX_TOKEN_NAME_LENGTH {
-            return Err(format!(
-                "Error: token-name must be fewer than {} characters, given character count: {}",
-                MAX_TOKEN_NAME_LENGTH,
-                token_name.len()
-            ));
-        }
-
-        if token_name.len() < MIN_TOKEN_NAME_LENGTH {
-            return Err(format!(
-                "Error: token-name must be greater than {} characters, given character count: {}",
-                MIN_TOKEN_NAME_LENGTH,
-                token_name.len()
-            ));
-        }
-
-        if token_name != token_name.trim() {
-            return Err("Token name must not have leading or trailing whitespaces".to_string());
-        }
-
-        if BANNED_TOKEN_NAMES.contains::<str>(
-            &token_name
-                .to_lowercase()
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect::<String>(),
-        ) {
-            return Err("Banned token name, please chose another one.".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_name(token_name)
     }
 
     fn validate_token_logo(&self) -> Result<(), String> {
@@ -1063,27 +953,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token_logo must be specified".to_string())?;
 
-        const PREFIX: &str = "data:image/png;base64,";
-
-        if token_logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
-            return Err(format!(
-                "Error: token_logo must be less than {} characters, roughly 256 Kb",
-                SnsMetadata::MAX_LOGO_LENGTH
-            ));
-        }
-
-        if !token_logo.starts_with(PREFIX) {
-            return Err(format!(
-                "Error: token_logo must be a base64 encoded PNG, but the provided \
-                string doesn't begin with `{PREFIX}`."
-            ));
-        }
-
-        if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
-            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_logo(token_logo)
     }
 
     fn validate_token_distribution(&self) -> Result<(), String> {
@@ -1251,7 +1121,7 @@ impl SnsInitPayload {
         if !invalid_principals.is_empty() {
             return Err(format!(
                 "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
-                The follow principals are invalid: {:?}", 
+                The follow principals are invalid: {:?}",
                 invalid_principals
                     .into_iter()
                     .map(|pair| pair.0)
@@ -1331,7 +1201,7 @@ impl SnsInitPayload {
         if final_reward_rate_basis_points > initial_reward_rate_basis_points {
             Err(
                 format!(
-                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points, 
+                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points,
                     initial_reward_rate_basis_points
                 )
             )
@@ -1609,45 +1479,16 @@ impl SnsInitPayload {
         } else {
             return NeuronBasketConstructionParametersValidationError::ExceedsU64.into();
         }
-        if neuron_basket_construction_parameters.count < 2 {
-            return NeuronBasketConstructionParametersValidationError::InadequateBasketSize.into();
+        if neuron_basket_construction_parameters.count < MIN_SNS_NEURONS_PER_BASKET {
+            return NeuronBasketConstructionParametersValidationError::BasketSizeTooSmall.into();
+        }
+        if neuron_basket_construction_parameters.count > MAX_SNS_NEURONS_PER_BASKET {
+            return NeuronBasketConstructionParametersValidationError::BasketSizeTooBig.into();
         }
         if neuron_basket_construction_parameters.dissolve_delay_interval_seconds < 1 {
             return NeuronBasketConstructionParametersValidationError::InadequateDissolveDelay
                 .into();
         }
-        Ok(())
-    }
-
-    fn validate_min_participants(&self) -> Result<(), String> {
-        let min_participants = self
-            .min_participants
-            .ok_or("Error: min_participants must be specified")?;
-
-        if min_participants == 0 {
-            return Err("Error: min_participants must be > 0".to_string());
-        }
-
-        // Needed as the SwapInit min_participants field is a u32
-        if min_participants > (u32::MAX as u64) {
-            return Err(format!(
-                "Error: min_participants cannot be greater than {}",
-                u32::MAX
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn validate_min_direct_participation_icp_e8s(&self) -> Result<(), String> {
-        let min_direct_participation_icp_e8s = self
-            .min_direct_participation_icp_e8s
-            .ok_or("Error: min_direct_participation_icp_e8s must be specified")?;
-
-        if min_direct_participation_icp_e8s == 0 {
-            return Err("Error: min_direct_participation_icp_e8s must be > 0".to_string());
-        }
-
         Ok(())
     }
 
@@ -1673,65 +1514,62 @@ impl SnsInitPayload {
         Ok(())
     }
 
-    fn validate_max_direct_participation_icp_e8s(&self) -> Result<(), String> {
-        let max_direct_participation_icp_e8s = self
-            .max_direct_participation_icp_e8s
-            .ok_or("Error: max_direct_participation_icp_e8s must be specified")?;
-
+    /// Validates that swap participation-related parameters<sup>*</sup> pass the following checks:
+    /// (1) All participation-related parameters are set.
+    /// (2) All participation-related parameters are within expected constant lower/upper bounds.
+    /// (3) Minimum is less than or equal to maximum for the same parameter.
+    /// (4) One participation cannot exceed the maximum ICP amount that the swap can obtain.
+    /// (5) No more than `MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP` may be collected from direct swap
+    ///     participants.
+    /// (6) If the minimum required number of participants participate each with the minimum
+    ///     required amount of ICP, the maximum ICP amount that the swap can obtain is not exceeded.
+    /// (7) Determines the smallest SNS neuron size is greated than the SNS ledger transaction fee.
+    /// (8) Required ICP participation amount is big enough to ensure that all participants will
+    ///     end up with enough SNS tokens to form the right number of SNS neurons (after paying for
+    ///     the SNS ledger transaction fee to create each such SNS neuron).
+    ///
+    /// * -- In the context of this function, swap participation-related parameters include:
+    /// - `min_direct_participation_icp_e8s` - Required ICP amount for the swap to succeed.
+    /// - `max_direct_participation_icp_e8s` - Maximum ICP amount that the swap can obtain.
+    /// - `min_participant_icp_e8s`          - Required ICP participation amount.
+    /// - `max_participant_icp_e8s`          - Maximum ICP amount from one participant.
+    /// - `min_participants`                 - Required number of *direct* participants for the swap
+    ///                                        to succeed. This does not restrict the number of
+    ///                                        *Neurons' Fund* participants.
+    /// - `initial_token_distribution.swap_distribution.initial_swap_amount_e8s`
+    ///                                      - How many SNS tokens will be distributed amoung all
+    ///                                        the swap participants if the swap succeeds.
+    /// - `neuron_basket_construction_parameters`
+    ///                                      - How many SNS neurons will be created per participant.
+    /// - `neuron_minimum_stake_e8s`         - Determines the smallest SNS neuron size.
+    /// - `sns_transaction_fee_e8s`          - SNS ledger transaction fee, in particular, charged
+    ///                                        for SNS neuron creation at swap finalization.
+    fn validate_participation_constraints(&self) -> Result<(), String> {
+        // (1)
         let min_direct_participation_icp_e8s = self
             .min_direct_participation_icp_e8s
             .ok_or("Error: min_direct_participation_icp_e8s must be specified")?;
 
-        if max_direct_participation_icp_e8s < min_direct_participation_icp_e8s {
-            return Err(format!(
-                "max_direct_participation_icp_e8s ({}) must be >= min_direct_participation_icp_e8s ({})",
-                max_direct_participation_icp_e8s, min_direct_participation_icp_e8s
-            ));
-        }
+        let max_direct_participation_icp_e8s = self
+            .max_direct_participation_icp_e8s
+            .ok_or("Error: max_direct_participation_icp_e8s must be specified")?;
 
-        if max_direct_participation_icp_e8s > MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP {
-            return Err(format!(
-                "Error: max_direct_participation_icp_e8s ({}) can be at most {} ICP E8s",
-                max_direct_participation_icp_e8s, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP
-            ));
-        }
+        let min_participant_icp_e8s = self
+            .min_participant_icp_e8s
+            .ok_or("Error: min_participant_icp_e8s must be specified")?;
+
+        let max_participant_icp_e8s = self
+            .max_participant_icp_e8s
+            .ok_or("Error: max_participant_icp_e8s must be specified")?;
 
         let min_participants = self
             .min_participants
             .ok_or("Error: min_participants must be specified")?;
 
-        let min_participant_icp_e8s = self
-            .min_participant_icp_e8s
-            .ok_or("Error: min_participant_icp_e8s must be specified")?;
-
-        if max_direct_participation_icp_e8s
-            < min_participants.saturating_mul(min_participant_icp_e8s)
-        {
-            return Err(format!(
-                "Error: max_direct_participation_icp_e8s ({}) must be >= min_participants ({}) * min_participant_icp_e8s ({})",
-                max_direct_participation_icp_e8s, min_participants, min_participant_icp_e8s
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn validate_min_participant_icp_e8s(&self) -> Result<(), String> {
-        let min_participant_icp_e8s = self
-            .min_participant_icp_e8s
-            .ok_or("Error: min_participant_icp_e8s must be specified")?;
-
-        let max_direct_participation_icp_e8s = self
-            .max_direct_participation_icp_e8s
-            .ok_or("Error: max_direct_participation_icp_e8s must be specified")?;
-
-        let sns_transaction_fee_e8s = self
-            .transaction_fee_e8s
-            .ok_or("Error: transaction_fee_e8s must be specified")?;
-
-        let neuron_minimum_stake_e8s = self
-            .neuron_minimum_stake_e8s
-            .ok_or("Error: neuron_minimum_stake_e8s must be specified")?;
+        let initial_swap_amount_e8s = self
+            .get_swap_distribution()
+            .map_err(|_| "Error: the SwapDistribution must be specified")?
+            .initial_swap_amount_e8s;
 
         let neuron_basket_construction_parameters_count = self
             .neuron_basket_construction_parameters
@@ -1739,12 +1577,87 @@ impl SnsInitPayload {
             .ok_or("Error: neuron_basket_construction_parameters must be specified")?
             .count;
 
-        let sns_tokens_e8s = self
-            .get_swap_distribution()
-            .map_err(|_| "Error: the SwapDistribution must be specified")?
-            .initial_swap_amount_e8s;
+        let neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .ok_or("Error: neuron_minimum_stake_e8s must be specified")?;
 
-        let min_participant_sns_e8s = min_participant_icp_e8s as u128 * sns_tokens_e8s as u128
+        let sns_transaction_fee_e8s = self
+            .transaction_fee_e8s
+            .ok_or("Error: transaction_fee_e8s must be specified")?;
+
+        // (2)
+        if min_direct_participation_icp_e8s == 0 {
+            return Err("Error: min_direct_participation_icp_e8s must be > 0".to_string());
+        }
+        if min_participant_icp_e8s == 0 {
+            return Err("Error: min_participant_icp_e8s must be > 0".to_string());
+        }
+        if min_participants == 0 {
+            return Err("Error: min_participants must be > 0".to_string());
+        }
+        // Needed as the SwapInit min_participants field is a `u32`.
+        if min_participants > (u32::MAX as u64) {
+            return Err(format!(
+                "Error: min_participants cannot be greater than {}",
+                u32::MAX
+            ));
+        }
+
+        // (3)
+        if max_direct_participation_icp_e8s < min_direct_participation_icp_e8s {
+            return Err(format!(
+                "Error: max_direct_participation_icp_e8s ({}) \
+                 must be >= min_direct_participation_icp_e8s ({})",
+                max_direct_participation_icp_e8s, min_direct_participation_icp_e8s
+            ));
+        }
+        if max_participant_icp_e8s < min_participant_icp_e8s {
+            return Err(format!(
+                "Error: max_participant_icp_e8s ({}) must be >= min_participant_icp_e8s ({})",
+                max_participant_icp_e8s, min_participant_icp_e8s
+            ));
+        }
+
+        // (4)
+        if max_participant_icp_e8s > max_direct_participation_icp_e8s {
+            return Err(format!(
+                "Error: max_participant_icp_e8s ({}) \
+                 must be <= max_direct_participation_icp_e8s ({})",
+                max_participant_icp_e8s, max_direct_participation_icp_e8s
+            ));
+        }
+
+        // (5)
+        if max_direct_participation_icp_e8s > MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP {
+            return Err(format!(
+                "Error: max_direct_participation_icp_e8s ({}) can be at most {} ICP E8s",
+                max_direct_participation_icp_e8s, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP
+            ));
+        }
+
+        // (6)
+        if max_direct_participation_icp_e8s
+            < min_participants.saturating_mul(min_participant_icp_e8s)
+        {
+            return Err(format!(
+                "Error: max_direct_participation_icp_e8s ({}) \
+                 must be >= min_participants ({}) * min_participant_icp_e8s ({})",
+                max_direct_participation_icp_e8s, min_participants, min_participant_icp_e8s
+            ));
+        }
+
+        // (7)
+        if neuron_minimum_stake_e8s <= sns_transaction_fee_e8s {
+            return Err(format!(
+                "Error: neuron_minimum_stake_e8s={} is too small. It needs to be \
+                 greater than the transaction fee ({} e8s)",
+                neuron_minimum_stake_e8s, sns_transaction_fee_e8s
+            ));
+        }
+
+        // (8)
+        let min_participant_sns_e8s = min_participant_icp_e8s as u128
+            * initial_swap_amount_e8s as u128
             / max_direct_participation_icp_e8s as u128;
 
         let min_participant_icp_e8s_big_enough = min_participant_sns_e8s
@@ -1758,42 +1671,13 @@ impl SnsInitPayload {
                  enough SNS tokens to form {} SNS neurons, each of which \
                  require at least {} SNS e8s, plus {} e8s in transaction \
                  fees. More precisely, the following inequality must hold: \
-                 min_participant_icp_e8s >= neuron_basket_count * \
-                 (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_tokens_e8s",
+                 min_participant_icp_e8s >= neuron_basket_count \
+                 * (neuron_minimum_stake_e8s + transaction_fee_e8s) \
+                 * max_direct_participation_icp_e8s / initial_swap_amount_e8s",
                 min_participant_icp_e8s,
                 neuron_basket_construction_parameters_count,
                 neuron_minimum_stake_e8s,
                 sns_transaction_fee_e8s,
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn validate_max_participant_icp_e8s(&self) -> Result<(), String> {
-        let max_participant_icp_e8s = self
-            .max_participant_icp_e8s
-            .ok_or("Error: max_participant_icp_e8s must be specified")?;
-
-        let min_participant_icp_e8s = self
-            .min_participant_icp_e8s
-            .ok_or("Error: min_participant_icp_e8s must be specified")?;
-
-        if max_participant_icp_e8s < min_participant_icp_e8s {
-            return Err(format!(
-                "Error: max_participant_icp_e8s ({}) must be >= min_participant_icp_e8s ({})",
-                max_participant_icp_e8s, min_participant_icp_e8s
-            ));
-        }
-
-        let max_direct_participation_icp_e8s = self
-            .max_direct_participation_icp_e8s
-            .ok_or("Error: max_direct_participation_icp_e8s must be specified")?;
-
-        if max_participant_icp_e8s > max_direct_participation_icp_e8s {
-            return Err(format!(
-                "max_participant_icp_e8s ({}) must be <= max_direct_participation_icp_e8s ({})",
-                max_participant_icp_e8s, max_direct_participation_icp_e8s
             ));
         }
 
@@ -1815,28 +1699,6 @@ impl SnsInitPayload {
         match self.nns_proposal_id {
             None => Err("Error: nns_proposal_id must be specified".to_string()),
             Some(_) => Ok(()),
-        }
-    }
-
-    fn validate_neurons_fund_participants_pre_execution(&self) -> Result<(), String> {
-        if self.neurons_fund_participants.is_none() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Error: neurons_fund_participants cannot be specified pre_execution, but was {:?}",
-                self.neurons_fund_participants
-            ))
-        }
-    }
-
-    fn validate_neurons_fund_participants(&self) -> Result<(), String> {
-        if self.neurons_fund_participants.is_none() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Error: neurons_fund_participants can be set only by Swap; was initialized to {:?}",
-                self.neurons_fund_participants
-            ))
         }
     }
 
@@ -2092,18 +1954,22 @@ mod test {
     use crate::{
         pb::v1::{
             AirdropDistribution, DappCanisters, DeveloperDistribution,
-            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
+            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution, SwapDistribution,
         },
         FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
         MinDirectParticipationThresholdValidationError,
         NeuronBasketConstructionParametersValidationError,
         NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
         SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
-        MAX_DAPP_CANISTERS_COUNT, MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
-        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+        MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
+    use ic_nervous_system_common::{
+        ledger_validation::{self, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH},
+        E8, ONE_MONTH_SECONDS,
+    };
     use ic_nervous_system_proto::pb::v1::{Canister, Countries};
     use ic_nns_constants::{
         CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -2111,9 +1977,7 @@ mod test {
         LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
         REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     };
-    use ic_sns_governance::{
-        governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
-    };
+    use ic_sns_governance::{governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata};
     use ic_sns_swap::pb::v1::{
         IdealMatchedParticipationFunction, LinearScalingCoefficient,
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
@@ -2262,7 +2126,7 @@ mod test {
         }
         {
             let mut sns_init_payload = sns_init_payload.clone();
-            sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+            sns_init_payload.logo = Some("S".repeat(ledger_validation::MAX_LOGO_LENGTH + 1));
             sns_init_payload.validate_post_execution().unwrap_err();
             sns_init_payload.validate_pre_execution().unwrap_err();
         }
@@ -2662,7 +2526,22 @@ mod test {
                 }),
                 ..sns_init_payload.clone()
             };
-            let expected = NeuronBasketConstructionParametersValidationError::InadequateBasketSize;
+            let expected = NeuronBasketConstructionParametersValidationError::BasketSizeTooSmall;
+            assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        // Test that validation fails when basket count is too high
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 11,
+                    dissolve_delay_interval_seconds: 12_345_678_u64, // arbitrary valid value
+                }),
+                min_participant_icp_e8s: Some(65000000000),
+                min_participants: Some(1),
+                ..sns_init_payload.clone()
+            };
+            let expected = NeuronBasketConstructionParametersValidationError::BasketSizeTooBig;
             assert_error(sns_init_payload.validate_post_execution(), expected);
             sns_init_payload.validate_pre_execution().unwrap_err();
         }
@@ -3029,7 +2908,7 @@ mod test {
         // Exceeds max length
         {
             let sns_init_payload = SnsInitPayload {
-                token_logo: Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                token_logo: Some("S".repeat(ledger_validation::MAX_LOGO_LENGTH + 1)),
                 ..sns_init_payload.clone()
             };
             sns_init_payload.validate_post_execution().unwrap_err();
@@ -3075,7 +2954,6 @@ mod test {
             let mut sns_init_payload =
                 SnsInitPayload::with_valid_values_for_testing_post_execution();
             sns_init_payload.nns_proposal_id = None;
-            sns_init_payload.neurons_fund_participants = None;
             sns_init_payload.swap_start_timestamp_seconds = None;
             sns_init_payload.swap_due_timestamp_seconds = None;
             sns_init_payload.neurons_fund_participation_constraints = None;
@@ -3452,6 +3330,126 @@ mod test {
             assert!(
                 sns_init_payload.validate_pre_execution().unwrap_err().contains("Error: The following canisters are listed as dapp canisters, but are NNS canisters:"),
             );
+        }
+    }
+
+    #[test]
+    fn test_transaction_fee_must_be_less_than_min_stake() {
+        // `neuron_minimum_stake_e8s == transaction_fee_e8s` is invalid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(10_000),
+
+                transaction_fee_e8s: Some(10_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is invalid in the view of the library
+            let error = sns_init_payload.validate_pre_execution().unwrap_err();
+            assert!(error.contains("neuron_minimum_stake_e8s"));
+            assert!(error.contains("It needs to be greater than the transaction fee"));
+        }
+
+        // `neuron_minimum_stake_e8s < transaction_fee_e8s` is invalid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(10_000),
+                transaction_fee_e8s: Some(11_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is invalid in the view of the library
+            let error = sns_init_payload.validate_pre_execution().unwrap_err();
+            assert!(error.contains("neuron_minimum_stake_e8s"));
+            assert!(error.contains("It needs to be greater than the transaction fee"));
+        }
+
+        // `neuron_minimum_stake_e8s > transaction_fee_e8s` may be valid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(11_000),
+                transaction_fee_e8s: Some(10_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is valid in the view of the library
+            sns_init_payload.validate_pre_execution().unwrap();
+        }
+    }
+
+    #[test]
+    fn test_validate_participation_constraints() {
+        // Common part for the happy and failing scenarios.
+        let fdvp = FractionalDVP {
+            swap_distribution: Some(SwapDistribution {
+                initial_swap_amount_e8s: MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+                // Not used in this test.
+                total_e8s: 0,
+            }),
+            // Not used in this test.
+            developer_distribution: None,
+            treasury_distribution: None,
+            airdrop_distribution: None,
+        };
+        let sns_init_payload = SnsInitPayload {
+            max_direct_participation_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_direct_participation_icp_e8s: Some(1),
+            max_participant_icp_e8s: Some(MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP),
+            min_participants: Some(40_000),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(fdvp)),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 2,
+                // Not used in this test.
+                dissolve_delay_interval_seconds: 0,
+            }),
+            neuron_minimum_stake_e8s: Some(1),
+            transaction_fee_e8s: Some(0),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+        // Happy scenario: Test that if the constraints are satisfied, the validation passes.
+        {
+            let sns_init_payload = SnsInitPayload {
+                min_participant_icp_e8s: Some(20_000 * E8),
+                ..sns_init_payload.clone()
+            };
+
+            // Run code under test.
+            sns_init_payload
+                .validate_participation_constraints()
+                .unwrap();
+        }
+        // Test that if the constraints are violated, the validation, indeed, fails.
+        {
+            let sns_init_payload = SnsInitPayload {
+                // This value being so low ensures there would be a problem.
+                min_participant_icp_e8s: Some(1),
+                ..sns_init_payload
+            };
+
+            // Run code under test.
+            let error = sns_init_payload
+                .validate_participation_constraints()
+                .unwrap_err();
+            {
+                let expected_error_fragment_a = "min_participant_icp_e8s=1 is too small.";
+                assert!(
+                    error.contains(expected_error_fragment_a),
+                    "Unexpected error: `{}`\nExpected `{}`",
+                    error,
+                    expected_error_fragment_a,
+                );
+
+                let expecrted_error_fragment_b = "the following inequality must hold: \
+                     min_participant_icp_e8s >= neuron_basket_count \
+                     * (neuron_minimum_stake_e8s + transaction_fee_e8s) \
+                     * max_direct_participation_icp_e8s / initial_swap_amount_e8s";
+                assert!(
+                    error.contains(expecrted_error_fragment_b),
+                    "Unexpected error: `{}`\nExpected `{}`",
+                    error,
+                    expecrted_error_fragment_b,
+                );
+            }
         }
     }
 }

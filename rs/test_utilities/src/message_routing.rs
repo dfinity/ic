@@ -1,7 +1,3 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
@@ -56,10 +52,15 @@ impl MessageRouting for FakeMessageRouting {
         };
         if batch.batch_number == expected_height {
             *next_batch_height = batch.batch_number.increment();
-            self.batches.write().unwrap().push(batch);
+            self.batches.write().unwrap().push(batch.clone());
             if let Some(state_manager) = &self.state_manager {
                 let (_height, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, expected_height, scope);
+                state_manager.commit_and_certify(
+                    state,
+                    expected_height,
+                    scope,
+                    batch.batch_summary,
+                );
             }
             return Ok(());
         }

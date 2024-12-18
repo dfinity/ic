@@ -9,13 +9,14 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -23,20 +24,26 @@ use ic_metrics::MetricsRegistry;
 use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
+use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     consensus::{CatchUpPackage, HasHeight},
-    NodeId, SubnetId,
+    messages::SignedIngress,
+    Height, NodeId, SubnetId,
 };
-use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{
+    mpsc::{channel, UnboundedSender},
+    watch, OnceCell,
+};
+
+/// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
+/// the message id and height of messages that complete execution.
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -63,11 +70,12 @@ pub fn construct_ic_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
+    tracing_handle: ReloadHandles,
 ) -> std::io::Result<(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
@@ -123,6 +131,9 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
+
+    let delegation_from_nns = Arc::new(OnceCell::new());
+
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
     // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
@@ -177,6 +188,11 @@ pub fn construct_ic_stack(
         subnet_config.cycles_account_manager_config,
     ));
 
+    let (completed_execution_messages_tx, finalized_ingress_height_rx) =
+        channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+    let max_canister_http_requests_in_flight =
+        config.hypervisor.max_canister_http_requests_in_flight;
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
@@ -187,6 +203,7 @@ pub fn construct_ic_stack(
         cycles_account_manager.clone(),
         state_manager.clone(),
         state_manager.get_fd_factory(),
+        completed_execution_messages_tx,
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =
@@ -218,14 +235,12 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
-    let message_router = Arc::new(message_router);
-    let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        xnet_config,
+        config.message_routing,
         metrics_registry,
         log.clone(),
     );
@@ -266,9 +281,11 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.anonymous_query_handler,
+        execution_services.query_execution_service.clone(),
+        max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
+        delegation_from_nns.clone(),
     );
     // ---------- QUERY STATS DEPS FOLLOW -----------
     let query_stats_payload_builder = execution_services
@@ -276,9 +293,8 @@ pub fn construct_ic_stack(
         .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
-        LocalStoreImpl::new(config.registry_client.local_store.clone()),
-    );
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
+
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
@@ -289,7 +305,6 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         Arc::clone(&crypto) as Arc<_>,
-        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,
@@ -298,7 +313,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        message_router,
+        Arc::new(message_router),
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
@@ -306,9 +321,9 @@ pub fn construct_ic_stack(
         registry.clone(),
         execution_services.ingress_history_reader,
         cycles_account_manager,
-        local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
+        max_certified_height_tx,
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
@@ -324,7 +339,6 @@ pub fn construct_ic_stack(
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
-        Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
         root_subnet_id,
@@ -332,8 +346,11 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        None,
+        delegation_from_nns,
         Arc::new(Pprof),
+        tracing_handle,
+        max_certified_height_rx,
+        finalized_ingress_height_rx,
     );
 
     Ok((

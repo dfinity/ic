@@ -7,7 +7,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 };
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     create_transcript as idkg_create_transcript,
     verify_dealing_opening as idkg_verify_dealing_opening,
     verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
@@ -34,6 +34,7 @@ mod tests;
 
 pub fn create_transcript<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     dealings: &BatchSignedIDkgDealings,
@@ -45,6 +46,7 @@ pub fn create_transcript<C: CspSigner>(
     for dealing in dealings {
         verify_signature_batch(
             csp_client,
+            vault,
             registry,
             dealing,
             params.verification_threshold(),
@@ -97,6 +99,7 @@ pub fn create_transcript<C: CspSigner>(
 
 pub fn verify_transcript<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     transcript: &IDkgTranscript,
@@ -114,6 +117,7 @@ pub fn verify_transcript<C: CspSigner>(
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
         verify_signature_batch(
             csp_client,
+            vault,
             registry,
             signed_dealing,
             transcript.verification_threshold(),
@@ -167,6 +171,7 @@ pub fn load_transcript(
     )?;
 
     let internal_complaints = vault.idkg_load_transcript(
+        transcript.algorithm_id,
         transcript.verified_dealings.clone(),
         transcript.context_data(),
         self_index,
@@ -231,6 +236,7 @@ pub fn load_transcript_with_openings(
     }
 
     vault.idkg_load_transcript_with_openings(
+        transcript.algorithm_id,
         transcript.verified_dealings.clone(),
         internal_openings,
         transcript.context_data(),
@@ -276,6 +282,7 @@ pub fn open_transcript(
     };
 
     let internal_opening = vault.idkg_open_dealing(
+        transcript.algorithm_id,
         signed_dealing.clone(),
         dealer_index,
         context_data,
@@ -530,7 +537,7 @@ fn ensure_matching_transcript_ids_and_dealer_ids(
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum VerifySignatureBatchError {
     InvalidSignatureBatch {
         error: String,
@@ -583,6 +590,7 @@ fn signature_batch_err_to_verify_transcript_err(
 
 fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     dealing: &BatchSignedIDkgDealing,
     verification_threshold: NumberOfNodes,
@@ -597,25 +605,39 @@ fn verify_signature_batch<C: CspSigner>(
             },
         );
     }
-    for (signer, signature) in dealing.signature.signatures_map.iter() {
-        BasicSigVerifierInternal::verify_basic_sig(
-            csp_client,
-            registry,
-            signature,
-            dealing.signed_idkg_dealing(),
-            *signer,
-            registry_version,
-        )
-        .map_err(
-            |crypto_error| VerifySignatureBatchError::InvalidSignatureBatch {
-                error: format!(
-                    "Invalid basic signature batch on dealing from dealer with id {}: {}",
-                    dealing.dealer_id(),
-                    crypto_error
-                ),
-                crypto_error,
-            },
-        )?;
+
+    if BasicSigVerifierInternal::verify_basic_sig_batch(
+        vault,
+        registry,
+        &dealing.signature,
+        dealing.signed_idkg_dealing(),
+        registry_version,
+    )
+    .is_err()
+    {
+        // fall back to single signature verification to find the node whose
+        // signature didn't verify
+        for (signer, signature) in dealing.signature.signatures_map.iter() {
+            BasicSigVerifierInternal::verify_basic_sig(
+                csp_client,
+                registry,
+                signature,
+                dealing.signed_idkg_dealing(),
+                *signer,
+                registry_version,
+            )
+            .map_err(|crypto_error| {
+                VerifySignatureBatchError::InvalidSignatureBatch {
+                    error: format!(
+                        "Invalid basic signature batch on dealing from dealer with id {}: {}",
+                        dealing.dealer_id(),
+                        crypto_error
+                    ),
+                    crypto_error,
+                }
+            })?;
+        }
     }
+
     Ok(())
 }

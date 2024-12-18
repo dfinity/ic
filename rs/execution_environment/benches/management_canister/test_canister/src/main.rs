@@ -16,7 +16,7 @@ use ic_cdk::api::management_canister::main::{
 use ic_cdk::update;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct CreateCanistersArgs {
     pub canisters_number: u64,
     pub canisters_per_batch: u64,
@@ -35,10 +35,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
                     CreateCanisterArgument {
                         settings: Some(CanisterSettings {
                             controllers: Some(vec![ic_cdk::api::id()]),
-                            compute_allocation: None,
-                            memory_allocation: None,
-                            freezing_threshold: None,
-                            reserved_cycles_limit: None,
+                            ..CanisterSettings::default()
                         }),
                     },
                     args.initial_cycles,
@@ -61,7 +58,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
     result
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct InstallCodeArgs {
     pub canister_ids: Vec<Principal>,
     pub wasm_module_size: u64,
@@ -95,7 +92,7 @@ async fn install_code(args: InstallCodeArgs) {
     });
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSettingsArgs {
     pub canister_ids: Vec<Principal>,
     pub controllers_number: u64,
@@ -112,10 +109,7 @@ async fn update_settings(args: UpdateSettingsArgs) {
                 canister_id,
                 settings: CanisterSettings {
                     controllers: Some(controllers.clone()),
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    freezing_threshold: None,
-                    reserved_cycles_limit: None,
+                    ..CanisterSettings::default()
                 },
             })
         })
@@ -128,7 +122,7 @@ async fn update_settings(args: UpdateSettingsArgs) {
     });
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct ECDSAArgs {
     pub ecdsa_key: EcdsaKeyId,
     pub calls: u64,
@@ -180,13 +174,13 @@ async fn sign_with_ecdsa(args: ECDSAArgs) {
     });
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestArgs {
     pub calls: u64,
     pub headers_number: u64,

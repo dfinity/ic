@@ -1,0 +1,16 @@
+[Unit]
+Description=IC-Boundary
+After=network-online.target
+Wants=network-online.target
+After=setup-ic-boundary.service
+BindsTo=setup-ic-boundary.service
+
+[Service]
+User=root
+Group=root
+Restart=always
+EnvironmentFile=/run/ic-node/etc/default/ic-boundary
+ExecStart=/opt/ic/bin/ic-boundary
+
+[Install]
+WantedBy=multi-user.target

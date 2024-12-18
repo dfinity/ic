@@ -1,3 +1,0 @@
-[run]
-omit =
-    *_test.py

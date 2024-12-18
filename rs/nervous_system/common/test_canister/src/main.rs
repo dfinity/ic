@@ -7,7 +7,7 @@ thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct State {
     i: i32,
 }

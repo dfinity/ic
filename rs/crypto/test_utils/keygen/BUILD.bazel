@@ -4,10 +4,12 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "keygen",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_keygen",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/interfaces",
         "//rs/interfaces/registry",

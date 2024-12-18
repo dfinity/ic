@@ -1,4 +1,5 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_protobuf::types::v1::RejectCode as pbRejectCode;
 use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
@@ -122,16 +123,15 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Generates an arbitrary [`Request`], with or without populated `metadata` and
-    /// `deadline` fields.
-    pub fn request_with_config(populate_metadata: bool, populate_deadline: bool)(
+    /// Generates an arbitrary [`Request`], with or without a populated `deadline` field.
+    pub fn request_with_config(populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
         method_name in "[a-zA-Z]{1,6}",
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
-        metadata in proptest::option::of(request_metadata()),
+        metadata in request_metadata(),
         deadline in deadline(),
     ) -> Request {
         Request {
@@ -141,7 +141,7 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
-            metadata: if populate_metadata { metadata } else { None },
+            metadata,
             deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
@@ -157,7 +157,7 @@ prop_compose! {
         // Always populate all fields, regardless of e.g. current certification version.
         // `ic_canonical_state` should not be using this generator; and all other crates /
         // proptests should be able to deal with all fields being populated.
-        request in request_with_config(true, true),
+        request in request_with_config(true),
     ) -> Request {
         request
     }
@@ -169,8 +169,11 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
         // Data payload.
         prop::collection::vec(any::<u8>(), 0..16).prop_flat_map(|data| Just(Payload::Data(data))),
         // Reject payload.
-        (1u64..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
-            RejectContext::new(code.try_into().unwrap(), message)
+        (1i32..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
+            RejectContext::new(
+                pbRejectCode::try_from(code).unwrap().try_into().unwrap(),
+                message
+            )
         )))
     ]
 }
@@ -201,7 +204,7 @@ prop_compose! {
     ///
     /// This is what should be used for generating arbitrary requests almost everywhere;
     /// the only exception is when specifically testing for a certain certification version,
-    /// in which case `request_with_config()` should be used.
+    /// in which case `response_with_config()` should be used.
     pub fn response()(
         response in response_with_config(true),
     ) -> Response {
@@ -209,15 +212,13 @@ prop_compose! {
     }
 }
 
-/// Produces an arbitrary [`RequestOrResponse`], with the respective fields
+/// Produces an arbitrary [`RequestOrResponse`], with the `deadline` field
 /// populated or not.
 pub fn request_or_response_with_config(
-    populate_request_metadata: bool,
     populate_deadline: bool,
 ) -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
-        request_with_config(populate_request_metadata, populate_deadline)
-            .prop_flat_map(|req| Just(req.into())),
+        request_with_config(populate_deadline).prop_flat_map(|req| Just(req.into())),
         response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
     ]
 }

@@ -42,7 +42,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ["#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]"].join(" "),
     );
 
-    config.type_attribute(".ic_sns_swap.pb.v1.TimeWindow", "#[derive(Copy)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfParticipant", "#[derive(Eq)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfNeuron", "#[derive(Eq)]");
     config.type_attribute(
@@ -61,6 +60,26 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".ic_sns_swap.pb.v1.IdealMatchedParticipationFunction",
         "#[derive(Eq)]",
     );
+
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec!["NeuronId.id"];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_swap.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+    let option_blob_fields = vec![
+        "Swap.purge_old_tickets_next_principal",
+        "ICRC1Account.subaccount",
+        "NewSaleTicketRequest.subaccount",
+    ];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_swap.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

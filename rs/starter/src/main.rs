@@ -20,16 +20,12 @@
 //!   - serves metrics at localhost:18080 instead of dumping them at stdout
 
 use anyhow::Result;
+use clap::builder::PossibleValuesParser;
 use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     crypto::CryptoConfig,
-    embedders::Config as EmbeddersConfig,
-    embedders::FeatureFlags,
-    embedders::MeteringType,
-    execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     metrics::{Config as MetricsConfig, Exporter},
@@ -39,16 +35,16 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_starter::hypervisor_config;
 use ic_types::{Height, ReplicaVersion};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -87,25 +83,47 @@ fn main() -> Result<()> {
         // At the moment, this always regenerates the node key.
         // TODO: Only regenerate if necessary, depends on CRP-359
 
+        let public_api = config.http_listen_addr;
+        // We put a fake xnet endpoint into the registry.
+        // The registry canister expects the public and xnet endpoints to be distinct
+        // and thus we modify the fake xnet endpoint if they are equal.
+        let mut xnet_api = SocketAddr::from_str("127.0.0.1:2497").unwrap();
+        if public_api == xnet_api {
+            xnet_api = SocketAddr::from_str("127.0.0.1:2197").unwrap();
+        }
+
         let mut subnet_nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
-                public_api: config.http_listen_addr,
+                xnet_api,
+                public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: None,
+                domain: None,
             },
         );
 
-        let ecdsa_config = config.ecdsa_keyid.clone().map(|key_id| EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![(&key_id).into()],
-            max_queue_size: 64,
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
+        let chain_key_config = if !config.chain_key_ids.is_empty() {
+            Some(
+                ChainKeyConfig {
+                    key_configs: config
+                        .chain_key_ids
+                        .iter()
+                        .map(|key_id| KeyConfig {
+                            key_id: key_id.clone(),
+                            max_queue_size: 64,
+                            pre_signatures_to_create_in_advance: 1,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                }
+                .into(),
+            )
+        } else {
+            None
+        };
 
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
@@ -126,11 +144,12 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                ecdsa_config,
+                chain_key_config,
                 None,
                 vec![],
                 vec![],
                 SubnetRunningState::default(),
+                None,
             ),
         );
 
@@ -150,7 +169,6 @@ fn main() -> Result<()> {
             None,
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
-            /* guest_launch_measurement_sha256_hex */ None,
         );
 
         ic_config.set_use_specified_ids_allocation_range(config.use_specified_ids_allocation_range);
@@ -191,7 +209,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Parser)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Parser, Serialize)]
 #[clap(name = "ic-starter", about = "Starter.", version)]
 struct CliArgs {
     /// Path the to replica binary.
@@ -200,11 +218,11 @@ struct CliArgs {
     /// expected that a config will be found for '--bin replica'. In other
     /// words, it is expected that the starter is invoked from the rs/
     /// directory.
-    #[clap(long = "replica-path", parse(from_os_str))]
+    #[clap(long = "replica-path")]
     replica_path: Option<PathBuf>,
 
     /// Version of the replica binary.
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long)]
     replica_version: Option<ReplicaVersion>,
 
     /// Path to the cargo binary. Not optional because there is a default value.
@@ -226,7 +244,7 @@ struct CliArgs {
     /// Path to the directory containing all state for this replica. (default: a
     /// temp directory that will be deleted immediately when the replica
     /// stops).
-    #[clap(long = "state-dir", parse(from_os_str))]
+    #[clap(long = "state-dir")]
     state_dir: Option<PathBuf>,
 
     /// The http port of the public API.
@@ -250,7 +268,7 @@ struct CliArgs {
     /// at start time.
     ///
     /// This argument is incompatible with --http-port.
-    #[clap(long = "http-port-file", parse(from_os_str))]
+    #[clap(long = "http-port-file")]
     http_port_file: Option<PathBuf>,
 
     /// Arg to control whitelist for creating funds which is either set to "*"
@@ -260,13 +278,9 @@ struct CliArgs {
 
     /// Run replica and ic-starter with the provided log level. Default is Warning
     #[clap(long = "log-level",
-                possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
+                value_parser = PossibleValuesParser::new(["critical", "error", "warning", "info", "debug", "trace"]),
                 ignore_case = true)]
     log_level: Option<String>,
-
-    /// Debug overrides to show debug logs for certain components.
-    #[clap(long = "debug-overrides", multiple_values(true))]
-    debug_overrides: Vec<String>,
 
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
     #[clap(long = "metrics-port")]
@@ -296,12 +310,12 @@ struct CliArgs {
 
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
     #[clap(long = "consensus-pool-backend",
-                possible_values = &["lmdb", "rocksdb"])]
+                value_parser = PossibleValuesParser::new(["lmdb", "rocksdb"]))]
     consensus_pool_backend: Option<String>,
 
     /// Subnet features
     #[clap(long = "subnet-features",
-        possible_values = &[
+        value_parser = PossibleValuesParser::new([
             "canister_sandboxing",
             "http_requests",
             "bitcoin_testnet",
@@ -313,17 +327,22 @@ struct CliArgs {
             "bitcoin_regtest",
             "bitcoin_regtest_syncing",
             "bitcoin_regtest_paused",
-        ],
-        multiple_values(true))]
+        ]),
+        num_args(1..))]
     subnet_features: Vec<String>,
 
     /// Enable ecdsa signature by assigning the given key id a freshly generated key.
     #[clap(long = "ecdsa-keyid")]
     ecdsa_keyid: Option<String>,
 
+    /// Enable threshold signatures by assigning the given key id a freshly generated key. Key IDs have
+    /// the form `schnorr:[algorithm]:[name]` for tSchnorr, and `ecdsa:[curve]:[name]` for tECDSA
+    #[clap(long = "chain-key-ids")]
+    chain_key_ids: Vec<String>,
+
     /// Subnet type
     #[clap(long = "subnet-type",
-                possible_values = &["application", "verified_application", "system"])]
+                value_parser = PossibleValuesParser::new(["application", "verified_application", "system"]))]
     subnet_type: Option<String>,
 
     /// Unix Domain Socket for Bitcoin testnet
@@ -338,11 +357,6 @@ struct CliArgs {
     /// Used only for local replicas.
     #[clap(long = "use-specified-ids-allocation-range")]
     use_specified_ids_allocation_range: bool,
-
-    /// Whether the old metering and costs should be used.
-    /// By default, the new metering is used.
-    #[clap(long = "use-old-metering")]
-    use_old_metering: bool,
 }
 
 impl CliArgs {
@@ -460,12 +474,12 @@ impl CliArgs {
             Some(log_level) => match log_level.to_lowercase().as_str() {
                 // According to the principle of least surprise, accept also a
                 // few alternative log level names
-                "critical" => slog::Level::Critical,
-                "error" => slog::Level::Error,
-                "warning" => slog::Level::Warning,
-                "info" => slog::Level::Info,
-                "debug" => slog::Level::Debug,
-                "trace" => slog::Level::Trace,
+                "critical" => ic_config::logger::Level::Critical,
+                "error" => ic_config::logger::Level::Error,
+                "warning" => ic_config::logger::Level::Warning,
+                "info" => ic_config::logger::Level::Info,
+                "debug" => ic_config::logger::Level::Debug,
+                "trace" => ic_config::logger::Level::Trace,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -473,7 +487,7 @@ impl CliArgs {
                     ))
                 }
             },
-            None => slog::Level::Warning,
+            None => ic_config::logger::Level::Warning,
         };
 
         let artifact_pool_dir = node_dir.join("ic_consensus_pool");
@@ -519,11 +533,25 @@ impl CliArgs {
                 )
             })?;
 
+        let mut chain_key_ids = self
+            .chain_key_ids
+            .iter()
+            .map(|s| MasterPublicKeyId::from_str(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid chain_key_ids: {}", err),
+                )
+            })?;
+        if let Some(ecdsa_key_id) = ecdsa_keyid {
+            chain_key_ids.push(MasterPublicKeyId::Ecdsa(ecdsa_key_id));
+        }
+
         Ok(ValidatedConfig {
             replica_path,
             replica_version,
             log_level,
-            debug_overrides: self.debug_overrides.clone(),
             cargo_bin,
             cargo_opts,
             state_dir,
@@ -541,12 +569,11 @@ impl CliArgs {
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
-            ecdsa_keyid,
+            chain_key_ids,
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             https_outcalls_uds_path: self.canister_http_uds_path,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
-            use_old_metering: self.use_old_metering,
         })
     }
 }
@@ -554,11 +581,10 @@ impl CliArgs {
 fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
     let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
-    let sev_enabled = features.iter().any(|s| s.as_str() == "sev_enabled");
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
-        sev_enabled,
+        ..Default::default()
     }
 }
 
@@ -566,8 +592,7 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
 struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    log_level: slog::Level,
-    debug_overrides: Vec<String>,
+    log_level: ic_config::logger::Level,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -584,12 +609,11 @@ struct ValidatedConfig {
     dkg_interval_length: Option<Height>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
-    ecdsa_keyid: Option<EcdsaKeyId>,
+    chain_key_ids: Vec<MasterPublicKeyId>,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     https_outcalls_uds_path: Option<PathBuf>,
     use_specified_ids_allocation_range: bool,
-    use_old_metering: bool,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
@@ -611,7 +635,9 @@ impl ValidatedConfig {
         let mut artifact_pool_cfg =
             ArtifactPoolTomlConfig::new(self.artifact_pool_dir.clone(), None);
         // artifact_pool.rs picks "lmdb" if None here
-        artifact_pool_cfg.consensus_pool_backend = self.consensus_pool_backend.clone();
+        artifact_pool_cfg
+            .consensus_pool_backend
+            .clone_from(&self.consensus_pool_backend);
         let artifact_pool = Some(artifact_pool_cfg);
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));
@@ -619,9 +645,7 @@ impl ValidatedConfig {
             local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
-            node_id: NODE_INDEX,
             level: self.log_level,
-            debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()
         };
         let logger = Some(logger_config);
@@ -633,35 +657,7 @@ impl ValidatedConfig {
             ..Default::default()
         });
 
-        let hypervisor_config = HypervisorConfig {
-            canister_sandboxing_flag: if self.subnet_features.canister_sandboxing {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
-            embedders_config: EmbeddersConfig {
-                feature_flags: FeatureFlags {
-                    rate_limiting_of_debug_prints: FlagStatus::Disabled,
-                    ..FeatureFlags::default()
-                },
-                metering_type: if self.use_old_metering {
-                    MeteringType::Old
-                } else {
-                    MeteringType::New
-                },
-                ..EmbeddersConfig::default()
-            },
-            rate_limiting_of_heap_delta: FlagStatus::Disabled,
-            rate_limiting_of_instructions: FlagStatus::Disabled,
-            composite_queries: FlagStatus::Enabled,
-            wasm_chunk_store: FlagStatus::Enabled,
-            query_stats_aggregation: FlagStatus::Enabled,
-            query_stats_epoch_length: 60,
-            canister_logging: FlagStatus::Enabled,
-            ..HypervisorConfig::default()
-        };
-
-        let hypervisor = Some(hypervisor_config);
+        let hypervisor = Some(hypervisor_config(self.subnet_features.canister_sandboxing));
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),

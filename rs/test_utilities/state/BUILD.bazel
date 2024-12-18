@@ -3,7 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/bitcoin/types/internal",
+    # Keep sorted.
+    "//rs/bitcoin/replica_types",
     "//rs/interfaces",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
@@ -18,10 +19,12 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:strum",
 ]
 
 rust_library(
     name = "state",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_test_utilities_state",
     version = "0.9.0",

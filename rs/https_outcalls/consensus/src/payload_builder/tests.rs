@@ -3,18 +3,21 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use crate::payload_builder::parse::{bytes_to_payload, payload_to_bytes};
-
-use super::CanisterHttpPayloadBuilderImpl;
+use super::{parse, CanisterHttpPayloadBuilderImpl};
+use crate::payload_builder::{
+    divergence_response_into_reject,
+    parse::{bytes_to_payload, payload_to_bytes},
+};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
-        CanisterHttpTransientValidationError,
+        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
+        InvalidCanisterHttpPayloadReason,
     },
-    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
+    consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
     validation::ValidationError,
 };
@@ -28,8 +31,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    artifact_kind::CanisterHttpArtifact,
-    batch::{CanisterHttpPayload, ValidationContext},
+    batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
@@ -38,12 +40,14 @@ use ic_types::{
     },
     consensus::get_faults_tolerated,
     crypto::{crypto_hash, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
-    messages::CallbackId,
+    messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion, Time,
 };
+use rand::Rng;
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use std::{
     collections::BTreeMap,
     ops::DerefMut,
@@ -53,6 +57,15 @@ use std::{
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
+
+#[test]
+fn default_payload_serializes_to_empty_vec() {
+    assert!(parse::payload_to_bytes(
+        &CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
+    )
+    .is_empty());
+}
 
 /// Check that a single well formed request with shares makes it through the block maker
 #[test]
@@ -499,9 +512,9 @@ fn oversized_validation() {
         &default_validation_context(),
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::PayloadTooBig { expected, received },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::PayloadTooBig { expected, received },
             ),
         )) if expected == 2 * 1024 * 1024 && received > expected => (),
         x => panic!("Expected PayloadTooBig, got {:?}", x),
@@ -522,9 +535,9 @@ fn registry_version_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::RegistryVersionMismatch { .. },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. },
             ),
         )) => (),
         x => panic!("Expected RegistryVersionMismatch, got {:?}", x),
@@ -543,9 +556,9 @@ fn hash_validation() {
         &default_validation_context(),
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::ContentHashMismatch { .. },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. },
             ),
         )) => (),
         x => panic!("Expected ContentHashMismatch, got {:?}", x),
@@ -565,9 +578,9 @@ fn timeout_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::Timeout {
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::Timeout {
                     timed_out_at,
                     validation_time,
                 },
@@ -590,7 +603,7 @@ fn registry_unavailable_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Transient(PayloadTransientError::RegistryUnavailable(
+        Err(ValidationError::ValidationFailed(PayloadValidationFailure::RegistryUnavailable(
             RegistryClientError::VersionNotAvailable { version },
         ))) if version == RegistryVersion::new(2) => (),
         x => panic!("Expected RegistryUnavailable, got {:?}", x),
@@ -605,9 +618,9 @@ fn registry_unavailable_validation() {
 fn feature_disabled_validation() {
     let validation_result = run_validatation_test(false, |_, _| {}, &default_validation_context());
     match validation_result {
-        Err(ValidationError::Transient(
-            PayloadTransientError::CanisterHttpPayloadValidationError(
-                CanisterHttpTransientValidationError::Disabled,
+        Err(ValidationError::ValidationFailed(
+            PayloadValidationFailure::CanisterHttpPayloadValidationFailed(
+                CanisterHttpPayloadValidationFailure::Disabled,
             ),
         )) => (),
         x => panic!("Expected Disabled, got {:?}", x),
@@ -641,9 +654,9 @@ fn duplicate_validation() {
         );
 
         match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DuplicateResponse(id),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(id),
                 ),
             )) if id == CallbackId::new(0) => (),
             x => panic!("Expected DuplicateResponse, got {:?}", x),
@@ -708,15 +721,16 @@ fn divergence_response_validation_test() {
             );
 
             match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
-            ))) => (),
-            x => panic!(
-                "Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}",
-                x
-            ),
-        }
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
+                    ),
+                )) => (),
+                x => panic!(
+                    "Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}",
+                    x
+                ),
+            }
 
             let (_, other_callback_id_metadata) = test_response_and_metadata(1);
 
@@ -745,17 +759,70 @@ fn divergence_response_validation_test() {
             );
 
             match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
-            ))) => (),
-            x => panic!(
-                "Expected DivergenceProofContainsMultipleCallbackIds, got {:?}",
-                x
-            ),
-        }
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
+                    ),
+                )) => (),
+                x => panic!(
+                    "Expected DivergenceProofContainsMultipleCallbackIds, got {:?}",
+                    x
+                ),
+            }
         });
     }
+}
+
+/// Check that the divergence error message is constructed correctly and readable
+#[test]
+fn divergence_error_message() {
+    let (_, metadata) = test_response_and_metadata(1);
+
+    let mut rng = ChaCha20Rng::seed_from_u64(1337);
+    let mut response_shares = (0..6)
+        .map(|node_id| {
+            let mut sample = metadata.clone();
+            let mut new_hash = [0; 32];
+            rng.fill(&mut new_hash);
+
+            sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
+
+            Signed {
+                content: sample,
+                signature: BasicSignature {
+                    signature: BasicSigOf::new(BasicSig(vec![])),
+                    signer: node_test_id(node_id),
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Duplicate some responses
+    response_shares.push(response_shares[0].clone());
+    response_shares.push(response_shares[0].clone());
+    response_shares.push(response_shares[1].clone());
+
+    let divergence_response = CanisterHttpResponseDivergence {
+        shares: response_shares,
+    };
+
+    let divergence_reject = divergence_response_into_reject(&divergence_response).unwrap();
+
+    assert_eq!(
+        divergence_reject.payload,
+        Payload::Reject(RejectContext::new(
+            RejectCode::SysTransient,
+            "No consensus could be reached. Replicas had different responses. \
+            Details: request_id: 1, timeout: 10000000000, hashes: \
+            [30bb6555f891c35fbc820c74a7db7c1ae621f924340712e12febe78a9be0a908: 3], \
+            [e93edfdefc581e2bdb54a08b55dd67bc675afafbbb32697ef6b8bf9cc75fe69b: 2], \
+            [af4dcbc617e83bc998190e3031123dbd26bcf0c5a5013b5465017234a98f7d74: 1], \
+            [51a9af560377af0994fe4be465ea5adff3372623c6ac692c4d3e23b323ef8486: 1], \
+            [2b7e888246a3b450c67396062e53c8b6c4b776e082e7d2a81c5536e89fe6013e: 1], \
+            [000b3b9ca14f1136c076b7f681b0a496f5108f721833e6465d0671c014e60b43: 1]"
+                .to_string()
+        ))
+    );
 }
 
 /// Build some test metadata and response, which is valid and can be used in
@@ -814,7 +881,7 @@ fn test_response_and_metadata_full(
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
 pub(crate) fn add_received_shares_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
@@ -824,17 +891,17 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
     }
 }
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 pub(crate) fn add_own_share_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
-    pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+    pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
         content.clone(),
     )]);
@@ -911,7 +978,6 @@ pub(crate) fn test_config_with_http_feature<T>(
         let Dependencies {
             crypto,
             registry,
-            membership,
             pool,
             canister_http_pool,
             state_manager,
@@ -927,7 +993,6 @@ pub(crate) fn test_config_with_http_feature<T>(
             pool.get_cache(),
             crypto,
             state_manager,
-            membership,
             subnet_test_id(0),
             registry,
             &MetricsRegistry::new(),

@@ -1,0 +1,42 @@
+[package]
+name = "ic-icp-index"
+description = "Index canister for the ICP Ledger"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-icp-index"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-icrc1-index-ng = { path = "../../icrc1/index-ng" }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-metrics-encoder = "1.1"
+ic-stable-structures = { workspace = true }
+icp-ledger = { path = ".." }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+scopeguard = "1.1.0"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
+ic-ledger-test-utils = { path = "../test_utils" }
+ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

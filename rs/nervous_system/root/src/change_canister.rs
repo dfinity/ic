@@ -15,18 +15,16 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
     /// The value depend on the canister. For instance:
     /// * Canisters that don't emit any inter-canister call, such as the
-    ///   registry canister,
-    /// have no reason to be stopped before being upgraded.
+    ///   registry canister, have no reason to be stopped before being upgraded.
     /// * Canisters that emit inter-canister call are at risk of undefined
-    ///   behavior if
-    /// a callback is delivered to them after the upgrade.
+    ///   behavior if a callback is delivered to them after the upgrade.
     pub stop_before_installing: bool,
 
     // -------------------------------------------------------------------- //
@@ -54,8 +52,6 @@ pub struct ChangeCanisterRequest {
     pub compute_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub query_allocation: Option<candid::Nat>,
 }
 
 impl ChangeCanisterRequest {
@@ -75,7 +71,6 @@ impl ChangeCanisterRequest {
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
-            .field("query_allocation", &self.query_allocation)
             .finish()
     }
 }
@@ -106,7 +101,6 @@ impl ChangeCanisterRequest {
             arg: Encode!().unwrap(),
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
         }
     }
 
@@ -131,7 +125,7 @@ impl ChangeCanisterRequest {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct AddCanisterRequest {
     /// A unique name for this canister.
     pub name: String,
@@ -141,14 +135,13 @@ pub struct AddCanisterRequest {
     #[serde(with = "serde_bytes")]
     pub wasm_module: Vec<u8>,
 
+    #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
 
     #[serde(serialize_with = "serialize_optional_nat")]
     pub compute_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub query_allocation: Option<candid::Nat>,
 
     pub initial_cycles: u64,
 }
@@ -168,7 +161,6 @@ impl AddCanisterRequest {
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
-            .field("query_allocation", &self.query_allocation)
             .field("initial_cycles", &self.initial_cycles)
             .finish()
     }
@@ -187,20 +179,20 @@ impl std::fmt::Display for AddCanisterRequest {
 }
 
 // The action to take on the canister.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
 }
 
-pub async fn change_canister<Rt>(request: ChangeCanisterRequest)
+pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
 {
@@ -214,13 +206,15 @@ where
                 "{}change_canister: Failed to stop canister, trying to restart...",
                 LOG_PREFIX
             );
-            match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {}
+            return match start_canister::<Rt>(canister_id).await {
+                Ok(_) => {
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
+                }
                 Err(_) => {
                     println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
                 }
             };
-            return;
         }
     }
 
@@ -231,7 +225,7 @@ where
     // because there could be a concurrent request to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(request).await;
+    let res = install_code(request.clone()).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -243,7 +237,7 @@ where
     }
 
     // Check the result of the install_code
-    res.unwrap();
+    res.map_err(|(rejection_code, message)| format!("Attempt to call install_code with request {request:?} failed with code {rejection_code:?}: {message}"))
 }
 
 /// Calls the "install_code" method of the management canister.
@@ -255,7 +249,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         arg,
         compute_allocation,
         memory_allocation,
-        query_allocation,
 
         stop_before_installing: _,
     } = request;
@@ -270,7 +263,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         arg,
         compute_allocation,
         memory_allocation,
-        query_allocation,
         sender_canister_version,
     };
     // Warning: despite dfn_core::call returning a Result, it actually traps when
@@ -313,7 +305,7 @@ where
 {
     // stop_canister returns the candid empty type, which cannot be parsed using
     // dfn_candid::candid
-    Rt::call_with_cleanup(
+    () = Rt::call_with_cleanup(
         CanisterId::ic_00(),
         "stop_canister",
         (CanisterIdRecord::from(canister_id),),

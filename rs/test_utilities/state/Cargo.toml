@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
@@ -19,6 +19,7 @@ ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 mockall = { workspace = true }
-proptest = "1.0"
-rand = "0.8"
-rand_chacha = "0.3"
+proptest = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+strum = { workspace = true }

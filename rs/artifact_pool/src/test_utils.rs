@@ -13,16 +13,17 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::ReplicaLogger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_test_utilities_types::ids::node_test_id;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
         dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
-        ConsensusMessageHashable, Finalization, FinalizationContent, FinalizationShare,
-        Notarization, NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
-        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare, Rank,
+        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationContent,
+        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
+        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
+        Rank,
     },
-    crypto::{ThresholdSigShare, ThresholdSigShareOf},
+    crypto::{BasicSigOf, CryptoHash, CryptoHashOf, ThresholdSigShare, ThresholdSigShareOf},
     signature::*,
     time::UNIX_EPOCH,
     Height,
@@ -142,6 +143,7 @@ where
         let fzs_ops = finalization_share_ops();
         let rt_ops = random_tape_ops();
         let rts_ops = random_tape_share_ops();
+        let ep_ops = equivocation_proof_ops(/*heights=*/ 1..18);
 
         // Insert a bunch of items and test that the pool returns them
         {
@@ -173,6 +175,9 @@ where
 
             pool.mutate(rts_ops.clone());
             match_ops_to_results(&rts_ops, pool.random_tape_share(), true);
+
+            pool.mutate(ep_ops.clone());
+            match_ops_to_results(&ep_ops, pool.equivocation_proof(), false);
         }
 
         // Test the matching after a reboot.
@@ -187,6 +192,7 @@ where
             match_ops_to_results(&fzs_ops, pool.finalization_share(), true);
             match_ops_to_results(&rt_ops, pool.random_tape(), false);
             match_ops_to_results(&rts_ops, pool.random_tape_share(), true);
+            match_ops_to_results(&ep_ops, pool.equivocation_proof(), false);
         }
 
         // Test purging shares below
@@ -195,39 +201,48 @@ where
                 pool.get_all().count()
             }
 
-            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: &HeightRange) -> usize {
-                pool.get_by_height_range(range.clone()).count()
+            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: HeightRange) -> usize {
+                pool.get_by_height_range(range).count()
             }
 
             let mut pool = T::new_consensus_pool(config, log);
             let finalized_height = pool.finalization().max_height().unwrap();
             let range_to_delete = HeightRange::new(Height::from(0), finalized_height.decrement());
 
-            // Only notarization shares and finalization shares should be deleted
+            // Only notarization shares, finalization shares and equivocation
+            // proofs should be deleted
             let expected_count = [
                 count_total(pool.random_beacon_share()),
                 count_total(pool.notarization_share())
-                    - count(pool.notarization_share(), &range_to_delete),
+                    - count(pool.notarization_share(), range_to_delete),
                 count_total(pool.finalization_share())
-                    - count(pool.finalization_share(), &range_to_delete),
+                    - count(pool.finalization_share(), range_to_delete),
                 count_total(pool.random_tape_share()),
+                count_total(pool.equivocation_proof())
+                    - count(pool.equivocation_proof(), range_to_delete),
             ];
 
             let mut expected_to_be_purged = Vec::new();
             expected_to_be_purged.extend(
                 pool.notarization_share()
-                    .get_by_height_range(range_to_delete.clone())
+                    .get_by_height_range(range_to_delete)
                     .map(|n| n.get_id()),
             );
             expected_to_be_purged.extend(
                 pool.finalization_share()
-                    .get_by_height_range(range_to_delete.clone())
+                    .get_by_height_range(range_to_delete)
+                    .map(|n| n.get_id()),
+            );
+            expected_to_be_purged.extend(
+                pool.equivocation_proof()
+                    .get_by_height_range(range_to_delete)
                     .map(|n| n.get_id()),
             );
 
             let mut ops = PoolSectionOps::new();
             ops.purge_type_below(PurgeableArtifactType::NotarizationShare, finalized_height);
             ops.purge_type_below(PurgeableArtifactType::FinalizationShare, finalized_height);
+            ops.purge_type_below(PurgeableArtifactType::EquivocationProof, finalized_height);
             let purged = pool.mutate(ops);
 
             assert_eq!(expected_to_be_purged.len(), purged.len());
@@ -235,14 +250,16 @@ where
             let purged_set = HashSet::<_>::from_iter(purged);
             assert_eq!(expected_set, purged_set);
 
-            assert!(count(pool.random_beacon_share(), &range_to_delete) > 0);
+            assert!(count(pool.random_beacon_share(), range_to_delete) > 0);
             assert_eq!(count_total(pool.random_beacon_share()), expected_count[0]);
-            assert_eq!(count(pool.notarization_share(), &range_to_delete), 0);
+            assert_eq!(count(pool.notarization_share(), range_to_delete), 0);
             assert_eq!(count_total(pool.notarization_share()), expected_count[1]);
-            assert_eq!(count(pool.finalization_share(), &range_to_delete), 0);
+            assert_eq!(count(pool.finalization_share(), range_to_delete), 0);
             assert_eq!(count_total(pool.finalization_share()), expected_count[2]);
-            assert!(count(pool.random_tape_share(), &range_to_delete) > 0);
+            assert!(count(pool.random_tape_share(), range_to_delete) > 0);
             assert_eq!(count_total(pool.random_tape_share()), expected_count[3]);
+            assert_eq!(count(pool.equivocation_proof(), range_to_delete), 0);
+            assert_eq!(count_total(pool.equivocation_proof()), expected_count[4]);
 
             let expected_to_be_purged = pool
                 .block_proposal()
@@ -490,6 +507,31 @@ pub(crate) fn block_proposal_ops(
     for height in heights {
         let block_proposal = fake_block_proposal(Height::from(height));
         let msg = ConsensusMessage::BlockProposal(block_proposal);
+        ops.insert(ValidatedConsensusArtifact {
+            msg,
+            timestamp: UNIX_EPOCH,
+        });
+    }
+    ops
+}
+
+fn equivocation_proof_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
+    let block = fake_block_proposal(Height::from(1));
+    let mut ops = PoolSectionOps::new();
+    for height in heights {
+        let equivocation_proof = EquivocationProof {
+            signer: node_test_id(0),
+            version: block.content.get_value().version.clone(),
+            height: Height::new(height),
+            subnet_id: subnet_test_id(0),
+            hash1: CryptoHashOf::new(CryptoHash(vec![height as u8])),
+            signature1: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![1, height as u8])),
+            signature2: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
+        };
+        let msg = ConsensusMessage::EquivocationProof(equivocation_proof);
         ops.insert(ValidatedConsensusArtifact {
             msg,
             timestamp: UNIX_EPOCH,

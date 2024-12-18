@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create large --lifetime-mins=180 --output-dir=./large -- --test_tmpdir=./large
 //
 // The --output-dir=./large will store the debug output of the test driver in the specified directory.
@@ -40,22 +40,24 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::BoundaryNodeVm;
-use ic_tests::driver::ic::{
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
 };
-use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
+use nns_dapp::{
+    install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
+    set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
@@ -69,9 +71,12 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+    // start p8s for metrics and dashboards
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+
+    // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
@@ -87,12 +92,20 @@ pub fn setup(env: TestEnv) {
     }
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
+
+    // set up NNS canisters
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
+
+    // sets the exchange rate to 12 XDR per 1 ICP
+    set_icp_xdr_exchange_rate(&env, 12_0000);
+
+    // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
+
+    // deploys the boundary node(s)
     let mut farm_url: Option<String> = None;
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
@@ -113,11 +126,30 @@ pub fn setup(env: TestEnv) {
         }
     }
     env.sync_with_prometheus_by_name("", farm_url);
+
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
         await_boundary_node_healthy(&env, &bn_name);
         if i == 0 {
-            install_ii_and_nns_dapp(&env, &bn_name, None);
+            // pick an SNS subnet among the application subnets
+            let topology = env.topology_snapshot();
+            let mut app_subnets = topology
+                .subnets()
+                .filter(|s| s.subnet_type() == SubnetType::Application);
+            let sns_subnet = app_subnets.next().unwrap();
+
+            // install the SNS aggregator canister onto the SNS subnet
+            let sns_node = sns_subnet.nodes().next().unwrap();
+            let sns_aggregator_canister_id = install_sns_aggregator(&env, &bn_name, sns_node);
+
+            // register the SNS subnet with the NNS
+            set_sns_subnet(&env, sns_subnet.subnet_id);
+
+            // upload SNS canister WASMs to the SNS-W canister
+            add_all_wasms_to_sns_wasm(&env);
+
+            // install II, NNS dapp, and Subnet Rental Canister
+            install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));
         }
     }
 }

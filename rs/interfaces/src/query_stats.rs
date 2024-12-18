@@ -3,7 +3,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{CanisterId, NodeId, QueryStatsEpoch};
 
 #[derive(Debug)]
-pub enum QueryStatsPermanentValidationError {
+pub enum InvalidQueryStatsPayloadReason {
     /// The payload could not be deserialized
     DeserializationFailed(ProxyDecodeError),
     /// The NodeId on the payload does not correspond to the proposer of the block
@@ -23,7 +23,7 @@ pub enum QueryStatsPermanentValidationError {
 }
 
 #[derive(Debug)]
-pub enum QueryStatsTransientValidationError {
+pub enum QueryStatsPayloadValidationFailure {
     /// The feature is not enabled
     Disabled,
     /// The state was not available for a height

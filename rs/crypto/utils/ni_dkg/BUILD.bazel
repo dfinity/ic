@@ -3,12 +3,14 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/protobuf",
     "//rs/types/types",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",

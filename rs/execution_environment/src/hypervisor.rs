@@ -2,17 +2,22 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
-use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
-use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
-use ic_embedders::{CompilationCache, CompilationResult};
-use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
+use ic_embedders::{
+    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_utils::decoding::decoded_wasm_size,
+    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
+use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
@@ -20,7 +25,7 @@ use ic_types::{
     Time,
 };
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
@@ -28,49 +33,50 @@ use crate::execution_environment::{as_round_instructions, CompilationCostHandlin
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
-#[cfg(test)]
-mod tests;
-
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
-    accessed_pages: Histogram,
-    dirty_pages: Histogram,
-    read_before_write_count: Histogram,
-    direct_write_count: Histogram,
+    accessed_pages: HistogramVec,
+    dirty_pages: HistogramVec,
+    read_before_write_count: HistogramVec,
+    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     largest_function_instruction_count: Histogram,
     compile: Histogram,
     max_complexity: Histogram,
-    sigsegv_count: Histogram,
-    mmap_count: Histogram,
-    mprotect_count: Histogram,
-    copy_page_count: Histogram,
+    sigsegv_count: HistogramVec,
+    mmap_count: HistogramVec,
+    mprotect_count: HistogramVec,
+    copy_page_count: HistogramVec,
 }
 
 impl HypervisorMetrics {
     #[doc(hidden)] // pub for usage in tests
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            accessed_pages: metrics_registry.histogram(
+            accessed_pages: metrics_registry.histogram_vec(
                 "hypervisor_accessed_pages",
-                "Number of pages accessed per execution round.",
+                "Number of pages accessed by type of memory (wasm, stable) and api type.",
                 // 1 page, 2 pages, …, 2^21 (8GiB worth of) pages
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            dirty_pages: metrics_registry.histogram(
+            dirty_pages: metrics_registry.histogram_vec(
                 "hypervisor_dirty_pages",
-                "Number of pages modified (dirtied) per execution round.",
+                "Number of pages modified (dirtied) by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            read_before_write_count: metrics_registry.histogram(
+            read_before_write_count: metrics_registry.histogram_vec(
                 "hypervisor_read_before_write_count",
-                "Number of wasm heap write accesses handled where the page had already been read.",
+                "Number of write accesses handled where the page had already been read by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
-            direct_write_count: metrics_registry.histogram(
+            direct_write_count: metrics_registry.histogram_vec(
                 "hypervisor_direct_write_count",
-                "Number of wasm heap write accesses handled where the page had not yet been read.",
+                "Number of write accesses handled where the page had not yet been read by type of memory (wasm, stable) and api type.",
                 exponential_buckets(1.0, 2.0, 22),
+                &["api_type", "memory_type"]
             ),
             allocated_pages: metrics_registry.int_gauge(
                 "hypervisor_allocated_pages",
@@ -91,48 +97,87 @@ impl HypervisorMetrics {
                 "The maximum function complexity in a wasm module.",
                 decimal_buckets_with_zero(1, 8), //10 - 100M.
             ),
-            sigsegv_count: metrics_registry.histogram(
+            sigsegv_count: metrics_registry.histogram_vec(
                 "hypervisor_sigsegv_count",
-                "Number of signal faults handled during the execution.",
+                "Number of signal faults handled during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            mmap_count: metrics_registry.histogram(
+            mmap_count: metrics_registry.histogram_vec(
                 "hypervisor_mmap_count",
-                "Number of calls to mmap during the execution.",
+                "Number of calls to mmap during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            mprotect_count: metrics_registry.histogram(
+            mprotect_count: metrics_registry.histogram_vec(
                 "hypervisor_mprotect_count",
-                "Number of calls to mprotect during the execution.",
+                "Number of calls to mprotect during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
-            copy_page_count: metrics_registry.histogram(
+            copy_page_count: metrics_registry.histogram_vec(
                 "hypervisor_copy_page_count",
-                "Number of calls to pages memcopied during the execution.",
+                "Number of calls to pages memcopied during the execution by type of memory (wasm, stable) and api type.",
                 decimal_buckets_with_zero(0,8),
+                &["api_type", "memory_type"]
             ),
         }
     }
 
-    fn observe(&self, result: &WasmExecutionResult) {
+    fn observe(&self, result: &WasmExecutionResult, api_type: &str) {
         if let WasmExecutionResult::Finished(_, output, ..) = result {
             self.accessed_pages
-                .observe(output.instance_stats.accessed_pages as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_accessed_pages as f64);
             self.dirty_pages
-                .observe(output.instance_stats.dirty_pages as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_dirty_pages as f64);
             self.read_before_write_count
-                .observe(output.instance_stats.read_before_write_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_read_before_write_count as f64);
             self.direct_write_count
-                .observe(output.instance_stats.direct_write_count as f64);
-            self.allocated_pages.set(allocated_pages_count() as i64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_direct_write_count as f64);
             self.sigsegv_count
-                .observe(output.instance_stats.sigsegv_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_sigsegv_count as f64);
             self.mmap_count
-                .observe(output.instance_stats.mmap_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_mmap_count as f64);
             self.mprotect_count
-                .observe(output.instance_stats.mprotect_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_mprotect_count as f64);
             self.copy_page_count
-                .observe(output.instance_stats.copy_page_count as f64);
+                .with_label_values(&[api_type, "wasm"])
+                .observe(output.instance_stats.wasm_copy_page_count as f64);
+
+            // Additional metrics for the stable memory.
+            self.accessed_pages
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_accessed_pages as f64);
+            self.dirty_pages
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_dirty_pages as f64);
+            self.read_before_write_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_read_before_write_count as f64);
+            self.direct_write_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_direct_write_count as f64);
+            self.sigsegv_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_sigsegv_count as f64);
+            self.mmap_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_mmap_count as f64);
+            self.mprotect_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_mprotect_count as f64);
+            self.copy_page_count
+                .with_label_values(&[api_type, "stable"])
+                .observe(output.instance_stats.stable_copy_page_count as f64);
+
+            self.allocated_pages.set(allocated_pages_count() as i64);
         }
     }
 
@@ -161,6 +206,7 @@ pub struct Hypervisor {
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
+    canister_guaranteed_callback_quota: usize,
 }
 
 impl Hypervisor {
@@ -193,7 +239,7 @@ impl Hypervisor {
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
             self.compilation_cache
-                .insert(&canister_module, Err(err.clone().into()));
+                .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
         }
 
@@ -230,11 +276,11 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
-        embedder_config.feature_flags.canister_logging = config.canister_logging;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -243,6 +289,8 @@ impl Hypervisor {
                     metrics_registry,
                     &embedder_config,
                     Arc::clone(&fd_factory),
+                    Arc::clone(&state_reader),
+                    true,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -271,6 +319,7 @@ impl Hypervisor {
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
 
@@ -285,6 +334,7 @@ impl Hypervisor {
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
+        canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
             wasm_executor,
@@ -297,6 +347,7 @@ impl Hypervisor {
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota,
         }
     }
 
@@ -392,16 +443,33 @@ impl Hypervisor {
                 execution_parameters.instruction_limits.slice()
             ),
         }
+        let caller = api_type.caller();
+        let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
+            // The default is never used (since we would never end up here with no
+            // `CallContextManager`) but preferrable to an `unwrap()`.
+            self.canister_guaranteed_callback_quota,
+            |ccm| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(ccm.callbacks().len())
+            },
+        ) as u64;
+        // Maximum between remaining canister quota and available subnet shared pool.
+        let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            available_callbacks,
             request_metadata,
             api_type.caller(),
+            api_type.call_context_id(),
+            execution_state.is_wasm64,
         );
-        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let api_type_str = api_type.as_str();
+        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -414,17 +482,64 @@ impl Hypervisor {
             },
             execution_state,
         );
-
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
-        self.metrics.observe(&execution_result);
+        self.metrics.observe(&execution_result, api_type_str);
+
+        // If the caller does not have permission to view this canister's logs,
+        // then it shouldn't get a backtrace either. So in that case we remove
+        // the backtrace from the error.
+        fn remove_backtrace(err: &mut HypervisorError) {
+            match err {
+                HypervisorError::Trapped { backtrace, .. }
+                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+                HypervisorError::Cleanup {
+                    callback_err,
+                    cleanup_err,
+                } => {
+                    remove_backtrace(callback_err);
+                    remove_backtrace(cleanup_err);
+                }
+                _ => {}
+            }
+        }
+        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
+            if let Err(err) = &mut result.wasm_result {
+                let can_view = match &system_state.log_visibility {
+                    LogVisibilityV2::Controllers => {
+                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                    }
+                    LogVisibilityV2::Public => true,
+                    LogVisibilityV2::AllowedViewers(allowed) => {
+                        caller.map_or(false, |c| allowed.get().contains(&c))
+                    }
+                };
+                if !can_view {
+                    remove_backtrace(err);
+                }
+            }
+        }
+
         execution_result
     }
 
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
+    }
+
+    /// Insert a compiled module in the compilation cache speed up tests by
+    /// skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        let canister_module = CanisterModule::new(bytes);
+        self.compilation_cache
+            .insert_ok(&canister_module, compiled_module);
     }
 }

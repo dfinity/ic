@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-crypto-tree-hash = { path = ".." }
-proptest = "1.0"
-rand = "0.8.4"
+proptest = { workspace = true }
+rand = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

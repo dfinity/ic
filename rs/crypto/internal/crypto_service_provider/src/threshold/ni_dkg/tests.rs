@@ -33,6 +33,7 @@ mod gen_dealing_encryption_key_pair_tests {
             .with_vault(LocalCspVault::builder_for_test().with_rng(rng()).build())
             .build();
         let (public_key, pop) = csp
+            .csp_vault
             .gen_dealing_encryption_key_pair(NODE_1)
             .expect("error generating NI-DKG encryption dealing key pair");
         let key_id = KeyId::from(&public_key);
@@ -45,7 +46,8 @@ mod gen_dealing_encryption_key_pair_tests {
         );
 
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .dkg_dealing_encryption_public_key
                 .expect("missing key"),
@@ -58,15 +60,18 @@ mod gen_dealing_encryption_key_pair_tests {
         let csp = Csp::builder_for_test().build();
         let node_id = NODE_1;
 
-        assert!(csp.gen_dealing_encryption_key_pair(node_id).is_ok());
-        let result = csp.gen_dealing_encryption_key_pair(node_id);
+        assert!(csp
+            .csp_vault
+            .gen_dealing_encryption_key_pair(node_id)
+            .is_ok());
+        let result = csp.csp_vault.gen_dealing_encryption_key_pair(node_id);
 
         assert_matches!(result,
             Err(CspDkgCreateFsKeyError::InternalError(InternalError { internal_error }))
             if internal_error.contains("ni-dkg dealing encryption public key already set")
         );
 
-        assert_matches!(csp.gen_dealing_encryption_key_pair(node_id),
+        assert_matches!(csp.csp_vault.gen_dealing_encryption_key_pair(node_id),
             Err(CspDkgCreateFsKeyError::InternalError(InternalError { internal_error }))
             if internal_error.contains("ni-dkg dealing encryption public key already set")
         );
@@ -86,7 +91,7 @@ mod gen_dealing_encryption_key_pair_tests {
             )
             .build();
 
-        let result = csp.gen_dealing_encryption_key_pair(NODE_1);
+        let result = csp.csp_vault.gen_dealing_encryption_key_pair(NODE_1);
 
         assert_matches!(result,
             Err(CspDkgCreateFsKeyError::DuplicateKeyId(error))
@@ -110,7 +115,7 @@ mod dkg_dealing_encryption_key_id {
     #[test]
     fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
         let csp = Csp::builder_for_test().build();
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
         assert_matches!(
             result,
             Err(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)
@@ -149,7 +154,7 @@ mod dkg_dealing_encryption_key_id {
             )
             .build();
 
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
 
         assert_matches!(
             result,
@@ -161,10 +166,11 @@ mod dkg_dealing_encryption_key_id {
     fn should_get_dkg_dealing_encryption_key_id() {
         let csp = Csp::builder_for_test().build();
         let (generated_dkg_pk, _pop) = csp
+            .csp_vault
             .gen_dealing_encryption_key_pair(NODE_1)
             .expect("no dkg key");
 
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
 
         assert_matches!(result, Ok(key_id) if key_id == KeyId::from(&generated_dkg_pk));
     }

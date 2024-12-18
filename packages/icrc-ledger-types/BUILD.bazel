@@ -12,17 +12,27 @@ rust_library(
     srcs = glob(
         ["src/**"],
     ),
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
     deps = [
+        # Keep sorted.
+        "//packages/icrc-cbor",
         "@crate_index//:base32",
         "@crate_index//:candid",
         "@crate_index//:crc32fast",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:itertools",
+        "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:sha2",
+        "@crate_index//:strum",
+        "@crate_index//:time",
     ],
 )
 
@@ -30,6 +40,7 @@ rust_test(
     name = "test",
     crate = ":icrc_ledger_types",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
         "@crate_index//:num-bigint",

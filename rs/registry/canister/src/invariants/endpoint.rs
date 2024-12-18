@@ -12,9 +12,6 @@ use prost::alloc::collections::BTreeSet;
 
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):
@@ -27,6 +24,7 @@ use dfn_core::println;
 ///      ip:port pairs for anything, no node has the same ip:port for multiple
 ///      endpoints), i.e., all IP:port-pairs of all nodes are mutually exclusive
 ///      (this includes the prometheus-endpoints)
+///
 /// Strict check imposes stricter rules on IP addresses
 pub(crate) fn check_endpoint_invariants(
     snapshot: &RegistrySnapshot,
@@ -68,31 +66,27 @@ pub(crate) fn check_endpoint_invariants(
             let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
             // Multiple nodes may have unspecified addresses, so duplicates should be avoided only for specified endpoints
             if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
-                let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+                return Err(InvariantCheckError {
                     msg: format!(
                         "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
                         &endpoint.ip_addr, &endpoint.port
                     ),
                     source: None,
                 });
-                // TODO: change to `return error;` after NNS1-2228 is closed.
-                println!("WARNING: {error:?}");
             }
         }
 
         // Check that there are _some_ node endpoints
         if new_valid_endpoints.is_empty() {
-            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+            return Err(InvariantCheckError {
                 msg: format!("{error_prefix}: No endpoints to validate"),
                 source: None,
             });
-            // TODO: change to `return error;` after NNS1-2228 is closed.
-            println!("WARNING: {error:?}");
         }
 
         // Check that there is no intersection with other nodes
         if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
-            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+            return Err(InvariantCheckError {
                 msg: format!(
                     "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
                     new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
@@ -105,8 +99,6 @@ pub(crate) fn check_endpoint_invariants(
                 ),
                 source: None,
             });
-            // TODO: change to `return error;` after NNS1-2228 is closed.
-            println!("WARNING: {error:?}");
         }
 
         // All is good -- add current endpoints to global set
@@ -313,9 +305,9 @@ fn mask_ipv6(addr: Ipv6Addr, mask: Ipv6Addr) -> Ipv6Addr {
 mod tests {
     use super::*;
     use ic_base_types::{NodeId, PrincipalId};
-    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::make_node_record_key;
+    use prost::Message;
 
     #[test]
     fn test_validate_endpoint() {
@@ -389,7 +381,7 @@ mod tests {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -399,21 +391,24 @@ mod tests {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
                 }),
-                hostos_version_id: None,
-                chip_id: None,
-                public_ipv4_config: None,
-                domain: None,
-            }),
+                ..Default::default()
+            }
+            .encode_to_vec(),
         );
 
-        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
+        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
+            panic!(
+                "Expected Ok result from registry invariant check, got {:?}",
+                err
+            );
+        }
 
         // Add a node with conflicting sockets
         let node_id = NodeId::from(PrincipalId::new_node_test_id(2));
         let key = make_node_record_key(node_id).into_bytes();
         snapshot.insert(
             key.clone(),
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -423,15 +418,23 @@ mod tests {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
                 }),
-                hostos_version_id: None,
-                chip_id: None,
-                public_ipv4_config: None,
-                domain: None,
-            }),
+
+                ..Default::default()
+            }
+            .encode_to_vec(),
         );
 
-        // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
-        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
+        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
+            assert_eq!(
+                err.msg,
+                "Invariant violation detected among 2 node records (checking failed for node \
+                 gfvbo-licaa-aaaaa-aaaap-2ai): Duplicate endpoints detected across nodes; \
+                 new_valid_endpoints = (200.1.1.1, 9001) (new), (200.1.1.3, 9000) (duplicate)"
+                    .to_string()
+            );
+        } else {
+            panic!("Expected Err result from registry invariant check, got Ok.");
+        }
 
         snapshot.remove(&key);
 
@@ -440,7 +443,7 @@ mod tests {
         let key = make_node_record_key(node_id).into_bytes();
         snapshot.insert(
             key,
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
@@ -450,11 +453,9 @@ mod tests {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
                 }),
-                hostos_version_id: None,
-                chip_id: None,
-                public_ipv4_config: None,
-                domain: None,
-            }),
+                ..Default::default()
+            }
+            .encode_to_vec(),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();
     }

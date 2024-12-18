@@ -1,3 +1,5 @@
+use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -12,33 +14,34 @@ use crate::{
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
-            TransferSnsTreasuryFundsActionAuxiliary,
+            self, ActionAuxiliary as ActionAuxiliaryPb, AdvanceSnsTargetVersionActionAuxiliary,
+            MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
-    types::{Environment, DEFAULT_TRANSFER_FEE},
+    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
+    types::Environment,
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
-use dfn_core::api::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, E8,
-    SECONDS_PER_DAY,
+    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
+    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
+use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
-    mint_sns_tokens_7_day_total_upper_bound_tokens,
+    // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
 };
 use ic_sns_governance_token_valuation::{Token, Valuation};
@@ -83,11 +86,17 @@ pub const MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE: usize = 100;
 /// successfully executed. (This is used by can_be_purged, and is generally used when calling
 /// total_treasury_transfer_amount_tokens to construct the min_executed_timestamp_seconds argument).
 pub const EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 =
-    7 * SECONDS_PER_DAY;
+    7 * ONE_DAY_SECONDS;
 
 /// Analogous to the previous constant; this one is for MintSnsTokens proposals. The value here is
 /// the same, but we keep separate constants, because we consider this to be a coincidence.
-pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * SECONDS_PER_DAY;
+pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * ONE_DAY_SECONDS;
+
+/// The maximum message size for inter-canister calls to a different subnet
+/// is 2MiB and thus we restrict the maximum joint size of the canister WASM
+/// and argument to 2MB (2,000,000B) to leave some slack for Candid overhead
+/// and a few constant-size fields (e.g., compute and memory allocation).
+pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
@@ -163,10 +172,11 @@ pub(crate) fn get_action_auxiliary(
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
+    AdvanceSnsTargetVersion(Version),
     None,
 }
 
@@ -180,6 +190,21 @@ impl ActionAuxiliary {
                 format!(
                     "Missing supporting information. Specifically, \
                      no treasury valuation factors: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
                     wrong,
                 ),
             )),
@@ -209,6 +234,14 @@ impl TryFrom<ActionAuxiliary> for Option<ActionAuxiliaryPb> {
                     valuation: Some(ValuationPb::try_from(valuation)?),
                 },
             )),
+
+            ActionAuxiliary::AdvanceSnsTargetVersion(target_version) => {
+                Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(
+                    AdvanceSnsTargetVersionActionAuxiliary {
+                        target_version: Some(SnsVersion::from(target_version)),
+                    },
+                ))
+            }
         };
 
         Ok(result)
@@ -238,6 +271,21 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                     .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
+            }
+            Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(action_auxiliary)) => {
+                let AdvanceSnsTargetVersionActionAuxiliary {
+                    target_version: Some(target_version),
+                } = action_auxiliary
+                else {
+                    return Err(
+                        "Invalid ActionAuxiliaryPb: target_version must be specified.".to_string(),
+                    );
+                };
+
+                let target_version = Version::try_from(target_version.clone())
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+
+                ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
         };
 
@@ -366,15 +414,18 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
-            validate_and_render_upgrade_sns_to_next_version(
-                upgrade_sns,
-                env,
-                root_canister_id,
-                current_version,
-            )
-            .await
+            match governance_proto.deployed_version_or_err() {
+                Ok(current_version) => {
+                    validate_and_render_upgrade_sns_to_next_version(
+                        upgrade_sns,
+                        env,
+                        root_canister_id,
+                        current_version,
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
+            }
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
@@ -435,6 +486,13 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
+        }
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                governance_proto,
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -790,7 +848,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
         total_treasury_transfer_amount_tokens(
             proposals,
             self.from_treasury(),
-            now_timestamp_seconds - 7 * SECONDS_PER_DAY,
+            now_timestamp_seconds - 7 * ONE_DAY_SECONDS,
         )
     }
 
@@ -956,15 +1014,25 @@ impl TokenProposalAction for MintSnsTokens {
         proposals: impl Iterator<Item = &'a ProposalData>,
         now_timestamp_seconds: u64,
     ) -> Result<Decimal, String> {
-        total_minting_amount_tokens(proposals, now_timestamp_seconds - 7 * SECONDS_PER_DAY)
+        total_minting_amount_tokens(proposals, now_timestamp_seconds - 7 * ONE_DAY_SECONDS)
     }
 
+    /* TODO(NNS1-2982): Uncomment.
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String> {
         mint_sns_tokens_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
                 format!("Unable to validate amount: {:?}", treasury_limit_error,)
             })
+    }
+    */
+
+    // TODO(NNS1-2982): Delete.
+    fn recent_amount_total_upper_bound_tokens(_valuation: &Valuation) -> Result<Decimal, String> {
+        // Ideally, we'd return infinity, but Decimal does not have that. This is the next best
+        // thing, and should be good enough, because we have already planned the obselences of this
+        // code (see tickets NNS1-298(1|2)).
+        Ok(Decimal::MAX)
     }
 }
 
@@ -973,6 +1041,21 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
 ) -> Result<String, String> {
     let mut defects = vec![];
+
+    let UpgradeSnsControlledCanister {
+        canister_id: _,
+        new_canister_wasm,
+        canister_upgrade_arg,
+        mode,
+    } = upgrade;
+    // Make sure `mode` is not None, and not an invalid/unknown value.
+    if let Some(mode) = mode {
+        if let Err(err) = CanisterInstallMode::try_from(*mode) {
+            defects.push(format!("Invalid mode: {}", err));
+        }
+    }
+    // Assume mode is the default if it is not set
+    let mode = upgrade.mode_or_upgrade();
 
     // Inspect canister_id.
     let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
@@ -989,20 +1072,26 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
     // see https://ic-interface-spec.netlify.app/#canister-module-format
     const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
-    // Minimum length of raw WASM is 8 bytes (4 magic bytes and 4 bytes encoding version).
-    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes, 1 byte encoding compression method, and 7 additional gzip header bytes).
-    const MIN_WASM_LEN: usize = 8;
-    if let Err(err) = validate_len(
-        "new_canister_wasm",
-        &upgrade.new_canister_wasm,
-        MIN_WASM_LEN,
-        usize::MAX,
-    ) {
-        defects.push(err);
-    } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && upgrade.new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+
+    if new_canister_wasm.len() < 4
+        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
+    }
+
+    if new_canister_wasm.len().saturating_add(
+        canister_upgrade_arg
+            .as_ref()
+            .map(|arg| arg.len())
+            .unwrap_or_default(),
+    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+    {
+        defects.push(format!(
+            "the maximum canister WASM and argument size \
+             for UpgradeSnsControlledCanister is {} bytes.",
+            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        ));
     }
 
     // Generate final report.
@@ -1013,18 +1102,33 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    let mut state = Sha256::new();
-    state.write(&upgrade.new_canister_wasm);
-    let sha = state.finish();
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(new_canister_wasm);
+        let sha = state.finish();
+        hex::encode(sha)
+    };
+
+    let upgrade_args_sha_256 = canister_upgrade_arg
+        .as_ref()
+        .map(|arg| {
+            let mut state = Sha256::new();
+            state.write(arg);
+            let sha = state.finish();
+            format!("Upgrade arg sha256: {}", hex::encode(sha))
+        })
+        .unwrap_or_else(|| "No upgrade arg".to_string());
 
     Ok(format!(
         r"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: {:?}
+## Canister id: {canister_id:?}
 
-## Canister wasm sha256: {}",
-        canister_id,
-        hex::encode(sha)
+## Canister wasm sha256: {canister_wasm_sha256}
+
+## Mode: {mode:?}
+
+## {upgrade_args_sha_256}",
     ))
 }
 
@@ -1055,7 +1159,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 ) -> Result<String, String> {
     let UpgradeSnsParams {
         next_version,
-        canister_type_to_upgrade: _,
+        canister_type_to_upgrade,
         new_wasm_hash,
         canister_ids_to_upgrade,
     } = get_upgrade_params(env, root_canister_id, &current_version)
@@ -1067,9 +1171,23 @@ async fn validate_and_render_upgrade_sns_to_next_version(
             )
         })?;
 
+    let proposal_id_message = get_proposal_id_that_added_wasm(env, new_wasm_hash.to_vec())
+        .await
+        .ok()
+        // TODO(NNS1-3152): If there was an error, surface it in some way so the
+        // community can talk about it.
+        .flatten()
+        .map(|id| {
+            format!(
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
+                id
+            )
+        })
+        .unwrap_or_default();
+
     // TODO display the hashes for current version and new version
     Ok(format!(
-        r"# Proposal to upgrade SNS to next version:
+        r"# Proposal to upgrade SNS {canister_type_to_upgrade:?} to next version:
 
 ## SNS Current Version:
 {}
@@ -1079,6 +1197,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 
 ## Canisters to be upgraded: {}
 ## Upgrade Version: {}
+{proposal_id_message}
 ",
         render_version(&current_version),
         render_version(&next_version),
@@ -1299,17 +1418,27 @@ pub async fn validate_and_render_execute_nervous_system_function(
                     )
                     .await?;
 
+                let payload_hash = {
+                    let mut state = Sha256::new();
+                    state.write(execute.payload.as_slice());
+                    let sha = state.finish();
+                    hex::encode(sha)
+                };
+
                 Ok(format!(
                     r"# Proposal to execute nervous system function:
 
 ## Nervous system function:
 
-{:#?}
+{function:#?}
+
+## Payload sha256: 
+
+{payload_hash}
 
 ## Payload:
 
-{}",
-                    function, rendering
+{rendering}"
                 ))
             }
         }
@@ -1477,16 +1606,35 @@ pub fn validate_and_render_manage_sns_metadata(
 fn validate_and_render_manage_ledger_parameters(
     manage_ledger_parameters: &ManageLedgerParameters,
 ) -> Result<String, String> {
-    let mut no_change = true;
+    let mut change = false;
     let mut render = "# Proposal to change ledger parameters:\n".to_string();
-    if let Some(transfer_fee) = &manage_ledger_parameters.transfer_fee {
-        render += &format!(
-            "# Set token transfer fee: {} token-quantums. \n",
-            transfer_fee
-        );
-        no_change = false;
+    let ManageLedgerParameters {
+        transfer_fee,
+        token_name,
+        token_symbol,
+        token_logo,
+    } = manage_ledger_parameters;
+
+    if let Some(transfer_fee) = transfer_fee {
+        render += &format!("# Set token transfer fee: {transfer_fee} token-quantums. \n",);
+        change = true;
     }
-    if no_change {
+    if let Some(token_name) = token_name {
+        ledger_validation::validate_token_name(token_name)?;
+        render += &format!("# Set token name: {token_name}. \n",);
+        change = true;
+    }
+    if let Some(token_symbol) = token_symbol {
+        ledger_validation::validate_token_symbol(token_symbol)?;
+        render += &format!("# Set token symbol: {token_symbol}. \n",);
+        change = true;
+    }
+    if let Some(token_logo) = token_logo {
+        ledger_validation::validate_token_logo(token_logo)?;
+        render += &format!("# Set token logo: {token_logo}. \n",);
+        change = true;
+    }
+    if !change {
         Err(String::from(
             "ManageLedgerParameters must change at least one value, all values are None",
         ))
@@ -1554,6 +1702,10 @@ fn validate_and_render_manage_dapp_canister_settings(
         );
         no_change = false;
     }
+    if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
+        render += &format!("# Set Wasm memory limit to: {}\n", wasm_memory_limit);
+        no_change = false;
+    }
 
     if no_change {
         Err(String::from(
@@ -1562,6 +1714,58 @@ fn validate_and_render_manage_dapp_canister_settings(
     } else {
         Ok(render)
     }
+}
+
+/// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
+/// Invalidates the action in the following cases:
+/// - There are no pending upgrades.
+/// - `new_target` is equal to `current_version`.
+/// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
+///
+/// Details:
+/// 1. Validates the action's `new_target` field, if it is set.
+/// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
+/// 3. Renders the Markdown proposal description.
+/// 4. Returns the rendering and the identified `target_version`.
+///    as `ActionAuxiliary`. This returned `target_version` should be used for executing
+///    this action, assuming the proposal gets adopted.
+fn validate_and_render_advance_sns_target_version_proposal(
+    sns_governance_canister_id: CanisterId,
+    governance_proto: &Governance,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    let (upgrade_steps, target_version) = governance_proto
+        .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
+
+    let time_of_validity = {
+        let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+        format_timestamp_for_humans(timestamp_seconds)
+    };
+
+    let current_target_versions_render =
+        render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
+
+    let upgrade_journal_url_render = format!(
+        "https://{}.raw.icp0.io/journal/json",
+        sns_governance_canister_id,
+    );
+
+    let render = format!(
+        "# Proposal to advance SNS target version\n\n\
+         {current_target_versions_render}\n\n\
+         ### Upgrade steps\n\n\
+         {upgrade_steps}\n\n\
+         ### Monitoring the upgrade process\n\n\
+         Please note: the upgrade steps mentioned above (valid around {time_of_validity}) \
+         might change during this proposal's voting period.\n\n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
+         {upgrade_journal_url_render}"
+    );
+
+    Ok((
+        render,
+        ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
+    ))
 }
 
 impl ProposalData {
@@ -1587,11 +1791,6 @@ impl ProposalData {
     /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
         if self.has_been_rewarded() {
-            debug_assert!(
-                self.is_eligible_for_rewards,
-                "Invalid ProposalData: {:#?}",
-                self
-            );
             return ProposalRewardStatus::Settled;
         }
 
@@ -1599,6 +1798,7 @@ impl ProposalData {
             return ProposalRewardStatus::AcceptVotes;
         }
 
+        // TODO(NNS1-2731): Replace this with just ReadyToSettle.
         if self.is_eligible_for_rewards {
             ProposalRewardStatus::ReadyToSettle
         } else {
@@ -1787,7 +1987,7 @@ impl ProposalData {
 
         // Every time the tally changes, (possibly) update the wait-for-quiet
         // dynamic deadline.
-        if let Some(old_tally) = self.latest_tally.clone() {
+        if let Some(old_tally) = self.latest_tally {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
                 && new_tally.total == old_tally.total
@@ -1943,6 +2143,7 @@ impl ProposalData {
     /// - 'no': Amount of voting power voting 'no'.
     /// - 'total': Total voting power.
     /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    ///
     /// The function returns a `Vote`:
     /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
     /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
@@ -2052,7 +2253,7 @@ impl ProposalData {
             failure_reason,
             reward_event_round,
             wait_for_quiet_state,
-            payload_text_rendering,
+            payload_text_rendering: _,
             is_eligible_for_rewards,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
@@ -2065,7 +2266,7 @@ impl ProposalData {
         let limited_ballots: BTreeMap<_, _> = ballots
             .iter()
             .filter(|(neuron_id, _)| caller_neurons_set.contains(*neuron_id))
-            .map(|(neuron_id, ballot)| (neuron_id.clone(), ballot.clone()))
+            .map(|(neuron_id, ballot)| (neuron_id.clone(), *ballot))
             .take(MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
             .collect();
 
@@ -2075,14 +2276,13 @@ impl ProposalData {
             proposer: proposer.clone(),
             reject_cost_e8s: *reject_cost_e8s,
             proposal_creation_timestamp_seconds: *proposal_creation_timestamp_seconds,
-            latest_tally: latest_tally.clone(),
+            latest_tally: *latest_tally,
             decided_timestamp_seconds: *decided_timestamp_seconds,
             executed_timestamp_seconds: *executed_timestamp_seconds,
             failed_timestamp_seconds: *failed_timestamp_seconds,
             failure_reason: failure_reason.clone(),
             reward_event_round: *reward_event_round,
-            wait_for_quiet_state: wait_for_quiet_state.clone(),
-            payload_text_rendering: payload_text_rendering.clone(),
+            wait_for_quiet_state: *wait_for_quiet_state,
             is_eligible_for_rewards: *is_eligible_for_rewards,
             initial_voting_period_seconds: *initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,
@@ -2092,9 +2292,34 @@ impl ProposalData {
             action_auxiliary: action_auxiliary.clone(),
 
             // The following fields are truncated:
+            payload_text_rendering: None,
             proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
             ballots: limited_ballots,
         }
+    }
+
+    /// "Upgrade proposals" are those that upgrade the SNS or a canister it controls.
+    pub(crate) fn is_upgrade_proposal(&self) -> bool {
+        let action_is_upgrade = matches!(
+            self.proposal,
+            Some(Proposal {
+                action: Some(
+                    Action::UpgradeSnsControlledCanister(_)
+                        | Action::UpgradeSnsToNextVersion(_)
+                        | Action::ManageLedgerParameters(_)
+                ),
+                ..
+            })
+        );
+        // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
+        // and not the action.
+        let upgrade_action_ids: [u64; 3] = [
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+        ];
+        let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
+        action_is_upgrade || action_id_is_upgrade
     }
 }
 
@@ -2145,7 +2370,7 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
     let spent_tokens = total_treasury_transfer_amount_tokens(
         proposals,
         transfer.from_treasury(),
-        now_timestamp_seconds - 7 * SECONDS_PER_DAY,
+        now_timestamp_seconds - 7 * ONE_DAY_SECONDS,
     )
     .map_err(|message| {
         GovernanceError::new_with_message(ErrorType::InconsistentInternalData, message)
@@ -2320,6 +2545,9 @@ mod treasury_tests;
 mod minting_tests;
 
 #[cfg(test)]
+mod advance_sns_target_version;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
@@ -2330,8 +2558,8 @@ mod tests {
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+            GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, SnsVersion,
         },
         tests::{assert_is_err, assert_is_ok},
         types::test_helpers::NativeEnvironment,
@@ -2386,6 +2614,10 @@ mod tests {
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
+            cached_upgrade_steps: None,
+            target_version: None,
+            timers: None,
+            upgrade_journal: None,
         }
     }
 
@@ -2536,6 +2768,68 @@ mod tests {
             proposal::Action::Motion(motion) => assert_is_err(validate_and_render_motion(motion)),
             _ => panic!("proposal.action is not Motion."),
         }
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## No upgrade arg"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(100), // 100 is not a valid mode
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
+        assert!(text.contains("Invalid mode"));
     }
 
     fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
@@ -2939,6 +3233,8 @@ mod tests {
             Some(0),
             0,
             0,
+            0,
+            0,
         )
     }
 
@@ -2954,8 +3250,6 @@ mod tests {
     /// It also is set to only upgrade root.
     fn setup_for_upgrade_sns_to_next_version_validation_tests(
     ) -> (NativeEnvironment, GovernanceProto) {
-        let expected_canister_to_be_upgraded = SnsCanisterType::Root;
-
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -3064,16 +3358,13 @@ mod tests {
         );
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
-            "get_wasm",
-            Encode!(&GetWasmRequest {
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest {
                 hash: expected_wasm_hash_requested
             })
             .unwrap(),
-            Ok(Encode!(&GetWasmResponse {
-                wasm: Some(SnsWasm {
-                    wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
-                })
+            Ok(Encode!(&GetProposalIdThatAddedWasmResponse {
+                proposal_id: Some(2),
             })
             .unwrap()),
         );
@@ -3100,7 +3391,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let expected_text = r"# Proposal to upgrade SNS to next version:
+        let expected_text = r"# Proposal to upgrade SNS Root to next version:
 
 ## SNS Current Version:
 Version {
@@ -3124,6 +3415,7 @@ Version {
 
 ## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
 ## Upgrade Version: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6
+## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal 2
 ";
         assert_eq!(actual_text, expected_text);
     }
@@ -4147,15 +4439,86 @@ Version {
     }
 
     #[test]
-    fn test_validate_and_render_manage_ledger_parameters() {
+    fn test_validate_and_render_manage_ledger_parameters_token_transfer_fee() {
         let new_fee = 751;
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
+            ..ManageLedgerParameters::default()
         })
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_symbol() {
+        let new_symbol = "COOL".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_symbol: Some(new_symbol.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                "# Proposal to change ledger parameters:\n# Set token symbol: {new_symbol}. \n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_name() {
+        let new_name = "coolcoin".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_name: Some(new_name.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token name: {new_name}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_logo() {
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_logo: Some(new_logo.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token logo: {new_logo}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_paramaters() {
+        let new_fee = 751;
+        let new_symbol = "COOL".to_string();
+        let new_name = "coolcoin".to_string();
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            transfer_fee: Some(new_fee),
+            token_symbol: Some(new_symbol.clone()),
+            token_name: Some(new_name.clone()),
+            token_logo: Some(new_logo.clone()),
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                r#"# Proposal to change ledger parameters:
+# Set token transfer fee: {new_fee} token-quantums. 
+# Set token name: {new_name}. 
+# Set token symbol: {new_symbol}. 
+# Set token logo: {new_logo}. 
+"#
+            )
         );
     }
 
@@ -4181,6 +4544,8 @@ Version {
             freezing_threshold: Some(1_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
+            wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         })
         .unwrap();
     }
@@ -4211,6 +4576,88 @@ Version {
         assert!(rendered_error.contains("must change at least one value"));
     }
 
+    #[tokio::test]
+    async fn validate_and_render_execute_nervous_system_function_success() {
+        let function_id = 1000;
+        let canister_id = CanisterId::from_u64(1);
+        let payload = vec![1, 2, 3];
+        let function = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(canister_id.get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(canister_id.get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        // set up environment
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.default_canister_call_response =
+            Err((Some(1), "Oh no something was not covered!".to_string()));
+        env.set_call_canister_response(
+            canister_id,
+            "test_validator_method",
+            payload.clone(),
+            Ok(Encode!(&Ok::<String, String>("Payload rendering here".to_string())).unwrap()),
+        );
+
+        let render = validate_and_render_execute_nervous_system_function(
+            &env,
+            &ExecuteGenericNervousSystemFunction {
+                function_id,
+                payload,
+            },
+            &btreemap! {function_id => function},
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            render,
+            r#"# Proposal to execute nervous system function:
+
+## Nervous system function:
+
+NervousSystemFunction {
+    id: 1000,
+    name: "a",
+    description: None,
+    function_type: Some(
+        GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                target_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                target_method_name: Some(
+                    "test_method",
+                ),
+                validator_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                validator_method_name: Some(
+                    "test_validator_method",
+                ),
+            },
+        ),
+    ),
+}
+
+## Payload sha256: 
+
+039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81
+
+## Payload:
+
+Payload rendering here"#
+        );
+    }
+
     #[test]
     fn validate_and_render_manage_dapp_canister_settings_no_changes_multiple_canisters() {
         let render =
@@ -4224,6 +4671,8 @@ Version {
                 freezing_threshold: Some(1_000),
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
+                wasm_memory_limit: Some(1_000_000_000),
+                wasm_memory_threshold: Some(1_000_000),
             })
             .unwrap();
         assert_eq!(
@@ -4236,7 +4685,8 @@ Version {
              # Set memory allocation to: 1073741824 bytes\n\
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
-             # Set log visibility to: Public \n"
+             # Set log visibility to: Public \n\
+             # Set Wasm memory limit to: 1000000000\n"
         );
     }
 
@@ -4289,7 +4739,7 @@ Version {
     }
 
     #[test]
-    fn limited_proposal_data_for_list_proposals_truncate_ballots() {
+    fn limited_proposal_data_for_list_proposals_truncate_ballots_and_text_rendering() {
         let ballots = (100..300)
             .map(|i| {
                 (
@@ -4309,6 +4759,9 @@ Version {
                 ..Default::default()
             }),
             ballots,
+            payload_text_rendering: Some(
+                "# Motion Proposal: ## Motion Text: some motion text".to_string(),
+            ),
             ..Default::default()
         };
         let caller_neurons = (0..1000).map(|i| i.to_string()).collect::<HashSet<_>>();
@@ -4331,6 +4784,7 @@ Version {
             limited_proposal_data,
             ProposalData {
                 ballots: expected_ballots,
+                payload_text_rendering: None,
                 ..original_proposal_data
             }
         );
@@ -4403,6 +4857,76 @@ Version {
                             mode: Some(1),
                         },
                     )),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_sns_metadata() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                    logo: Some("some logo".to_string()),
+                    url: Some("some url".to_string()),
+                    name: Some("some name".to_string()),
+                    description: Some("some description".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                        logo: None,
+                        url: Some("some url".to_string()),
+                        name: Some("some name".to_string()),
+                        description: Some("some description".to_string()),
+                    },)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_ledger_parameters() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: Some(100),
+                    token_name: Some("some name".to_string()),
+                    token_symbol: Some("some symbol".to_string()),
+                    token_logo: Some("some logo".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                        transfer_fee: Some(100),
+                        token_name: Some("some name".to_string()),
+                        token_symbol: Some("some symbol".to_string()),
+                        token_logo: None,
+                    },)),
                     ..Default::default()
                 }),
                 ..Default::default()

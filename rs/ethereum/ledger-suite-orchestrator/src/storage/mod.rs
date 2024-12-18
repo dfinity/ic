@@ -3,11 +3,14 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
+use crate::scheduler::{Task, TaskExecution};
 use crate::state::{
-    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm, WasmHash,
-    ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerSuiteVersion, LedgerWasm,
+    Wasm, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
-use crate::storage::memory::{wasm_store_memory, StableMemory};
+use crate::storage::memory::{
+    deadline_by_task_memory, task_queue_memory, wasm_store_memory, StableMemory,
+};
 use candid::Deserialize;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap, Storable};
@@ -15,10 +18,19 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-pub(crate) type WasmStore = BTreeMap<WasmHash, StoredWasm, StableMemory>;
+pub type WasmStore = BTreeMap<WasmHash, StoredWasm, StableMemory>;
+
+pub struct TaskQueue {
+    pub queue: BTreeMap<TaskExecution, (), StableMemory>,
+    pub deadline_by_task: BTreeMap<Task, u64, StableMemory>,
+}
 
 thread_local! {
     static WASM_STORE: RefCell<WasmStore> = RefCell::new(WasmStore::init(wasm_store_memory()));
+    pub static TASKS: RefCell<TaskQueue> = RefCell::new(TaskQueue {
+        queue: BTreeMap::init(task_queue_memory()),
+        deadline_by_task: BTreeMap::init(deadline_by_task_memory()),
+    });
 }
 
 pub(crate) mod memory {
@@ -34,6 +46,8 @@ pub(crate) mod memory {
 
     const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
     const WASM_STORE_MEMORY_ID: MemoryId = MemoryId::new(1);
+    const TASK_QUEUE_ID: MemoryId = MemoryId::new(2);
+    const DEADLINE_BY_TASK_ID: MemoryId = MemoryId::new(3);
 
     pub type StableMemory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -44,9 +58,17 @@ pub(crate) mod memory {
     pub fn wasm_store_memory() -> StableMemory {
         MEMORY_MANAGER.with(|m| m.borrow().get(WASM_STORE_MEMORY_ID))
     }
+
+    pub fn task_queue_memory() -> StableMemory {
+        MEMORY_MANAGER.with(|m| m.borrow().get(TASK_QUEUE_ID))
+    }
+
+    pub fn deadline_by_task_memory() -> StableMemory {
+        MEMORY_MANAGER.with(|m| m.borrow().get(DEADLINE_BY_TASK_ID))
+    }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StoredWasm {
     /// The canister time at which the orchestrator stored this wasm
     /// in nanoseconds since the epoch (1970-01-01).
@@ -58,6 +80,20 @@ pub struct StoredWasm {
     binary: Vec<u8>,
     /// Encodes which type of wasm this is.
     marker: u8,
+}
+
+impl StoredWasm {
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
+    pub fn git_commit(&self) -> &GitCommitHash {
+        &self.git_commit
+    }
+
+    pub fn marker(&self) -> u8 {
+        self.marker
+    }
 }
 
 pub trait StorableWasm {
@@ -96,7 +132,42 @@ impl Storable for StoredWasm {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl Storable for TaskExecution {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(&self, &mut buf)
+            .expect("failed to encode a TaskExecution to bytes");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode TaskExecution bytes {}: {e}",
+                hex::encode(bytes)
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for Task {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(&self, &mut buf).expect("failed to encode a Task to bytes");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        ciborium::de::from_reader(bytes.as_ref())
+            .unwrap_or_else(|e| panic!("failed to decode Task bytes {}: {e}", hex::encode(bytes)))
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub enum WasmStoreError {
     WasmMismatch {
         wasm_hash: WasmHash,
@@ -171,28 +242,43 @@ pub fn record_icrc1_ledger_suite_wasms(
     wasm_store: &mut WasmStore,
     timestamp: u64,
     git_commit: GitCommitHash,
-) -> Result<(), WasmStoreError> {
-    wasm_store_try_insert(
+) -> Result<LedgerSuiteVersion, WasmStoreError> {
+    let ledger_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit.clone(),
         LedgerWasm::from(LEDGER_BYTECODE),
     )?;
-    wasm_store_try_insert(
+    let index_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit.clone(),
         IndexWasm::from(INDEX_BYTECODE),
     )?;
-    wasm_store_try_insert(
+    let archive_compressed_wasm_hash = record_wasm(
         wasm_store,
         timestamp,
         git_commit,
         ArchiveWasm::from(ARCHIVE_NODE_BYTECODE),
-    )
+    )?;
+    Ok(LedgerSuiteVersion {
+        ledger_compressed_wasm_hash,
+        index_compressed_wasm_hash,
+        archive_compressed_wasm_hash,
+    })
 }
 
-#[derive(Debug, PartialEq, Clone)]
+fn record_wasm<T: StorableWasm>(
+    wasm_store: &mut WasmStore,
+    timestamp: u64,
+    git_commit: GitCommitHash,
+    wasm: Wasm<T>,
+) -> Result<WasmHash, WasmStoreError> {
+    let hash = wasm.hash().clone();
+    wasm_store_try_insert(wasm_store, timestamp, git_commit, wasm).map(|()| hash)
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub enum WasmHashError {
     Invalid(String),
     NotFound(WasmHash),
@@ -229,7 +315,7 @@ pub fn validate_wasm_hashes(
     ])
 }
 
-fn wasm_store_contain<T: StorableWasm>(wasm_store: &WasmStore, wasm_hash: &WasmHash) -> bool {
+pub fn wasm_store_contain<T: StorableWasm>(wasm_store: &WasmStore, wasm_hash: &WasmHash) -> bool {
     match wasm_store_try_get::<T>(wasm_store, wasm_hash) {
         Ok(Some(_)) => true,
         Ok(None) | Err(_) => false,

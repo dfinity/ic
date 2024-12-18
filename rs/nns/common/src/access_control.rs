@@ -24,3 +24,9 @@ pub fn check_caller_is_governance() {
         panic!("Only the Governance canister is allowed to call this method");
     }
 }
+
+pub fn check_caller_is_sns_w() {
+    if caller() != PrincipalId::from(ic_nns_constants::SNS_WASM_CANISTER_ID) {
+        panic!("Only the SNS-W canister is allowed to call this method");
+    }
+}

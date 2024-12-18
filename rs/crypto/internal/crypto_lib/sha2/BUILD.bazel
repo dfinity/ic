@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:sha2",
 ]
 

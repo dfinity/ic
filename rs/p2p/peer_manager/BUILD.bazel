@@ -6,11 +6,12 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces",
-    "//rs/p2p/quic_transport",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/p2p/quic_transport",
     "//rs/registry/helpers",
     "//rs/types/base_types",
     "@crate_index//:prometheus",
@@ -19,12 +20,14 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/p2p/test_utils",
-    "//rs/types/types_test_utils",
     "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

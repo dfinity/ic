@@ -30,6 +30,18 @@ impl ControllerServiceImpl {
     pub fn new(registry: Arc<ActiveExecutionStateRegistry>, log: ReplicaLogger) -> Arc<Self> {
         Arc::new(ControllerServiceImpl { registry, log })
     }
+
+    pub fn flush_with_errors(&self) {
+        let execs = self.registry.take_all();
+        for (_exec_id, entry) in execs {
+            // here we could do something like
+            // entry.completion(exec_id, CompletionResult::Finished(exec_failed_result));
+            // to pass the error to whoever is waiting, but since in the current setup we want to panic
+            // there anyway, it is sufficient to just drop the closure
+            // so the channel on which sandboxed_execution_controller is waiting will get disconnected
+            drop(entry)
+        }
+    }
 }
 
 impl ControllerService for ControllerServiceImpl {

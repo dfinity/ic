@@ -1,7 +1,8 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord, SubnetType};
+use ic_limits::INITIAL_NOTARY_DELAY;
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::types::v1 as pb_types;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -21,7 +22,6 @@ impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 
 pub mod internal {
     use super::*;
-    use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
@@ -39,17 +39,15 @@ pub mod internal {
     use ic_crypto_temp_crypto_vault::{
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
-    use ic_crypto_tls_interfaces::{
-        AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
-        TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
-    };
+    use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-        ThresholdSigVerifierByPublicKey, ThresholdSigner,
+        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+        ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+        ThresholdSigner,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
@@ -67,8 +65,10 @@ pub mod internal {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -76,6 +76,7 @@ pub mod internal {
     };
     use ic_types::crypto::canister_threshold_sig::{
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::{
@@ -93,13 +94,12 @@ pub mod internal {
     use ic_types::signature::BasicSignatureBatch;
     use ic_types::{NodeId, RegistryVersion, SubnetId};
     use rand::rngs::OsRng;
+    use rustls::{ClientConfig, ServerConfig};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
     use std::ops::Deref;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::net::TcpStream;
-    use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
     /// This struct combines the following two items:
     /// * a crypto component whose state lives in a temporary directory
@@ -306,7 +306,7 @@ pub mod internal {
                 .unwrap_or_else(NodeKeysToGenerate::none);
             let node_signing_pk = node_keys_to_generate
                 .generate_node_signing_keys
-                .then(|| generate_node_signing_keys(&csp));
+                .then(|| generate_node_signing_keys(local_vault.as_ref()));
             let node_id = self
                 .node_id
                 .unwrap_or_else(|| match node_signing_pk.as_ref() {
@@ -316,20 +316,20 @@ pub mod internal {
                 });
             let committee_signing_pk = node_keys_to_generate
                 .generate_committee_signing_keys
-                .then(|| generate_committee_signing_keys(&csp));
+                .then(|| generate_committee_signing_keys(local_vault.as_ref()));
             let dkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_dkg_dealing_encryption_keys
-                .then(|| generate_dkg_dealing_encryption_keys(&csp, node_id));
+                .then(|| generate_dkg_dealing_encryption_keys(local_vault.as_ref(), node_id));
             let idkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
-                    generate_idkg_dealing_encryption_keys(&csp).unwrap_or_else(|e| {
-                        panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
-                    })
+                    generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
+                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
+                    )
                 });
             let tls_certificate = node_keys_to_generate
                 .generate_tls_keys_and_certificate
-                .then(|| generate_tls_keys(&csp, node_id).to_proto());
+                .then(|| generate_tls_keys(local_vault.as_ref(), node_id).to_proto());
 
             let is_registry_data_provided = self.registry_data.is_some();
             let registry_data = self
@@ -640,11 +640,11 @@ pub mod internal {
     impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigner
         for TempCryptoComponentGeneric<C, R>
     {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            self.crypto_component.sign_share(inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&self.crypto_component, inputs)
         }
     }
 
@@ -657,8 +657,12 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             share: &ThresholdEcdsaSigShare,
         ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-            self.crypto_component
-                .verify_sig_share(signer, inputs, share)
+            ThresholdEcdsaSigVerifier::verify_sig_share(
+                &self.crypto_component,
+                signer,
+                inputs,
+                share,
+            )
         }
 
         fn combine_sig_shares(
@@ -666,7 +670,7 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
         ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-            self.crypto_component.combine_sig_shares(inputs, shares)
+            ThresholdEcdsaSigVerifier::combine_sig_shares(&self.crypto_component, inputs, shares)
         }
 
         fn verify_combined_sig(
@@ -674,44 +678,61 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             signature: &ThresholdEcdsaCombinedSignature,
         ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-            self.crypto_component.verify_combined_sig(inputs, signature)
+            ThresholdEcdsaSigVerifier::verify_combined_sig(
+                &self.crypto_component,
+                inputs,
+                signature,
+            )
         }
     }
 
-    #[async_trait]
-    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsHandshake
+    impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigner
         for TempCryptoComponentGeneric<C, R>
     {
-        async fn perform_tls_server_handshake(
+        fn create_sig_share(
             &self,
-            tcp_stream: TcpStream,
-            allowed_clients: SomeOrAllNodes,
-            registry_version: RegistryVersion,
-        ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
-                .await
+            inputs: &ThresholdSchnorrSigInputs,
+        ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+            ThresholdSchnorrSigner::create_sig_share(&self.crypto_component, inputs)
+        }
+    }
+
+    impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigVerifier
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn verify_sig_share(
+            &self,
+            signer: NodeId,
+            inputs: &ThresholdSchnorrSigInputs,
+            share: &ThresholdSchnorrSigShare,
+        ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+            ThresholdSchnorrSigVerifier::verify_sig_share(
+                &self.crypto_component,
+                signer,
+                inputs,
+                share,
+            )
         }
 
-        async fn perform_tls_server_handshake_without_client_auth(
+        fn combine_sig_shares(
             &self,
-            tcp_stream: TcpStream,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-                .await
+            inputs: &ThresholdSchnorrSigInputs,
+            shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+        ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+        {
+            ThresholdSchnorrSigVerifier::combine_sig_shares(&self.crypto_component, inputs, shares)
         }
 
-        async fn perform_tls_client_handshake(
+        fn verify_combined_sig(
             &self,
-            tcp_stream: TcpStream,
-            server: NodeId,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-            self.crypto_component
-                .perform_tls_client_handshake(tcp_stream, server, registry_version)
-                .await
+            inputs: &ThresholdSchnorrSigInputs,
+            signature: &ThresholdSchnorrCombinedSignature,
+        ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+            ThresholdSchnorrSigVerifier::verify_combined_sig(
+                &self.crypto_component,
+                inputs,
+                signature,
+            )
         }
     }
 
@@ -829,7 +850,7 @@ pub mod internal {
             &self,
             signature: &ThresholdSigShareOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
             signer: NodeId,
         ) -> CryptoResult<()> {
             self.crypto_component
@@ -839,7 +860,7 @@ pub mod internal {
         fn combine_threshold_sig_shares(
             &self,
             shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<CombinedThresholdSigOf<T>> {
             self.crypto_component
                 .combine_threshold_sig_shares(shares, dkg_id)
@@ -849,7 +870,7 @@ pub mod internal {
             &self,
             signature: &CombinedThresholdSigOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_threshold_sig_combined(signature, message, dkg_id)
@@ -951,7 +972,7 @@ pub mod internal {
         fn sign_threshold(
             &self,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<ThresholdSigShareOf<T>> {
             self.crypto_component.sign_threshold(message, dkg_id)
         }
@@ -1017,29 +1038,32 @@ impl EcdsaSubnetConfig {
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 2 * 1024 * 1024,
                 unit_delay_millis: 500,
-                initial_notary_delay_millis: 1500,
+                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 59,
                 dkg_dealings_per_block: 1,
-                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: Some(EcdsaConfig {
-                    quadruples_to_create_in_advance: 10,
-                    key_ids: vec![EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1.into(),
-                        name: "dummy_ecdsa_key_id".to_string(),
+                ecdsa_config: None,
+                chain_key_config: Some(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        key_id: Some(ic_protobuf::types::v1::MasterPublicKeyId {
+                            key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
+                                pb_types::EcdsaKeyId {
+                                    curve: pb_types::EcdsaCurve::Secp256k1.into(),
+                                    name: "dummy_ecdsa_key_id".to_string(),
+                                },
+                            )),
+                        }),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(20),
                     }],
-                    max_queue_size: 20,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
@@ -1062,16 +1086,16 @@ impl EcdsaSubnetConfig {
         let mut subnet_config = Self::new(subnet_id, node_id, key_rotation_period);
         subnet_config
             .subnet_record
-            .ecdsa_config
+            .chain_key_config
             .take()
             .expect("ECDSA config is None")
-            .key_ids = vec![];
+            .key_configs = vec![];
         subnet_config
     }
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,

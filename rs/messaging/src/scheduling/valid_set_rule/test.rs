@@ -1,7 +1,7 @@
 use super::*;
 
 use assert_matches::assert_matches;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00,
@@ -40,7 +40,8 @@ impl IngressHistoryWriter for NoopIngressHistoryWriter {
         _state: &mut ReplicatedState,
         _message_id: MessageId,
         _status: IngressStatus,
-    ) {
+    ) -> Arc<IngressStatus> {
+        IngressStatus::Unknown.into()
     }
 }
 
@@ -117,6 +118,7 @@ fn induct_message_with_successful_history_update() {
                     },
                     NumBytes::from(u64::MAX),
                 );
+                IngressStatus::Unknown.into()
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -183,6 +185,7 @@ fn induct_message_fails_for_stopping_canister() {
             .times(1)
             .returning(move |state, _, status| {
                 state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
+                IngressStatus::Unknown.into()
             });
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let metrics_registry = MetricsRegistry::new();
@@ -239,6 +242,7 @@ fn induct_message_fails_for_stopped_canister() {
             .times(1)
             .returning(move |state, _, status| {
                 state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
+                IngressStatus::Unknown.into()
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -335,6 +339,7 @@ fn update_history_if_induction_failed() {
             .times(1)
             .returning(move |state, _, _| {
                 state.set_ingress_status(msg_id.clone(), status.clone(), NumBytes::from(u64::MAX));
+                IngressStatus::Unknown.into()
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -352,7 +357,7 @@ fn update_history_if_induction_failed() {
         // ReplicatedState.
         valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
         assert!(state.canister_state(&canister_id).is_none());
-        assert_eq!(state.get_ingress_status(&msg.id()), status_clone);
+        assert_eq!(state.get_ingress_status(&msg.id()), &status_clone);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_NOT_FOUND)], 1)]),
             &metrics_registry,
@@ -406,6 +411,7 @@ fn dont_induct_duplicate_messages() {
                     },
                     NumBytes::from(u64::MAX),
                 );
+                IngressStatus::Unknown.into()
             });
 
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -602,7 +608,7 @@ fn ingress_to_stopping_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopping(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopping(canister_test_id(0)))
     );
 }
 
@@ -636,7 +642,7 @@ fn ingress_to_stopped_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopped(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopped(canister_test_id(0)))
     );
 }
 
@@ -647,7 +653,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         ingress_history_writer
             .expect_set_status()
             .times(1)
-            .return_const(());
+            .return_const(Arc::new(IngressStatus::Unknown));
         let metrics_registry = MetricsRegistry::new();
 
         let valid_set_rule = ValidSetRuleImpl::new(
@@ -689,7 +695,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         ingress_history_writer
             .expect_set_status()
             .times(1)
-            .return_const(());
+            .return_const(Arc::new(IngressStatus::Unknown));
         let metrics_registry = MetricsRegistry::new();
         let valid_set_rule = ValidSetRuleImpl::new(
             Arc::new(ingress_history_writer),
@@ -747,7 +753,9 @@ fn management_message_with_unknown_method_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::UnknownSubnetMethod(String::from("test")))
+        Err(IngressInductionError::CanisterMethodNotFound(String::from(
+            "test"
+        )))
     );
 }
 
@@ -777,7 +785,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::InvalidSubnetPayload)
+        Err(IngressInductionError::InvalidManagementPayload)
     );
 }
 
@@ -870,6 +878,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             .times(4)
             .returning(move |state, msg_id, status| {
                 state.set_ingress_status(msg_id, status, NumBytes::from(u64::MAX));
+                IngressStatus::Unknown.into()
             });
 
         let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);

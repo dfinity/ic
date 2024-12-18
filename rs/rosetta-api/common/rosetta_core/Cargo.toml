@@ -1,0 +1,29 @@
+[package]
+name = "rosetta-core"
+description = "Build Once. Integrate Your Blockchain Everywhere. Core Package "
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
+ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
+ic-types = { path = "../../../types/types" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+num-bigint = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -1,0 +1,19 @@
+[package]
+name = "random-traffic-test"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "random-traffic-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-error-types = { path = "../../types/error_types" }
+ic-types = { path = "../../types/types" }
+futures = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }

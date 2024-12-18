@@ -1,0 +1,17 @@
+[package]
+name = "hostos_tool"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "hostos_tool"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+network = { path = "../../network" }
+deterministic_ips = { path = "../../deterministic_ips" }
+utils = { path = "../../utils" }

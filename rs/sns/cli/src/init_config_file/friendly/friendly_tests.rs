@@ -1,9 +1,9 @@
 use super::*;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
 use pretty_assertions::assert_eq;
 
-const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY + SECONDS_PER_DAY / 4;
+const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 4;
 
 #[test]
 fn test_parse() {
@@ -23,28 +23,7 @@ fn test_parse() {
         logo: PathBuf::from("test.png"),
         url: "https://some-link-to-a-project.org".to_string(),
 
-        principals: vec![
-            PrincipalAlias {
-                id: "5zxxw-63ouu-faaaa-aaaap-4ai".to_string(),
-                name: Some("Bruce Wayne".to_string()),
-                email: Some("batman@superherosinc.com".to_string()),
-            },
-            PrincipalAlias {
-                id: PrincipalId::new_user_test_id(746890).to_string(),
-                name: Some("Alfred Pennyworth".to_string()),
-                email: None,
-            },
-            PrincipalAlias {
-                id: "c2n4r-wni5m-dqaaa-aaaap-4ai".to_string(),
-                name: Some("employees (canister)".to_string()),
-                email: None,
-            },
-            PrincipalAlias {
-                id: "ucm27-3lxwy-faaaa-aaaap-4ai".to_string(),
-                name: Some("departments (canister)".to_string()),
-                email: None,
-            },
-        ],
+        principals: vec![],
 
         fallback_controller_principals: vec!["5zxxw-63ouu-faaaa-aaaap-4ai".to_string()],
         dapp_canisters: vec![
@@ -62,10 +41,10 @@ fn test_parse() {
         proposals: Proposals {
             rejection_fee: nervous_system_pb::Tokens { e8s: Some(E8) },
             initial_voting_period: nervous_system_pb::Duration {
-                seconds: Some(4 * SECONDS_PER_DAY),
+                seconds: Some(4 * ONE_DAY_SECONDS),
             },
             maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration {
-                seconds: Some(SECONDS_PER_DAY),
+                seconds: Some(ONE_DAY_SECONDS),
             },
         },
 
@@ -75,7 +54,7 @@ fn test_parse() {
 
         voting: Voting {
             minimum_dissolve_delay: nervous_system_pb::Duration {
-                seconds: Some(26 * 7 * SECONDS_PER_DAY),
+                seconds: Some(26 * 7 * ONE_DAY_SECONDS),
             },
 
             maximum_voting_power_bonuses: MaximumVotingPowerBonuses {
@@ -131,16 +110,16 @@ fn test_parse() {
                     },
                     memo: 0, // Not explicitly supplied -> 0 is taken as default.
                     dissolve_delay: nervous_system_pb::Duration {
-                        seconds: Some(52 * 7 * SECONDS_PER_DAY),
+                        seconds: Some(52 * 7 * ONE_DAY_SECONDS),
                     },
                     vesting_period: nervous_system_pb::Duration {
-                        seconds: Some(53 * 7 * SECONDS_PER_DAY),
+                        seconds: Some(53 * 7 * ONE_DAY_SECONDS),
                     },
                 },
             ],
 
             initial_balances: InitialBalances {
-                governance: nervous_system_pb::Tokens { e8s: Some(60 * E8) },
+                treasury: nervous_system_pb::Tokens { e8s: Some(60 * E8) },
                 swap: nervous_system_pb::Tokens { e8s: Some(40 * E8) },
             },
 
@@ -166,7 +145,7 @@ fn test_parse() {
             restricted_countries: Some(vec!["US".to_string(), "CH".to_string()]),
 
             vesting_schedule: VestingSchedule {
-                events: 83,
+                events: 9,
                 interval: parse_duration("17 days").unwrap(),
             },
 
@@ -451,7 +430,7 @@ fn test_convert_to_create_service_nervous_system() {
 
             neuron_basket_construction_parameters: Some(
                 nns_governance_pb::NeuronBasketConstructionParameters {
-                    count: Some(83),
+                    count: Some(9),
                     dissolve_delay_interval: Some(parse_duration("17 days").unwrap()),
                 }
             ),

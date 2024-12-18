@@ -10,7 +10,10 @@ use ic_ledger_core::{
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
 };
-use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_common::{
+    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -20,7 +23,6 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::{
     governance::Governance,
-    ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance::{self, SnsMetadata},
@@ -40,7 +42,7 @@ use ic_sns_governance::{
         NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
         RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
     },
-    types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
+    types::{test_helpers::NativeEnvironment, Environment},
 };
 use ic_sns_test_utils::{
     icrc1,
@@ -666,7 +668,7 @@ fn test_neuron_action_is_not_authorized() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -1253,7 +1255,7 @@ async fn zero_total_reward_shares() {
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
         swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(NervousSystemParameters {
-            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
             ..NervousSystemParameters::with_default_values()
         }),
         mode: governance::Mode::Normal as i32,
@@ -1276,6 +1278,7 @@ async fn zero_total_reward_shares() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
         sns_metadata: Some(SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
@@ -1296,7 +1299,7 @@ async fn zero_total_reward_shares() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results. The main thing is to make sure that we did not
     // divide by zero. If that happened, it would show up in a couple places:
@@ -1369,7 +1372,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     }
 
     let nervous_system_parameters = NervousSystemParameters {
-        voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+        voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
         ..NervousSystemParameters::with_default_values()
     };
 
@@ -1492,6 +1495,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
 
         sns_metadata: Some(SnsMetadata {
@@ -1513,7 +1517,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results.
 
@@ -1993,6 +1997,8 @@ fn test_neuron_add_non_grantable_permission_fails() {
 #[test]
 fn test_exceeding_max_principals_for_neuron_fails() {
     local_test_on_sns_subnet(|runtime| async move {
+        let max_number_of_principals_per_neuron = 5;
+
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
@@ -2006,7 +2012,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            max_number_of_principals_per_neuron: Some(1_u64),
+            max_number_of_principals_per_neuron: Some(5_u64),
             // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
@@ -2022,6 +2028,35 @@ fn test_exceeding_max_principals_for_neuron_fails() {
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         let subaccount = neuron.subaccount().expect("Error creating the subaccount");
 
+        // These calls should succeed
+        for i in 0..(max_number_of_principals_per_neuron - 1) {
+            let add_neuron_permission = AddNeuronPermissions {
+                principal_id: Some(PrincipalId::new_user_test_id(101010 + i)),
+                permissions_to_add: Some(NeuronPermissionList {
+                    permissions: vec![NeuronPermissionType::Vote as i32],
+                }),
+            };
+
+            let manage_neuron_response: ManageNeuronResponse = sns_canisters
+                .governance
+                .update_from_sender(
+                    "manage_neuron",
+                    candid_one,
+                    ManageNeuron {
+                        subaccount: subaccount.to_vec(),
+                        command: Some(Command::AddNeuronPermissions(add_neuron_permission)),
+                    },
+                    &user,
+                )
+                .await
+                .expect("Error calling manage_neuron");
+
+            if let CommandResponse::Error(error) = manage_neuron_response.command.unwrap() {
+                panic!("Adding permission should have succeeded, but encountered {error:?} on iteration {i}");
+            }
+        }
+
+        // This call should fail
         let add_neuron_permission = AddNeuronPermissions {
             principal_id: Some(additional_user.get_principal_id()),
             permissions_to_add: Some(NeuronPermissionList {

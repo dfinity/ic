@@ -90,8 +90,9 @@ mod tests {
         node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
     };
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use prost::Message;
 
-    use crate::{invariants::common::RegistrySnapshot, mutations::common::encode_or_panic};
+    use crate::invariants::common::RegistrySnapshot;
 
     use super::check_api_boundary_node_invariants;
 
@@ -108,11 +109,11 @@ mod tests {
 
             snapshot.insert(
                 make_api_boundary_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+                ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
             );
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&NodeRecord {
+                NodeRecord {
                     public_ipv4_config: Some(IPv4InterfaceConfig {
                         ip_addr: "127.0.0.1".to_string(),
                         ..Default::default()
@@ -123,7 +124,8 @@ mod tests {
                     }),
                     domain: Some(domain.into()),
                     ..Default::default()
-                }), // record
+                }
+                .encode_to_vec(), // record
             );
         }
 
@@ -139,7 +141,7 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
 
         assert_eq!(
@@ -160,15 +162,16 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord {
+            NodeRecord {
                 domain: Some(domain.into()),
                 ..Default::default()
-            }), // record
+            }
+            .encode_to_vec(), // record
         );
 
         assert_eq!(
@@ -188,15 +191,16 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord {
+            NodeRecord {
                 http: Some(ConnectionEndpoint::default()),
                 ..Default::default()
-            }), // record
+            }
+            .encode_to_vec(), // record
         );
 
         assert_eq!(
@@ -220,11 +224,11 @@ mod tests {
 
             snapshot.insert(
                 make_api_boundary_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+                ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
             );
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&NodeRecord {
+                NodeRecord {
                     public_ipv4_config: Some(IPv4InterfaceConfig {
                         ip_addr: "127.0.0.1".to_string(),
                         ..Default::default()
@@ -235,7 +239,8 @@ mod tests {
                     }),
                     domain: Some(domain.into()),
                     ..Default::default()
-                }), // record
+                }
+                .encode_to_vec(), // record
             );
         }
 
@@ -259,11 +264,11 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord {
+            NodeRecord {
                 public_ipv4_config: Some(IPv4InterfaceConfig {
                     ip_addr: "127.0.0.1".to_string(),
                     ..Default::default()
@@ -274,7 +279,8 @@ mod tests {
                 }),
                 domain: Some(domain.into()),
                 ..Default::default()
-            }), // record
+            }
+            .encode_to_vec(), // record
         );
 
         assert_eq!(
@@ -293,11 +299,11 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord {
+            NodeRecord {
                 public_ipv4_config: Some(IPv4InterfaceConfig {
                     ip_addr: "not_an_ipv4".to_string(),
                     ..Default::default()
@@ -308,7 +314,8 @@ mod tests {
                 }),
                 domain: Some(domain.into()),
                 ..Default::default()
-            }), // record
+            }
+            .encode_to_vec(), // record
         );
 
         assert_eq!(

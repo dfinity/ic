@@ -19,22 +19,23 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::RegistryVersion;
+use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use tokio::sync::watch;
-use tracing::info;
+use tracing::{debug, warn};
+use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     core::Run,
     firewall::{FirewallGenerator, SystemdReloader},
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
+    routes::RequestType,
 };
 
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -42,7 +43,7 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
-    pub replica_version: String,
+    pub avg_latency_secs: f64,
 }
 
 // Lightweight Eq, just compare principals
@@ -60,13 +61,38 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(Debug, Clone)]
+impl Node {
+    pub fn build_url(
+        &self,
+        request_type: RequestType,
+        principal: Principal,
+    ) -> Result<Url, ParseError> {
+        let node_id = &self.id;
+        let node_port = &self.port;
+        match request_type {
+            RequestType::Unknown => {
+                panic!("can't construct url for unknown request type")
+            }
+            RequestType::SyncCall => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
+            )),
+            RequestType::ReadStateSubnet => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
+            )),
+            _ => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/{request_type}",
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
@@ -105,11 +131,10 @@ pub trait Snapshot: Send + Sync {
     fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySnapshot {
     pub version: u64,
     pub timestamp: u64,
-    pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
@@ -265,6 +290,8 @@ impl Snapshotter {
                             .context("Unable to parse TLS certificate")?;
 
                         let node = Node {
+                            // init to max, this value is updated with running health checks
+                            avg_latency_secs: f64::MAX,
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
                             subnet_type,
@@ -272,7 +299,6 @@ impl Snapshotter {
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
                             tls_certificate: cert.certificate_der,
-                            replica_version: replica_version.to_string(),
                         };
                         let node = Arc::new(node);
 
@@ -308,7 +334,6 @@ impl Snapshotter {
         Ok(RegistrySnapshot {
             version: version.get(),
             timestamp,
-            nns_subnet_id: nns_subnet_id.get().0,
             nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
@@ -388,7 +413,7 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
         match r {
             SnapshotResult::Published(v) => {
-                info!(
+                warn!(
                     action = "snapshot",
                     version_old = v.old.as_ref().map(|x| x.version),
                     version_new = v.new.version,
@@ -404,7 +429,7 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
                 timestamp.set(v.timestamp as i64);
             }
 
-            SnapshotResult::NotOldEnough(v) => info!(
+            SnapshotResult::NotOldEnough(v) => debug!(
                 action = "snapshot",
                 "Snapshot {v} is not old enough, not publishing"
             ),
@@ -414,6 +439,15 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
         Ok(())
     }
+}
+
+// Forked functions from ic-test-utilities to avoid depending on that crate
+pub fn subnet_test_id(i: u64) -> SubnetId {
+    SubnetId::from(PrincipalId::new_subnet_test_id(i))
+}
+
+pub fn node_test_id(i: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(i))
 }
 
 pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
@@ -426,7 +460,6 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     RegistrySnapshot {
         version: 0,
         timestamp: 0,
-        nns_subnet_id: subnet_test_id(666).get().0,
         nns_public_key: vec![],
         subnets,
         nodes,
@@ -441,13 +474,14 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         .enumerate()
         .map(|(i, x)| {
             Arc::new(Node {
+                // init to max, this value is updated with running health checks
+                avg_latency_secs: f64::MAX,
                 id: node_test_id(i as u64).get().0,
                 subnet_type: SubnetType::Application,
                 subnet_id,
                 addr: x.ip(),
                 port: x.port(),
                 tls_certificate: vec![],
-                replica_version: "".into(),
             })
         })
         .collect::<Vec<_>>();

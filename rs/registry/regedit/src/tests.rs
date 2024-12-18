@@ -134,7 +134,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             public_api: SocketAddr::from_str("0.0.0.0:8080").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: None,
+            domain: None,
         },
     );
 
@@ -162,6 +162,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             vec![],
             vec![],
             SubnetRunningState::Active,
+            None,
         ),
     );
 
@@ -178,7 +179,6 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         None,
         None,
         /* ssh_readonly_access_to_unassigned_nodes */ vec![],
-        /* guest_launch_measurement_sha256_hex */ None,
     );
     ic_config.initialize().unwrap();
     let path: PathBuf = temp_dir.path().into();

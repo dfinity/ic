@@ -14,7 +14,8 @@ use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters,
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -73,7 +74,7 @@ fn governance_canister_sha() -> [u8; 32] {
 
 #[test]
 fn test_upgrade_governance_through_root_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -176,7 +177,7 @@ fn test_upgrade_governance_through_root_proposal() {
 // submit a root proposal.
 #[test]
 fn test_unauthorized_user_cant_submit_on_root_proposals() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -218,7 +219,7 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
 
 #[test]
 fn test_cant_submit_root_proposal_with_wrong_sha() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -261,7 +262,7 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
 
 #[test]
 fn test_enough_no_votes_rejects_the_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -340,7 +341,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
 // first which should cause 1 to be invalid.
 #[test]
 fn test_changing_the_sha_invalidates_the_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),

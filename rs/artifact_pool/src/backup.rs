@@ -24,8 +24,8 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, Notarization,
-        RandomBeacon, RandomTape,
+        BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
+        RandomTape,
     },
     time::{Time, UNIX_EPOCH},
     Height,
@@ -45,12 +45,38 @@ use std::{
 };
 
 pub enum BackupArtifact {
-    Finalization(Box<Finalization>),
-    Notarization(Box<Notarization>),
-    BlockProposal(Box<BlockProposal>),
-    RandomBeacon(Box<RandomBeacon>),
-    RandomTape(Box<RandomTape>),
-    CatchUpPackage(Box<CatchUpPackage>),
+    Finalization(Finalization),
+    Notarization(Notarization),
+    BlockProposal(BlockProposal),
+    RandomBeacon(RandomBeacon),
+    RandomTape(RandomTape),
+    CatchUpPackage((Height, pb::CatchUpPackage)),
+}
+
+impl TryFrom<ConsensusMessage> for BackupArtifact {
+    type Error = ();
+    fn try_from(artifact: ConsensusMessage) -> Result<Self, Self::Error> {
+        use ConsensusMessage::*;
+        match artifact {
+            Finalization(artifact) => Ok(BackupArtifact::Finalization(artifact)),
+            Notarization(artifact) => Ok(BackupArtifact::Notarization(artifact)),
+            BlockProposal(artifact) => Ok(BackupArtifact::BlockProposal(artifact)),
+            RandomTape(artifact) => Ok(BackupArtifact::RandomTape(artifact)),
+            RandomBeacon(artifact) => Ok(BackupArtifact::RandomBeacon(artifact)),
+            CatchUpPackage(artifact) => Ok(BackupArtifact::CatchUpPackage((
+                artifact.height(),
+                pb::CatchUpPackage::from(&artifact),
+            ))),
+            // Do not replace by a `_` so that we evaluate at this place if we want to
+            // backup a new artifact!
+            RandomBeaconShare(_)
+            | NotarizationShare(_)
+            | FinalizationShare(_)
+            | RandomTapeShare(_)
+            | CatchUpPackageShare(_)
+            | EquivocationProof(_) => Err(()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +137,10 @@ impl BackupThread {
         loop {
             match rx.recv() {
                 Ok(BackupRequest::Backup(artifacts)) => {
+                    let artifacts = artifacts
+                        .into_iter()
+                        .flat_map(BackupArtifact::try_from)
+                        .collect();
                     if let Err(err) = store_artifacts(artifacts, &self.version_path) {
                         error!(self.log, "Backup storing failed: {:?}", err);
                         self.metrics.io_errors.inc();
@@ -385,25 +415,9 @@ impl Backup {
 
 // Write all backup files to the disk. For the sake of simplicity, we write all
 // artifacts sequentially.
-fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), io::Error> {
-    use ConsensusMessage::*;
+fn store_artifacts(artifacts: Vec<BackupArtifact>, path: &Path) -> Result<(), io::Error> {
     artifacts
         .into_iter()
-        .filter_map(|artifact| match artifact {
-            Finalization(artifact) => Some(BackupArtifact::Finalization(Box::new(artifact))),
-            Notarization(artifact) => Some(BackupArtifact::Notarization(Box::new(artifact))),
-            BlockProposal(artifact) => Some(BackupArtifact::BlockProposal(Box::new(artifact))),
-            RandomTape(artifact) => Some(BackupArtifact::RandomTape(Box::new(artifact))),
-            RandomBeacon(artifact) => Some(BackupArtifact::RandomBeacon(Box::new(artifact))),
-            CatchUpPackage(artifact) => Some(BackupArtifact::CatchUpPackage(Box::new(artifact))),
-            // Do not replace by a `_` so that we evaluate at this place if we want to
-            // backup a new artifact!
-            RandomBeaconShare(_)
-            | NotarizationShare(_)
-            | FinalizationShare(_)
-            | RandomTapeShare(_)
-            | CatchUpPackageShare(_) => None,
-        })
         .try_for_each(|artifact| artifact.write_to_disk(path))
 }
 
@@ -471,7 +485,8 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
 }
 
 // Returns all artifacts starting from the latest catch-up package height.
-fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage> {
+// CUPs need to be returned as their original protobuf bytes for compatibility.
+fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<BackupArtifact> {
     let cup_height = pool.as_cache().catch_up_package().height();
     let notarization_pool = pool.validated().notarization();
     let notarization_range = HeightRange::new(
@@ -491,13 +506,6 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
     let block_proposal_range = HeightRange::new(
         cup_height,
         block_proposal_pool
-            .max_height()
-            .unwrap_or_else(|| Height::from(0)),
-    );
-    let catch_up_package_pool = pool.validated().catch_up_package();
-    let catch_up_package_range = HeightRange::new(
-        cup_height,
-        catch_up_package_pool
             .max_height()
             .unwrap_or_else(|| Height::from(0)),
     );
@@ -525,11 +533,6 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
                 .map(ConsensusMessage::Notarization),
         )
         .chain(
-            catch_up_package_pool
-                .get_by_height_range(catch_up_package_range)
-                .map(ConsensusMessage::CatchUpPackage),
-        )
-        .chain(
             random_tape_pool
                 .get_by_height_range(random_tape_range)
                 .map(ConsensusMessage::RandomTape),
@@ -544,6 +547,11 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
                 .get_by_height_range(block_proposal_range)
                 .map(ConsensusMessage::BlockProposal),
         )
+        .flat_map(BackupArtifact::try_from)
+        .chain(std::iter::once(BackupArtifact::CatchUpPackage((
+            cup_height,
+            pool.validated().highest_catch_up_package_proto(),
+        ))))
         .collect()
 }
 
@@ -582,14 +590,12 @@ impl BackupArtifact {
         let mut buf = Vec::new();
         use BackupArtifact::*;
         match self {
-            Finalization(artifact) => pb::Finalization::from(artifact.as_ref()).encode(&mut buf),
-            Notarization(artifact) => pb::Notarization::from(artifact.as_ref()).encode(&mut buf),
-            BlockProposal(artifact) => pb::BlockProposal::from(artifact.as_ref()).encode(&mut buf),
-            RandomTape(artifact) => pb::RandomTape::from(artifact.as_ref()).encode(&mut buf),
-            RandomBeacon(artifact) => pb::RandomBeacon::from(artifact.as_ref()).encode(&mut buf),
-            CatchUpPackage(artifact) => {
-                pb::CatchUpPackage::from(artifact.as_ref()).encode(&mut buf)
-            }
+            Finalization(artifact) => pb::Finalization::from(artifact).encode(&mut buf),
+            Notarization(artifact) => pb::Notarization::from(artifact).encode(&mut buf),
+            BlockProposal(artifact) => pb::BlockProposal::from(artifact).encode(&mut buf),
+            RandomTape(artifact) => pb::RandomTape::from(artifact).encode(&mut buf),
+            RandomBeacon(artifact) => pb::RandomBeacon::from(artifact).encode(&mut buf),
+            CatchUpPackage((_, artifact)) => artifact.encode(&mut buf),
         }
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
         Ok(buf)
@@ -613,7 +619,7 @@ impl BackupArtifact {
             BackupArtifact::BlockProposal(artifact) => (artifact.height(), "block_proposal.bin"),
             BackupArtifact::RandomTape(artifact) => (artifact.height(), "random_tape.bin"),
             BackupArtifact::RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin"),
-            BackupArtifact::CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin"),
+            BackupArtifact::CatchUpPackage((height, _)) => (*height, "catch_up_package.bin"),
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most

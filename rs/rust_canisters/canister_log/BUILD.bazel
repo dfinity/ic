@@ -10,6 +10,7 @@ rust_library(
     crate_name = "ic_canister_log",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:serde",
     ],
 )

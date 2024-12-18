@@ -1,30 +1,33 @@
 use crate::common::LOG_PREFIX;
 use crate::invariants::{
     common::{
-        get_all_ecdsa_signing_subnet_list_records, get_node_records_from_snapshot,
-        get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError,
-        RegistrySnapshot,
+        get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
+        InvariantCheckError, RegistrySnapshot,
     },
     subnet::get_subnet_records_map,
 };
 use ic_base_types::{subnet_id_try_from_protobuf, NodeId, SubnetId};
 use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+use ic_protobuf::types::v1::MasterPublicKeyId;
 use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
+    get_master_public_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_subnet_record_key,
     maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
     CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
 };
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::KeyPurpose;
 use prost::Message;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
+
+use super::common::get_all_chain_key_signing_subnet_list_records;
 
 #[cfg(test)]
 mod tests;
@@ -62,7 +65,8 @@ pub(crate) fn check_node_crypto_keys_invariants(
 ) -> Result<(), InvariantCheckError> {
     check_node_crypto_keys_exist_and_are_unique(snapshot)?;
     check_no_orphaned_node_crypto_records(snapshot)?;
-    check_ecdsa_signing_subnet_lists(snapshot)?;
+    check_chain_key_configs(snapshot)?;
+    check_chain_key_signing_subnet_lists(snapshot)?;
     check_high_threshold_public_key_matches_the_one_in_cup(snapshot)?;
     Ok(())
 }
@@ -259,35 +263,93 @@ fn get_all_nodes_public_keys_and_certs(
     Ok((pks, certs))
 }
 
-fn check_ecdsa_signing_subnet_lists(
+fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantCheckError> {
+    let mut subnet_records_map = get_subnet_records_map(snapshot);
+    let subnet_id_list = get_subnet_ids_from_snapshot(snapshot);
+    for subnet_id in subnet_id_list {
+        // Subnets in the subnet list have a subnet record
+        let subnet_record: SubnetRecord = subnet_records_map
+            .remove(&make_subnet_record_key(subnet_id).into_bytes())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Subnet {:} is in subnet list but no record exists",
+                    subnet_id
+                )
+            });
+
+        let Some(chain_key_config_pb) = subnet_record.chain_key_config else {
+            continue;
+        };
+
+        let chain_key_config =
+            ChainKeyConfig::try_from(chain_key_config_pb.clone()).map_err(|err| {
+                InvariantCheckError {
+                    msg: format!(
+                        "ChainKeyConfig {:?} of subnet {:} could not be deserialized: {}",
+                        chain_key_config_pb, subnet_id, err,
+                    ),
+                    source: None,
+                }
+            })?;
+
+        let mut key_ids = BTreeSet::new();
+        for key_config in chain_key_config.key_configs {
+            if key_config.pre_signatures_to_create_in_advance == 0 {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "`pre_signatures_to_create_in_advance` of subnet {:} cannot be zero.",
+                        subnet_id,
+                    ),
+                    source: None,
+                });
+            }
+            if !key_ids.insert(key_config.key_id.clone()) {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "ChainKeyConfig of subnet {:} contains multiple entries for key ID {}.",
+                        subnet_id, key_config.key_id,
+                    ),
+                    source: None,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Checks that the chain key signing subnet list is consistent with the chain key configurations
+///
+/// In particular, this function checks:
+/// - That every subnet refered to by the signing subnet list exists
+/// - That the subnet has a chain key configuration that contains the corresponding key
+fn check_chain_key_signing_subnet_lists(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
     let subnet_records_map = get_subnet_records_map(snapshot);
 
-    get_all_ecdsa_signing_subnet_list_records(snapshot)
+    get_all_chain_key_signing_subnet_list_records(snapshot)
         .iter()
-        .try_for_each(|(key_id, ecdsa_signing_subnet_list)| {
-            let ecdsa_key_id =  match get_ecdsa_key_id_from_signing_subnet_list_key(key_id) {
-                Ok(ecdsa_key_id) => ecdsa_key_id,
-                Err(error) => {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Registry key_id {} could not be converted to an ECDSA signature key id: {:?}",
-                            key_id,
-                            error,
-                        ),
-                        source: None,
-                    });
-                }
-            };
+        .try_for_each(|(key_id, chain_key_signing_subnet_list)| {
+            let master_key_id =  get_master_public_key_id_from_signing_subnet_list_key(key_id)
+                .map_err(|err| InvariantCheckError {
+                    msg: format!(
+                        "Registry key_id {} could not be converted to an MasterPublicKeyId",
+                        key_id,
+                    ),
+                    source: Some(Box::new(err)),
+                })?;
 
-            ecdsa_signing_subnet_list
+            chain_key_signing_subnet_list
                 .subnets
                 .iter()
                 .try_for_each(|subnet_id_bytes| {
-                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone()).unwrap();
+                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone())
+                    .map_err(|err| InvariantCheckError {
+                        msg: "Failed to deserialize subnet id from protobuf".to_string(),
+                        source: Some(Box::new(err)),
+                    })?;
 
-                    subnet_records_map
+                    if subnet_records_map
                         .get(&make_subnet_record_key(subnet_id).into_bytes())
                         .ok_or(InvariantCheckError {
                             msg: format!(
@@ -296,22 +358,26 @@ fn check_ecdsa_signing_subnet_lists(
                             ),
                             source: None,
                         })?
-                        .ecdsa_config
+                        .chain_key_config
                         .as_ref()
                         .ok_or(InvariantCheckError {
-                            msg: format!("The subnet {} does not have an ECDSA config", subnet_id),
+                            msg: format!("The subnet {} does not have a ChainKeyConfig", subnet_id),
                             source: None,
                         })?
-                        .key_ids
-                        .contains(&(&ecdsa_key_id).into())
-                        .then_some(())
-                        .ok_or(InvariantCheckError {
-                            msg: format!(
-                                "The subnet {} does not have the key with {} in its ecdsa configurations",
-                                subnet_id, key_id
-                            ),
-                            source: None,
-                        })
+                        .key_configs
+                        .iter()
+                        .filter_map(|config| config.key_id.clone())
+                        .any(|key| key == MasterPublicKeyId::from(&master_key_id)) {
+                            Ok(())
+                        } else {
+                            Err(InvariantCheckError {
+                                msg: format!(
+                                    "The subnet {} does not have the key with {} in its chain key configurations",
+                                    subnet_id, key_id
+                                ),
+                                source: None,
+                            })
+                        }
                 })
         })
 }

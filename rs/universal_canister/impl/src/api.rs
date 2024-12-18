@@ -47,6 +47,8 @@ mod ic0 {
         ) -> ();
         pub fn call_on_cleanup(fun: u32, env: u32) -> ();
         pub fn call_data_append(src: u32, size: u32) -> ();
+        pub fn call_with_best_effort_response(timeout_seconds: u32) -> ();
+        pub fn msg_deadline() -> u64;
         pub fn call_cycles_add(amount: u64) -> ();
         pub fn call_cycles_add128(amount_high: u64, amount_low: u64) -> ();
         pub fn call_perform() -> u32;
@@ -69,6 +71,7 @@ mod ic0 {
         pub fn canister_version() -> u64;
 
         pub fn mint_cycles(amount: u64) -> u64;
+        pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: u32) -> ();
 
         pub fn is_controller(src: u32, size: u32) -> u32;
         pub fn in_replicated_execution() -> u32;
@@ -121,6 +124,15 @@ pub fn call_data_append(payload: &[u8]) {
     }
 }
 
+pub fn call_with_best_effort_response(timeout_seconds: u32) {
+    unsafe {
+        ic0::call_with_best_effort_response(timeout_seconds);
+    }
+}
+
+pub fn msg_deadline() -> u64 {
+    unsafe { ic0::msg_deadline() }
+}
 pub fn call_cycles_add(amount: u64) {
     unsafe {
         ic0::call_cycles_add(amount);
@@ -371,8 +383,8 @@ pub fn print(data: &[u8]) {
 
 pub fn bad_print() {
     unsafe {
-        ic0::debug_print(u32::max_value() - 2, 1);
-        ic0::debug_print(u32::max_value() - 2, 3);
+        ic0::debug_print(u32::MAX - 2, 1);
+        ic0::debug_print(u32::MAX - 2, 3);
     }
 }
 
@@ -391,6 +403,13 @@ pub fn trap_with(message: &str) -> ! {
 /// Mint cycles (only works on CMC).
 pub fn mint_cycles(amount: u64) -> u64 {
     unsafe { ic0::mint_cycles(amount) }
+}
+
+/// Mint cycles (only works on CMC).
+pub fn mint_cycles128(amount_high: u64, amount_low: u64) -> Vec<u8> {
+    let mut result_bytes = vec![0u8; CYCLES_SIZE];
+    unsafe { ic0::mint_cycles128(amount_high, amount_low, result_bytes.as_mut_ptr() as u32) }
+    result_bytes
 }
 
 pub fn is_controller(data: &[u8]) -> u32 {

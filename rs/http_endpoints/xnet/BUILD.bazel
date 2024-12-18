@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/crypto/tls_interfaces",
+    "//rs/http_endpoints/async_utils",
+    "//rs/interfaces/certified_stream_store",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/types/types",
+    "@crate_index//:axum",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:tower",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/tls_interfaces/mocks",
+    "//rs/interfaces/registry/mocks",
+    "//rs/interfaces/state_manager",
+    "//rs/registry/keys",
+    "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/types",
+    "@crate_index//:bytes",
+    "@crate_index//:maplit",
+    "@crate_index//:prost",
+    "@crate_index//:reqwest",
+]
+
+rust_library(
+    name = "xnet",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_http_endpoints_xnet",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    crate = ":xnet",
+    deps = DEV_DEPENDENCIES,
+)

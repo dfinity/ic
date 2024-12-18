@@ -1,0 +1,10 @@
+[Unit]
+Description=Log HostOS config partition
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/log-config.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

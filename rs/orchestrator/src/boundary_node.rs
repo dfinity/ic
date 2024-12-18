@@ -4,9 +4,11 @@ use crate::{
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
+use ic_config::crypto::CryptoConfig;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -15,6 +17,7 @@ struct BoundaryNodeProcess {
     version: ReplicaVersion,
     binary: String,
     args: Vec<String>,
+    env: HashMap<String, String>,
 }
 
 impl Process for BoundaryNodeProcess {
@@ -33,6 +36,10 @@ impl Process for BoundaryNodeProcess {
     fn get_args(&self) -> &[String] {
         &self.args
     }
+
+    fn get_env(&self) -> HashMap<String, String> {
+        self.env.clone()
+    }
 }
 
 pub(crate) struct BoundaryNodeManager {
@@ -40,9 +47,11 @@ pub(crate) struct BoundaryNodeManager {
     _metrics: Arc<OrchestratorMetrics>,
     process: Arc<Mutex<ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
+    crypto_config: CryptoConfig,
     version: ReplicaVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
+    domain_name: Option<String>,
 }
 
 impl BoundaryNodeManager {
@@ -52,6 +61,7 @@ impl BoundaryNodeManager {
         version: ReplicaVersion,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
+        crypto_config: CryptoConfig,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -61,9 +71,11 @@ impl BoundaryNodeManager {
                 logger.clone().inner_logger.root,
             ))),
             ic_binary_dir,
+            crypto_config,
             version,
             logger,
             node_id,
+            domain_name: None,
         }
     }
 
@@ -83,8 +95,38 @@ impl BoundaryNodeManager {
                     );
                     // NOTE: We could also shutdown the boundary node here. However, it makes sense to continue
                     // serving requests while the orchestrator is downloading the new image in most cases.
-                } else if let Err(err) = self.ensure_boundary_node_running(&self.version) {
-                    warn!(self.logger, "Failed to start Boundary Node: {}", err);
+                } else {
+                    match self.registry.get_node_domain_name(registry_version) {
+                        Ok(Some(domain_name)) => {
+                            let domain_name = Some(domain_name);
+
+                            // stop ic-boundary when the domain name changes and start it again.
+                            if domain_name != self.domain_name {
+                                if let Err(err) = self.ensure_boundary_node_stopped() {
+                                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                                }
+                                self.domain_name = domain_name;
+                            }
+
+                            // make sure the boundary node is running
+                            if let Err(err) = self.ensure_boundary_node_running(&self.version) {
+                                warn!(self.logger, "Failed to start Boundary Node: {}", err);
+                            }
+                        }
+                        // BN should not be active when the node doesn't have a domain name
+                        Ok(None) => {
+                            warn!(self.logger, "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down.");
+                            if let Err(err) = self.ensure_boundary_node_stopped() {
+                                warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                            }
+                            self.domain_name = None;
+                        }
+                        // Failing to read the registry
+                        Err(err) => warn!(
+                            self.logger,
+                            "Failed to fetch Boundary Node domain name: {}", err
+                        ),
+                    }
                 }
             }
             // BN should not be active
@@ -117,18 +159,22 @@ impl BoundaryNodeManager {
             .display()
             .to_string();
 
-        // TODO: Should these values be settable via config?
-        // TODO: Add --hostname argument for prod usage
+        let domain_name = self
+            .domain_name
+            .as_ref()
+            .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
+
+        let env = env_file_reader::read_file("/opt/ic/share/ic-boundary.env").map_err(|e| {
+            OrchestratorError::IoError("unable to read ic-boundary environment variables".into(), e)
+        })?;
+
         let args = vec![
-            format!("--http-port=80"),
-            format!("--https-port=443"),
-            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
-            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
-            format!("--acme-credentials-path=/var/lib/ic/data/ic-boundary-acme.json"),
-            format!("--disable-registry-replicator"),
-            format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
-            format!("--log-journald"),
-            format!("--metrics-addr=[::]:9324"),
+            format!("--tls-hostname={}", domain_name),
+            format!(
+                "--crypto-config={}",
+                serde_json::to_string(&self.crypto_config)
+                    .map_err(OrchestratorError::SerializeCryptoConfigError)?
+            ),
         ];
 
         process
@@ -136,6 +182,7 @@ impl BoundaryNodeManager {
                 version: version.clone(),
                 binary,
                 args,
+                env,
             })
             .map_err(|e| {
                 OrchestratorError::IoError(

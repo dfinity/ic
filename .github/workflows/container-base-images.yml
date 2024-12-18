@@ -1,0 +1,153 @@
+# Workflow for building IC Base Container Images
+# On master branch the images are pushed to DockerHub and references updated in automated PR
+
+name: Container IC Base Images
+
+on:
+  schedule:
+    - cron: "0 8 * * 4"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/container-base-images.yml'
+      - '**/Dockerfile.base'
+      - '**/packages.common'
+      - '**/packages.dev'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  packages: write
+  contents: write
+
+jobs:
+  build-base-image:
+    name: Build Base Container Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - IMAGE: "guestos-base"
+            CONTEXT: "ic-os/guestos/context"
+            REFFILE: "ic-os/guestos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "guestos-base-dev"
+            CONTEXT: "ic-os/guestos/context"
+            REFFILE: "ic-os/guestos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+          - IMAGE: "boundaryos-base"
+            CONTEXT: "ic-os/boundary-guestos/context"
+            REFFILE: "ic-os/boundary-guestos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "hostos-base"
+            CONTEXT: "ic-os/hostos/context"
+            REFFILE: "ic-os/hostos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "hostos-base-dev"
+            CONTEXT: "ic-os/hostos/context"
+            REFFILE: "ic-os/hostos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+          - IMAGE: "setupos-base"
+            CONTEXT: "ic-os/setupos/context"
+            REFFILE: "ic-os/setupos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "setupos-base-dev"
+            CONTEXT: "ic-os/setupos/context"
+            REFFILE: "ic-os/setupos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Current Date
+        id: date
+        run: echo "DATE=$(date '+%Y-%m-%d-%H')" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Base Image
+        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
+        id: build-base-image
+        with:
+          context: ${{ matrix.CONTEXT }}
+          file: ${{ matrix.CONTEXT }}/Dockerfile.base
+          push: ${{ github.ref_name == 'master' }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
+          build-args: ${{ matrix.BUILD_ARGS }}
+
+      - name: Collect SHA256 Digest
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          mkdir -p "$(dirname artifacts/${{ matrix.REFFILE }})"
+          echo ghcr.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
+            > artifacts/${{ matrix.REFFILE }}
+
+      - name: Upload SHA256 Digest Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256-${{ matrix.IMAGE }}
+          path: artifacts
+          retention-days: 1
+
+  update-ref-files-pr:
+    name: Update Reference Files PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-base-image]
+    if: ${{ github.ref_name == 'master' }}
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Current Date
+        id: date
+        run: echo "DATE=$(date '+%Y-%m-%d-%H%M')" >> $GITHUB_ENV
+
+      - name: Download SHA256 Digest Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: sha256-*
+          merge-multiple: true
+
+      - name: Update Base Image Refs
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          find artifacts
+          rsync -rv artifacts/ .
+          rm -rf artifacts
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@6d6857d36972b65feb161a90e484f2984215f83e # v6.0.5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: master
+          branch: base-image-refs-update-${{ env.DATE }}
+          delete-branch: true
+          title: "chore: Update Base Image Refs [${{ env.DATE }}]"
+          body: |
+            Updating base container image references.
+
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          draft: false

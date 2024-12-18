@@ -1,0 +1,25 @@
+# These are additional Ubuntu packages installed on the "dev" images.
+
+# editor for convenience
+vim
+nano
+
+# packages requested by networking
+tcpdump
+iperf
+netcat-openbsd
+curl
+iputils-ping
+
+# Third-party services we will be running
+openssh-server
+
+# may want to ssh into other hosts -- not sure if this is really advisable
+openssh-client
+
+# useful for first-order debugging
+gdb
+strace
+
+# useful for SELinux development
+setools

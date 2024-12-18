@@ -50,7 +50,7 @@ pub trait RecoveryIterator<
             } else {
                 super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
                 if let Some(explanation) = current_step.get_documentation() {
-                    info!(self.get_logger(), "\n\n{}\n", format(explanation));
+                    info!(self.get_logger(), "\n\n{}\n", explanation);
                 }
                 if self.interactive() {
                     self.read_step_params(current_step);
@@ -103,28 +103,11 @@ impl Iterator for NNSRecoveryFailoverNodes {
     }
 }
 
-// Creates line breaks so that no line is longer than 80 characters.
-fn format(description: &str) -> String {
-    let iter = description.split(' ');
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in iter {
-        if line.len() + word.len() > 80 {
-            lines.push(line.clone());
-            line.clear();
-        }
-        line += word;
-        line += " ";
-    }
-    lines.push(line);
-    lines.join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[derive(Debug, Copy, Clone, EnumMessage, PartialEq)]
+    #[derive(Copy, Clone, PartialEq, Debug, EnumMessage)]
     enum FakeStep {
         P0,
         P1,

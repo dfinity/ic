@@ -2,7 +2,7 @@
 pub enum DomainSeparator {
     /// The domain separator to be used when calculating the sender signature for a
     /// request to the Internet Computer according to the
-    /// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+    /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
     #[allow(dead_code)]
     // This variant is only defined to check in tests that there are no
     // collisions in separators. The used variable is defined in DOMAIN_IC_REQUEST
@@ -17,6 +17,7 @@ pub enum DomainSeparator {
     _BlockProposal,
     BlockMetadata,
     BlockMetadataProposal,
+    EquivocationProof,
     InmemoryPayload,
     RandomBeaconContent,
     RandomBeacon,
@@ -33,7 +34,7 @@ pub enum DomainSeparator {
     _IcOnchainObservabilityReport,
     /// The domain separator to be used when calculating the signature for a
     /// query response from a replica.
-    /// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+    /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
     QueryResponse,
     RandomTapeContent,
     RandomTape,
@@ -46,16 +47,18 @@ pub enum DomainSeparator {
     _StateSyncMessage,
     ConsensusMessage,
     CertificationMessage,
-    EcdsaMessage,
+    IDkgMessage,
     IdkgDealing,
     SignedIdkgDealing,
     IdkgDealingSupport,
-    EcdsaTranscript,
+    IDkgTranscript,
     EcdsaSigShare,
-    EcdsaComplaintContent,
-    EcdsaComplaint,
-    EcdsaOpeningContent,
-    EcdsaOpening,
+    SchnorrSigShare,
+    VetKdKeyShare,
+    IDkgComplaintContent,
+    SignedIDkgComplaint,
+    IDkgOpeningContent,
+    SignedIDkgOpening,
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
     CanisterHttpResponseShare,
@@ -76,6 +79,7 @@ impl DomainSeparator {
             DomainSeparator::_BlockProposal => "block_proposal_domain",
             DomainSeparator::BlockMetadata => "block_metadata_domain",
             DomainSeparator::BlockMetadataProposal => "block_metadata_proposal_domain",
+            DomainSeparator::EquivocationProof => "equivocation_proof_domain",
             DomainSeparator::InmemoryPayload => "inmemory_payload_domain",
             DomainSeparator::RandomBeaconContent => "random_beacon_content_domain",
             DomainSeparator::RandomBeacon => "random_beacon_domain",
@@ -103,16 +107,18 @@ impl DomainSeparator {
             DomainSeparator::_StateSyncMessage => "state_sync_message_domain",
             DomainSeparator::ConsensusMessage => "consensus_message_domain",
             DomainSeparator::CertificationMessage => "certification_message_domain",
-            DomainSeparator::EcdsaMessage => "ic-threshold-ecdsa-message-domain",
+            DomainSeparator::IDkgMessage => "ic-threshold-ecdsa-message-domain",
             DomainSeparator::IdkgDealing => "ic-idkg-dealing-domain",
             DomainSeparator::SignedIdkgDealing => "ic-idkg-signed-dealing-domain",
             DomainSeparator::IdkgDealingSupport => "ic-idkg-dealing-support-domain",
-            DomainSeparator::EcdsaTranscript => "ic-idkg-transcript-domain",
+            DomainSeparator::IDkgTranscript => "ic-idkg-transcript-domain",
             DomainSeparator::EcdsaSigShare => "ic-threshold-ecdsa-sig-share-domain",
-            DomainSeparator::EcdsaComplaintContent => "ic-threshold-ecdsa-complaint-content-domain",
-            DomainSeparator::EcdsaComplaint => "ic-threshold-ecdsa-complaint-domain",
-            DomainSeparator::EcdsaOpeningContent => "ic-threshold-ecdsa-opening-content-domain",
-            DomainSeparator::EcdsaOpening => "ic-threshold-ecdsa-opening-domain",
+            DomainSeparator::SchnorrSigShare => "ic-threshold-schnorr-sig-share-domain",
+            DomainSeparator::VetKdKeyShare => "ic-vetkd-key-share-domain",
+            DomainSeparator::IDkgComplaintContent => "ic-threshold-ecdsa-complaint-content-domain",
+            DomainSeparator::SignedIDkgComplaint => "ic-threshold-ecdsa-complaint-domain",
+            DomainSeparator::IDkgOpeningContent => "ic-threshold-ecdsa-opening-content-domain",
+            DomainSeparator::SignedIDkgOpening => "ic-threshold-ecdsa-opening-domain",
             DomainSeparator::CanisterHttpResponse => "ic-canister-http-response-domain",
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata => {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
@@ -122,9 +128,9 @@ impl DomainSeparator {
     }
 }
 
-impl std::string::ToString for DomainSeparator {
-    fn to_string(&self) -> String {
-        self.as_str().to_string()
+impl std::fmt::Display for DomainSeparator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 

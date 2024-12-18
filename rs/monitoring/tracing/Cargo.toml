@@ -1,0 +1,11 @@
+[package]
+name = "ic-tracing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

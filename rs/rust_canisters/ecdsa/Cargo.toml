@@ -9,10 +9,9 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../dfn_core" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+serde_json = { workspace = true }

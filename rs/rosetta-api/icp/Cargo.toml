@@ -1,0 +1,88 @@
+[package]
+name = "ic-rosetta-api"
+version = "2.1.1"
+authors = ["The Internet Computer Project Developers"]
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+edition = "2021"
+default-run = "ic-rosetta-api"
+
+[dependencies]
+actix-rt = { workspace = true }
+actix-web = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-limits = { path = "../../limits" }
+ic-ledger-canister-blocks-synchronizer = { path = "ledger_canister_blocks_synchronizer" }
+ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
+ic-types = { path = "../../types/types" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
+on_wire = { path = "../../rust_canisters/on_wire" }
+prometheus = { workspace = true }
+rand = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
+reqwest = { workspace = true }
+rolling-file = { workspace = true }
+rosetta-core = { path = "../common/rosetta_core" }
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
+ic-nns-governance = { path = "../../nns/governance" }
+ic-rosetta-test-utils = { path = "test_utils" }
+ic-types = { path = "../../types/types" }
+proptest = { workspace = true }
+rand_chacha = { workspace = true }
+ic-icp-rosetta-runner = { path = "runner" }
+ic-icp-rosetta-client = { path = "client" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-ledger-test-utils = { path = "../../ledger_suite/icp/test_utils" }
+ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
+tempfile = { workspace = true }
+icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-nns-governance-init = { path = "../../nns/governance/init" }
+ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
+prost = { workspace = true }
+
+[features]
+rosetta-blocks = []
+
+[[test]]
+name = "system_tests"
+path = "tests/system_tests/system_tests.rs"

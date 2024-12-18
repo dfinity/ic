@@ -3,14 +3,14 @@
 //! and value type `V`. There are a number of benefits of doing this:
 //!
 //! 1. Equality check can be done just on the hash, which is often cheaper than
-//! traversing the object recursively.
+//!    traversing the object recursively.
 //!
 //! 2. Computing hashes over `Hashed<H, V>` can also take a shortcut by just
-//! hashing the hash of type `H`, instead of the value of type `V`. Note that
-//! this does not lead to the same hash result as directly hashing the value.
+//!    hashing the hash of type `H`, instead of the value of type `V`. Note that
+//!    this does not lead to the same hash result as directly hashing the value.
 //!
 //! 3. Using Hash also gives a strawman implementation of `Ord` if the order
-//! does not have to be consistent with the actual order of the object's value.
+//!    does not have to be consistent with the actual order of the object's value.
 //!
 //! The serialization of `Hashed<H, V>` will serialize both the hash and the
 //! value.
@@ -21,7 +21,7 @@ use std::cmp::{Eq, Ordering, PartialOrd};
 /// Bundle of both a value and its hash. Once created it remains immutable,
 /// which is why both fields are only accessible through member functions, not
 /// as record fields.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Hashed<H, V> {
     pub(crate) hash: H,
     pub(crate) value: V,

@@ -1,15 +1,18 @@
 [package]
 name = "ic-https-outcalls-adapter-client"
-version = "0.1.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 
 candid = { workspace = true }
 futures = { workspace = true }
-ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
-ic-async-utils = { path = "../../async_utils" }
+hyper-util = { workspace = true }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../types/error_types" }
 ic-https-outcalls-service = { path = "../service" }
@@ -25,8 +28,9 @@ slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-tower-test = "0.4.0"
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+tower-test = "0.4.0"

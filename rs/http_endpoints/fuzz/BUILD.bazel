@@ -5,12 +5,14 @@ package(default_visibility = ["//visibility:private"])
 MACRO_DEPENDENCIES = []
 
 CALLSERVICE_FUZZER_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/http_endpoints/public",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/registry/mocks",
     "//rs/monitoring/logger",
+    "//rs/monitoring/tracing",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/provisional_whitelist",
@@ -23,11 +25,11 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/validator/http_request_arbitrary",
     "@crate_index//:arbitrary",
-    "@crate_index//:axum_0_7_0",
+    "@crate_index//:axum",
     "@crate_index//:bytes",
-    "@crate_index//:http_body_1_0_0",
-    "@crate_index//:http_body_util_0_1_0",
-    "@crate_index//:hyper_1_0_0",
+    "@crate_index//:http-body",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
     "@crate_index//:libfuzzer-sys",
@@ -36,22 +38,26 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tower-test",
+    "@crate_index//:tracing-subscriber",
 ]
 
 # required to compile tests/common
 DEV_DEPENDENCIES = [
-    "//rs/monitoring/metrics",
+    # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto/tree_hash",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tls_interfaces/mocks",
+    "//rs/crypto/tree_hash",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager",
     "//rs/interfaces/state_manager/mocks",
+    "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde_cbor",
 ]
 
 rust_fuzz_test_binary_afl(

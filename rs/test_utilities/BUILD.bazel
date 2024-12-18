@@ -4,23 +4,20 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "test_utilities",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
     version = "0.9.0",
     deps = [
-        "//rs/bitcoin/types/internal",
+        # Keep sorted.
+        "//rs/bitcoin/replica_types",
         "//rs/config",
         "//rs/crypto/interfaces/sig_verification",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha2",
         "//rs/crypto/temp_crypto",
-        "//rs/crypto/test_utils",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/ni-dkg",
-        "//rs/crypto/tls_interfaces",
         "//rs/crypto/tree_hash",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
@@ -28,7 +25,6 @@ rust_library(
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
-        "//rs/interfaces/transport",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
@@ -37,8 +33,6 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/test_utilities/logger",
-        "//rs/test_utilities/registry",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -54,7 +48,6 @@ rust_library(
         "@crate_index//:socket2",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
-        "@crate_index//:tokio-rustls",
         "@crate_index//:tower",
         "@crate_index//:wat",
     ],
@@ -64,7 +57,10 @@ rust_test(
     name = "test_utilities_test",
     crate = ":test_utilities",
     deps = [
+        # Keep sorted.
         "//rs/artifact_pool",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",
     ],
@@ -76,6 +72,7 @@ rust_doc_test(
     name = "test_utilities_doc_test",
     crate = ":test_utilities",
     deps = [
+        # Keep sorted.
         "//rs/artifact_pool",
         "@crate_index//:rusty-fork",
     ],

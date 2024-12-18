@@ -5,14 +5,62 @@
 use crate::UserError;
 use candid::Principal;
 use hex;
-use reqwest::blocking::Response;
+use reqwest::Response;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 pub type InstanceId = usize;
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AutoProgressConfig {
+    pub artificial_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum HttpGatewayBackend {
+    Replica(String),
+    PocketIcInstance(InstanceId),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayConfig {
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub forward_to: HttpGatewayBackend,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayDetails {
+    pub instance_id: InstanceId,
+    pub port: u16,
+    pub forward_to: HttpGatewayBackend,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayInfo {
+    pub instance_id: InstanceId,
+    pub port: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum CreateHttpGatewayResponse {
+    Created(HttpGatewayInfo),
+    Error { message: String },
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum CreateInstanceResponse {
@@ -48,6 +96,36 @@ pub enum RawEffectivePrincipal {
         #[serde(serialize_with = "base64::serialize")]
         Vec<u8>,
     ),
+}
+
+impl std::fmt::Display for RawEffectivePrincipal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RawEffectivePrincipal::None => write!(f, "None"),
+            RawEffectivePrincipal::SubnetId(subnet_id) => {
+                let principal = Principal::from_slice(subnet_id);
+                write!(f, "SubnetId({})", principal)
+            }
+            RawEffectivePrincipal::CanisterId(canister_id) => {
+                let principal = Principal::from_slice(canister_id);
+                write!(f, "CanisterId({})", principal)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMessageId {
+    pub effective_principal: RawEffectivePrincipal,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub message_id: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub enum RawSubmitIngressResult {
+    Ok(RawMessageId),
+    Err(UserError),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -119,11 +197,11 @@ pub enum ApiResponse<T> {
     Error { message: String },
 }
 
-impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
-    fn from(resp: Response) -> Self {
+impl<T: DeserializeOwned> ApiResponse<T> {
+    pub async fn from_response(resp: Response) -> Self {
         match resp.status() {
             reqwest::StatusCode::OK => {
-                let result = resp.json::<T>();
+                let result = resp.json::<T>().await;
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
@@ -132,7 +210,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::ACCEPTED => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Started { state_label, op_id }
@@ -143,7 +221,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::CONFLICT => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Busy { state_label, op_id }
@@ -154,7 +232,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             _ => {
-                let result = resp.json::<ApiError>();
+                let result = resp.json::<ApiError>().await;
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
@@ -179,7 +257,29 @@ pub struct RawCycles {
     pub cycles: u128,
 }
 
-#[derive(Clone, Serialize, Eq, PartialEq, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+pub struct RawPrincipalId {
+    // raw bytes of the principal
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub principal_id: Vec<u8>,
+}
+
+impl From<Principal> for RawPrincipalId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            principal_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+impl From<RawPrincipalId> for Principal {
+    fn from(raw_principal_id: RawPrincipalId) -> Self {
+        Principal::from_slice(&raw_principal_id.principal_id)
+    }
+}
+
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -192,6 +292,12 @@ impl From<Principal> for RawCanisterId {
         Self {
             canister_id: principal.as_slice().to_vec(),
         }
+    }
+}
+
+impl From<RawCanisterId> for Principal {
+    fn from(raw_canister_id: RawCanisterId) -> Self {
+        Principal::from_slice(&raw_canister_id.canister_id)
     }
 }
 
@@ -215,6 +321,29 @@ impl From<Principal> for RawSubnetId {
 impl From<RawSubnetId> for Principal {
     fn from(val: RawSubnetId) -> Self {
         Principal::from_slice(&val.subnet_id)
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+pub struct RawNodeId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub node_id: Vec<u8>,
+}
+
+impl From<RawNodeId> for Principal {
+    fn from(val: RawNodeId) -> Self {
+        Principal::from_slice(&val.node_id)
+    }
+}
+
+impl From<Principal> for RawNodeId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            node_id: principal.as_slice().to_vec(),
+        }
     }
 }
 
@@ -279,7 +408,9 @@ pub mod base64 {
 
 // ================================================================================================================= //
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetKind {
     Application,
     Bitcoin,
@@ -288,6 +419,7 @@ pub enum SubnetKind {
     NNS,
     SNS,
     System,
+    VerifiedApplication,
 }
 
 /// This represents which named subnets the user wants to create, and how
@@ -301,12 +433,14 @@ pub struct SubnetConfigSet {
     pub bitcoin: bool,
     pub system: usize,
     pub application: usize,
+    pub verified_application: usize,
 }
 
 impl SubnetConfigSet {
     pub fn validate(&self) -> Result<(), String> {
         if self.system > 0
             || self.application > 0
+            || self.verified_application > 0
             || self.nns
             || self.sns
             || self.ii
@@ -329,6 +463,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             bitcoin,
             system,
             application,
+            verified_application,
         }: SubnetConfigSet,
     ) -> Self {
         ExtendedSubnetConfigSet {
@@ -359,8 +494,18 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             },
             system: vec![SubnetSpec::default(); system],
             application: vec![SubnetSpec::default(); application],
+            verified_application: vec![SubnetSpec::default(); verified_application],
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct InstanceConfig {
+    pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub state_dir: Option<PathBuf>,
+    pub nonmainnet_features: bool,
+    pub log_level: Option<String>,
+    pub bitcoind_addr: Option<Vec<SocketAddr>>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -372,6 +517,7 @@ pub struct ExtendedSubnetConfigSet {
     pub bitcoin: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
+    pub verified_application: Vec<SubnetSpec>,
 }
 
 /// Specifies various configurations for a subnet.
@@ -427,7 +573,9 @@ impl Default for SubnetSpec {
 }
 
 /// Specifies instruction limits for canister execution on this subnet.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetInstructionConfig {
     /// Use default instruction limits as in production.
     Production,
@@ -468,7 +616,15 @@ impl SubnetStateConfig {
 
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
-    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
+    #[allow(clippy::type_complexity)]
+    pub fn get_named(
+        &self,
+    ) -> Vec<(
+        SubnetKind,
+        Option<PathBuf>,
+        Option<RawSubnetId>,
+        SubnetInstructionConfig,
+    )> {
         use SubnetKind::*;
         vec![
             (self.nns.clone(), NNS),
@@ -481,7 +637,12 @@ impl ExtendedSubnetConfigSet {
         .filter(|(mb, _)| mb.is_some())
         .map(|(mb, kind)| {
             let spec = mb.unwrap();
-            (kind, spec.get_state_path(), spec.get_instruction_config())
+            (
+                kind,
+                spec.get_state_path(),
+                spec.get_subnet_id(),
+                spec.get_instruction_config(),
+            )
         })
         .collect()
     }
@@ -489,6 +650,7 @@ impl ExtendedSubnetConfigSet {
     pub fn validate(&self) -> Result<(), String> {
         if !self.system.is_empty()
             || !self.application.is_empty()
+            || !self.verified_application.is_empty()
             || self.nns.is_some()
             || self.sns.is_some()
             || self.ii.is_some()
@@ -502,29 +664,57 @@ impl ExtendedSubnetConfigSet {
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
+    pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Number of nodes in the subnet.
-    pub size: u64,
+    /// Node ids of nodes in the subnet.
+    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct CanisterIdRange {
     pub start: RawCanisterId,
     pub end: RawCanisterId,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
+impl CanisterIdRange {
+    fn contains(&self, canister_id: Principal) -> bool {
+        Principal::from_slice(&self.start.canister_id) <= canister_id
+            && canister_id <= Principal::from_slice(&self.end.canister_id)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+pub struct Topology {
+    pub subnet_configs: BTreeMap<SubnetId, SubnetConfig>,
+    pub default_effective_canister_id: RawCanisterId,
+}
 
 impl Topology {
+    pub fn get_subnet(&self, canister_id: Principal) -> Option<SubnetId> {
+        self.subnet_configs
+            .iter()
+            .find(|(_, config)| {
+                config
+                    .canister_ranges
+                    .iter()
+                    .any(|r| r.contains(canister_id))
+            })
+            .map(|(subnet_id, _)| subnet_id)
+            .copied()
+    }
+
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
         self.find_subnets(SubnetKind::Application, None)
+    }
+
+    pub fn get_verified_app_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::VerifiedApplication, None)
     }
 
     pub fn get_benchmarking_app_subnets(&self) -> Vec<SubnetId> {
@@ -563,7 +753,7 @@ impl Topology {
         kind: SubnetKind,
         instruction_config: Option<SubnetInstructionConfig>,
     ) -> Vec<SubnetId> {
-        self.0
+        self.subnet_configs
             .iter()
             .filter(|(_, config)| {
                 config.subnet_kind == kind
@@ -577,9 +767,151 @@ impl Topology {
     }
 
     fn find_subnet(&self, kind: SubnetKind) -> Option<SubnetId> {
-        self.0
+        self.subnet_configs
             .iter()
             .find(|(_, config)| config.subnet_kind == kind)
             .map(|(id, _)| *id)
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpMethod {
+    GET,
+    POST,
+    HEAD,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterHttpRequest {
+    pub subnet_id: RawSubnetId,
+    pub request_id: u64,
+    pub http_method: CanisterHttpMethod,
+    pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+    pub max_response_bytes: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct CanisterHttpRequest {
+    pub subnet_id: Principal,
+    pub request_id: u64,
+    pub http_method: CanisterHttpMethod,
+    pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+    pub max_response_bytes: Option<u64>,
+}
+
+impl From<RawCanisterHttpRequest> for CanisterHttpRequest {
+    fn from(raw_canister_http_request: RawCanisterHttpRequest) -> Self {
+        Self {
+            subnet_id: candid::Principal::from_slice(
+                &raw_canister_http_request.subnet_id.subnet_id,
+            ),
+            request_id: raw_canister_http_request.request_id,
+            http_method: raw_canister_http_request.http_method,
+            url: raw_canister_http_request.url,
+            headers: raw_canister_http_request.headers,
+            body: raw_canister_http_request.body,
+            max_response_bytes: raw_canister_http_request.max_response_bytes,
+        }
+    }
+}
+
+impl From<CanisterHttpRequest> for RawCanisterHttpRequest {
+    fn from(canister_http_request: CanisterHttpRequest) -> Self {
+        Self {
+            subnet_id: canister_http_request.subnet_id.into(),
+            request_id: canister_http_request.request_id,
+            http_method: canister_http_request.http_method,
+            url: canister_http_request.url,
+            headers: canister_http_request.headers,
+            body: canister_http_request.body,
+            max_response_bytes: canister_http_request.max_response_bytes,
+        }
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpReply {
+    pub status: u16,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpReject {
+    pub reject_code: u64,
+    pub message: String,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpResponse {
+    CanisterHttpReply(CanisterHttpReply),
+    CanisterHttpReject(CanisterHttpReject),
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMockCanisterHttpResponse {
+    pub subnet_id: RawSubnetId,
+    pub request_id: u64,
+    pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct MockCanisterHttpResponse {
+    pub subnet_id: Principal,
+    pub request_id: u64,
+    pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
+}
+
+impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
+    fn from(raw_mock_canister_http_response: RawMockCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: candid::Principal::from_slice(
+                &raw_mock_canister_http_response.subnet_id.subnet_id,
+            ),
+            request_id: raw_mock_canister_http_response.request_id,
+            response: raw_mock_canister_http_response.response,
+            additional_responses: raw_mock_canister_http_response.additional_responses,
+        }
+    }
+}
+
+impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
+    fn from(mock_canister_http_response: MockCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: RawSubnetId {
+                subnet_id: mock_canister_http_response.subnet_id.as_slice().to_vec(),
+            },
+            request_id: mock_canister_http_response.request_id,
+            response: mock_canister_http_response.response,
+            additional_responses: mock_canister_http_response.additional_responses,
+        }
     }
 }

@@ -5,7 +5,8 @@
 //! algorithm, and a component responsible for certifying state hashes produced
 //! by the upper layers of the internet computer.
 
+mod bouncer_metrics;
 pub mod certification;
 pub mod consensus;
 pub mod dkg;
-pub mod ecdsa;
+pub mod idkg;

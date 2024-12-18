@@ -1,4 +1,6 @@
 //! Utilities to help with testing interleavings of calls to canisters
+pub use crate::prometheus::{get_counter, get_gauge, get_samples};
+
 use async_trait::async_trait;
 use dfn_core::CanisterId;
 use futures::{
@@ -15,6 +17,9 @@ use ic_nervous_system_common::{
 use icp_ledger::{AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
+
+mod prometheus;
+pub mod wasm_helpers;
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
@@ -136,7 +141,7 @@ pub async fn drain_receiver_channel(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum LedgerCall {
     TransferFundsICRC1 {
         amount_e8s: u64,

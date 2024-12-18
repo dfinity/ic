@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.57"
+async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }

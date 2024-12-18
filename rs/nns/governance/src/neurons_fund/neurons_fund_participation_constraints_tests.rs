@@ -8,11 +8,15 @@ use maplit::{btreemap, btreeset};
 
 fn new_neurons_fund_neuron(id: u64, maturity_equivalent_icp_e8s: u64) -> NeuronsFundNeuron {
     let id = NeuronId { id };
-    let controller = PrincipalId::default();
+    let controller = PrincipalId::new_user_test_id(55);
+    let hotkey1 = PrincipalId::new_user_test_id(56);
+    let hotkey2 = PrincipalId::new_user_test_id(57);
+    let hotkeys = vec![hotkey1, hotkey2];
     NeuronsFundNeuron {
         id,
         maturity_equivalent_icp_e8s,
         controller,
+        hotkeys,
     }
 }
 
@@ -95,6 +99,7 @@ fn test_diff_with_empty_snapshot() {
     );
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let snapshot = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -103,6 +108,7 @@ fn test_diff_with_empty_snapshot() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(2) => NeuronsFundNeuronPortion {
                 id: nid(2),
@@ -110,6 +116,7 @@ fn test_diff_with_empty_snapshot() {
                 maturity_equivalent_icp_e8s: 2000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(3) => NeuronsFundNeuronPortion {
                 id: nid(3),
@@ -117,6 +124,7 @@ fn test_diff_with_empty_snapshot() {
                 maturity_equivalent_icp_e8s: 9000,
                 is_capped: true,
                 controller,
+                hotkeys: hotkeys.clone(),
             }
         },
     };
@@ -137,6 +145,7 @@ fn test_diff_with_empty_snapshot() {
                     maturity_equivalent_icp_e8s: 1000,
                     is_capped: false,
                     controller,
+                    hotkeys: hotkeys.clone(),
                 },
                 nid(2) => NeuronsFundNeuronPortion {
                     id: nid(2),
@@ -144,6 +153,7 @@ fn test_diff_with_empty_snapshot() {
                     maturity_equivalent_icp_e8s: 2000,
                     is_capped: false,
                     controller,
+                    hotkeys: hotkeys.clone(),
                 },
                 nid(3) => NeuronsFundNeuronPortion {
                     id: nid(3),
@@ -151,6 +161,7 @@ fn test_diff_with_empty_snapshot() {
                     maturity_equivalent_icp_e8s: 9000,
                     is_capped: false,
                     controller,
+                    hotkeys: hotkeys.clone(),
                 }
             },
         })
@@ -161,6 +172,7 @@ fn test_diff_with_empty_snapshot() {
 fn test_diff_ok_once_then_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -169,6 +181,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(2) => NeuronsFundNeuronPortion {
                 id: nid(2),
@@ -176,6 +189,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 2000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(3) => NeuronsFundNeuronPortion {
                 id: nid(3),
@@ -183,6 +197,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 9000,
                 is_capped: true,
                 controller,
+                hotkeys: hotkeys.clone(),
             }
         },
     };
@@ -194,6 +209,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(3) => NeuronsFundNeuronPortion {
                 id: nid(3),
@@ -201,6 +217,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 9000,
                 is_capped: true,
                 controller,
+                hotkeys: hotkeys.clone(),
             }
         },
     };
@@ -212,6 +229,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(2) => NeuronsFundNeuronPortion {
                 id: nid(2),
@@ -219,6 +237,7 @@ fn test_diff_ok_once_then_err() {
                 maturity_equivalent_icp_e8s: 2000,
                 is_capped: false,
                 controller,
+                hotkeys,
             }
         },
     };
@@ -237,6 +256,7 @@ fn test_diff_ok_once_then_err() {
 fn test_diff_extra_neuron_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -245,6 +265,7 @@ fn test_diff_extra_neuron_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         },
     };
@@ -256,6 +277,7 @@ fn test_diff_extra_neuron_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             nid(3) => NeuronsFundNeuronPortion {
                 id: nid(3),
@@ -263,6 +285,7 @@ fn test_diff_extra_neuron_err() {
                 maturity_equivalent_icp_e8s: 9000,
                 is_capped: true,
                 controller,
+                hotkeys,
             }
         },
     };
@@ -280,6 +303,7 @@ fn test_diff_extra_neuron_err() {
 fn test_diff_negative_amount_in_diff_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -288,6 +312,7 @@ fn test_diff_negative_amount_in_diff_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         },
     };
@@ -299,6 +324,7 @@ fn test_diff_negative_amount_in_diff_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys,
             },
         },
     };
@@ -316,6 +342,7 @@ fn test_diff_negative_amount_in_diff_err() {
 #[test]
 fn test_diff_controller_err() {
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -324,6 +351,7 @@ fn test_diff_controller_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller: PrincipalId::new_user_test_id(111),
+                hotkeys: hotkeys.clone(),
             },
         },
     };
@@ -335,6 +363,7 @@ fn test_diff_controller_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller: PrincipalId::new_user_test_id(222),
+                hotkeys,
             },
         },
     };
@@ -356,6 +385,7 @@ fn test_diff_controller_err() {
 fn test_diff_maturity_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
+    let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
             nid(1) => NeuronsFundNeuronPortion {
@@ -364,6 +394,7 @@ fn test_diff_maturity_err() {
                 maturity_equivalent_icp_e8s: 1000,
                 is_capped: false,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         },
     };
@@ -375,6 +406,7 @@ fn test_diff_maturity_err() {
                 maturity_equivalent_icp_e8s: 1111,
                 is_capped: false,
                 controller,
+                hotkeys,
             },
         },
     };
@@ -393,6 +425,7 @@ fn test_diff_maturity_err() {
 fn test_diff_is_capped() {
     let nid = |id: u64| NeuronId { id };
     let controller = PrincipalId::default();
+    let hotkeys = Vec::new();
     let test_with = |is_capped_left: bool, is_capped_right: bool| {
         let left = NeuronsFundSnapshot {
             neurons: btreemap! {
@@ -402,6 +435,7 @@ fn test_diff_is_capped() {
                     maturity_equivalent_icp_e8s: 1000,
                     is_capped: is_capped_left,
                     controller,
+                    hotkeys: hotkeys.clone(),
                 },
             },
         };
@@ -413,6 +447,7 @@ fn test_diff_is_capped() {
                     maturity_equivalent_icp_e8s: 1000,
                     is_capped: is_capped_right,
                     controller,
+                    hotkeys: hotkeys.clone(),
                 },
             },
         };

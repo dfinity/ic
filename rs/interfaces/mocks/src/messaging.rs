@@ -6,6 +6,7 @@ use ic_types::{
     Height, NumBytes,
 };
 use mockall::mock;
+use std::sync::RwLock;
 
 mock! {
     pub MessageRouting {}
@@ -13,6 +14,27 @@ mock! {
     impl MessageRouting for MessageRouting {
         fn deliver_batch(& self, b: Batch) -> Result<(), MessageRoutingError>;
         fn expected_batch_height(&self) -> Height;
+    }
+}
+
+/// Sync wrapper to allow shared modification. See [`RefMockStateManager`].
+#[derive(Default)]
+pub struct RefMockMessageRouting {
+    pub mock: RwLock<MockMessageRouting>,
+}
+
+impl RefMockMessageRouting {
+    pub fn get_mut(&self) -> std::sync::RwLockWriteGuard<'_, MockMessageRouting> {
+        self.mock.write().unwrap()
+    }
+}
+
+impl MessageRouting for RefMockMessageRouting {
+    fn deliver_batch(&self, b: Batch) -> Result<(), MessageRoutingError> {
+        self.mock.read().unwrap().deliver_batch(b)
+    }
+    fn expected_batch_height(&self) -> Height {
+        self.mock.read().unwrap().expected_batch_height()
     }
 }
 

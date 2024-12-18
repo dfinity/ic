@@ -32,7 +32,7 @@ const MAX_TIME_FOR_GOVERNANCE_UPGRADE_ROOT_PROPOSAL: u64 = 60 * 60 * 24 * 7;
 /// Root proposals are initialized with one ballot per node at creation
 /// in the "Undecided" state. These ballots are then changed when the node
 /// operators vote.
-#[derive(CandidType, Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum RootProposalBallot {
     Yes,
     No,
@@ -78,17 +78,19 @@ impl FromStr for RootProposalBallot {
 /// indicate the hash of the wasm that they intend to upgrade. This way if two
 /// proposals to upgrade the same wasm are submitted before any of them is
 /// executed, only the the first proposal gets to be executed.
-#[derive(CandidType, Debug, Clone, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GovernanceUpgradeRootProposal {
     /// The id of the NNS subnet.
     pub nns_subnet_id: SubnetId,
     /// The expected sha256 hash of the governance canister
     /// wasm. This must match the sha of the currently running
     /// governance canister.
+    #[serde(with = "serde_bytes")]
     pub current_wasm_sha: Vec<u8>,
     /// The proposal payload to upgrade the governance canister.
     pub payload: ChangeCanisterRequest,
     /// The sha of the binary the proposer wants to upgrade to.
+    #[serde(with = "serde_bytes")]
     pub proposed_wasm_sha: Vec<u8>,
     /// The principal id of the proposer (must be one of the node
     /// operators of the NNS subnet according to the registry at
@@ -140,7 +142,7 @@ impl GovernanceUpgradeRootProposal {
 }
 
 thread_local! {
-  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = RefCell::new(BTreeMap::new());
+  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {
@@ -440,7 +442,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        change_canister::<DfnRuntime>(payload).await;
+        let _ = change_canister::<DfnRuntime>(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

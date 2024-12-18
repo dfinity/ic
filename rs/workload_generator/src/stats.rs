@@ -17,7 +17,7 @@ impl ToMilliseconds for Duration {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 struct MS(f64);
 impl From<Duration> for MS {
     fn from(d: Duration) -> MS {
@@ -168,7 +168,7 @@ impl DurationStats {
 }
 
 /// Represents the statistics around a given set of facts.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Summary {
     average: Duration,
     median: Duration,
@@ -337,7 +337,10 @@ impl fmt::Display for Summary {
         writeln!(f, "  Data:      {}", self.content_length)?;
         writeln!(f)?;
         writeln!(f, "Status codes:")?;
-        writeln!(f, "https://gitlab.com/dfinity-lab/core/ic/tree/master/rs/workload_generator#summary-status-counts")?;
+        writeln!(
+            f,
+            "https://github.com/dfinity/ic/tree/master/rs/workload_generator#summary-status-counts"
+        )?;
         let mut status_counts: Vec<(&u16, &u32)> = self.status_counts.iter().collect();
         status_counts.sort_by(|&(&code_a, _), &(&code_b, _)| code_a.cmp(&code_b));
         for (k, v) in status_counts {

@@ -3,17 +3,17 @@ use serde::{de::Error, Deserialize, Deserializer, Serializer};
 use std::future::Future;
 use tokio::runtime::Runtime;
 
-pub fn block_on<F: Future>(f: F) -> F::Output {
+pub(crate) fn block_on<F: Future>(f: F) -> F::Output {
     let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
     rt.block_on(f)
 }
 
-pub fn sleep_secs(secs: u64) {
+pub(crate) fn sleep_secs(secs: u64) {
     let sleep_duration = std::time::Duration::from_secs(secs);
     std::thread::sleep(sleep_duration);
 }
 
-pub fn replica_from_string<'de, D>(deserializer: D) -> Result<ReplicaVersion, D::Error>
+pub(crate) fn replica_from_string<'de, D>(deserializer: D) -> Result<ReplicaVersion, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -21,7 +21,7 @@ where
     ReplicaVersion::try_from(s).map_err(D::Error::custom)
 }
 
-pub fn replica_to_string<S>(ver: &ReplicaVersion, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn replica_to_string<S>(ver: &ReplicaVersion, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {

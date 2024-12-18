@@ -4,67 +4,70 @@
 //!
 //! As much as possible the naming of structs in this module should match the
 //! naming used in the [Interface
-//! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+//! Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec)
 mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
-mod state_reader_executor;
 mod status;
-mod threads;
+mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
-        pub mod validator_executor;
-        pub mod metrics;
         pub mod call;
     } else {
-        mod validator_executor;
-        mod metrics;
         mod call;
     }
 }
 
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
+pub use common::cors_layer;
+pub use query::QueryServiceBuilder;
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+pub use read_state::subnet::SubnetReadStateServiceBuilder;
+
 use crate::{
     catch_up_package::CatchUpPackageService,
-    common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
+    common::{
+        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        MAX_REQUEST_RECEIVE_TIMEOUT,
+    },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{LABEL_STATUS, REQUESTS_LABEL_NAMES, STATUS_ERROR, STATUS_SUCCESS},
+    metrics::{
+        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
+        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
+        STATUS_SUCCESS,
+    },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    read_state::subnet::SubnetReadStateService,
-    state_reader_executor::StateReaderExecutor,
+    status::StatusService,
+    tracing_flamegraph::TracingFlamegraphService,
 };
-pub use call::CallServiceBuilder;
-pub use common::cors_layer;
 
 use axum::{
     body::Body,
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::{IntoResponse, Redirect},
-    routing::{get, get_service, post_service, MethodRouter},
+    response::Redirect,
+    routing::get,
     Router,
 };
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::{body::Incoming, Request, Response, StatusCode};
-use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
-    server,
-};
-use ic_async_utils::start_tcp_listener;
+use hyper::{body::Incoming, Request, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
@@ -82,49 +85,42 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
+        HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
+        ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
-    NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
-use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
-pub use query::QueryServiceBuilder;
 use rand::Rng;
-pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
-use status::StatusState;
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::TryFrom,
     io::Write,
     net::SocketAddr,
     path::PathBuf,
-    str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
-use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::UnboundedSender,
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch, OnceCell,
+    },
     time::{sleep, timeout, Instant},
 };
-use tokio_io_timeout::TimeoutStream;
-use tokio_rustls::server::TlsStream;
-use tower::{
-    limit::GlobalConcurrencyLimitLayer, service_fn, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder, ServiceExt,
-};
-use tower_http::limit::RequestBodyLimitLayer;
+use tokio_rustls::TlsConnector;
+use tokio_util::sync::CancellationToken;
+use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
-const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
@@ -135,27 +131,31 @@ const ALPN_HTTP2: &[u8; 2] = b"h2";
 /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
 const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 
-#[derive(Debug, Clone, PartialEq)]
+/// To indicate a TLS handshake the first byte of the TLS record (also known as Content Type) is set to 22.
+/// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
+const TLS_HANDHAKE_BYTES: u8 = 22;
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
-
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
+    call_v3_router: Router,
     query_router: Router,
-    catchup_service: EndpointService,
-    dashboard_service: EndpointService,
-    status_method: MethodRouter,
-    canister_read_state_service: EndpointService,
-    subnet_read_state_service: EndpointService,
-    pprof_home_service: EndpointService,
-    pprof_profile_service: EndpointService,
-    pprof_flamegraph_service: EndpointService,
+    catchup_router: Router,
+    dashboard_router: Router,
+    status_router: Router,
+    canister_read_state_router: Router,
+    subnet_read_state_router: Router,
+    pprof_home_router: Router,
+    pprof_profile_router: Router,
+    pprof_flamegraph_router: Router,
+    tracing_flamegraph_router: Router,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -167,11 +167,11 @@ fn start_server_initialization(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    state_reader_executor: StateReaderExecutor,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 ) {
     let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
@@ -181,13 +181,13 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::WaitingForCertifiedState.to_string(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::WaitingForCertifiedState.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
 
-        while common::get_latest_certified_state(&state_reader_executor)
+        while common::get_latest_certified_state(state_reader.clone())
             .await
             .is_none()
         {
@@ -205,17 +205,17 @@ fn start_server_initialization(
             subnet_id,
             nns_subnet_id,
             registry_client.as_ref(),
-            tls_handshake.as_ref(),
+            tls_config.as_ref(),
         )
         .await;
         if let Some(delegation) = loaded_delegation {
-            *delegation_from_nns.write().unwrap() = Some(delegation);
+            let _ = delegation_from_nns.set(delegation);
         }
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::Healthy.to_string(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::Healthy.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);
@@ -270,6 +270,11 @@ fn create_port_file(path: PathBuf, port: u16) {
 /// to provide a way to "fake" delegations received from the NNS subnet
 /// without having to either mock all the related calls to the registry
 /// or actually make the calls.
+///
+/// The unbounded channel, `terminal_state_ingress_messages`, is used to register the height
+/// of the replicated state when each ingress message reaches a terminal state.
+/// It is fine to use an unbounded channel as the the consumer, [`IngressWatcher`],
+/// will be able to consume the messages at the same rate as they are produced.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -278,12 +283,11 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -292,42 +296,67 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
+    tracing_handle: ReloadHandles,
+    certified_height_watcher: watch::Receiver<Height>,
+    completed_execution_messages_rx: Receiver<(MessageId, Height)>,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
 
-    let _enter = rt_handle.enter();
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr);
-
+    let tcp_listener = start_tcp_listener(addr, &rt_handle);
+    let _enter = rt_handle.enter();
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
-    let state_reader_clone = state_reader.clone();
-    let state_reader_executor = StateReaderExecutor::new(state_reader);
-    let call_router = CallServiceBuilder::builder(
+
+    let ingress_filter = Arc::new(Mutex::new(ingress_filter));
+
+    let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_id,
         subnet_id,
         registry_client.clone(),
         ingress_verifier.clone(),
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
+        ingress_filter.clone(),
+        ingress_throttler.clone(),
+        ingress_tx.clone(),
     )
-    .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
-    .build_router();
+    .build();
+
+    let (ingress_watcher_handle, _) = IngressWatcher::start(
+        rt_handle.clone(),
+        log.clone(),
+        metrics.clone(),
+        certified_height_watcher,
+        completed_execution_messages_rx,
+        CancellationToken::new(),
+    );
+
+    let call_router =
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+
+    let call_v3_router = call_v3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
+    );
+
     let query_router = QueryServiceBuilder::builder(
+        log.clone(),
         node_id,
         query_signer,
         registry_client.clone(),
@@ -335,59 +364,48 @@ pub fn start_server(
         delegation_from_nns.clone(),
         query_execution_service,
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
-    let canister_read_state_service = BoxCloneService::new(
-        CanisterReadStateServiceBuilder::builder(
-            state_reader_clone,
-            registry_client.clone(),
-            ingress_verifier,
-            delegation_from_nns.clone(),
-        )
-        .with_logger(log.clone())
-        .with_health_status(health_status.clone())
-        .with_malicious_flags(malicious_flags)
-        .build(),
-    );
-
-    let subnet_read_state_service = SubnetReadStateService::new_service(
+    let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
         log.clone(),
+        state_reader.clone(),
+        registry_client.clone(),
+        ingress_verifier,
+        delegation_from_nns.clone(),
+    )
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags)
+    .build_router();
+
+    let subnet_read_state_router =
+        SubnetReadStateServiceBuilder::builder(delegation_from_nns.clone(), state_reader.clone())
+            .with_health_status(health_status.clone())
+            .build_router();
+    let status_router = StatusService::build_router(
+        log.clone(),
+        nns_subnet_id,
+        Arc::clone(&registry_client),
         Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
-    let status_method =
-        MethodRouter::new()
-            .get(crate::status::status)
-            .with_state(StatusState::new(
-                log.clone(),
-                nns_subnet_id,
-                Arc::clone(&registry_client),
-                Arc::clone(&health_status),
-                state_reader_executor.clone(),
-            ));
-    let dashboard_service =
-        DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
-    let catchup_service = CatchUpPackageService::new_service(consensus_pool_cache.clone());
+    let dashboard_router =
+        DashboardService::new_router(config.clone(), subnet_type, state_reader.clone());
+    let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
-    let pprof_concurrency_buffer =
-        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
+    let pprof_home_router = PprofHomeService::new_router();
+    let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
+    let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
 
-    let pprof_home_service = PprofHomeService::new_service(pprof_concurrency_buffer.clone());
-    let pprof_profile_service =
-        PprofProfileService::new_service(pprof_collector.clone(), pprof_concurrency_buffer.clone());
-    let pprof_flamegraph_service =
-        PprofFlamegraphService::new_service(pprof_collector, pprof_concurrency_buffer);
+    let tracing_flamegraph_router = TracingFlamegraphService::build_router(tracing_handle);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
         metrics.clone(),
         Arc::clone(&health_status),
         consensus_pool_cache,
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
 
     start_server_initialization(
@@ -397,29 +415,31 @@ pub fn start_server(
         subnet_id,
         nns_subnet_id,
         registry_client.clone(),
-        state_reader_executor,
+        state_reader,
         Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_handshake.clone(),
+        tls_config.clone(),
     );
 
     let http_handler = HttpHandler {
         call_router,
+        call_v3_router,
         query_router,
-        status_method,
-        catchup_service,
-        dashboard_service,
-        canister_read_state_service,
-        subnet_read_state_service,
-        pprof_home_service,
-        pprof_profile_service,
-        pprof_flamegraph_service,
+        status_router,
+        catchup_router,
+        dashboard_router,
+        canister_read_state_router,
+        subnet_read_state_router,
+        pprof_home_router,
+        pprof_profile_router,
+        pprof_flamegraph_router,
+        tracing_flamegraph_router,
     };
-    let main_service = create_main_service(
-        metrics.clone(),
-        config.clone(),
+    let router = make_router(
         http_handler,
+        config.clone(),
+        metrics.clone(),
         health_status_refresher,
     );
 
@@ -431,231 +451,122 @@ pub fn start_server(
         create_port_file(path, local_addr.port());
     }
 
-    let metrics_cl = metrics.clone();
-    let log_cl = log.clone();
-    let conn_svc = ServiceBuilder::new().service_fn(move |tcp_stream: TcpStream| {
-        handshake_and_serve_connection(
-            log_cl.clone(),
-            config.clone(),
-            main_service.clone(),
-            tcp_stream,
-            tls_config.clone(),
-            registry_client.clone(),
-            metrics_cl.clone(),
-        )
-    });
-    let conn_svc = BoxCloneService::new(conn_svc);
-    rt_handle.clone().spawn(async move {
+    let read_timeout = Duration::from_secs(config.connection_read_timeout_seconds);
+    rt_handle.spawn(async move {
         loop {
-            match tcp_listener.accept().await {
-                Ok((tcp_stream, _)) => {
-                    metrics.connections_total.inc();
-                    // Start recording connection setup duration.
-                    let mut conn_svc = conn_svc.clone();
-                    tokio::spawn(async move {
-                        let _ = conn_svc
-                            .ready()
-                            .await
-                            .expect("The load shedder must always be ready.")
-                            .call(tcp_stream)
-                            .await;
-                    });
+            let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+
+            let router = router.clone();
+            let tls_config = tls_config.clone();
+            let log = log.clone();
+            let registry_client = registry_client.clone();
+            let metrics = metrics.clone();
+
+            tokio::spawn(async move {
+                metrics.connections_total.inc();
+
+                let timer = Instant::now();
+                // Set `NODELAY`
+                if stream.set_nodelay(true).is_err() {
+                    warn!(log, "Failed to set NODELAY option on tcp stream");
                 }
-                Err(err) => {
-                    // Don't exit the loop on a connection error. We will want to
-                    // continue serving.
+
+                // Peek to know if it is TLS connection.
+                let mut b = [0_u8; 1];
+                match timeout(read_timeout, stream.peek(&mut b)).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(_)) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
+                        return;
+                    }
+                    Err(_) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
+                        return;
+                    }
+                }
+                let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
+                stream.set_read_timeout(Some(read_timeout));
+                let stream = Box::pin(stream);
+
+                if b[0] == TLS_HANDHAKE_BYTES {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_SECURE])
+                        .start_timer();
+                    let mut server_config = match tls_config
+                        .server_config_without_client_auth(registry_client.get_latest_version())
+                    {
+                        Ok(c) => c,
+                        Err(err) => {
+                            warn!(log, "Failed to get server config from crypto {err}");
+                            metrics.closed_connections_total.inc();
+                            return;
+                        }
+                    };
+                    server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+
+                    match tls_acceptor.accept(stream).await {
+                        Ok(stream) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
+                                .observe(timer.elapsed().as_secs_f64());
+                            if let Err(err) =
+                                serve_http(stream, router, config.http_max_concurrent_streams).await
+                            {
+                                warn!(log, "failed to serve connection: {err}");
+                            }
+                        }
+                        Err(_) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
+                                .observe(timer.elapsed().as_secs_f64());
+                        }
+                    }
+                } else {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_INSECURE])
+                        .start_timer();
                     metrics
                         .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, ConnError::Io.into()])
-                        .observe(0.0);
+                        .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
+                        .observe(timer.elapsed().as_secs_f64());
+                    if let Err(err) =
+                        serve_http(stream, router, config.http_max_concurrent_streams).await
+                    {
+                        warn!(log, "failed to serve connection: {err}");
+                    }
+                };
 
-                    error!(log, "Can't accept TCP connection, error = {}", err);
-                }
-            }
+                metrics.closed_connections_total.inc();
+            });
         }
     });
 }
 
-fn create_main_service(
-    metrics: HttpHandlerMetrics,
-    config: Config,
-    http_handler: HttpHandler,
-    health_status_refresher: HealthStatusRefreshLayer,
-) -> BoxCloneService<Request<Incoming>, Response<Body>, Infallible> {
-    let res = make_router(http_handler, config, metrics, health_status_refresher);
-    let route_service = service_fn(move |req: Request<Incoming>| {
-        let mut r = res.clone();
-
-        async move {
-            r.as_service()
-                .map_response(|r| r.map(|b| Body::new(b.map_err(BoxError::from))))
-                .oneshot(req)
-                .await
-        }
-    });
-
-    BoxCloneService::new(route_service)
-}
-
-async fn handshake_and_serve_connection(
-    log: ReplicaLogger,
-    config: Config,
-    service: BoxCloneService<Request<Incoming>, Response<Body>, Infallible>,
-    tcp_stream: TcpStream,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    registry_client: Arc<dyn RegistryClient>,
-    metrics: HttpHandlerMetrics,
-) -> Result<(), Infallible> {
-    let connection_start_time = Instant::now();
-    let peer_addr = tcp_stream.peer_addr();
-    let conn_after_handshake = stream_after_handshake(
-        &log,
-        config.connection_read_timeout_seconds,
-        tcp_stream,
-        tls_config,
-        registry_client,
-    )
-    .await;
-
-    let (connection_result, conn_type_label) = match conn_after_handshake {
-        Err(err) => {
-            warn!(
-                log,
-                "Handshake failed, error = {:?}, peer_addr = {:?}", err, peer_addr,
-            );
-            metrics
-                .connection_setup_duration
-                .with_label_values(&[STATUS_ERROR, err.into()])
-                .observe(connection_start_time.elapsed().as_secs_f64());
-            return Ok(());
-        }
-        Ok(conn_type) => {
-            let conn_type_label = conn_type.to_string();
-            metrics
-                .connection_setup_duration
-                .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
-                .observe(connection_start_time.elapsed().as_secs_f64());
-            let conn_result = match conn_type {
-                ConnType::Secure(tls_stream) => {
-                    serve_connection_with_read_timeout(
-                        tls_stream,
-                        service,
-                        config.connection_read_timeout_seconds,
-                    )
-                    .await
-                }
-                ConnType::Insecure(tcp_stream) => {
-                    serve_connection_with_read_timeout(
-                        tcp_stream,
-                        service,
-                        config.connection_read_timeout_seconds,
-                    )
-                    .await
-                }
-            };
-            (conn_result, conn_type_label)
-        }
-    };
-    match connection_result {
-        Err(err) => {
-            info!(
-                log,
-                "The connection was closed abruptly after {:?}, error = {}",
-                connection_start_time.elapsed(),
-                err
-            );
-            metrics
-                .connection_duration
-                .with_label_values(&[STATUS_ERROR, &conn_type_label])
-                .observe(connection_start_time.elapsed().as_secs_f64())
-        }
-        Ok(()) => metrics
-            .connection_duration
-            .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
-            .observe(connection_start_time.elapsed().as_secs_f64()),
-    }
-    Ok(())
-}
-
-#[derive(Display)]
-#[strum(serialize_all = "snake_case")]
-enum ConnType {
-    #[strum(serialize = "secure")]
-    Secure(TlsStream<TcpStream>),
-    #[strum(serialize = "insecure")]
-    Insecure(TcpStream),
-}
-
-#[derive(Error, Debug, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub(crate) enum ConnError {
-    #[strum(serialize = "tls_handshake_failed")]
-    #[error("TLS Handshake failed: {0}")]
-    TlsHandshakeFailed(std::io::Error),
-    #[error("IO error.")]
-    Io,
-    #[error("Timeout while trying to connect.")]
-    Timeout,
-}
-
-async fn stream_after_handshake(
-    log: &ReplicaLogger,
-    connection_read_timeout_seconds: u64,
-    tcp_stream: TcpStream,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    registry_client: Arc<dyn RegistryClient>,
-) -> Result<ConnType, ConnError> {
-    use tokio_rustls::TlsAcceptor;
-
-    let mut b = [0_u8; 1];
-    match timeout(
-        Duration::from_secs(connection_read_timeout_seconds),
-        tcp_stream.peek(&mut b),
-    )
-    .await
-    {
-        // The peek operation was successful within the timeout.
-        Ok(Ok(_)) => {
-            if b[0] == 22 {
-                let mut config = tls_config
-                    .server_config_without_client_auth(registry_client.get_latest_version())
-                    .unwrap();
-
-                config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
-
-                TlsAcceptor::from(Arc::new(config))
-                    .accept(tcp_stream)
-                    .await
-                    .map(ConnType::Secure)
-                    .map_err(ConnError::TlsHandshakeFailed)
-            } else {
-                Ok(ConnType::Insecure(tcp_stream))
-            }
-        }
-        Ok(Err(err)) => {
-            warn!(log, "Peeking TCP stream failed with: {:?}", err);
-            Err(ConnError::Io)
-        }
-        Err(_) => Err(ConnError::Timeout),
-    }
-}
-
-async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + Unpin + 'static>(
-    stream: T,
-    metrics_svc: BoxCloneService<Request<Incoming>, Response<Body>, Infallible>,
-    connection_read_timeout_seconds: u64,
+async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
+    stream: S,
+    router: Router,
+    max_concurrent_streams: u32,
 ) -> Result<(), BoxError> {
-    let mut stream = TimeoutStream::new(stream);
-    stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
-    let stream = Box::pin(stream);
-
     let stream = TokioIo::new(stream);
-
-    let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
-        metrics_svc.clone().oneshot(request)
-    });
-    server::conn::auto::Builder::new(TokioExecutor::new())
-        .serve_connection(stream, hyper_service)
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+    hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .http2()
+        .max_concurrent_streams(max_concurrent_streams)
+        .serve_connection_with_upgrades(stream, hyper_service)
         .await
 }
 
@@ -665,64 +576,26 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
-    let catch_up_package_service = http_handler.catchup_service.clone();
-    let dashboard_service = http_handler.dashboard_service.clone();
-    let canister_read_state_service = http_handler.canister_read_state_service.clone();
-    let subnet_read_state_service = http_handler.subnet_read_state_service.clone();
-    let pprof_home_service = http_handler.pprof_home_service.clone();
-    let pprof_profile_service = http_handler.pprof_profile_service.clone();
-    let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
-
-    let post_router: Router = Router::new()
-        .route(
-            "/api/v2/canister/:effective_canister_id/read_state",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(canister_read_state_service),
-            ),
-        )
-        .route(
-            "/api/v2/subnet/:effective_canister_id/read_state",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(subnet_read_state_service),
-            ),
-        )
-        .route(
-            "/_/catch_up_package",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_catch_up_package_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .service(catch_up_package_service),
-            ),
-        );
-
     let pprof_concurrency_limiter =
         GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
 
-    let get_router = Router::new()
-        .route_service(
-            "/api/v2/status",
-            http_handler.status_method.layer(
+    let base_router = Router::new()
+        // TODO this is 303 instead of 302
+        .route(
+            "/",
+            get(|| async { Redirect::to(DashboardService::route()) }),
+        )
+        .route(
+            "/_/",
+            get(|| async { Redirect::to(DashboardService::route()) }),
+        )
+        .fallback(|| async {
+            make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
+        });
+
+    let final_router = base_router
+        .merge(
+            http_handler.status_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -731,56 +604,6 @@ fn make_router(
                     )),
             ),
         )
-        // TODO this is 303 instead of 302
-        .route("/", get(|| async { Redirect::to(HTTP_DASHBOARD_URL_PATH) }))
-        .route(
-            "/_/",
-            get(|| async { Redirect::to(HTTP_DASHBOARD_URL_PATH) }),
-        )
-        .route_service(
-            "/_/pprof",
-            get_service(pprof_home_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .route_service(
-            "/_/pprof/profile",
-            get_service(pprof_profile_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .route_service(
-            "/_/pprof/flamegraph",
-            get_service(pprof_flamegraph_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter),
-            ),
-        )
-        .route_service(
-            HTTP_DASHBOARD_URL_PATH,
-            get_service(dashboard_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_dashboard_concurrent_requests,
-                    )),
-            ),
-        )
-        .fallback(|| async {
-            make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
-        });
-
-    let final_router = get_router
-        .merge(post_router)
         .merge(
             http_handler.call_router.layer(
                 ServiceBuilder::new()
@@ -791,6 +614,7 @@ fn make_router(
                     )),
             ),
         )
+        .merge(http_handler.call_v3_router)
         .merge(
             http_handler.query_router.layer(
                 ServiceBuilder::new()
@@ -800,10 +624,85 @@ fn make_router(
                         config.max_query_concurrent_requests,
                     )),
             ),
+        )
+        .merge(
+            http_handler.subnet_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.canister_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.catchup_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_catch_up_package_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.dashboard_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_dashboard_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.pprof_home_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_profile_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.tracing_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    )),
+            ),
         );
 
     final_router.layer(
         ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
             .layer(HandleErrorLayer::new(map_box_error_to_response))
             .layer(health_status_refresher.clone())
             .load_shed()
@@ -845,27 +744,6 @@ async fn verify_cbor_content_header(
     next.run(request).await
 }
 
-async fn attach_effective_canister_id(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<String>,
-    mut request: axum::extract::Request,
-    next: Next,
-) -> axum::response::Response {
-    match PrincipalId::from_str(&effective_canister_id) {
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            format!(
-                "Malformed request: Invalid efffective principal id {}: {}",
-                effective_canister_id, e
-            ),
-        )
-            .into_response(),
-        Ok(eci) => {
-            request.extensions_mut().insert(eci);
-            next.run(request).await
-        }
-    }
-}
-
 async fn collect_timer_metric(
     State(metrics): State<Arc<HttpHandlerMetrics>>,
     request: axum::extract::Request,
@@ -878,6 +756,14 @@ async fn collect_timer_metric(
     } else {
         request.uri().path().to_owned()
     };
+
+    let http_version = format!("{:?}", request.version());
+
+    metrics
+        .request_http_version_counts
+        .with_label_values(&[&http_version])
+        .inc();
+
     metrics
         .request_body_size_bytes
         .with_label_values(&[&path, LABEL_UNKNOWN])
@@ -895,33 +781,13 @@ async fn collect_timer_metric(
     // This is a workaround for `StatusCode::as_str()` not returning a `&'static
     // str`. It ensures `request_timer` is dropped before `status`.
     let mut timer = request_timer;
-    timer.set_label(LABEL_STATUS, status.as_str());
+    timer.set_label(LABEL_HTTP_STATUS_CODE, status.as_str());
 
     metrics
         .response_body_size_bytes
         .with_label_values(&[&path])
         .observe(resp.body().size_hint().lower() as f64);
     resp
-}
-
-async fn receive_request_body(body: Body) -> Result<Bytes, Response<Body>> {
-    match body.collect().await.map_err(|e| e.into_inner()) {
-        Ok(b) => Ok(b.to_bytes()),
-        Err(e) if e.is::<LengthLimitError>() => {
-            let res = make_plaintext_response(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "Http body too large".to_string(),
-            );
-            Err(res)
-        }
-        Err(_) => {
-            let res = make_plaintext_response(
-                StatusCode::BAD_REQUEST,
-                "Unable to receive http body".to_string(),
-            );
-            Err(res)
-        }
-    }
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -933,7 +799,7 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Option<CertificateDelegation> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -960,7 +826,7 @@ async fn load_root_delegation(
             &subnet_id,
             &nns_subnet_id,
             registry_client,
-            tls_handshake,
+            tls_config,
         )
         .await
         {
@@ -990,7 +856,7 @@ async fn try_fetch_delegation_from_nns(
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
     let (peer_id, node) =
         match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id).await {
@@ -1037,17 +903,34 @@ async fn try_fetch_delegation_from_nns(
 
     let addr = SocketAddr::new(ip_addr, node.port as u16);
 
+    let tls_client_config = tls_config
+        .client_config(peer_id, registry_version)
+        .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
+
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
-    let tls_handshake = tls_handshake
-        .perform_tls_client_handshake(tcp_stream, peer_id, registry_version)
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+    let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
+    let tls_stream = tls_connector
+        .connect(
+            irrelevant_domain
+                .try_into()
+                // TODO: ideally the expect should run at compile time
+                .expect("failed to create domain"),
+            tcp_stream,
+        )
         .await
-        .map_err(|err| format!("TLS handshake failed: {:?}.", err))?;
+        .map_err(|err| {
+            format!(
+                "Could not establish TLS stream to node {}. {:?}.",
+                addr, err
+            )
+        })?;
 
     let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(tls_handshake)).await?;
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
     let log_clone = log.clone();
 
@@ -1077,7 +960,7 @@ async fn try_fetch_delegation_from_nns(
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
     let raw_response = match timeout(
-        Duration::from_secs(config.max_request_receive_seconds),
+        MAX_REQUEST_RECEIVE_TIMEOUT,
         http_body_util::Limited::new(
             raw_response_res.into_body(),
             config.max_delegation_certificate_size_bytes as usize,
@@ -1098,7 +981,8 @@ async fn try_fetch_delegation_from_nns(
         Err(e) => {
             return Err(format!(
                 "Timeout of {}s reached while receiving http body: {}",
-                config.max_request_receive_seconds, e
+                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
+                e
             )
             .into())
         }
@@ -1205,6 +1089,8 @@ async fn get_random_node_from_nns_subnet(
 
 #[cfg(test)]
 mod tests {
+    use crate::read_state::subnet::SubnetReadStateService;
+    use bytes::Bytes;
     use futures_util::{future::select_all, stream::pending, FutureExt};
     use http::{
         header::{
@@ -1218,41 +1104,56 @@ mod tests {
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
     use ic_types::{CanisterId, Height};
+    use std::convert::Infallible;
+    use tower::ServiceExt;
 
-    use crate::{call::CallService, query::QueryService};
+    use crate::{common::Cbor, query::QueryService};
 
     use super::*;
 
+    fn empty_cbor() -> Bytes {
+        Bytes::from(serde_cbor::to_vec(&()).unwrap())
+    }
+
     fn dummy_router(config: Config) -> Router {
-        let dummy_service = BoxCloneService::new(service_fn(|req: Request<Body>| async move {
-            match receive_request_body(req.into_body()).await {
-                Ok(_) => Ok(Response::new(Body::new("success".to_string()))),
-                Err(e) => Ok(e),
-            }
-        }));
+        async fn dummy(_body: Bytes) -> String {
+            "success".to_string()
+        }
+        async fn dummy_cbor(_body: Cbor<()>) -> String {
+            "success".to_string()
+        }
         let http_handler = HttpHandler {
-            call_router: Router::new().route(
-                CallService::route(),
-                axum::routing::post_service(dummy_service.clone()),
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
+            query_router: Router::new()
+                .route(QueryService::route(), axum::routing::post(dummy_cbor)),
+            catchup_router: Router::new().route(
+                CatchUpPackageService::route(),
+                axum::routing::post(dummy_cbor),
             ),
-            query_router: Router::new().route(
-                QueryService::route(),
-                axum::routing::post_service(dummy_service.clone()),
+            dashboard_router: Router::new()
+                .route(DashboardService::route(), axum::routing::get(dummy)),
+            status_router: Router::new().route(StatusService::route(), axum::routing::get(dummy)),
+            canister_read_state_router: Router::new().route(
+                CanisterReadStateService::route(),
+                axum::routing::post(dummy),
             ),
-            catchup_service: dummy_service.clone(),
-            dashboard_service: dummy_service.clone(),
-            status_method: MethodRouter::new().get_service(dummy_service.clone()),
-            canister_read_state_service: dummy_service.clone(),
-            subnet_read_state_service: dummy_service.clone(),
-            pprof_home_service: dummy_service.clone(),
-            pprof_profile_service: dummy_service.clone(),
-            pprof_flamegraph_service: dummy_service.clone(),
+            subnet_read_state_router: Router::new()
+                .route(SubnetReadStateService::route(), axum::routing::post(dummy)),
+            pprof_home_router: Router::new()
+                .route(PprofHomeService::route(), axum::routing::get(dummy)),
+            pprof_profile_router: Router::new()
+                .route(PprofProfileService::route(), axum::routing::get(dummy)),
+            pprof_flamegraph_router: Router::new()
+                .route(PprofFlamegraphService::route(), axum::routing::get(dummy)),
+            tracing_flamegraph_router: Router::new()
+                .route(TracingFlamegraphService::route(), axum::routing::get(dummy)),
         };
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());
 
-        let mut state_reader_executor = MockStateManager::new();
-        state_reader_executor
+        let mut state_manager = MockStateManager::new();
+        state_manager
             .expect_latest_certified_height()
             .return_const(Height::from(1));
 
@@ -1270,7 +1171,7 @@ mod tests {
                 metrics,
                 Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy)),
                 Arc::new(consensus_pool_cache),
-                StateReaderExecutor::new(Arc::new(state_reader_executor)),
+                Arc::new(state_manager),
             ),
         )
     }
@@ -1381,7 +1282,7 @@ mod tests {
             .uri(format!("/api/v2/canister/{}/query", CanisterId::ic_00()))
             .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
             .method(hyper::Method::POST)
-            .body(Body::new(Empty::new()))
+            .body(Body::new(Full::new(empty_cbor())))
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
@@ -1501,7 +1402,7 @@ mod tests {
             .uri("/_/catch_up_package")
             .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
             .method(hyper::Method::POST)
-            .body(Body::new(Empty::new()))
+            .body(Body::new(Full::new(empty_cbor())))
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

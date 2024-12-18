@@ -3,15 +3,15 @@
 //! layers by signing state hashes.
 use ic_consensus_utils::crypto::{Aggregate, SignVerify};
 use ic_interfaces::crypto::{Crypto, ThresholdSigner};
-use ic_types::signature::*;
 use ic_types::{
     consensus::certification::CertificationContent, crypto::threshold_sig::ni_dkg::NiDkgId,
+    signature::*,
 };
 
 mod certifier;
 mod verifier;
 
-pub use certifier::{setup, CertifierImpl};
+pub use certifier::{CertifierBouncer, CertifierImpl};
 pub use verifier::VerifierImpl;
 
 /// A trait that encompasses all crypto signing/verification interface required

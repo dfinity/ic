@@ -14,7 +14,6 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
@@ -33,8 +32,8 @@ use ic_types::batch::QueryStats;
 use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, UserQuery},
-    CanisterId, NumInstructions, PrincipalId,
+    messages::{Blob, Certificate, CertificateDelegation, Query},
+    CanisterId, NumInstructions, PrincipalId, SubnetId,
 };
 use prometheus::Histogram;
 use serde::Serialize;
@@ -45,16 +44,18 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
-    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
-use ic_replicated_state::NetworkTopology;
+
+const DISTRIKT_SUBNET_PRINCIPAL: &str =
+    "shefu-t3kr5-t5q3w-mqmdq-jabyv-vyvtf-cyyey-3kmo4-toyln-emubw-4qe";
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -102,6 +103,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -141,6 +143,7 @@ impl InternalHttpQueryHandler {
     pub fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -154,6 +157,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -188,10 +192,10 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
-    /// Handle a query of type `UserQuery` which was sent by an end user.
+    /// Handle a query of type `Query`.
     pub fn query(
         &self,
-        mut query: UserQuery,
+        query: Query,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
@@ -199,28 +203,21 @@ impl InternalHttpQueryHandler {
 
         // Update the query receiver if the query is for the management canister.
         if query.receiver == CanisterId::ic_00() {
-            let network = match QueryMethod::from_str(query.method_name.as_str()) {
-                Ok(QueryMethod::BitcoinGetUtxosQuery) => {
-                    BitcoinGetUtxosArgs::decode(&query.method_payload)?.network
-                }
-                Ok(QueryMethod::BitcoinGetBalanceQuery) => {
-                    BitcoinGetBalanceArgs::decode(&query.method_payload)?.network
-                }
+            match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return match self.config.canister_logging {
-                        FlagStatus::Enabled => fetch_canister_logs(
-                            query.source.get(),
-                            state.get_ref(),
-                            FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        ),
-                        FlagStatus::Disabled => Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            format!(
-                                "{} API is not enabled on this subnet",
-                                QueryMethod::FetchCanisterLogs
-                            ),
-                        )),
-                    }
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
+                        query.source(),
+                        state.get_ref(),
+                        FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.allowed_viewers_feature,
+                    );
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
@@ -229,9 +226,6 @@ impl InternalHttpQueryHandler {
                     ));
                 }
             };
-
-            query.receiver =
-                route_bitcoin_message(network, &state.get_ref().metadata.network_topology)?;
         }
 
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
@@ -260,11 +254,16 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
+        // We apply the (rather high) subnet soft limit for callbacks because the
+        // instruction limit for the whole composite query tree imposes a much lower
+        // implicit bound anyway.
+        let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
+            self.own_subnet_id,
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -272,6 +271,8 @@ impl InternalHttpQueryHandler {
             state.clone(),
             data_certificate,
             subnet_available_memory,
+            subnet_available_callbacks,
+            self.config.canister_guaranteed_callback_quota as u64,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
@@ -303,37 +304,11 @@ impl InternalHttpQueryHandler {
     }
 }
 
-fn route_bitcoin_message(
-    network: BitcoinNetwork,
-    network_topology: &NetworkTopology,
-) -> Result<CanisterId, UserError> {
-    let canister_id = match network {
-        // Route to the bitcoin canister if it exists, otherwise return the error.
-        BitcoinNetwork::Testnet
-        | BitcoinNetwork::testnet
-        | BitcoinNetwork::Regtest
-        | BitcoinNetwork::regtest => {
-            network_topology
-                .bitcoin_testnet_canister_id
-                .ok_or(UserError::new(
-                    ErrorCode::CanisterNotHostedBySubnet,
-                    "Bitcoin testnet canister is not installed.".to_string(),
-                ))?
-        }
-        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => network_topology
-            .bitcoin_mainnet_canister_id
-            .ok_or(UserError::new(
-                ErrorCode::CanisterNotHostedBySubnet,
-                "Bitcoin mainnet canister is not installed.".to_string(),
-            ))?,
-    };
-    Ok(canister_id)
-}
-
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
+    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -343,10 +318,19 @@ fn fetch_canister_logs(
         )
     })?;
 
-    match canister.log_visibility() {
-        LogVisibility::Public => Ok(()),
-        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+    let log_visibility = match canister.log_visibility() {
+        // If the feature is disabled override `AllowedViewers` with default value.
+        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
+            &LogVisibilityV2::default()
+        }
+        other => other,
+    };
+    match log_visibility {
+        LogVisibilityV2::Public => Ok(()),
+        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",
@@ -384,7 +368,7 @@ impl HttpQueryHandler {
     }
 }
 
-impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
+impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
     type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -396,7 +380,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
 
     fn call(
         &mut self,
-        (query, certificate_delegation): (UserQuery, Option<CertificateDelegation>),
+        (query, certificate_delegation): (Query, Option<CertificateDelegation>),
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);

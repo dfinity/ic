@@ -9,8 +9,7 @@ use crate::{
     types::Environment,
 };
 use candid::{Decode, Encode};
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -96,7 +95,6 @@ async fn install_code(
         arg,
         compute_allocation: None,
         memory_allocation: None,
-        query_allocation: None,
         sender_canister_version: env.canister_version(),
     };
 

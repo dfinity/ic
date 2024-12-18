@@ -36,7 +36,7 @@ pub fn new_random_cert<R: Rng + RngCore + CryptoRng>(
         rng,
     );
 
-    let cert_builder = conditionally_add_delegation_cert(cert_builder, with_delegation);
+    let cert_builder = conditionally_add_delegation_cert(cert_builder, with_delegation, rng);
     let (_cert, root_pk, cert_cbor) = cert_builder.build();
 
     CanisterCertificate {
@@ -49,15 +49,19 @@ pub fn new_random_cert<R: Rng + RngCore + CryptoRng>(
     }
 }
 
-fn conditionally_add_delegation_cert(
+fn conditionally_add_delegation_cert<R: Rng + CryptoRng>(
     cert_builder: CertificateBuilder,
     with_delegation: bool,
+    rng: &mut R,
 ) -> CertificateBuilder {
     if with_delegation {
-        cert_builder.with_delegation(CertificateBuilder::new(CertificateData::SubnetData {
-            subnet_id: subnet_id(123),
-            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-        }))
+        cert_builder.with_delegation(CertificateBuilder::new_with_rng(
+            CertificateData::SubnetData {
+                subnet_id: subnet_id(123),
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        ))
     } else {
         cert_builder
     }

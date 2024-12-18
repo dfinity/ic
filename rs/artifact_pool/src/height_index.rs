@@ -4,6 +4,7 @@ use ic_types::{
     Height,
 };
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 pub struct HeightIndex<T: Eq> {
     buckets: BTreeMap<Height, Vec<T>>,
@@ -104,6 +105,7 @@ pub struct Indexes {
     pub random_tape_share: HeightIndex<CryptoHashOf<RandomTapeShare>>,
     pub catch_up_package: HeightIndex<CryptoHashOf<CatchUpPackage>>,
     pub catch_up_package_share: HeightIndex<CryptoHashOf<CatchUpPackageShare>>,
+    pub equivocation_proof: HeightIndex<CryptoHashOf<EquivocationProof>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -121,6 +123,7 @@ impl Indexes {
             random_tape_share: HeightIndex::new(),
             catch_up_package: HeightIndex::new(),
             catch_up_package_share: HeightIndex::new(),
+            equivocation_proof: HeightIndex::new(),
         }
     }
 
@@ -159,6 +162,9 @@ impl Indexes {
             ConsensusMessage::CatchUpPackageShare(artifact) => self
                 .catch_up_package_share
                 .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
+            ConsensusMessage::EquivocationProof(artifact) => self
+                .equivocation_proof
+                .insert(artifact.height(), &CryptoHashOf::from(hash.clone())),
         };
     }
 
@@ -196,6 +202,9 @@ impl Indexes {
                 .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
             ConsensusMessage::CatchUpPackageShare(artifact) => self
                 .catch_up_package_share
+                .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
+            ConsensusMessage::EquivocationProof(artifact) => self
+                .equivocation_proof
                 .remove(artifact.height(), &CryptoHashOf::from(hash.clone())),
         };
     }
@@ -268,6 +277,51 @@ impl SelectIndex for CryptoHashOf<CatchUpPackage> {
 impl SelectIndex for CryptoHashOf<CatchUpPackageShare> {
     fn select_index(indexes: &Indexes) -> &HeightIndex<Self> {
         &indexes.catch_up_package_share
+    }
+}
+
+impl SelectIndex for CryptoHashOf<EquivocationProof> {
+    fn select_index(indexes: &Indexes) -> &HeightIndex<Self> {
+        &indexes.equivocation_proof
+    }
+}
+
+/// Stores instants for any object, and indexes them by height
+pub struct HeightIndexedInstants<T: Eq + Ord + Clone> {
+    instants: BTreeMap<T, Instant>,
+    index: HeightIndex<T>,
+}
+
+impl<T: Eq + Ord + Clone> Default for HeightIndexedInstants<T> {
+    fn default() -> Self {
+        Self {
+            instants: Default::default(),
+            index: Default::default(),
+        }
+    }
+}
+
+impl<T: Eq + Ord + Clone> HeightIndexedInstants<T> {
+    pub fn get(&self, key: &T) -> Option<&Instant> {
+        self.instants.get(key)
+    }
+
+    /// Inserts the key-value pair at the given height. If the key
+    /// already exists, the value is *not* updated.
+    pub fn insert(&mut self, key: &T, value: Instant, height: Height) {
+        if self.index.insert(height, key) {
+            self.instants.entry(key.clone()).or_insert(value);
+        }
+    }
+
+    pub fn clear(&mut self, h: Height) {
+        let range = self.index.range(Height::new(0)..h);
+        for (_, bucket) in range {
+            for hash in bucket {
+                self.instants.remove(hash);
+            }
+        }
+        self.index.remove_all_below(h);
     }
 }
 

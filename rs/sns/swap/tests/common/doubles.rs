@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use ic_nervous_system_common_test_utils::SpyLedger;
@@ -12,8 +12,9 @@ use ic_sns_swap::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterClients,
     pb::v1::{
-        CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        set_dapp_controllers_request::CanisterIds, CanisterCallError, SetDappControllersRequest,
+        SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -23,7 +24,7 @@ use std::{
 };
 
 /// Expect that no SNS root calls will be made. Explode otherwise.
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct ExplodingSnsRootClient;
 
 #[async_trait]
@@ -37,20 +38,34 @@ impl SnsRootClient for ExplodingSnsRootClient {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum SnsRootClientCall {
     SetDappControllers(SetDappControllersRequest),
 }
 
+impl SnsRootClientCall {
+    pub fn set_dapp_controllers(
+        canisters: Option<Vec<CanisterId>>,
+        controllers: Vec<PrincipalId>,
+    ) -> Self {
+        let request = SetDappControllersRequest {
+            canister_ids: canisters.map(|canisters| CanisterIds {
+                canister_ids: canisters.into_iter().map(|x| x.get()).collect(),
+            }),
+            controller_principal_ids: controllers,
+        };
+        SnsRootClientCall::SetDappControllers(request)
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum SnsRootClientReply {
     SetDappControllers(SetDappControllersResponse),
-    CanisterCallError(CanisterCallError),
 }
 
 /// SnsRootClient that lets the test spy on the calls made
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct SpySnsRootClient {
     pub observed_calls: Vec<SnsRootClientCall>,
     pub replies: Vec<SnsRootClientReply>,
@@ -66,7 +81,6 @@ impl SnsRootClient for SpySnsRootClient {
             .push(SnsRootClientCall::SetDappControllers(request));
         match self.replies.pop().unwrap() {
             SnsRootClientReply::SetDappControllers(reply) => Ok(reply),
-            SnsRootClientReply::CanisterCallError(error) => Err(error),
         }
     }
 }
@@ -77,16 +91,6 @@ impl SpySnsRootClient {
             observed_calls: vec![],
             replies,
         }
-    }
-
-    pub fn push_reply(&mut self, reply: SnsRootClientReply) {
-        self.replies.push(reply)
-    }
-
-    pub fn pop_observed_call(&mut self) -> SnsRootClientCall {
-        self.observed_calls
-            .pop()
-            .expect("Expected there to be a call on SpySnsRootClient's observed_call stack")
     }
 }
 
@@ -100,7 +104,7 @@ impl SnsRootClientReply {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum SnsGovernanceClientCall {
     ClaimSwapNeurons(ClaimSwapNeuronsRequest),
     ManageNeuron(ManageNeuron),
@@ -108,7 +112,7 @@ pub enum SnsGovernanceClientCall {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 #[allow(unused)]
 pub enum SnsGovernanceClientReply {
     ClaimSwapNeurons(ClaimSwapNeuronsResponse),
@@ -117,7 +121,7 @@ pub enum SnsGovernanceClientReply {
     CanisterCallError(CanisterCallError),
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct SpySnsGovernanceClient {
     pub calls: Vec<SnsGovernanceClientCall>,
     pub replies: VecDeque<SnsGovernanceClientReply>,
@@ -194,19 +198,19 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum NnsGovernanceClientCall {
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationRequest),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum NnsGovernanceClientReply {
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationResponse),
     CanisterCallError(CanisterCallError),
 }
 
 /// NnsGovernanceClient that allows tests to spy on the calls made
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct SpyNnsGovernanceClient {
     pub calls: Vec<NnsGovernanceClientCall>,
     pub replies: Vec<NnsGovernanceClientReply>,
@@ -251,13 +255,13 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
 }
 
 /// Expectation of one call on the mock Ledger.
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub enum LedgerExpect {
     AccountBalance(Account, Result<Tokens, i32>),
     TransferFunds(u64, u64, Option<Subaccount>, Account, u64, Result<u64, i32>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MockLedger {
     pub expect: Arc<Mutex<Vec<LedgerExpect>>>,
 }

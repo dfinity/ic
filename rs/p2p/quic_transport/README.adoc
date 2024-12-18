@@ -8,40 +8,37 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 == Requirements ==
 
-[cols="1,1"]
+A scalable, RPC-like library designed to operate in a peer-to-peer (P2P) network with Byzantine peers.
+
+[cols="3,3,3"]
 |===
-| **What ?**
-| **Why ?**
+| **Capability**
+| **Purpose**
+| **Implementation Requirement**
 
+| Request–response abstraction
+| Simplifies one-to-one communication between nodes, enabling developers to focus on application logic instead of low-level networking.	
+| Ensure https://en.wikipedia.org/wiki/Reliability_(computer_networking)[reliable data delivery] so the sender receives confirmation of successful message delivery.
 
-| https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
-| Applications on top of the transport layer are simpler to implement when this abstraction exists. E.g. they don't need to re-implement TCP or QUIC.
+| Scalable and resource-efficient
+| Optimizes shared resource usage (e.g., CPU, file descriptors) to sustain high performance under load and prevent resource exhaustion.	
+| Use https://en.wikipedia.org/wiki/Connection-oriented_communication[connection-oriented communication] to maintain a single persistent connection, minimizing overhead from repeated TLS handshakes or excessive connections.
 
-| https://en.wikipedia.org/wiki/Multiplexing[Multiplexing] - allowing messages to reach all the endpoints independently, and hence independent of packet losses involving other messages.
-| No head-of-line blocking delays. The transport layer implements a RPC-like abstraction that can process requests concurrently and independently.
+| Multitenancy of endpoints/handlers
+| Supports independent processing of multiple concurrent requests and responses.
+| Implement https://en.wikipedia.org/wiki/Multiplexing[multiplexing] to route messages independently, ensuring that packet loss or delay does not affect unrelated messages.
 
-| https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
-| In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
-
-| Application specific handshake - TLS.
-| Security.
-
-| Persistent connections.
-| P2P applications require fast exchange of data (e.g. ICP consensus protocol) so opening, closing and performing TLS handshake often introduces prohibitive high latency overhead.
-
-| Bounded memory.
-| There should be no operational burden. Having unbounded data structures implies there is high risk of nodes OOMing. If an OOM event happens most likely an operation mitigation is required in order to decrease the memory usage.
+| P2P fairness and resource protection
+| Ensures fair resource allocation in a P2P network where all peers are equal, preventing resource exhaustion by any single peer.
+| Enforce https://en.wikipedia.org/wiki/Flow_control_(data)[flow control] to limit the number of connections and in-flight messages per peer, ensuring resource usage stays within allocated boundaries.
 
 |===
-
 
 == Architecture ==
 
 Transport is devided into two logical parts - sending and receiving.
 
-For the sending side, transport exposes two API calls - `+rpc+` and `+push+`. For both the `+push+` and `+rpc+` method calls, the caller specifies destination, payload and an URI.
-The key difference between the two is that the `+push+` method doesn't return a response from the receving side.
-It is effectively the same as `+rpc+` just slightly more performant because there is less data to be exchanged. 
+For the sending side, transport exposes the `+rpc+` API call. 
 
 Transport uses https://docs.rs/anyhow/latest/anyhow/struct.Error.html[anyhow::Error] instead of https://docs.rs/thiserror/latest/thiserror/derive.Error.html[thiserror::Error] as the error type 
 because the errors are transient and it is expected that the user retries on failure.
@@ -54,16 +51,12 @@ How do you make sure there are only transient errors? For example, how do you ru
 [source, rust]
 ----
     async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error>;
-
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 ----
 
 The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
 When a message is received by transport, a handler is chosen using the URI and invoked with the payload (a.k.a. routing).
 
-== Handlers ==
-
-As a rule of thumb, if a handler doesn't return a response the sender should use the `+push+` method for sending data.
+=== Handlers ===
 
 A handler implements an async interface. This implies that a handler must satisfy all Tokio requirements for async code.
 Some handlers may use synchronous APIs that block the running thread for longer periods of time (>100 microseconds). 
@@ -71,27 +64,48 @@ In order to make request processing https://docs.rs/tokio/latest/tokio/task/inde
 Job execution starts in the threadpool iff the parent task was not cancelled.
 A nice writeup about async and blocking operations can be found in https://ryhl.io/blog/async-what-is-blocking/[Alice Ryhl's blog post].
 
-== Implementation design decisions ==
+== Implementation Details ==
 
-1. Use QUIC to statisfy the first two requirements ("Reliable data delivery" and "Multiplexing").
-2. Open new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
-3. Handlers are always ready to process messages, hence the router is always ready to accept streams. TODO: explain.
+This RPC library uses the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
 
-=== Breaking dependency cycles in P2P protocols ===
+=== QUIC stream per message ===
 
-In any design that uses a single connection for inbound and outbound traffic with
-designated listner and dialer there exists a circlular dependency between the read and write paths.
-There are different approaches of breaking this depedency.
+Instead of one stream per handler/URI. TODO: explain.
 
-The IC P2P protocols have a single event loop per P2P protocol that drives the outbound traffic.
-This follows the libp2p philosophy.
-Hence only those event loops need access to the `QuicTransport` object.
-In this model handlers can have a channel to the main event loop.
+=== Handlers are always ready to process messages ===
 
-Alternative approach (the one that SUI takes) is to have weak references
-to the transport object that can be used directly in the handlers. As a result,
-when there are handlers that take the weak reference the transport object needs to first be instantiated 
-and later started with the already constructed router.
-This approach enables the handlers for doing most of the work and potentially eliminating the need
-of the event loop from the first approach.
-However, this comes at the cost of having more shared state and more contention.
+The router is always ready to accept streams. TODO: explain.
+
+=== Unused QUIC/QUINN Abstraction ===
+
+* `+QuicTransport+` neither sends nor receives datagrams, as they are not reliably delivered.
+* `+QuicTransport+` does not use uni-directional streams. Although uni-directional streams are suitable for infallible handlers, the client cannot determine whether a request was processed by such a handler or dropped due to a missing route. Since routes and handlers are client-provided, a missing route is not considered a transport failure.
+For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods expect a response from the application receive side]. Moreover, no `+gRPC+` implementation returns https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`], the most suitable return code for a missing route.
+
+=== Using HTTP Request/Response as API Types ===
+
+gRPC implementations rely on Interface Definition Language (IDL) to define both the service interface and payload structure. However, the QUIC transport library avoids IDL to keep things lightweight.
+
+Instead, the QUIC transport directly uses HTTP request and response types, for two main reasons:
+
+* Reuse existing HTTP request/response types to simplify the code, eliminating the need for custom extractors.
+* Ease transition from existing HTTP client-server setups to the QUIC transport, allowing full reuse of the server router and leaving request building and response handling unchanged on the client side.
+
+== Breaking dependency cycles in P2P protocols ==
+
+Many P2P protocol designs use a single TCP/UDP connection between any two peers. The main benefit is less consumption of limited resources (e.g. CPU for TLS handshake, file descriptors for sockets).
+Such protocols that use a single connection for inbound and outbound traffic, with a designated listener and dialer, have circular dependency between the read and write paths.
+
+There are different approaches to breaking this dependency.
+
+1. Clients of the P2P protocol have a single event loop that drives the outbound traffic. Hence only those event loops need access to the `+QuicTransport+` object. 
+In this model, handlers can have a channel to the main event loop. Effectively this means that P2P clients are instantiated in two stages 1. creating the receive side router and 2. creating the send side event loop.
+
+2. An alternative is instead of splitting the creation of P2P clients into send and receive sides to split the creation of the `+QuicTransport+` in two - 
+creating the `+QuicTransport+` object (client side) and starting the `+QuicTransport+` event loop for establishing connections(server side). 
+This approach enables the handlers to do most of the work and potentially eliminates the need for the event loop from the first approach. However, this comes at the cost of having a more shared state and contention. 
+One possible implementation using this approach is to have weak references to the transport object that can be used directly in the handlers. 
+As a result, when there are handlers that take the weak reference the transport object needs first to be instantiated and later started with the already constructed router.
+
+3. Another alternative is to allow the `+QuicTransport+` to update the routes dynamically. In this case, once a connection is established it is unnatural to change the available routes from a client PoV.
+

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::sign::tests::REG_V2;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
@@ -570,16 +568,13 @@ mod load_transcript {
         };
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_load_threshold_signing_key()
-            .withf(
-                move |algorithm_id, dkg_id, epoch_, transcript, receiver_index| {
-                    *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
-                        && *dkg_id == NI_DKG_ID_1
-                        && *epoch_ == epoch(REG_V1)
-                        && *transcript == csp_transcript
-                        && *receiver_index == 2 // index of NODE_3 in (sorted)
-                                                // resharing committee
-                },
-            )
+            .withf(move |algorithm_id, epoch_, transcript, receiver_index| {
+                *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
+                    && *epoch_ == epoch(REG_V1)
+                    && *transcript == csp_transcript
+                    && *receiver_index == 2 // index of NODE_3 in (sorted)
+                                            // resharing committee
+            })
             .times(1)
             .return_const(Ok(()));
         csp.expect_observe_epoch_in_loaded_transcript()
@@ -728,7 +723,7 @@ mod load_transcript {
     ) -> Option<TranscriptData> {
         lockable_threshold_sig_data_store
             .read()
-            .transcript_data(dkg_id)
+            .transcript_data(&dkg_id)
             .cloned()
     }
 

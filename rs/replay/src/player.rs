@@ -1,7 +1,7 @@
-use crate::backup::{cup_file_name, rename_file};
-use crate::ingress::IngressWithPrinter;
 use crate::{
     backup,
+    backup::{cup_file_name, rename_file},
+    ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
 use ic_artifact_pool::{
@@ -10,20 +10,18 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
-use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
-use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
+use ic_consensus_utils::{
+    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
+    pool_reader::PoolReader,
 };
+use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::SysTimeSource,
 };
 use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
@@ -33,13 +31,12 @@ use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
+use ic_protobuf::{
+    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
+    types::v1 as pb,
 };
-use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
 use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -52,43 +49,34 @@ use ic_registry_transport::{
     serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
-use ic_types::batch::{BatchMessages, BlockmakerMetrics};
-use ic_types::consensus::certification::CertificationShare;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
-use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
-    batch::Batch,
-    consensus::{CatchUpPackage, HasHeight, HasVersion},
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::UserQuery,
-    time::current_time,
-    CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
-    Time, UserId,
-};
-use ic_types::{
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
-        certification::{Certification, CertificationContent},
-        CatchUpContentProtobufBytes,
+        certification::{Certification, CertificationContent, CertificationShare},
+        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
     },
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signable, Signed},
-    messages::CertificateDelegation,
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+    },
+    ingress::{IngressState, IngressStatus, WasmResult},
+    malicious_flags::MaliciousFlags,
+    messages::{Query, QuerySource},
     signature::ThresholdSignature,
+    time::current_time,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
-use ic_types::{CryptoHashOfPartialState, NodeId};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
-use std::collections::{HashMap, HashSet};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
-use tower::buffer::Buffer as TowerBuffer;
 use tower::ServiceExt;
 
 // Amount of time we are waiting for execution, after batches are delivered.
@@ -128,8 +116,7 @@ pub struct Player {
     membership: Option<Arc<Membership>>,
     validator: Option<ReplayValidator>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,
-    query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+    query_handler: QueryExecutionService,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
@@ -314,6 +301,7 @@ impl Player {
             None,
             MaliciousFlags::default(),
         ));
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
@@ -324,6 +312,7 @@ impl Player {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),
@@ -378,8 +367,7 @@ impl Player {
             membership,
             validator,
             crypto,
-            query_handler: runtime
-                .block_on(async { TowerBuffer::new(execution_service.query_execution_service, 1) }),
+            query_handler: execution_service.query_execution_service,
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
             registry,
@@ -593,7 +581,8 @@ impl Player {
                 .is_ok()
         };
 
-        let malicious_nodes = find_malicious_nodes(certification_pool, &verify);
+        let malicious_nodes =
+            find_malicious_nodes(certification_pool, self.get_latest_cup().height(), &verify);
 
         // Get heights and local state hashes without a full certification
         let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
@@ -710,7 +699,6 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                self.replica_version.clone(),
                 &self.log,
                 replay_target_height,
                 None,
@@ -737,11 +725,12 @@ impl Player {
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
     ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
-        let (registry_version, time, randomness) = match pool {
+        let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
+                ReplicaVersion::default(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -759,23 +748,24 @@ impl Player {
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
                     Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    last_block.version.clone(),
                 )
             }
         };
-        let batch_number = message_routing.expected_batch_height();
         let mut extra_batch = Batch {
-            batch_number,
-            next_checkpoint_height: None,
-            requires_full_state_hash: true,
+            batch_number: message_routing.expected_batch_height(),
+            batch_summary: None,
+            requires_full_state_hash: false,
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            ecdsa_subnet_public_keys: BTreeMap::new(),
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            chain_key_subnet_public_keys: BTreeMap::new(),
+            idkg_pre_signature_ids: BTreeMap::new(),
             registry_version,
             time,
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version,
         };
         let context_time = extra_batch.time;
         let extra_msgs = extra(self, context_time);
@@ -789,16 +779,44 @@ impl Player {
                 .collect::<Vec<_>>();
             println!("extra_batch created with new ingress");
         }
-        let batch_number = extra_batch.batch_number;
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
-                    println!("Delivered batch {}", batch_number);
-                    break;
+                    println!("Delivered batch {}", extra_batch.batch_number);
+                    self.wait_for_state(extra_batch.batch_number);
+
+                    // We are done once we delivered a batch for a new checkpoint
+                    if extra_batch.requires_full_state_hash {
+                        break;
+                    }
+
+                    // If we have messages that could not be completed, we need to keep delivering
+                    // empty batches. If all messages could be completed, we need to deliver one
+                    // more batch triggering checkpoint creation.
+                    let msg_status = self.ingress_history_reader.get_latest_status();
+                    let incomplete_msgs_exists =
+                        extra_msgs
+                            .iter()
+                            .any(|msg| match msg_status(&msg.ingress.id()) {
+                                IngressStatus::Unknown => true,
+                                IngressStatus::Known { state, .. } => !state.is_terminal(),
+                            });
+
+                    extra_batch = extra_batch.clone();
+                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.batch_number = message_routing.expected_batch_height();
+                    extra_batch.time += Duration::from_nanos(1);
+
+                    if !incomplete_msgs_exists {
+                        extra_batch.requires_full_state_hash = true;
+                    }
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
-                    unreachable!("Unexpected error on a valid batch number {}", batch_number);
+                    unreachable!(
+                        "Unexpected error on a valid batch number {}",
+                        extra_batch.batch_number
+                    );
                 }
             }
         }
@@ -806,37 +824,22 @@ impl Player {
     }
 
     fn certify_state_with_dummy_certification(&self) {
-        let (_ni_dkg_transcript, secret_key) =
-            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(42));
         if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
             let state_hashes = self.state_manager.list_state_hashes_to_certify();
             let (height, hash) = state_hashes
                 .last()
                 .expect("There should be at least one state hash to certify");
             self.state_manager
-                .deliver_state_certification(Self::certify_hash(
-                    &secret_key,
-                    self.subnet_id,
-                    height,
-                    hash,
-                ));
+                .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
         }
     }
 
     fn certify_hash(
-        secret_key: &SecretKeyBytes,
         subnet_id: SubnetId,
         height: &Height,
         hash: &CryptoHashOfPartialState,
     ) -> Certification {
-        let signature = sign_message(
-            CertificationContent::new(hash.clone())
-                .as_signed_bytes()
-                .as_slice(),
-            secret_key,
-        );
-        let combined_sig =
-            CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
+        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
             signed: Signed {
@@ -861,14 +864,16 @@ impl Player {
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
         let key = make_blessed_replica_versions_key();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_value".to_string(),
             method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
                 .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -901,13 +906,15 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<RegistryVersion, String> {
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_latest_version".to_string(),
             method_payload: Vec::new(),
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -941,13 +948,15 @@ impl Player {
         ingress_expiry: Time,
     ) -> Result<Vec<RegistryTransportRecord>, String> {
         let payload = serialize_get_changes_since_request(version).unwrap();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_changes_since".to_string(),
             method_payload: payload,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -971,8 +980,12 @@ impl Player {
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
         let subnet_record_key = make_subnet_record_key(self.subnet_id);
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_value".to_string(),
             method_payload: serialize_get_value_request(
@@ -980,8 +993,6 @@ impl Player {
                 None,
             )
             .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -1134,7 +1145,7 @@ impl Player {
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
         use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
-        pool.apply_changes(ChangeAction::PurgeValidatedBelow(purge_height).into());
+        pool.apply(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }
 
@@ -1222,15 +1233,20 @@ impl Player {
 /// Return the set of signers that created multiple valid certification shares for the same height
 fn find_malicious_nodes(
     certification_pool: &CertificationPoolImpl,
+    latest_cup_height: Height,
     verify: &dyn Fn(&CertificationShare) -> bool,
 ) -> HashSet<NodeId> {
     let mut malicious = HashSet::new();
     if let Some(range) = certification_pool
-        .persistent_pool
+        .validated
         .certification_shares()
         .height_range()
     {
-        for h in range.min.get()..=range.max.get() {
+        // Do not try to verify shares below the CUP height
+        // They are not needed and we may not have the key material to do so
+        let min = std::cmp::max(range.min.get(), latest_cup_height.get());
+
+        for h in min..=range.max.get() {
             let shares = certification_pool
                 .shares_at_height(Height::from(h))
                 .filter(verify)
@@ -1478,11 +1494,9 @@ mod tests {
             make_share(3, vec![3], 7),
         ];
 
-        shares
-            .into_iter()
-            .for_each(|s| pool.persistent_pool.insert(s));
+        shares.into_iter().for_each(|s| pool.validated.insert(s));
 
-        let malicious = find_malicious_nodes(&pool, &verify);
+        let malicious = find_malicious_nodes(&pool, Height::new(0), &verify);
         assert_eq!(malicious.len(), 1);
         assert_eq!(*malicious.iter().next().unwrap(), node_test_id(7));
 

@@ -1,37 +1,46 @@
+use std::time::Instant;
+
 use async_trait::async_trait;
-use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
-use hyper::body;
-use reqwest::{Error as ReqwestError, Request, Response};
+use ic_bn_lib::http::{http_version, Client};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, routes::ErrorCause};
-
-/// Standard response used to pass between middlewares
-pub type AxumResponse = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
-
-// TODO remove this wrapper?
-#[async_trait]
-pub trait HttpClient: Send + Sync {
-    async fn execute(&self, req: Request) -> Result<Response, ReqwestError>;
-}
-
-pub struct ReqwestClient(pub reqwest::Client);
+use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
 
 #[async_trait]
-impl HttpClient for ReqwestClient {
-    async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
-        self.0.execute(req).await
+impl<T: Client> Client for WithMetrics<T> {
+    async fn execute(&self, req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+        let start = Instant::now();
+        let res = self.0.execute(req).await;
+        let dur = start.elapsed().as_secs_f64();
+
+        let success = if res.is_ok() { "yes" } else { "no" };
+
+        let status = res.as_ref().map(|x| x.status());
+        let status_code = status.as_ref().map(|x| x.as_str()).unwrap_or("0");
+
+        let http_version = res
+            .as_ref()
+            .map(|x| http_version(x.version()))
+            .unwrap_or("-");
+
+        let labels = &[success, status_code, http_version];
+        self.1.counter.with_label_values(labels).inc();
+        self.1.recorder.with_label_values(labels).observe(dur);
+
+        res
     }
 }
 
 // Try to categorize the error that we got from Reqwest call
-pub fn reqwest_error_infer(e: ReqwestError) -> ErrorCause {
-    if e.is_connect() {
-        return ErrorCause::ReplicaErrorConnect;
-    }
+pub fn error_infer(e: &impl std::error::Error) -> ErrorCause {
+    if let Some(e) = error_source::<reqwest::Error>(&e) {
+        if e.is_connect() {
+            return ErrorCause::ReplicaErrorConnect;
+        }
 
-    if e.is_timeout() {
-        return ErrorCause::ReplicaTimeout;
+        if e.is_timeout() {
+            return ErrorCause::ReplicaTimeout;
+        }
     }
 
     // Check if it's a DNS error
@@ -53,25 +62,4 @@ pub fn reqwest_error_infer(e: ReqwestError) -> ErrorCause {
     }
 
     ErrorCause::ReplicaErrorOther(e.to_string())
-}
-
-// Read the body from the available stream enforcing a size limit
-pub async fn read_streaming_body<H: HttpBody>(
-    body_stream: H,
-    size_limit: usize,
-) -> Result<Vec<u8>, ErrorCause>
-where
-    <H as HttpBody>::Error: std::error::Error + Send + Sync + 'static,
-{
-    let limited_body = Limited::new(body_stream, size_limit);
-
-    let data = body::to_bytes(limited_body).await.map_err(|err| {
-        if err.downcast_ref::<LengthLimitError>().is_some() {
-            ErrorCause::PayloadTooLarge(size_limit)
-        } else {
-            ErrorCause::UnableToReadBody(format!("unable to read response body: {err}"))
-        }
-    })?;
-
-    Ok(data.to_vec())
 }

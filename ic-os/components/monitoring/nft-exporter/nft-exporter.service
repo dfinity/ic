@@ -1,0 +1,9 @@
+[Unit]
+Description=Collect nft counters and write them to a file for node exporter
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/nft-exporter

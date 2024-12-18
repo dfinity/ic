@@ -131,6 +131,8 @@ pub(crate) fn setup() -> (
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone().into(),
         &metrics_registry,
@@ -141,6 +143,7 @@ pub(crate) fn setup() -> (
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager.get_fd_factory()),
+        completed_execution_messages_tx,
     );
 
     let message_routing = MessageRoutingImpl::new(

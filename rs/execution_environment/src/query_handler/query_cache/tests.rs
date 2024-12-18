@@ -5,7 +5,7 @@ use crate::{
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -15,7 +15,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, UserQuery},
+    messages::{CanisterTask, Query, QuerySource},
     time, CountBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
@@ -323,13 +323,15 @@ fn query_cache_returns_different_results_for_different_sources() {
     let q = wasm().caller().append_and_reply();
     for_query_and_composite_query(q, |test, a_id, b_id, method, q| {
         let res_1 = test.query(
-            UserQuery {
-                source: user_test_id(1),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: a_id,
                 method_name: method.into(),
                 method_payload: q.clone(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -345,13 +347,15 @@ fn query_cache_returns_different_results_for_different_sources() {
         assert_eq!(Ok(WasmResult::Reply(caller.into())), res_1);
 
         let res_2 = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: a_id,
                 method_name: method.into(),
                 method_payload: q,
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1361,19 +1365,20 @@ fn query_cache_never_caches_calls_to_management_canister() {
         .call_simple(CanisterId::ic_00(), "raw_rand", call_args())
         .build();
 
-    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    let res_1 = test
+        .non_replicated_query(a_id, "query", q.clone())
+        .unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-    let description = format!("Canister {} violated contract: \"ic0_call_new\" cannot be executed in non replicated query mode", a_id);
-    assert_eq!(
-        Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            description
-        )),
-        res_1
+    let description = format!(
+        "Error from Canister {a_id}: Canister violated contract: \
+        \"ic0_call_new\" cannot be executed in non replicated query mode"
     );
+    res_1.assert_contains(ErrorCode::CanisterContractViolation, &description);
 
-    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    let res_2 = test
+        .non_replicated_query(a_id, "query", q.clone())
+        .unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 1);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
     assert_eq!(res_1, res_2);
@@ -1466,6 +1471,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup
         | SystemApiCallId::CallPerform
+        | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
@@ -1479,8 +1485,10 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::DataCertificateSize
         | SystemApiCallId::DebugPrint
         | SystemApiCallId::GlobalTimerSet
+        | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
         | SystemApiCallId::MintCycles
+        | SystemApiCallId::MintCycles128
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
         | SystemApiCallId::MsgCallerCopy
@@ -1491,6 +1499,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgCyclesAvailable128
         | SystemApiCallId::MsgCyclesRefunded
         | SystemApiCallId::MsgCyclesRefunded128
+        | SystemApiCallId::MsgDeadline
         | SystemApiCallId::MsgMethodNameCopy
         | SystemApiCallId::MsgMethodNameSize
         | SystemApiCallId::MsgReject
@@ -1511,7 +1520,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableWrite
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
-        | SystemApiCallId::UpdateAvailableMemory => {
+        | SystemApiCallId::TryGrowWasmMemory => {
             ////////////////////////////////////////////////////////////////////
             // ATTENTION!
             ////////////////////////////////////////////////////////////////////

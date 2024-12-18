@@ -8,12 +8,12 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.73"
-axum = "0.6.20"
+async-trait = { workspace = true }
+axum = { workspace = true }
 clap = { workspace = true }
-http = "0.2.9"
+http = { workspace = true }
 itertools = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-url = "2.4.0"
+url = { workspace = true }

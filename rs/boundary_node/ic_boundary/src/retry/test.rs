@@ -15,7 +15,7 @@ use http::StatusCode;
 use ic_types::CanisterId;
 use tower::Service;
 
-use crate::routes::test::test_route_subnet;
+use crate::routes::{test::test_route_subnet, RequestType};
 
 struct TestState {
     failures: u8,
@@ -64,32 +64,6 @@ async fn handler(State(state): State<Arc<RwLock<TestState>>>) -> impl IntoRespon
 }
 
 #[tokio::test]
-async fn test_request_clone() -> Result<(), Error> {
-    let mut req = gen_request(RequestType::Query);
-    req.headers_mut().insert("foo", "bar".try_into().unwrap());
-    req.headers_mut().insert("baz", "bax".try_into().unwrap());
-
-    let (parts_in, body_in) = req.into_parts();
-    let body_in = body::to_bytes(body_in).await.unwrap().to_vec();
-
-    let req = request_clone(&parts_in, &body_in);
-
-    let (parts_out, body_out) = req.into_parts();
-    let body_out = body::to_bytes(body_out).await.unwrap().to_vec();
-
-    assert_eq!(body_in, body_out);
-
-    for (k, v) in parts_in.headers.iter() {
-        assert_eq!(parts_out.headers.get(k).unwrap(), v);
-    }
-
-    parts_out.extensions.get::<Arc<RequestContext>>().unwrap();
-    parts_out.extensions.get::<CanisterId>().unwrap();
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn test_retry() -> Result<(), Error> {
     let state = Arc::new(RwLock::new(TestState {
         failures: 2,
@@ -103,6 +77,7 @@ async fn test_retry() -> Result<(), Error> {
             RetryParams {
                 retry_count: 3,
                 retry_update_call: false,
+                disable_latency_routing: true,
             },
             retry_request,
         ));
@@ -154,7 +129,7 @@ async fn test_retry() -> Result<(), Error> {
     // Check non-retriable ErrorCause
     {
         state.write().unwrap().failures = 2;
-        state.write().unwrap().error_cause = Some(ErrorCause::ReplicaTimeout);
+        state.write().unwrap().error_cause = Some(ErrorCause::PayloadTooLarge(123));
     }
 
     let req = gen_request(RequestType::Query);
@@ -168,6 +143,7 @@ async fn test_retry() -> Result<(), Error> {
             RetryParams {
                 retry_count: 3,
                 retry_update_call: true,
+                disable_latency_routing: true,
             },
             retry_request,
         ));

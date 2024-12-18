@@ -1,0 +1,15 @@
+[Unit]
+Description=Set up hostname
+DefaultDependencies=no
+Before=systemd-networkd.service
+After=systemd-tmpfiles-setup.service
+Wants=dev-ipmi0.device
+After=dev-ipmi0.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-hostname.sh --type=host
+
+[Install]
+WantedBy=multi-user.target

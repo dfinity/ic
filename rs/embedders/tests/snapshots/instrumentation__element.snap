@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 53
+assertion_line: 62
 expression: out
 ---
 (module
@@ -8,12 +8,12 @@ expression: out
   (type (;1;) (func (result i64)))
   (type (;2;) (func (param i64) (result i64)))
   (type (;3;) (func (param i32)))
-  (type (;4;) (func (param i32 i32 i32) (result i32)))
+  (type (;4;) (func (param i32 i32) (result i32)))
   (type (;5;) (func (param i64 i64 i32) (result i64)))
   (type (;6;) (func (param i64 i64 i64)))
   (type (;7;) (func (param i32 i32) (result i32 i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 0)))
-  (import "__" "update_available_memory" (func (;1;) (type 4)))
+  (import "__" "try_grow_wasm_memory" (func (;1;) (type 4)))
   (import "__" "try_grow_stable_memory" (func (;2;) (type 5)))
   (import "__" "internal_trap" (func (;3;) (type 3)))
   (import "__" "stable_read_first_access" (func (;4;) (type 6)))
@@ -131,8 +131,8 @@ expression: out
     i32.sub
   )
   (table (;0;) 5 5 funcref)
-  (memory (;0;) i64 0 6553600)
-  (memory (;1;) 1600 1600)
+  (memory (;0;) i64 0 8192000)
+  (memory (;1;) 2000 2000)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
@@ -147,3 +147,4 @@ expression: out
   (export "canister counter_accessed_pages" (global 2))
   (elem (;0;) (i32.const 0) func 7 7 7 6 5)
 )
+

@@ -4,8 +4,8 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/http_types",
-    "@crate_index//:ic0",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:futures",
@@ -14,12 +14,14 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-xrc-types",
+    "@crate_index//:ic0",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
@@ -28,7 +30,6 @@ rust_library(
     name = "xrc_mock",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "xrc_mock",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

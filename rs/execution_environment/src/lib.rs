@@ -1,4 +1,3 @@
-mod anonymous_query_handler;
 mod bitcoin;
 mod canister_manager;
 mod canister_settings;
@@ -15,7 +14,6 @@ mod scheduler;
 mod types;
 pub mod util;
 
-use crate::anonymous_query_handler::AnonymousQueryHandler;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
@@ -26,7 +24,6 @@ pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
     Scheduler,
@@ -38,13 +35,17 @@ use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
-use ic_types::{messages::CallContextId, SubnetId};
+use ic_types::{
+    messages::{CallContextId, MessageId},
+    Height, SubnetId,
+};
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -71,7 +72,7 @@ pub enum QueryExecutionType {
 /// This enum indicates whether execution of a non-replicated query
 /// should keep track of the state or not.
 #[doc(hidden)]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
     Stateful { call_origin: CallOrigin },
     Pure { caller: PrincipalId },
@@ -83,7 +84,6 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
-    pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
@@ -102,6 +102,7 @@ impl ExecutionServices {
         cycles_account_manager: Arc<CyclesAccountManager>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        completed_execution_messages_tx: Sender<(MessageId, Height)>,
     ) -> ExecutionServices {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
@@ -112,12 +113,15 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
+            Arc::clone(&state_reader),
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
             config.clone(),
             logger.clone(),
             metrics_registry,
+            completed_execution_messages_tx,
+            Arc::clone(&state_reader),
         ));
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
@@ -132,17 +136,19 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
             scheduler_config.heap_delta_rate_limit,
             scheduler_config.upload_wasm_chunk_instructions,
+            scheduler_config.canister_snapshot_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config.clone(),
             metrics_registry,
@@ -175,12 +181,6 @@ impl ExecutionServices {
             Arc::clone(&exec_env),
             ingress_filter_metrics.clone(),
         );
-        let anonymous_query_handler = AnonymousQueryHandler::new_service(
-            query_scheduler,
-            Arc::clone(&state_reader),
-            Arc::clone(&exec_env),
-            scheduler_config.max_instructions_per_message_without_dts,
-        );
 
         let scheduler = Box::new(SchedulerImpl::new(
             scheduler_config,
@@ -201,7 +201,6 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
-            anonymous_query_handler,
             scheduler,
             query_stats_payload_builder,
         }
@@ -215,7 +214,6 @@ impl ExecutionServices {
         Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
-        AnonymousQueryService,
         Box<dyn Scheduler<State = ReplicatedState>>,
     ) {
         (
@@ -223,7 +221,6 @@ impl ExecutionServices {
             self.ingress_history_writer,
             self.ingress_history_reader,
             self.query_execution_service,
-            self.anonymous_query_handler,
             self.scheduler,
         )
     }

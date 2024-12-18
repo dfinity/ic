@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
 ]
@@ -17,6 +18,7 @@ ALIASES = {}
 
 rust_library(
     name = "reproducible_rng",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_reproducible_rng",

@@ -22,7 +22,7 @@ mod tests;
 /// list is bounded in size we could use a fixed size representation.  We
 /// may also want to expose the data structure here, depending on the
 /// strategic decisions regarding CBOR and protobufs.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct FsEncryptionSecretKey {
     pub bte_nodes: Vec<BTENodeBytes>,
 }
@@ -35,7 +35,7 @@ impl fmt::Debug for FsEncryptionSecretKey {
 }
 
 /// Library-independent representation of binary tree encryption leaf keys.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct BTENodeBytes {
     // Notation from section 7.2.
     #[serde(with = "serde_bytes")]
@@ -59,7 +59,7 @@ impl fmt::Debug for BTENodeBytes {
 }
 
 /// Forward-secure encryption public key, secret key, and proof-of-possession.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct FsEncryptionKeySetWithPop {
     #[zeroize(skip)]
     pub public_key: FsEncryptionPublicKey,

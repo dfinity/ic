@@ -14,7 +14,7 @@ use std::path::Path;
 /// The decoded `ThresholdSigPublicKey`
 /// # Error
 /// * `std::io::Error` if the file cannot be opened, or if the contents
-/// are not PEM, or if the encoded key is not BLS12-381.
+///   are not PEM, or if the encoded key is not BLS12-381.
 pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey> {
     let buf = std::fs::read(pem_file)?;
     let s = String::from_utf8_lossy(&buf);

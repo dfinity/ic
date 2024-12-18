@@ -3,6 +3,7 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:libfuzzer-sys",

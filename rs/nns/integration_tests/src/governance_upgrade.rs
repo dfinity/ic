@@ -4,7 +4,7 @@
 //! This is to make sure that the previous stable memory content does not have
 //! a detrimental impact on future upgrades.
 
-use canister_test::{local_test_e, Project};
+use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
@@ -12,27 +12,25 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{
-    init::{GovernanceCanisterInitPayloadBuilder, TEST_NEURON_1_ID},
-    pb::v1::{
-        manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
-        ManageNeuron, ManageNeuronResponse,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
+    ManageNeuron, ManageNeuronResponse,
 };
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::install_governance_canister,
+    itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
     state_test_helpers::{
-        create_canister_id_at_position, setup_nns_root_with_correct_canister_id, update_with_sender,
+        create_canister_id_at_position, setup_nns_root_with_correct_canister_id,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use std::time::Duration;
 
@@ -42,7 +40,7 @@ use std::time::Duration;
 /// in a trap in post_upgrade.
 #[test]
 fn test_upgrade_after_state_shrink() {
-    local_test_e(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut governance_proto = GovernanceCanisterInitPayloadBuilder::new()
             .with_test_neurons()
             .build();
@@ -97,7 +95,7 @@ fn test_upgrade_after_state_shrink() {
 
 #[test]
 fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let governance_id = create_canister_id_at_position(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
@@ -132,14 +130,12 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
-        query_allocation: None,
     };
 
     let _: () = update_with_sender(
         &state_machine,
         ROOT_CANISTER_ID,
         "change_nns_canister",
-        candid_one,
         proposal,
         GOVERNANCE_CANISTER_ID.get(),
     )
@@ -156,7 +152,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
@@ -173,7 +168,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )

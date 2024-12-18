@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/nns/governance/api",
+    "//rs/types/base_types",
+    "@crate_index//:csv",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "init",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_nns_governance_init",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "init--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_nns_governance_init",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

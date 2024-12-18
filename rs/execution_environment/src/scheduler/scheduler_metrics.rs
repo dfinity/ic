@@ -12,7 +12,7 @@ use prometheus::{
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, ScopedMetrics,
+    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -27,34 +27,38 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
+    pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
+    pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
     pub(super) canister_compute_allocation: Histogram,
+    pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
     pub(super) executable_canisters_per_round: Histogram,
+    pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) ingress_history_length: IntGauge,
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
-    /// Metric `consumed_cycles_since_replica_started` is not
-    /// monotonically increasing. Cycles consumed are increasing the
-    /// value of the metric while refunding cycles are decreasing it.
+    /// Metric `consumed_cycles` is not monotonically increasing. Cycles
+    /// consumed are increasing the value of the metric while refunding
+    /// cycles are decreasing it.
     ///
     /// `f64` gauge because cycles values are `u128`: converting them
     /// into `u64` would result in truncation when the value overflows
     /// 64 bits (which would be indistinguishable from a huge refund);
     /// whereas conversion to `f64` merely results in loss of precision
     /// when dealing with values > 2^53.
-    pub(super) consumed_cycles_since_replica_started: Gauge,
-    pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
+    pub(super) consumed_cycles: Gauge,
+    pub(super) consumed_cycles_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
-    pub(super) queues_reservations: IntGauge,
+    pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) streams_response_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
@@ -72,7 +76,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
-    pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
+    pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
@@ -105,11 +109,14 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
-    pub(super) ecdsa_signature_agreements: IntGauge,
-    pub(super) ecdsa_delivered_quadruples: HistogramVec,
-    pub(super) ecdsa_completed_contexts: IntCounterVec,
+    pub(super) threshold_signature_agreements: IntGaugeVec,
+    pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
+    pub(super) canister_snapshots_memory_usage: IntGauge,
+    pub(super) num_canister_snapshots: IntGauge,
+    pub(super) zero_instruction_messages: IntCounter,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -119,6 +126,9 @@ pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
 /// Alert for call contexts older than this cutoff (one day).
 pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
+
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -140,12 +150,38 @@ impl SchedulerMetrics {
             ),
             canister_binary_size: memory_histogram(
                 "canister_binary_size_bytes",
-                "Canisters WASM binary size distribution in bytes.",
+                "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
+            ),
+            // TODO(EXC-1722): remove after migrating to v2.
+            canister_log_memory_usage: memory_histogram(
+                "canister_log_memory_usage_bytes",
+                "Canisters log memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_log_memory_usage_v2: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v2",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                ])
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
-                "Canisters WASM memory usage distribution in bytes.",
+                "Canisters Wasm memory usage distribution in bytes.",
                 metrics_registry,
             ),
             canister_stable_memory_usage: memory_histogram(
@@ -162,6 +198,12 @@ impl SchedulerMetrics {
                 "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
+            ),
+            canister_ingress_queue_latencies: metrics_registry.histogram(
+                "scheduler_canister_ingress_queue_latencies_seconds",
+                "Per-canister mean IC clock duration spent by messages in the ingress queue.",
+                // 10ms, 20ms, 50ms, …, 100s, 200s, 500s
+                decimal_buckets(-2, 2),
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",
@@ -183,8 +225,14 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
-                // 1, 2, 5, …, 1000, 2000, 5000
-                decimal_buckets(0, 3),
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
+            ),
+            executed_canisters_per_round: metrics_registry.histogram(
+                "scheduler_executed_canisters_per_round",
+                "Number of canisters that were actually executed in the last round.",
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",
@@ -209,28 +257,29 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            consumed_cycles_since_replica_started: metrics_registry.gauge(
+            consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed since replica started",
+                "Number of cycles consumed",
             ),
-            consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
+            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
-                "Number of cycles consumed since replica started by use cases.",
+                "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_gauge(
-                "replicated_state_ecdsa_signature_agreements_total",
-                "Total number of ECDSA signature agreements created",
+            threshold_signature_agreements: metrics_registry.int_gauge_vec(
+                "replicated_state_threshold_signature_agreements_total",
+                "Total number of threshold signature agreements created by key Id",
+                &["key_id"],
             ),
-            ecdsa_delivered_quadruples: metrics_registry.histogram_vec(
-                "execution_ecdsa_delivered_quadruples",
-                "Number of ECDSA quadruples delivered to execution by key ID",
+            delivered_pre_signatures: metrics_registry.histogram_vec(
+                "execution_idkg_delivered_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
-            ecdsa_completed_contexts: metrics_registry.int_counter_vec(
-                "execution_completed_sign_with_ecdsa_contexts_total",
-                "Total number of completed sign with ECDSA contexts by key ID",
+            completed_signature_request_contexts: metrics_registry.int_counter_vec(
+                "execution_completed_signature_request_contexts_total",
+                "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
@@ -247,9 +296,9 @@ impl SchedulerMetrics {
                 "execution_queues_response_size_bytes",
                 "Total byte size of all responses in input and output queues.",
             ),
-            queues_reservations: metrics_registry.int_gauge(
+            queues_memory_reservations: metrics_registry.int_gauge(
                 "execution_queues_reservations",
-                "Total number of reserved slots for responses in input and output queues.",
+                "Total number of memory reservations for guaranteed responses in input and output queues.",
             ),
             queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
                 "execution_queues_oversized_requests_extra_bytes",
@@ -436,9 +485,9 @@ impl SchedulerMetrics {
                 "The duration of execution round scheduling in seconds.",
                 metrics_registry,
             ),
-            round_update_sign_with_ecdsa_contexts_duration: duration_histogram(
-                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
-                "The duration of updating sign with ecdsa contexts in seconds.",
+            round_update_signature_request_contexts_duration: duration_histogram(
+                "execution_round_update_signature_request_contexts_duration_seconds",
+                "The duration of updating signature request contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {
@@ -668,12 +717,25 @@ impl SchedulerMetrics {
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
             ),
+            canister_snapshots_memory_usage: metrics_registry.int_gauge(
+                "scheduler_canister_snapshots_memory_usage_bytes",
+                "Canisters total snapshots memory usage in bytes.",
+            ),
+            num_canister_snapshots: metrics_registry.int_gauge(
+                "scheduler_num_canister_snapshots",
+                "Total number of canister snapshots on this subnet.",
+            ),
+            zero_instruction_messages: metrics_registry.int_counter(
+                "scheduler_zero_instruction_messages",
+                "Number of messages that were scheduled to be \
+                executed, but didn't end up using any cycles. Possibly \
+                because the canister couldn't prepay for the execution."
+            )
         }
     }
 
     pub(super) fn observe_consumed_cycles(&self, consumed_cycles: NominalCycles) {
-        self.consumed_cycles_since_replica_started
-            .set(consumed_cycles.get() as f64);
+        self.consumed_cycles.set(consumed_cycles.get() as f64);
     }
 
     pub(super) fn observe_consumed_cycles_by_use_case(
@@ -681,7 +743,7 @@ impl SchedulerMetrics {
         consumed_cycles_by_use_case: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
         for (use_case, cycles) in consumed_cycles_by_use_case.iter() {
-            self.consumed_cycles_since_replica_started_by_use_case
+            self.consumed_cycles_by_use_case
                 .with_label_values(&[use_case.as_str()])
                 .set(cycles.get() as f64);
         }
@@ -703,8 +765,8 @@ impl SchedulerMetrics {
         self.queues_response_bytes.set(size_bytes as i64);
     }
 
-    pub(super) fn observe_queues_reservations(&self, reservations: usize) {
-        self.queues_reservations.set(reservations as i64);
+    pub(super) fn observe_queues_memory_reservations(&self, reservations: usize) {
+        self.queues_memory_reservations.set(reservations as i64);
     }
 
     pub(super) fn observe_oversized_requests_extra_bytes(&self, size_bytes: usize) {

@@ -1,6 +1,6 @@
 use crate::pb::v1::Canister;
 use ic_base_types::PrincipalId;
-use pb::v1::{Decimal as DecimalPb, Duration, GlobalTimeOfDay, Percentage, Tokens};
+use pb::v1::{Decimal as DecimalPb, Duration, GlobalTimeOfDay, Percentage, Principals, Tokens};
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
@@ -158,6 +158,18 @@ impl TryFrom<DecimalPb> for Decimal {
                 err,
             )
         })
+    }
+}
+
+impl From<Vec<PrincipalId>> for Principals {
+    fn from(principals: Vec<PrincipalId>) -> Self {
+        Self { principals }
+    }
+}
+
+impl From<Principals> for Vec<PrincipalId> {
+    fn from(principals: Principals) -> Self {
+        principals.principals
     }
 }
 

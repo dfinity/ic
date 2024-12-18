@@ -34,7 +34,7 @@ use ic_protobuf::{
 use prost::{bytes::BufMut, Message};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct QueryStats {
     pub num_calls: u32,
     pub num_instructions: u64, // Want u128, but not supported in protobuf
@@ -65,7 +65,7 @@ impl QueryStats {
 /// a problem if the client side is polling frequently enough and handles those overflows.
 ///
 /// Given the size of these values, overflows sould be rare, though.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct TotalQueryStats {
     pub num_calls: u128,
     pub num_instructions: u128,
@@ -120,7 +120,7 @@ impl From<&TotalQueryStats> for TotalQueryStatsProto {
 ///
 /// [`LocalQueryStats`] are sent from execution to consensus for
 /// inclusion in blocks.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct LocalQueryStats {
     pub epoch: QueryStatsEpoch,
     pub stats: Vec<CanisterQueryStats>,
@@ -132,7 +132,7 @@ pub struct LocalQueryStats {
 /// so that they can survive a restart of the node.
 /// Need to remember the epoch this is for as well as the NodeId of the
 /// node proposing the block.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct RawQueryStats {
     pub highest_aggregated_epoch: Option<QueryStatsEpoch>,
     pub stats: BTreeMap<NodeId, BTreeMap<QueryStatsEpoch, BTreeMap<CanisterId, QueryStats>>>,
@@ -159,10 +159,14 @@ impl RawQueryStats {
             }
         }
 
-        self.highest_aggregated_epoch.map(|epoch| QueryStatsProto {
-            highest_aggregated_epoch: epoch.get(),
-            query_stats,
-        })
+        if query_stats.is_empty() && self.highest_aggregated_epoch.is_none() {
+            None
+        } else {
+            Some(QueryStatsProto {
+                highest_aggregated_epoch: self.highest_aggregated_epoch.map(|epoch| epoch.get()),
+                query_stats,
+            })
+        }
     }
 }
 
@@ -171,7 +175,7 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 
     fn try_from(value: QueryStatsProto) -> Result<Self, Self::Error> {
         let mut r = RawQueryStats {
-            highest_aggregated_epoch: Some(QueryStatsEpoch::from(value.highest_aggregated_epoch)),
+            highest_aggregated_epoch: value.highest_aggregated_epoch.map(QueryStatsEpoch::from),
             stats: BTreeMap::new(),
         };
         for entry in value.query_stats {
@@ -206,7 +210,7 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 /// data of the block itself, we want to keep metadata specific to query stats
 /// as part of the query stats payload. This way, consensus stays nice and generic and
 /// the query stats part is self contained.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct QueryStatsPayload {
     pub epoch: QueryStatsEpoch,
     pub proposer: NodeId,
@@ -296,7 +300,7 @@ impl QueryStatsPayload {
 }
 
 /// A message about the statistics of a specific canister.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterQueryStats {
     pub canister_id: CanisterId,
     pub stats: QueryStats,
@@ -337,6 +341,7 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
 mod tests {
     use super::*;
     use ic_base_types::PrincipalId;
+    use ic_types_test_utils::ids::{canister_test_id, node_test_id};
     use rand::{Rng, RngCore, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
@@ -387,6 +392,29 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    /// Serialization and deserialization test
+    #[test]
+    fn serialization_roundtrip_raw_query_stats() {
+        let mut rng = ChaCha8Rng::seed_from_u64(1454);
+
+        let mut inner = BTreeMap::new();
+        inner.insert(canister_test_id(1), rng_epoch_stats(&mut rng));
+        let mut record = BTreeMap::new();
+        record.insert(QueryStatsEpoch::new(0), inner);
+        let mut stats = BTreeMap::new();
+        stats.insert(node_test_id(1), record);
+
+        let test = RawQueryStats {
+            highest_aggregated_epoch: None,
+            stats,
+        };
+
+        let pb_test = test.as_query_stats().unwrap();
+        let check_test = RawQueryStats::try_from(pb_test).unwrap();
+
+        assert_eq!(test, check_test);
     }
 
     fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats

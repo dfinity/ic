@@ -7,7 +7,7 @@ pub mod wasmtime_embedder;
 
 use std::{sync::Arc, time::Duration};
 
-pub use compilation_cache::CompilationCache;
+pub use compilation_cache::{CompilationCache, StoredCompilation};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_replicated_state::{Global, PageIndex};
 use ic_system_api::{
@@ -15,7 +15,9 @@ use ic_system_api::{
 };
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-pub use serialized_module::{SerializedModule, SerializedModuleBytes};
+pub use serialized_module::{
+    InitialStateData, OnDiskSerializedModule, SerializedModule, SerializedModuleBytes,
+};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 /// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
@@ -37,16 +39,16 @@ pub struct WasmExecutionInput {
     pub compilation_cache: Arc<CompilationCache>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct InstanceRunResult {
-    pub dirty_pages: Vec<PageIndex>,
+    pub wasm_dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
     pub exported_globals: Vec<Global>,
 }
 
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,

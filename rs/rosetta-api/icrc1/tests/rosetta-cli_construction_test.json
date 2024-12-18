@@ -1,0 +1,125 @@
+{
+  "network": {
+    "blockchain": "Internet Computer",
+    "network": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
+  },
+  "online_url": "http://localhost:0000",
+  "http_timeout": 10,
+  "max_retries": 5,
+  "retry_elapsed_time": 0,
+  "max_online_connections": 120,
+  "max_sync_concurrency": 64,
+  "tip_delay": 9999999999,
+  "max_reorg_depth": 100,
+  "log_configuration": false,
+  "compression_disabled": false,
+  "construction": {
+    "offline_url": "http://localhost:0000",
+    "prefunded_accounts": [
+      {
+        "account_identifier": {
+          "address": "vydpq-evb4l-dbne2-kj4tz-b2dfh-u4z2c-42hva-6qyqy-v6rbb-bw6ws-qae",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "611830d3641a68f94a690dcc25d1f4b0dac948325ac18f6dd32564371735f32c",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "cxmxh-xq3su-rgm2n-djueb-lkdnx-4sw5z-qeap6-q3k5k-al4is-osbbk-4ae",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "1fbec814b18b1d4c3eaa7cec41007e04bf0a98453b06ec7582aa29882c52eb7e",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "3mjjd-frtpy-wlyev-b5kwx-3mgpf-n57p3-32yf2-bidz4-g3r2u-7f5kf-4ae",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "ecd9c4a53ea15f18447b08fb96a13c5ab7dc7d24067b102fcbaaf7b39ca52e6d",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "3oc2t-zmvus-3d3co-x2aqo-ne4in-ifu6i-hypfu-lz4ar-wnk2e-kinrb-fqe",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "e463bcb1a6e57288ffd4671503082fa8656e3eacb78fb1925f8a7c76400e8e95",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "z5evl-fxu6f-u6jlc-gpvxs-6gm2m-ukuv6-3igz5-csh6m-wh5ye-j6shr-yqe",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "7a19fb2d099a9557f7c10c2efbb8b101d9e0ec85610d5c74a887d1d4fb8d28a7",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "h4vrj-mal7j-qdcs5-a5t35-ulvo5-rpzec-fbypn-gfkgt-2yv6o-yf6au-kqe",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "4dbad51eb408af559dd91bbbed8dbeae0a2c89e0e05f0cce87c98652a8437fdf",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      },
+      {
+        "account_identifier": {
+          "address": "irzi3-u6b25-7j45m-bsflc-dkvyb-4khlr-xcr4j-dwrcy-p2khb-ntjkg-oqe",
+          "sub_account": {
+            "address": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "privkey": "befba86ae9e0c207865f7e24e8349d4ecdbc8b0f4632842499a0dfa60568e28a",
+        "curve_type": "edwards25519",
+        "currency": {
+          "symbol": "XTST",
+          "decimals": 8
+        }
+      }
+    ],
+    "constructor_dsl_file": "rosetta_transfer_workflows.ros",
+    "end_conditions": {
+      "create_account": 10,
+      "transfer": 10
+    }
+  },
+  "data": null
+}

@@ -11,17 +11,18 @@ use ic_management_canister_types::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
@@ -33,7 +34,7 @@ pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
-pub fn execution_parameters() -> ExecutionParameters {
+pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -41,10 +42,12 @@ pub fn execution_parameters() -> ExecutionParameters {
             NumInstructions::from(5_000_000_000),
         ),
         canister_memory_limit: NumBytes::new(4 << 30),
+        wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: 50,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
+        execution_mode,
         subnet_memory_saturation: ResourceSaturation::default(),
     }
 }
@@ -96,6 +99,31 @@ impl ApiTypeBuilder {
         )
     }
 
+    pub fn build_non_replicated_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Pure,
+        )
+    }
+
+    pub fn build_composite_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Stateful {
+                call_context_id: CallContextId::from(1),
+                outgoing_request: None,
+            },
+        )
+    }
+
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
             UNIX_EPOCH,
@@ -105,6 +133,19 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
+        )
+    }
+
+    pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
+        ApiType::reply_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            vec![],
+            incoming_cycles,
+            CallContextId::new(1),
+            false,
+            ExecutionMode::NonReplicated,
             0.into(),
         )
     }
@@ -121,6 +162,19 @@ impl ApiTypeBuilder {
             0.into(),
         )
     }
+
+    pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
+        ApiType::reject_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            reject_context,
+            Cycles::zero(),
+            call_context_test_id(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
+        )
+    }
 }
 
 pub fn get_system_api(
@@ -128,21 +182,24 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let execution_mode = api_type.execution_mode();
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters().compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).compute_allocation,
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(),
+        execution_parameters(execution_mode),
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
@@ -151,9 +208,11 @@ pub fn get_system_api(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
 }
@@ -161,14 +220,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
-        );
+            Default::default(),
+        )
+        .unwrap();
     system_state
 }
 

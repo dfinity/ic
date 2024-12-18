@@ -24,8 +24,7 @@ use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
-    identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::Secp256k1Identity, Agent,
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
@@ -71,6 +70,7 @@ mod check;
 mod cloudflare;
 mod dns;
 mod encode;
+mod headers;
 mod metrics;
 mod registration;
 mod verification;
@@ -198,10 +198,8 @@ async fn main() -> Result<(), Error> {
         static USER_AGENT: &str = "Ic-Certificate-Issuer";
         let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
 
-        let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-            cli.orchestrator_uri.to_string(),
-            client,
-        )?;
+        let transport =
+            ReqwestTransport::create_with_client(cli.orchestrator_uri.to_string(), client)?;
 
         let f = File::open(cli.identity_path).context("failed to open identity file")?;
         let identity = Secp256k1Identity::from_pem(f).context("failed to create basic identity")?;
@@ -263,7 +261,6 @@ async fn main() -> Result<(), Error> {
     let encoder = Arc::new(encoder);
 
     let decoder = Decoder::new(cipher.clone());
-    let decoder = WithMetrics(decoder, MetricParams::new(&meter, SERVICE_NAME, "decrypt"));
     let decoder = Arc::new(decoder);
 
     // Registration
@@ -415,7 +412,8 @@ async fn main() -> Result<(), Error> {
                     .with_description("Duration of requests")
                     .init(),
             }))
-            .layer(middleware::from_fn(metrics_mw)),
+            .layer(middleware::from_fn(metrics_mw))
+            .layer(middleware::from_fn(headers::middleware)),
     );
 
     // ACME
@@ -431,6 +429,7 @@ async fn main() -> Result<(), Error> {
         (Some(id), Some(path)) => {
             let key =
                 std::fs::read_to_string(path).context("failed to open acme account key file")?;
+
             let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
                 r#"{{
                     "id": "{acme_provider_url}/acme/acct/{id}",
@@ -444,25 +443,31 @@ async fn main() -> Result<(), Error> {
             ))?;
 
             Account::from_credentials(acme_credentials)
-                .context("failed to create acme account from credentials")
+                .await
+                .context("failed to create acme account from credentials")?
         }
-        (Some(_), None) | (None, Some(_)) => Err(anyhow!(
-            "must provide both acme_account_id and acme_account_key"
-        )),
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(anyhow!(
+                "must provide both acme_account_id and acme_account_key"
+            ))
+        }
 
         // Create new ACME cccount
-        _ => Account::create(
-            &NewAccount {
-                contact: &[],
-                terms_of_service_agreed: true,
-                only_return_existing: false,
-            },
-            &acme_provider_url,
-            None,
-        )
-        .await
-        .context("failed to create acme account"),
-    }?;
+        _ => {
+            Account::create(
+                &NewAccount {
+                    contact: &[],
+                    terms_of_service_agreed: true,
+                    only_return_existing: false,
+                },
+                &acme_provider_url,
+                None,
+            )
+            .await
+            .context("failed to create acme account")?
+            .0
+        }
+    };
 
     let acme_client = Acme::new(acme_account);
 

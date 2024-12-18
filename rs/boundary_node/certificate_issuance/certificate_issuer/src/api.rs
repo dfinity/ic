@@ -47,7 +47,7 @@ pub async fn create_handler(
         }
         Err(err) => {
             return Response::builder()
-                .status(500)
+                .status(400)
                 .body(Body::from(err.to_string()))
                 .unwrap()
         }
@@ -184,7 +184,7 @@ pub async fn update_handler(
         }
         Err(err) => {
             return Response::builder()
-                .status(500)
+                .status(400)
                 .body(Body::from(err.to_string()))
                 .unwrap()
         }

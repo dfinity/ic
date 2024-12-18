@@ -35,7 +35,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
     PROPOSAL_FILE=$1
     NEURON_ID=$2
 
-    TARGET_SNS_GOVERNANCE_CANISTER=$(proposal_header_field_value $PROPOSAL_FILE "Target SNS Governance Canister(s):")
+    TARGET_SNS_GOVERNANCE_CANISTER=$(old_proposal_header_field_value $PROPOSAL_FILE "Target SNS Governance Canister(s):")
 
     validate_no_todos "$PROPOSAL_FILE"
 
@@ -80,13 +80,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-
-        if [ $(uname -o) != "Darwin" ]; then
-            install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
-        else
-            echo "IC_ADMIN must be set for Mac, cannot download."
-            return 1
-        fi
+        install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
 fi

@@ -1,14 +1,11 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use prost::Message;
 
 impl Registry {
     /// Update the node rewards table
@@ -17,9 +14,7 @@ impl Registry {
 
         let mut node_rewards_table = self
             .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
-            .map(|RegistryValue { value, .. }| {
-                decode_registry_value::<NodeRewardsTable>(value.clone())
-            })
+            .map(|RegistryValue { value, .. }| NodeRewardsTable::decode(value.as_slice()).unwrap())
             .unwrap_or_default();
 
         node_rewards_table.extend(payload.get_rewards_table());
@@ -27,7 +22,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Upsert as i32,
             key: NODE_REWARDS_TABLE_KEY.into(),
-            value: encode_or_panic(&node_rewards_table),
+            value: node_rewards_table.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations

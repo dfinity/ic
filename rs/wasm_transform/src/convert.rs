@@ -121,7 +121,7 @@ pub(super) mod internal_to_encoder {
             wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
             wasmparser::BlockType::Type(ty) => {
                 wasm_encoder::BlockType::Result(wasm_encoder::ValType::try_from(ty).map_err(
-                    |()| Error::ConversionError(format!("Failed to convert type: {:?}", ty)),
+                    |_err| Error::ConversionError(format!("Failed to convert type: {:?}", ty)),
                 )?)
             }
             wasmparser::BlockType::FuncType(f) => wasm_encoder::BlockType::FunctionType(f),
@@ -136,12 +136,34 @@ pub(super) mod internal_to_encoder {
         }
     }
 
+    fn ordering(arg: wasmparser::Ordering) -> wasm_encoder::Ordering {
+        match arg {
+            wasmparser::Ordering::SeqCst => wasm_encoder::Ordering::SeqCst,
+            wasmparser::Ordering::AcqRel => wasm_encoder::Ordering::AcqRel,
+        }
+    }
+
     pub(crate) fn const_expr(expr: &wasmparser::Operator) -> Result<wasm_encoder::ConstExpr> {
         use wasm_encoder::Encode;
 
         let mut bytes = vec![];
         op(expr.clone())?.encode(&mut bytes);
         Ok(wasm_encoder::ConstExpr::raw(bytes))
+    }
+
+    pub(crate) fn catch(catch: &wasmparser::Catch) -> wasm_encoder::Catch {
+        match catch {
+            wasmparser::Catch::One { tag, label } => wasm_encoder::Catch::One {
+                tag: *tag,
+                label: *label,
+            },
+            wasmparser::Catch::OneRef { tag, label } => wasm_encoder::Catch::OneRef {
+                tag: *tag,
+                label: *label,
+            },
+            wasmparser::Catch::All { label } => wasm_encoder::Catch::All { label: *label },
+            wasmparser::Catch::AllRef { label } => wasm_encoder::Catch::AllRef { label: *label },
+        }
     }
 
     /// Convert [`wasmparser::Operator`] to [`wasm_encoder::Instruction`]. A
@@ -169,6 +191,16 @@ pub(super) mod internal_to_encoder {
 
             // Arguments which need to be explicitly converted or ignored.
             (map $arg:ident blockty) => (block_type($arg)?);
+            (map $arg:ident try_table) => ((
+                block_type($arg.ty)?,
+                std::borrow::Cow::from(
+                    $arg
+                        .catches
+                        .iter()
+                        .map(|c| catch(c))
+                        .collect::<std::vec::Vec<_>>()
+                )
+            ));
             (map $arg:ident targets) => ((
                 $arg
                     .targets()
@@ -178,16 +210,27 @@ pub(super) mod internal_to_encoder {
             ));
             (map $arg:ident ty) => (
                 wasm_encoder::ValType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
             (map $arg:ident hty) => (
                 wasm_encoder::HeapType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
+            (map $arg:ident from_ref_type) => (
+                wasm_encoder::RefType::try_from($arg)
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+            );
+            (map $arg:ident to_ref_type) => (
+                wasm_encoder::RefType::try_from($arg)
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+            );
+
             (map $arg:ident memarg) => (memarg(&$arg));
+            (map $arg:ident ordering) => (ordering($arg));
             (map $arg:ident table_byte) => (());
             (map $arg:ident mem_byte) => (());
             (map $arg:ident flags) => (());
+
 
             // All other arguments are kept the same.
             (map $arg:ident $_:ident) => ($arg);
@@ -202,6 +245,7 @@ pub(super) mod internal_to_encoder {
 
             // Special cases with a single argument.
             (build BrTable $arg:ident) => (Ok(I::BrTable($arg.0, $arg.1)));
+            (build TryTable $arg:ident) => (Ok(I::TryTable($arg.0, $arg.1)));
             (build F32Const $arg:ident) => (Ok(I::F32Const(f32::from_bits($arg.bits()))));
             (build F64Const $arg:ident) => (Ok(I::F64Const(f64::from_bits($arg.bits()))));
             (build V128Const $arg:ident) => (Ok(I::V128Const($arg.i128())));
@@ -211,12 +255,12 @@ pub(super) mod internal_to_encoder {
 
             // Special case of multiple arguments.
             (build CallIndirect $ty:ident $table:ident $_:ident) => (Ok(I::CallIndirect {
-                ty: $ty,
-                table: $table,
+                type_index: $ty,
+                table_index: $table,
             }));
             (build ReturnCallIndirect $ty:ident $table:ident) => (Ok(I::ReturnCallIndirect {
-                ty: $ty,
-                table: $table,
+                type_index: $ty,
+                table_index: $table,
             }));
             (build MemoryGrow $mem:ident $_:ident) => (Ok(I::MemoryGrow($mem)));
             (build MemorySize $mem:ident $_:ident) => (Ok(I::MemorySize($mem)));

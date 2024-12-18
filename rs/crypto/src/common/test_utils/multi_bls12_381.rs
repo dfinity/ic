@@ -61,7 +61,7 @@ pub fn testvec(
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter)]
 pub enum MultiBls12381TestVector {
     STABILITY_1,
     STABILITY_2,

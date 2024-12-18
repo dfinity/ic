@@ -1,5 +1,5 @@
 [package]
-name = "testing-verifcation-tests"
+name = "testing-verification-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -9,29 +9,41 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-tests = { path = ".." }
-spec-compliance = { path = "./spec_compliance" }
+ic-system-test-driver = { path = "../driver" }
+slog = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+tokio = { workspace = true }
+ic-types = { path = "../../types/types" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-prep = { path = "../../prep" }
+ic-registry-local-store = { path = "../../registry/local_store" }
+ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
+ic-regedit = { path = "../../registry/regedit" }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+ssh2 = { workspace = true }
 
 [[bin]]
-name = "ic-systest-spec-compliance-application-subnet"
-path = "spec_compliance_application_subnet_test.rs"
+name = "colocate_test"
+path = "colocate_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-system-subnet"
-path = "spec_compliance_system_subnet_test.rs"
+name = "basic_health_test"
+path = "basic_health_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-group-01-application-subnet"
-path = "spec_compliance_group_01_application_subnet_test.rs"
+name = "test_driver_e2e_scenarios"
+path = "test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-group-01-system-subnet"
-path = "spec_compliance_group_01_system_subnet_test.rs"
+name = "mainnet_test"
+path = "mainnet_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-group-02-application-subnet"
-path = "spec_compliance_group_02_application_subnet_test.rs"
+name = "replicable_mock_test"
+path = "replicable_mock_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-group-02-system-subnet"
-path = "spec_compliance_group_02_system_subnet_test.rs"
+name = "remote_replicable_mock_test"
+path = "remote_replicable_mock_test.rs"

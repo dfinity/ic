@@ -65,7 +65,7 @@ fn test_can_be_purged_retain_recent_mint_sns_tokens() {
     {
         // Substep 1: Run the code under test, but now, at a later time.
         let can_be_purged =
-            settled_proposal.can_be_purged(now_timestamp_seconds + 7 * SECONDS_PER_DAY);
+            settled_proposal.can_be_purged(now_timestamp_seconds + 7 * ONE_DAY_SECONDS);
 
         // Substep 2: Unlike before, the proposal no longer needs to be retained.
         assert!(can_be_purged);

@@ -37,7 +37,6 @@ fn run_memory_grows(grows: &[GrowCommand]) {
         vec![],
         None,
         None,
-        None,
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
@@ -59,8 +58,7 @@ fn run_memory_grows(grows: &[GrowCommand]) {
 
 #[test]
 fn random_stable_grows() {
-    // The default is 256 cases, but we do half of that to reduce the test time.
-    let config = Config::with_cases(128);
+    let config = Config::with_cases(10);
     let algorithm = config.rng_algorithm;
     let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
     runner

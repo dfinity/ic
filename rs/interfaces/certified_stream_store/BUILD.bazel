@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_interfaces_certified_stream_store",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/types/types",
     ],
 )

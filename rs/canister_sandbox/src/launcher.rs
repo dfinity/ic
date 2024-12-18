@@ -73,7 +73,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream, embedder_config_arg:
     // Wrap it all up to handle frames received on socket.
     let frame_handler = transport::Demux::<_, _, protocol::transport::ControllerToLauncher>::new(
         Arc::new(rpc::ServerStub::new(svc, reply_out_stream)),
-        reply_handler,
+        reply_handler.clone(),
     );
 
     // Run RPC operations on the stream socket.
@@ -84,6 +84,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream, embedder_config_arg:
         socket,
         SocketReaderConfig::default(),
     );
+    reply_handler.flush_with_errors();
 }
 
 #[derive(Debug)]
@@ -173,7 +174,12 @@ impl LauncherService for LauncherServer {
             socket,
         }: LaunchSandboxRequest,
     ) -> rpc::Call<LaunchSandboxReply> {
-        match spawn_socketed_process(&sandbox_exec_path, &argv, socket) {
+        match spawn_socketed_process(
+            &sandbox_exec_path,
+            &argv,
+            &[("RUST_LIB_BACKTRACE", "0")],
+            socket,
+        ) {
             Ok(child_handle) => {
                 // Ensure the launcher closes its end of the socket.
                 drop(unsafe { UnixStream::from_raw_fd(socket) });
@@ -217,7 +223,7 @@ impl LauncherService for LauncherServer {
         args.push("--embedder-config".to_string());
         args.push(self.embedder_config_arg.clone());
 
-        match spawn_socketed_process(&exec_path, &args, socket) {
+        match spawn_socketed_process(&exec_path, &args, &[], socket) {
             Ok(child_handle) => {
                 // Ensure the launcher closes its end of the socket.
                 drop(unsafe { UnixStream::from_raw_fd(socket) });

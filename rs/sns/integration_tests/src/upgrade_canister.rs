@@ -10,6 +10,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::state_test_helpers::{
@@ -17,20 +18,20 @@ use ic_nns_test_utils::state_test_helpers::{
     sns_wait_for_proposal_execution, update,
 };
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use ic_sns_governance::{
-    pb::v1::{
-        governance_error::ErrorType, proposal::Action, NervousSystemParameters,
-        NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
-    },
-    types::ONE_YEAR_SECONDS,
+use ic_sns_governance::pb::v1::{
+    governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
+    NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
         install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
-        UserInfo,
+        install_swap_canister, state_machine_test_on_sns_subnet, SnsCanisters,
+        SnsTestsInitPayloadBuilder, UserInfo,
     },
-    state_test_helpers::{setup_sns_canisters, sns_root_register_dapp_canisters},
+    state_test_helpers::{
+        setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
+        SnsTestCanisterIds,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
@@ -46,9 +47,9 @@ lazy_static! {
 
 // Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
 
-#[test]
-fn test_upgrade_canister_proposal_is_successful() {
-    let state_machine = StateMachine::new();
+fn setup_sns(
+    state_machine: &StateMachine,
+) -> (SnsTestCanisterIds, CanisterId, PrincipalId, NeuronId) {
     // Step 1.a: Boot up SNS with one user.
     let user = PrincipalId::new_user_test_id(0);
     let alloc = Tokens::from_tokens(1000).unwrap();
@@ -65,10 +66,10 @@ fn test_upgrade_canister_proposal_is_successful() {
         .with_nervous_system_parameters(system_params)
         .build();
 
-    let canister_ids = setup_sns_canisters(&state_machine, sns_init_payload);
+    let canister_ids = setup_sns_canisters(state_machine, sns_init_payload);
 
     let dapp_canister_id = create_canister(
-        &state_machine,
+        state_machine,
         Wasm::from_bytes(EMPTY_WASM.clone()),
         Some(Encode!().unwrap()),
         Some(
@@ -80,7 +81,7 @@ fn test_upgrade_canister_proposal_is_successful() {
     );
 
     sns_stake_neuron(
-        &state_machine,
+        state_machine,
         canister_ids.governance_canister_id,
         canister_ids.ledger_canister_id,
         user,
@@ -88,7 +89,7 @@ fn test_upgrade_canister_proposal_is_successful() {
         1,
     );
     let neuron_id = sns_claim_staked_neuron(
-        &state_machine,
+        state_machine,
         canister_ids.governance_canister_id,
         user,
         1,
@@ -96,21 +97,33 @@ fn test_upgrade_canister_proposal_is_successful() {
     );
 
     sns_root_register_dapp_canisters(
-        &state_machine,
+        state_machine,
         canister_ids.root_canister_id,
         canister_ids.governance_canister_id,
         vec![dapp_canister_id],
     );
 
-    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
     let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(status.memory_allocation(), 2 << 30);
     assert_ne!(status.module_hash().unwrap(), new_dapp_wasm_hash.to_vec());
+
+    (canister_ids, dapp_canister_id, user, neuron_id)
+}
+
+#[test]
+fn test_upgrade_canister_proposal_is_successful() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+    let (canister_ids, dapp_canister_id, user, neuron_id) = setup_sns(&state_machine);
+
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
+    let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
+
     // Step 2.b: Make the proposal. (This should get executed right
     // away, because the proposing neuron is the only neuron.)
     let proposal = Proposal {
@@ -147,7 +160,7 @@ fn test_upgrade_canister_proposal_is_successful() {
     }
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     // Assert that memory allocation is not changed.
@@ -167,7 +180,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
 #[test]
 fn test_upgrade_canister_proposal_reinstall() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -193,7 +206,7 @@ fn test_upgrade_canister_proposal_reinstall() {
             .await
             .expect("Could not create dapp canister");
 
-        let dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM);
+        let dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec());
 
         dapp_wasm
             .install_with_retries_onto_canister(
@@ -238,7 +251,7 @@ fn test_upgrade_canister_proposal_reinstall() {
         // Step 2: Execute code under test: Propose that we upgrade dapp.
         // (This should get executed right away,
         // because the proposing neuron is the only neuron.)
-        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
         let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
         let proposal = Proposal {
             title: "Reinstall dapp.".into(),
@@ -314,7 +327,7 @@ fn test_upgrade_canister_proposal_reinstall() {
 
 #[test]
 fn test_upgrade_canister_proposal_execution_fail() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -490,8 +503,41 @@ fn test_upgrade_canister_proposal_execution_fail() {
 }
 
 #[test]
+fn test_upgrade_canister_proposal_too_large() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+    let (canister_ids, dapp_canister_id, user, neuron_id) = setup_sns(&state_machine);
+
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
+
+    // Step 2.b: Make the proposal. (This should get executed right
+    // away, because the proposing neuron is the only neuron.)
+    let proposal = Proposal {
+        title: "Upgrade dapp.".into(),
+        action: Some(Action::UpgradeSnsControlledCanister(
+            UpgradeSnsControlledCanister {
+                canister_id: Some(dapp_canister_id.get()),
+                new_canister_wasm: new_dapp_wasm,
+                canister_upgrade_arg: Some(wasm().set_global_data(&[42; 2_000_000]).build()),
+                // mode: None corresponds to CanisterInstallModeProto::Upgrade
+                mode: None,
+            },
+        )),
+        ..Default::default()
+    };
+    let error = sns_make_proposal(
+        &state_machine,
+        canister_ids.governance_canister_id,
+        user,
+        neuron_id,
+        proposal,
+    )
+    .unwrap_err();
+    assert!(error.error_message.contains("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is 2000000 bytes."));
+}
+
+#[test]
 fn governance_mem_test() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         println!("Initializing governance mem test canister...");
 
         let mut runtime = runtime;
@@ -541,7 +587,7 @@ fn governance_mem_test() {
 /// in a trap in post_upgrade.
 #[test]
 fn test_upgrade_after_state_shrink() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize a User with a unique principal to claim a neuron
         let neuron_claimer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize an extra user who's unique principal will be used to shrink the state
@@ -644,7 +690,7 @@ fn test_upgrade_after_state_shrink() {
 /// Test that SNS canisters can be installed in any order.
 #[test]
 fn test_install_canisters_in_any_order() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
             .build();

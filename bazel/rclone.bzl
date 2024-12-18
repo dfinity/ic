@@ -1,5 +1,5 @@
 """
-The module fetches rclone binary to be used by upload_artifacts
+The module fetches rclone binary that is used by upload_artifacts
 """
 
 RCLONE_BUILD = """

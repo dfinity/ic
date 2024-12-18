@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
@@ -12,6 +13,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
@@ -29,7 +31,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_for_verification_only",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -38,7 +39,6 @@ rust_test(
     name = "verification_test",
     aliases = ALIASES,
     crate = ":for_verification_only",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -47,7 +47,6 @@ rust_test_suite(
     name = "for_verification_only_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":for_verification_only"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

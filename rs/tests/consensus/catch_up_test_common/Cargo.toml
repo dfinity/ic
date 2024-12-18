@@ -1,0 +1,15 @@
+[package]
+name = "ic_consensus_system_test_catch_up_test_common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+slog = { workspace = true }

@@ -1,0 +1,113 @@
+proxies:
+  # HostOS node exporter metrics proxying.
+  - listen_on:
+      url: https://[::]:42372/metrics/hostos_node_exporter
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://[::1]:9100/metrics
+      tolerate_bad_tls: true
+    # In case of conflict, the last matching rule
+    # overrides any previous rules.
+    # Full documentation at:
+    # https://github.com/dfinity/metrics-proxy
+    label_filters:
+      - regex: .*
+        actions:
+          - drop
+      # Kernel-sourced hardware monitoring information.
+      # Fan speed, temperature, chip info.
+      # This may require sensors-detect to run before
+      # node exporter starts, in order to load drivers
+      # that provide information not otherwise provided
+      # by the ACPI subsystem.
+      - regex: node_hwmon.*
+        actions:
+          - keep
+      # Specifically temperatures.
+      # Reduce sampling resolution to half a minute.
+      # Add three degrees Celsius of random noise to
+      # freshly-polled metrics.
+      - regex: node_hwmon_temp_celsius
+        actions:
+          - add_absolute_noise:
+              amplitude: 3
+              quantum: 0.25
+          - reduce_time_resolution:
+              resolution: 30s
+      # Power metrics.  Useful to track the blockchain's
+      # power consumption.
+      # No need to reduce resolution since these are already
+      # collected periodically using a cron job rather than
+      # on every poll.
+      - regex: power.*
+        actions:
+          - keep
+      # File system errors and NVME hardware info.
+      - regex: node_filesystem_device_error|nvme.*|node_nvme_info
+        actions:
+          - keep
+      # ...but not tmpfs errors, these are always 0.
+      - regex: node_filesystem_device_error;tmpfs
+        source_labels:
+          - __name__
+          - fstype
+        actions:
+          - drop
+      # CPU usage and frequency.
+      # Reduce sampling resolution to half a minute.
+      - regex: node_cpu.*
+        actions:
+          - keep
+          - reduce_time_resolution:
+              resolution: 30s
+      # NIC carrier information and throughput information.
+      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes|node_network_(receive|transmit)_.*
+        actions:
+          - keep
+      # HostOS version.
+      - regex: hostos_version
+        actions:
+          - keep
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
+  # GuestOS replica consensus metrics proxying.
+  # This chainloads onto GuestOS metrics proxy instance.
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_replica
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://guestos:42372/metrics/guestos_replica
+      tolerate_bad_tls: true
+    # The GuestOS metrics proxy already does filtering.
+    # See the GuestOS metrics-proxy.yaml for the filters.
+    label_filters: []
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
+  # GuestOS version metrics proxying.
+  # This chainloads onto GuestOS metrics proxy instance.
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_node_exporter
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://guestos:42372/metrics/guestos_node_exporter
+      tolerate_bad_tls: true
+    # The GuestOS metrics proxy already does filtering.
+    # See the GuestOS metrics-proxy.yaml for the filters.
+    label_filters: []
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
+metrics:
+  # Telemetry of metrics-proxy itself (see nftables.conf in HostOS).
+  url: https://[::]:19100/metrics
+  # We reuse the SSL cert of node exporter.
+  certificate_file: /etc/node_exporter/node_exporter.crt
+  key_file: /etc/node_exporter/node_exporter.key

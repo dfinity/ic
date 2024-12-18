@@ -1,7 +1,7 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
+use ic_cdk::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
@@ -26,6 +26,11 @@ const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 
+const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
+const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
+
+const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -36,6 +41,15 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
     static STATE: RefCell<State> = RefCell::new(State::new());
+
+    // Cannot be part of STATE because it also needs to borrow things in STATE
+    // when being used.
+    static VOTING_STATE_MACHINES: RefCell<VotingStateMachines<VM>> = RefCell::new({
+       MEMORY_MANAGER.with(|memory_manager| {
+            let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
+            VotingStateMachines::new(memory)
+        })
+    })
 }
 
 struct State {
@@ -50,6 +64,8 @@ struct State {
 
     // Neuron indexes stored in stable storage.
     stable_neuron_indexes: neuron_indexes::StableNeuronIndexes<VM>,
+
+    node_provider_rewards_log: StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>,
 }
 
 impl State {
@@ -62,7 +78,7 @@ impl State {
                 memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
                 memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
             )
-            .expect("Failed to initialize stable log")
+            .expect("Failed to initialize stable log for Audit Events")
         });
         let stable_neuron_store = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
@@ -93,11 +109,21 @@ impl State {
             .build()
         });
 
+        let node_provider_rewards_log = MEMORY_MANAGER.with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
+            StableLog::init(
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID),
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID),
+            )
+            .expect("Failed to initialize stable log for NP Rewards")
+        });
+
         Self {
             upgrades_memory,
             audit_events_log,
             stable_neuron_store,
             stable_neuron_indexes,
+            node_provider_rewards_log,
         }
     }
 
@@ -106,6 +132,8 @@ impl State {
     fn validate(&self) {
         self.stable_neuron_store.validate();
         self.stable_neuron_indexes.validate();
+        validate_stable_log(&self.audit_events_log);
+        validate_stable_log(&self.node_provider_rewards_log);
     }
 }
 
@@ -159,6 +187,24 @@ pub(crate) fn with_stable_neuron_indexes_mut<R>(
     })
 }
 
+pub(crate) fn with_node_provider_rewards_log<R>(
+    f: impl FnOnce(&StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let node_provider_rewards_log = &state.borrow().node_provider_rewards_log;
+        f(node_provider_rewards_log)
+    })
+}
+
+pub(crate) fn with_voting_state_machines_mut<R>(
+    f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
+) -> R {
+    VOTING_STATE_MACHINES.with(|voting_state_machines| {
+        let voting_state_machines = &mut voting_state_machines.borrow_mut();
+        f(voting_state_machines)
+    })
+}
+
 /// Validates that some of the data in stable storage can be read, in order to prevent broken
 /// schema. Should only be called in post_upgrade.
 pub fn validate_stable_storage() {
@@ -172,22 +218,36 @@ where
     M: Memory,
 {
     // This is just to verify that any key-value pair can be deserialized without panicking. It is
-    // not guaranteed to catch all deserializations, but should catch a lot of common issues.
+    // guaranteed to catch all deserialization errors, but should help.
     let _ = btree_map.first_key_value();
+}
+
+pub(crate) fn validate_stable_log<Value, M>(log: &StableLog<Value, M, M>)
+where
+    Value: Storable,
+    M: Memory,
+{
+    // This is just to verify that an early value can be deserialized without panicking. It is not
+    // guaranteed to catch all deserialization errors, but should help.
+    let _ = log.get(0);
 }
 
 // Clears and initializes stable memory and stable structures before testing. Typically only needed
 // in proptest! where stable storage data needs to be accessed in multiple iterations within one
 // thread.
-#[cfg(feature = "test")]
+#[cfg(any(feature = "test", test))]
 pub fn reset_stable_memory() {
     MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
     STATE.with(|cell| *cell.borrow_mut() = State::new());
+    VOTING_STATE_MACHINES.with(|cell| {
+        *cell.borrow_mut() = {
+            MEMORY_MANAGER.with(|memory_manager| {
+                let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
+                VotingStateMachines::new(memory)
+            })
+        }
+    });
 }
-
-// Do nothing when feature = "test" is not enabled.
-#[cfg(not(feature = "test"))]
-pub fn reset_stable_memory() {}
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {
     with_upgrades_memory(|upgrades_memory| {

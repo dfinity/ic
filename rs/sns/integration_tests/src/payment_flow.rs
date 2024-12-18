@@ -2,7 +2,7 @@ use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
@@ -15,6 +15,7 @@ use ic_sns_swap::{
 use ic_sns_test_utils::state_test_helpers::{
     get_buyer_state, get_buyers_total, get_lifecycle, get_open_ticket, get_sns_sale_parameters,
     new_sale_ticket, notify_payment_failure, refresh_buyer_tokens,
+    state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
@@ -28,6 +29,7 @@ use lazy_static::lazy_static;
 use std::{
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
 lazy_static! {
@@ -61,7 +63,6 @@ pub struct PaymentProtocolTestSetup {
     pub state_machine: StateMachine,
     pub sns_sale_canister_id: CanisterId,
     pub icp_ledger_canister_id: CanisterId,
-    pub sns_ledger_canister_id: CanisterId,
     pub icp_ledger_minting_account: Account,
 }
 
@@ -69,7 +70,7 @@ impl PaymentProtocolTestSetup {
     /// If no specific initialization arguments need to be used for a test, the default versions can be used by parsing None
     /// for all init args.
     pub fn default_setup() -> Self {
-        let state_machine = StateMachine::new();
+        let state_machine = state_machine_builder_for_sns_tests().build();
         let icp_ledger_id = state_machine.create_canister(None);
         let sns_ledger_id = state_machine.create_canister(None);
         let swap_id = state_machine.create_canister(None);
@@ -82,7 +83,7 @@ impl PaymentProtocolTestSetup {
         // install the ICP ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icp_ledger/ledger",
+                "../../ledger_suite/icp/ledger",
                 "ledger-canister",
                 &[],
             );
@@ -94,7 +95,7 @@ impl PaymentProtocolTestSetup {
         // install the sns ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icrc1/ledger",
+                "../../ledger_suite/icrc1/ledger",
                 "ic-icrc1-ledger",
                 &[],
             );
@@ -115,13 +116,15 @@ impl PaymentProtocolTestSetup {
             state_machine
                 .install_existing_canister(swap_id, wasm, args)
                 .unwrap();
+            // Make sure at least one Swap periodic tasks is executed.
+            state_machine.advance_time(Duration::from_secs(100));
+            state_machine.tick();
         }
 
         Self {
             state_machine,
             sns_sale_canister_id: swap_id,
             icp_ledger_canister_id: icp_ledger_id,
-            sns_ledger_canister_id: sns_ledger_id,
             icp_ledger_minting_account: *DEFAULT_MINTING_ACCOUNT,
         }
     }
@@ -171,12 +174,13 @@ impl PaymentProtocolTestSetup {
             sns_token_e8s: Some(10_000_000),
             swap_start_timestamp_seconds: Some(0),
             swap_due_timestamp_seconds: Some(
-                StateMachine::new()
+                state_machine_builder_for_sns_tests()
+                    .build()
                     .time()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs()
-                    + 13 * SECONDS_PER_DAY,
+                    + 13 * ONE_DAY_SECONDS,
             ),
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                 count: 2,
@@ -186,7 +190,6 @@ impl PaymentProtocolTestSetup {
             should_auto_finalize: Some(true),
             max_icp_e8s: None,
             min_icp_e8s: None,
-            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }
@@ -309,6 +312,10 @@ impl PaymentProtocolTestSetup {
 fn test_get_open_ticket() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
+    assert_eq!(
+        payment_flow_protocol.get_lifecycle().lifecycle,
+        Some(Lifecycle::Open as i32)
+    );
     assert_eq!(payment_flow_protocol.get_open_ticket(&user0).unwrap(), None);
 }
 

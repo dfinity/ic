@@ -8,23 +8,23 @@ mod conversions;
 mod generic_traits;
 
 /// An ICCSA signature encoded as a bytestring
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct SignatureBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 /// Container for an ICCSA public key _without_ the DER-wrapping.
 /// The byte representation may be invalid and needs to be parsed
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct PublicKeyBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 /// A decoded ICCSA signature
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Signature {
     pub certificate: Blob,
     pub tree: MixedHashTree,
 }
 
 /// A ICCSA public key that was successfully parsed.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct PublicKey {
     signing_canister_id: CanisterId,
     #[serde(with = "serde_bytes")]

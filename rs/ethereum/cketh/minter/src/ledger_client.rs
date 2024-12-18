@@ -16,16 +16,21 @@ pub struct LedgerClient {
     client: ICRC1Client<CdkRuntime>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CkLedger {
     pub token_symbol: CkTokenSymbol,
     pub id: Principal,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum LedgerBurnError {
     TemporarilyUnavailable {
         message: String,
+        ledger: CkLedger,
+    },
+    AmountTooLow {
+        minimum_burn_amount: Nat,
+        failed_burn_amount: Nat,
         ledger: CkLedger,
     },
     InsufficientFunds {
@@ -46,7 +51,7 @@ impl LedgerClient {
             token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
             client: ICRC1Client {
                 runtime: CdkRuntime,
-                ledger_canister_id: state.ledger_id,
+                ledger_canister_id: state.cketh_ledger_id,
             },
         }
     }
@@ -96,7 +101,11 @@ impl LedgerClient {
                         panic!("BUG: bad fee, expected fee: {expected_fee}")
                     }
                     TransferFromError::BadBurn { min_burn_amount } => {
-                        panic!("BUG: bad burn, minimum burn amount: {min_burn_amount}")
+                        LedgerBurnError::AmountTooLow {
+                            minimum_burn_amount: min_burn_amount,
+                            failed_burn_amount: amount.clone(),
+                            ledger: self.ck_ledger(),
+                        }
                     }
                     TransferFromError::InsufficientFunds { balance } => {
                         LedgerBurnError::InsufficientFunds {

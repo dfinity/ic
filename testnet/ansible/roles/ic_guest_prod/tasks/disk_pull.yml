@@ -1,5 +1,4 @@
 ---
-
 - name: Download disk images
   shell: |
     set -eExuo pipefail
@@ -30,13 +29,13 @@
   args:
     executable: /bin/bash
   register: script_res
-  changed_when: "script_res.stdout | default('')"
+  changed_when: script_res.stdout | default('')
   retries: 0
   delay: 10
   until: script_res is not failed
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]
 
-- name: unarchive file disk-img.tar.zst
+- name: Unarchive file disk-img.tar.zst
   shell: |
     set -eExuo pipefail
 
@@ -46,5 +45,5 @@
   args:
     executable: /bin/bash
   register: script_res
-  changed_when: "script_res.stdout | default('')"
-  tags: [ "ic_guest" ]
+  changed_when: script_res.stdout | default('')
+  tags: [ic_guest]

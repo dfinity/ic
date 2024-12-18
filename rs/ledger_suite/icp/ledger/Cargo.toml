@@ -1,0 +1,59 @@
+[package]
+name = "ledger-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ledger-canister"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+candid_parser = { workspace = true }
+ciborium = { workspace = true }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+hex = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-limits = { path = "../../../limits" }
+ic-icrc1 = { path = "../../icrc1" }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+ic-metrics-encoder = "1"
+ic-stable-structures = { workspace = true }
+icp-ledger = { path = "../" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+intmap = { version = "1.1.0", features = ["serde"] }
+lazy_static = { workspace = true }
+minicbor = { workspace = true }
+num-traits = { workspace = true }
+on_wire = { path = "../../../rust_canisters/on_wire" }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-agent = { workspace = true }
+ic-error-types = { path = "../../../types/error_types" }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
+ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+proptest = { workspace = true }
+
+[features]
+notify-method = []
+icp-allowance-getter = []
+next-ledger-version = []
+low-upgrade-instruction-limits = []

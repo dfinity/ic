@@ -14,18 +14,6 @@ use std::convert::TryFrom;
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 
-/// Wraps around Message::encode and panics on error.
-pub fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf)
-        .expect("Encoding input as Protobuf failed");
-    buf
-}
-
-pub fn decode_or_panic<T: Message + Default>(msg: Vec<u8>) -> T {
-    T::decode(msg.as_slice()).expect("could not decode byte vector as PB Message")
-}
-
 /// Returns the deserialized value associated with the given key and version.
 /// If the version is `None`, then the "latest" version is returned.
 ///

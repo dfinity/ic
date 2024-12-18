@@ -16,13 +16,13 @@ fn nid(id: u64) -> NeuronId {
 /// 3. Derive the final participation from the initial participation.
 /// 4. Assert that the relationship between the field values is correct for the initial
 ///    and final participations. In particular, a decrease is expected for the fields
-///   `intended_neurons_fund_participation_icp_e8s` and `allocated_neurons_fund_participation_icp_e8s`.
-///   (Initial participation is for the best-case scenario, so final participation is less than or
-///   equal to the initial.) Note that these two fields have the same value in the initial
-///   participation, but a slightly different value in the final participation. This is because we
-///   set the smallest neuron's maturity to a value is sufficient for it to participate in the best
-///   case scenario (corresponding to the initial participation) while not sufficient for it to
-///   participate in the final participation.
+///    `intended_neurons_fund_participation_icp_e8s` and `allocated_neurons_fund_participation_icp_e8s`.
+///    (Initial participation is for the best-case scenario, so final participation is less than or
+///    equal to the initial.) Note that these two fields have the same value in the initial
+///    participation, but a slightly different value in the final participation. This is because we
+///    set the smallest neuron's maturity to a value is sufficient for it to participate in the best
+///    case scenario (corresponding to the initial participation) while not sufficient for it to
+///    participate in the final participation.
 /// 5. Assert that the `total_amount_icp_e8s` is computed correctly.
 /// 6. Assert that the neuron portions comprising maturity refunds computed through
 ///    ```
@@ -39,20 +39,24 @@ fn nid(id: u64) -> NeuronId {
 #[test]
 fn test() {
     let controller = PrincipalId::default();
+    let hotkeys = Vec::new();
     let small_neuron = NeuronsFundNeuron {
         id: nid(111),
         maturity_equivalent_icp_e8s: 590,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let medium_neuron = NeuronsFundNeuron {
         id: nid(222),
         maturity_equivalent_icp_e8s: 5_000,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let big_neuron = NeuronsFundNeuron {
         id: nid(333),
         maturity_equivalent_icp_e8s: 500_000,
         controller,
+        hotkeys: hotkeys.clone(),
     };
     let swap_participation_limits = SwapParticipationLimits {
         min_participant_icp_e8s: 50,
@@ -148,6 +152,7 @@ fn test() {
                 amount_icp_e8s: 59,
                 maturity_equivalent_icp_e8s: small_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys: hotkeys.clone(),
                 is_capped: false,
             },
             NeuronsFundNeuronPortion {
@@ -155,6 +160,7 @@ fn test() {
                 amount_icp_e8s: 500,
                 maturity_equivalent_icp_e8s: medium_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys: hotkeys.clone(),
                 is_capped: false,
             },
             NeuronsFundNeuronPortion {
@@ -162,6 +168,7 @@ fn test() {
                 amount_icp_e8s: 39_506,
                 maturity_equivalent_icp_e8s: big_neuron.maturity_equivalent_icp_e8s,
                 controller,
+                hotkeys,
                 is_capped: false,
             },
         ]))

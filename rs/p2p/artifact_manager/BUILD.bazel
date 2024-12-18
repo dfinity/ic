@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces",
+    "//rs/monitoring/metrics",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/protobuf",
+    "//rs/test_utilities",
+    "@crate_index//:assert_matches",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "artifact_manager",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_artifact_manager",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "artifact_manager_test",
+    aliases = ALIASES,
+    crate = ":artifact_manager",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

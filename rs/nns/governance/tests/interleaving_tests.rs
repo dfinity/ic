@@ -13,7 +13,8 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+        manage_neuron::Disburse, neuron::DissolveState,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
         settle_neurons_fund_participation_request, CreateServiceNervousSystem,
         IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
         NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
@@ -55,7 +56,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     let nns = NNSBuilder::new()
         .add_neuron(
             NeuronBuilder::new(neuron_id_u64, 10, owner)
-                .set_dissolve_state(None)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
@@ -63,6 +64,12 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         }))
         .set_economics(NetworkEconomics::default())
         .create();
+
+    let neuron_1 = nns
+        .governance
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(neuron_id_u64), |neuron| neuron.clone())
+        .expect("Could not find the neuron we just added!");
 
     let now = nns.now();
 
@@ -82,6 +89,12 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // for the signal that the ledger transfer has been initiated
     let neuron_id_clone = neuron_id;
     thread::spawn(move || {
+        // this is a hack
+        // We have to re-add neurons because of thread_local
+        boxed
+            .neuron_store
+            .add_neuron(neuron_1)
+            .expect("Could not add neuron!");
         let disburse = Disburse {
             amount: None,
             to_account: Some(AccountIdentifier::new(owner, None).into()),
@@ -172,6 +185,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
             one_third_participation_milestone_icp: dec!(100_000.0),
             full_participation_milestone_icp: dec!(167_000.0),
         },
+        false,
     )
     .unwrap();
 
@@ -182,6 +196,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // channel to terminate the test.
     let finish_tx = tx.clone();
 
+    #[allow(deprecated)]
     let initial_neurons_fund_participation = NeuronsFundParticipation {
         ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
             serialized_representation: Some(matching_function.serialize()),
@@ -193,7 +208,8 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 }),
                 amount_icp_e8s: Some(max_direct_participation_icp_e8s),
                 maturity_equivalent_icp_e8s: Some(nf_neuron_maturity),
-                hotkey_principal: Some(nf_neurons_controller),
+                controller: Some(nf_neurons_controller),
+                hotkeys: Vec::new(),
                 is_capped: Some(false),
             }],
         }),
@@ -224,7 +240,6 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 )),
                 ..Default::default()
             }),
-            cf_participants: vec![],
             neurons_fund_data: Some(NeuronsFundData {
                 initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
                 final_neurons_fund_participation: None,
@@ -235,6 +250,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         })
         .add_neuron(
             NeuronBuilder::new(nf_neuron_id_u64, 100, nf_neurons_controller)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
                 .set_maturity(nf_neuron_maturity)
                 .set_joined_community_fund(100),
         )
@@ -287,7 +303,22 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // Clone the request so it can be moved into the closure
     let settle_nf_request_clone = settle_nf_request.clone();
 
+    let neuron_1 = boxed
+        .governance
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(nf_neuron_id_u64), |neuron| {
+            neuron.clone()
+        })
+        .expect("Could not find the neuron we just added!");
+
     let thread_handle = thread::spawn(move || {
+        // this is a hack
+        // We have to re-add neurons because of thread_local
+        boxed
+            .governance
+            .neuron_store
+            .add_neuron(neuron_1)
+            .expect("Could not add neuron!");
         let settle_nf_future = boxed
             .governance
             .settle_neurons_fund_participation(swap_canister_id, settle_nf_request_clone.clone());

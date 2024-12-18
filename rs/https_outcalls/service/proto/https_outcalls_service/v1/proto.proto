@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package https_outcalls_service.v1;
+
+message HttpHeader {
+  string name = 1;
+  string value = 2;
+}
+
+enum HttpMethod {
+  HTTP_METHOD_UNSPECIFIED = 0;
+  HTTP_METHOD_GET = 1;
+  HTTP_METHOD_POST = 2;
+  HTTP_METHOD_HEAD = 3;
+}
+
+message HttpsOutcallRequest {
+  string url = 1;
+  bytes body = 2;
+  repeated HttpHeader headers = 3;
+  HttpMethod method = 4;
+  uint64 max_response_size_bytes = 5;
+  bool socks_proxy_allowed = 6;
+}
+
+message HttpsOutcallResponse {
+  uint32 status = 1;
+  repeated HttpHeader headers = 2;
+  bytes content = 3;
+}
+
+service HttpsOutcallsService {
+  rpc HttpsOutcall(HttpsOutcallRequest) returns (HttpsOutcallResponse);
+}

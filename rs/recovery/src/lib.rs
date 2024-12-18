@@ -25,6 +25,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
+use std::io::ErrorKind;
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -35,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str};
+use util::{block_on, parse_hex_str, UploadMethod};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -76,12 +77,13 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
 ];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";
 pub const READONLY: &str = "readonly";
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
     dfx_hsm_pin: String,
     slot: String,
@@ -94,9 +96,10 @@ pub struct NodeMetrics {
     _ip: IpAddr,
     pub finalization_height: Height,
     pub certification_height: Height,
+    pub certification_share_height: Height,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
@@ -148,7 +151,22 @@ impl Recovery {
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path])?;
+        match Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path]) {
+            Err(RecoveryError::IoError(s, err)) => match err.kind() {
+                ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
+                    format!(
+                        "No permission to create recovery directory. Consider manually \
+                        creating the directory with the right permissions by running:\n\n  \
+                        sudo mkdir -p {} && sudo chown $USER {}\n",
+                        recovery_dir.display(),
+                        recovery_dir.display()
+                    ),
+                    err,
+                )),
+                _ => Err(RecoveryError::IoError(s, err)),
+            },
+            x => x,
+        }?;
 
         let registry_helper = RegistryHelper::new(
             logger.clone(),
@@ -339,6 +357,7 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
+        replay_until_height: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -347,6 +366,7 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
     }
@@ -359,6 +379,7 @@ impl Recovery {
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -378,6 +399,7 @@ impl Recovery {
                 ),
             }),
             None,
+            replay_until_height,
         ))
     }
 
@@ -388,6 +410,7 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -409,6 +432,7 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
         ))
     }
 
@@ -462,20 +486,23 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
-        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
+    pub fn get_upload_and_restart_step(&self, upload_method: UploadMethod) -> impl Step {
+        self.get_upload_and_restart_step_with_data_src(
+            upload_method,
+            self.work_dir.join(IC_STATE_DIR),
+        )
     }
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        node_ip: IpAddr,
+        upload_method: UploadMethod,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {
             logger: self.logger.clone(),
-            node_ip,
+            upload_method,
             work_dir: self.work_dir.clone(),
             data_src,
             require_confirmation: self.ssh_confirmation,
@@ -552,7 +579,7 @@ impl Recovery {
 
     /// Return an [AdminStep] step upgrading the given subnet to the given
     /// replica version.
-    pub fn update_subnet_replica_version(
+    pub fn deploy_guestos_to_all_subnet_nodes(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
@@ -561,7 +588,10 @@ impl Recovery {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_update_subnet_replica_version_command(subnet_id, upgrade_version),
+                .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
+                    subnet_id,
+                    upgrade_version,
+                ),
         }
     }
 
@@ -574,21 +604,21 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = ecdsa_subnet_id
-            .map(|id| match self.registry_helper.get_ecdsa_config(id) {
-                Ok((_registry_version, Some(config))) => config.key_ids,
+        let chain_key_config = chain_key_subnet_id
+            .map(|id| match self.registry_helper.get_chain_key_config(id) {
+                Ok((_registry_version, Some(config))) => Some((config, id)),
                 Ok((registry_version, None)) => {
                     info!(
                         self.logger,
-                        "No ECDSA config at registry version {}", registry_version
+                        "No Chain key config at registry version {}", registry_version
                     );
-                    vec![]
+                    None
                 }
                 Err(err) => {
-                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
-                    vec![]
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
                 }
             })
             .unwrap_or_default();
@@ -601,10 +631,9 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
                     SystemTime::now(),
                 ),
         })
@@ -680,7 +709,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..30 {
+        for i in 0..35 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -778,7 +807,7 @@ impl Recovery {
             .arg("-zcvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 
@@ -883,16 +912,29 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
     let mut node_heights = NodeMetrics {
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
+        certification_share_height: Height::from(0),
         _ip: *ip,
     };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                "certification_last_certified_height" => match height.trim().parse::<u64>() {
-                    Ok(val) => node_heights.certification_height = Height::from(val),
-                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
-                },
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.certification_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.certification_share_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.finalization_height = Height::from(val),
@@ -968,6 +1010,7 @@ pub fn get_member_ips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::GracefulExpect;
     use ic_test_utilities_tmpdir::tmpdir;
 
     #[test]
@@ -983,7 +1026,7 @@ mod tests {
 
         let (name, height) =
             Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect("Failed getting the latest checkpoint name and height");
+                .expect_graceful("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
         assert_eq!(height, Height::from(64900));

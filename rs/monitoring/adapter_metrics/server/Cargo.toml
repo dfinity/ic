@@ -1,0 +1,17 @@
+[package]
+name = "ic-adapter-metrics-server"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+futures = { workspace = true }
+ic-adapter-metrics-service = { path = "../service" }
+ic-logger = { path = "../../logger" }
+ic-metrics = { path = "../../metrics" }
+protobuf = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }

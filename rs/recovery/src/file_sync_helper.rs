@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     thread,
+    time::Duration,
 };
 
 /// Given the name and replica version of a binary, download the artifact to the
@@ -32,8 +33,14 @@ pub async fn download_binary(
 
     let mut file = target_dir.join(format!("{}.gz", binary_name));
 
-    info!(logger, "Downloading {} to {:?}...", binary_name, file);
-    let file_downloader = FileDownloader::new(None);
+    info!(
+        logger,
+        "Downloading {} to {}...",
+        binary_name,
+        file.display()
+    );
+    let file_downloader =
+        FileDownloader::new_with_timeout(Some(logger.clone().into()), Duration::from_secs(60));
     file_downloader
         .download_file(&binary_url, &file, None)
         .await
@@ -78,9 +85,7 @@ pub fn rsync_with_retries(
             require_confirmation,
             key_file,
         ) {
-            Err(e) => {
-                warn!(logger, "Rsync failed: {:?}, retrying...", e);
-            }
+            Err(e) => warn!(logger, "Rsync failed: {:?}, retrying...", e),
             success => return success,
         }
         thread::sleep(time::Duration::from_secs(10));
@@ -178,6 +183,26 @@ pub fn remove_dir(path: &Path) -> RecoveryResult<()> {
     }
 }
 
+pub fn clear_dir(path: &Path) -> RecoveryResult<()> {
+    if path_exists(path)? {
+        for entry in fs::read_dir(path).map_err(|e| RecoveryError::dir_error(path, e))? {
+            let entry = entry.map_err(|e| RecoveryError::dir_error(path, e))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| RecoveryError::dir_error(path, e))?;
+            if file_type.is_dir() {
+                fs::remove_dir_all(entry.path())
+            } else {
+                fs::remove_file(entry.path())
+            }
+            .map_err(|e| RecoveryError::dir_error(entry.path().as_path(), e))?
+        }
+        Ok(())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;
@@ -220,6 +245,6 @@ mod tests {
                 "/tmp/src",
                 "/tmp/target",
                 "-e",
-                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=30 -o ConnectTimeout=60 -A -i /tmp/key_file"]);
+                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i /tmp/key_file"]);
     }
 }

@@ -14,20 +14,19 @@
 //! small number of values variable.
 
 use crate::tests::{access_ingress_pool, setup_with_params};
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
     p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
     ids::{canister_test_id, node_test_id},
     messages::SignedIngressBuilder,
 };
-use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
     time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
@@ -59,6 +58,7 @@ proptest! {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
@@ -78,15 +78,11 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(
                             message_id.clone(),
-                            node_test_id(0),
-                            m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
-                        ))]);
+                        )]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 

@@ -2,6 +2,7 @@
 use crate::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
+    error::GracefulExpect,
     get_node_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
@@ -11,7 +12,8 @@ use crate::{
     steps::Step,
     util,
     util::subnet_id_from_str,
-    NeuronArgs, RecoveryArgs,
+    util::upload_method_from_str,
+    NeuronArgs, RecoveryArgs, UploadMethod,
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -268,6 +270,10 @@ pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId
     read_optional_type(logger, prompt, subnet_id_from_str)
 }
 
+pub fn read_optional_upload_method(logger: &Logger, prompt: &str) -> Option<UploadMethod> {
+    read_optional_type(logger, prompt, upload_method_from_str)
+}
+
 /// Optionally read an input of the generic type by applying the given deserialization function.
 pub fn read_optional_type<T, E: Display>(
     logger: &Logger,
@@ -299,7 +305,7 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
     subcommand_args: Option<T>,
 ) -> RecoveryState<T> {
     let state = RecoveryState::<T>::read(&recovery_args.dir)
-        .expect("Failed to read the recovery state file");
+        .expect_graceful("Failed to read the recovery state file");
 
     if let Some(state) = state {
         info!(

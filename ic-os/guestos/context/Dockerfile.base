@@ -1,0 +1,105 @@
+# GuestOS - Base Image
+#
+# Build steps:
+# - `docker build -t dfinity/guestos-base:<tag> -f Dockerfile.base .`
+# - `docker push/pull dfinity/guestos-base:<tag>`
+# - `docker build -t dfinity/guestos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
+# - `docker push/pull dfinity/guestos-base-dev:<tag>`
+#
+# NOTE! If you edit this file, you will need to perform the following
+# operations to get your changes deployed.
+#
+# 1. Get your MR approved and merged into master
+# 2. On the next hourly master pipeline, click the "deploy-guest-os-baseimg" job
+# 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
+#
+
+#
+# First build stage:
+# - Download 3rd party tools
+#
+FROM ubuntu:24.04 as download
+
+USER root:root
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    curl \
+    perl
+
+# Download and verify filebeat
+RUN cd /tmp/ && \
+    curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz && \
+    echo "6c7efc9968ba224f44afb2f66bd21f45d29232e5bd2dc8b7631f52f552d882da95644c13c75cda44ed1ee81d4d5ee367247af8346cdcc330d01e6a45b22f9893  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha512 && \
+    shasum -c filebeat.sha512
+
+# Download and verify node_exporter
+RUN cd /tmp/ && \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
+    echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
+    shasum -c node_exporter.sha256
+
+# Download >=6.11 kernel and modules
+RUN cd /tmp/ && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux-signed/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux-meta/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
+    echo "d4cd2d97fcca81b57bec947b0e8ca004d556afce1d13f5cebe5d677c0445c6a2  linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
+    echo "241811191691c68e0874519ee71bda9de39e23510dee5e5512150db874f5b285  linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
+    echo "5c31c7e0d996ebc0928c5e1ad3b80fea047b56dfbbdaa759f7e7a70b1c42f10e  linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb" >> kernel.sha256 && \
+    shasum -c kernel.sha256
+
+#
+# Second build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
+# - Copy downloaded archives from first build stage into the target image
+#
+FROM ubuntu:24.04
+
+USER root:root
+
+ENV SOURCE_DATE_EPOCH=0
+ENV TZ=UTC
+
+# For the prod image, just use packages.common to define the packages installed
+# on target.
+# For the dev image, use both "packages.common" and "packages.dev" -- this can
+# be set via docker build args (see above).
+ARG PACKAGE_FILES=packages.common
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY packages.* /tmp/
+RUN apt-get -y update && \
+    apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    rm /tmp/packages.*
+
+# Install filebeat
+COPY --from=download /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz
+RUN cd /tmp/ && \
+    mkdir -p /var/lib/filebeat \
+             /var/log/filebeat && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf filebeat-oss-8.9.1-linux-x86_64.tar.gz filebeat-8.9.1-linux-x86_64/filebeat && \
+    rm /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz
+
+# Install node_exporter
+COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+RUN cd /tmp/ && \
+    mkdir -p /etc/node_exporter && \
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
+    rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+
+# Install >=6.11 kernel
+COPY --from=download /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb
+COPY --from=download /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb
+COPY --from=download /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb
+
+RUN apt-get install -y --no-install-recommends \
+    /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
+    /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
+    /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
+    rm /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
+    rm /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
+    rm /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb

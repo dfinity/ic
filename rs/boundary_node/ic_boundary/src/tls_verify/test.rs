@@ -1,19 +1,17 @@
 use super::*;
 
-use std::{
-    str::FromStr,
-    time::{Duration, SystemTime},
-};
+use std::{str::FromStr, time::Duration};
 
 use anyhow::Error;
-
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_types::{NodeId, PrincipalId};
-use rustls::{Certificate, CertificateError, Error as RustlsError, ServerName};
+use rustls::{
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    CertificateError, Error as RustlsError,
+};
 
 use crate::{
     snapshot::{Snapshot, Snapshotter},
-    test_utils::create_fake_registry_client,
+    test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time},
 };
 
 // CN = s52il-lowsg-eip4y-pt5lv-sbdpb-vg4gg-4iasu-egajp-yluji-znfz3-2qe
@@ -33,19 +31,17 @@ fn check_certificate_verification(
     name: &str,
     der: Vec<u8>,
 ) -> Result<(), RustlsError> {
-    let crt = Certificate(der);
-    let intermediates: Vec<Certificate> = vec![];
+    let crt = CertificateDer::from(der);
+    let intermediates: Vec<CertificateDer> = vec![];
     let server_name = ServerName::try_from(name).unwrap();
-    let scts: Vec<&[u8]> = vec![];
     let ocsp_response: Vec<u8> = vec![];
 
     tls_verifier.verify_server_cert(
         &crt,
         intermediates.as_slice(),
         &server_name,
-        &mut scts.into_iter(),
         ocsp_response.as_slice(),
-        SystemTime::now(),
+        UnixTime::now(),
     )?;
 
     Ok(())

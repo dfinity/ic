@@ -11,18 +11,18 @@
 //!   the message validates successfully
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use dkg::DkgDataPayload;
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
@@ -30,6 +30,7 @@ use ic_interfaces::{
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::IC_00;
 use ic_metrics::MetricsRegistry;
@@ -157,7 +158,7 @@ where
             Arc::new(state_manager),
             cycles_account_manager,
             ic_types::malicious_flags::MaliciousFlags::default(),
-            CustomRandomState::default(),
+            RandomStateKind::Random,
         ));
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
@@ -217,6 +218,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
         state,
         Height::new(CERTIFIED_HEIGHT),
         CertificationScope::Full,
+        None,
     );
 
     let to_certify = state_manager.list_state_hashes_to_certify();
@@ -262,7 +264,7 @@ fn add_past_blocks(
         .next()
         .unwrap();
     let mut parent = cup.content.block.into_inner();
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     let to_add = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 1;
     for i in 1..=to_add {
         let mut block = Block::from_parent(&parent);
@@ -275,10 +277,8 @@ fn add_past_blocks(
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(
-                    block.payload.as_ref().dkg_interval_start_height(),
-                ),
-                ecdsa: None,
+                dkg: DkgDataPayload::new_empty(block.payload.as_ref().dkg_interval_start_height()),
+                idkg: None,
             }),
         );
 
@@ -289,7 +289,7 @@ fn add_past_blocks(
             timestamp: UNIX_EPOCH,
         }));
     }
-    consensus_pool.apply_changes(changeset);
+    consensus_pool.apply(changeset);
     parent
 }
 
@@ -352,10 +352,10 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                             ingress,
                             ..BatchPayload::default()
                         },
-                        dealings: dkg::Dealings::new_empty(
+                        dkg: DkgDataPayload::new_empty(
                             tip.payload.as_ref().dkg_interval_start_height(),
                         ),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 );
 

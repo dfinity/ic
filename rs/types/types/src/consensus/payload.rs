@@ -1,7 +1,7 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, ecdsa, hashed::Hashed, thunk::Thunk},
+    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
     crypto::CryptoHashOf,
     *,
 };
@@ -13,20 +13,20 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 /// A payload, that contains information needed during a regular round.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dealings: dkg::Dealings,
-    pub ecdsa: ecdsa::Payload,
+    pub dkg: dkg::DkgDataPayload,
+    pub idkg: idkg::Payload,
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
-    pub ecdsa: ecdsa::Summary,
+    pub idkg: idkg::Summary,
 }
 
 impl SummaryPayload {
@@ -40,12 +40,12 @@ impl SummaryPayload {
     /// Note that this function should generally be called on the CUP instead.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         let dkg_version = self.dkg.get_oldest_registry_version_in_use();
-        if let Some(ecdsa_version) = self
-            .ecdsa
+        if let Some(idkg_version) = self
+            .idkg
             .as_ref()
             .and_then(|payload| payload.get_oldest_registry_version_in_use())
         {
-            dkg_version.min(ecdsa_version)
+            dkg_version.min(idkg_version)
         } else {
             dkg_version
         }
@@ -53,7 +53,7 @@ impl SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
@@ -68,7 +68,7 @@ impl BlockPayload {
     pub fn is_empty(&self) -> bool {
         match self {
             BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.ecdsa.is_none()
+                data.batch.is_empty() && data.dkg.messages.is_empty() && data.idkg.is_none()
             }
             _ => false,
         }
@@ -113,11 +113,11 @@ impl BlockPayload {
         }
     }
 
-    /// Returns a reference to EcdsaPayload if it exists.
-    pub fn as_ecdsa(&self) -> Option<&ecdsa::EcdsaPayload> {
+    /// Returns a reference to IDkgPayload if it exists.
+    pub fn as_idkg(&self) -> Option<&idkg::IDkgPayload> {
         match self {
-            BlockPayload::Data(data) => data.ecdsa.as_ref(),
-            BlockPayload::Summary(data) => data.ecdsa.as_ref(),
+            BlockPayload::Data(data) => data.idkg.as_ref(),
+            BlockPayload::Summary(data) => data.idkg.as_ref(),
         }
     }
 
@@ -133,12 +133,12 @@ impl BlockPayload {
     pub fn dkg_interval_start_height(&self) -> Height {
         match self {
             BlockPayload::Summary(summary) => summary.dkg.height,
-            BlockPayload::Data(data) => data.dealings.start_height,
+            BlockPayload::Data(data) => data.dkg.start_height,
         }
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
@@ -162,7 +162,7 @@ impl std::fmt::Display for PayloadType {
 /// pointer so that it is cheap to clone.
 ///
 /// It serializes to both the crypto hash and value of a `BlockPayload`.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct Payload {
     payload_type: PayloadType,
     // It is not crucial that Arc used here is unique, because the data referenced remains
@@ -242,12 +242,12 @@ impl From<dkg::Payload> for BlockPayload {
         match payload {
             dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
-                ecdsa: None,
+                idkg: None,
             }),
-            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings,
-                ecdsa: ecdsa::Payload::default(),
+                dkg,
+                idkg: idkg::Payload::default(),
             }),
         }
     }

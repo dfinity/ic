@@ -13,7 +13,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// For new code, consider instead using SecretBytes, also from this
 /// crate, which implements a compact encoding which is equivalent to
 /// just the bytestring itself.
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretVec {
     inner_secret: Vec<u8>,
 }

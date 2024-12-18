@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+chrono = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
@@ -14,12 +15,11 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-chrono = { workspace = true }
 prost = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-certification-test-utils = { path = "../../certification/test-utils" }

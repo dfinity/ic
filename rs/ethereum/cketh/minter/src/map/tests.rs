@@ -15,10 +15,6 @@ fn should_insert_and_retrieve_by_key_and_alt_key() {
         Some((&AltKey::new('a'), &1))
     );
     assert_eq!(map.get_alt(&AltKey::new('a')), Some(&1));
-    assert_eq!(
-        map.get_entry_alt(&AltKey::new('a')),
-        Some((&PrimaryKey::new(1), &1))
-    );
 
     assert_eq!(map.get(&PrimaryKey::new(2)), Some(&2));
     assert_eq!(
@@ -26,10 +22,6 @@ fn should_insert_and_retrieve_by_key_and_alt_key() {
         Some((&AltKey::new('b'), &2))
     );
     assert_eq!(map.get_alt(&AltKey::new('b')), Some(&2));
-    assert_eq!(
-        map.get_entry_alt(&AltKey::new('b')),
-        Some((&PrimaryKey::new(2), &2))
-    );
 }
 
 #[test]

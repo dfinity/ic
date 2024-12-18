@@ -1,6 +1,8 @@
-use crate::message_routing::LatencyMetrics;
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
 use ic_error_types::RejectCode;
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -15,7 +17,6 @@ use ic_types::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
     },
-    xnet::QueueId,
     CountBytes, SubnetId,
 };
 #[cfg(test)]
@@ -28,12 +29,14 @@ use std::sync::{Arc, Mutex};
 mod tests;
 
 struct StreamBuilderMetrics {
-    /// Messages currently enqueued in streams, by destination subnet.
+    /// Messages currently enqueued in streams, by remote subnet.
     pub stream_messages: IntGaugeVec,
-    /// Stream byte size, by destination subnet.
+    /// Stream byte size, by remote subnet.
     pub stream_bytes: IntGaugeVec,
-    /// Stream begin, by destination subnet.
+    /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals end, by remote subnet.
+    pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
@@ -44,6 +47,9 @@ struct StreamBuilderMetrics {
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
     pub critical_error_response_destination_not_found: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 }
 
 /// Desired byte size of an outgoing stream.
@@ -56,11 +62,12 @@ const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
 ///
 /// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
 /// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 50_000;
+const MAX_STREAM_MESSAGES: usize = 10_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
@@ -72,8 +79,6 @@ const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
-const LABEL_VALUE_STATUS_DESTINATION_NOT_ACCEPTING_REQUESTS: &str =
-    "destination_not_accepting_requests";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 
 const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
@@ -82,20 +87,28 @@ const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
     "mr_stream_builder_response_destination_not_found";
 
 impl StreamBuilderMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
+    ) -> Self {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
-            "Messages currently enqueued in streams, by destination subnet.",
+            "Messages currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_bytes = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BYTES,
-            "Stream byte size including header, by destination subnet.",
+            "Stream byte size including header, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_begin = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BEGIN,
-            "Stream begin, by destination subnet",
+            "Stream begin, by remote subnet",
+            &[LABEL_REMOTE],
+        );
+        let signals_end = metrics_registry.int_gauge_vec(
+            METRIC_SIGNALS_END,
+            "Signals end, by remote subnet",
             &[LABEL_REMOTE],
         );
         let routed_messages = metrics_registry.int_counter_vec(
@@ -115,6 +128,9 @@ impl StreamBuilderMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
             metrics_registry.error_counter(CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND);
+        let critical_error_induct_response_failed = message_routing_metrics
+            .critical_error_induct_response_failed
+            .clone();
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -136,11 +152,13 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            signals_end,
             routed_messages,
             routed_payload_sizes,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
+            critical_error_induct_response_failed,
         }
     }
 }
@@ -165,12 +183,13 @@ impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             subnet_id,
-            metrics: StreamBuilderMetrics::new(metrics_registry),
+            metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             log,
         }
@@ -205,9 +224,19 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
-            // Enqueuing a response for a local request.
-            // There should never be the case of getting `CanisterStopped` or `CanisterStopping`.
-            .unwrap();
+            .map(|_| ())
+            .unwrap_or_else(|(err, response)| {
+                // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
+                // `NonMatchingResponse` error.
+                error!(
+                    self.log,
+                    "{}: Failed to enqueue reject response for local request: {}\n{:?}",
+                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                    err,
+                    response
+                );
+                self.metrics.critical_error_induct_response_failed.inc();
+            });
     }
 
     /// Records the result of routing an XNet message.
@@ -251,22 +280,26 @@ impl StreamBuilderImpl {
         ///    peeked one.
         fn validated_next(
             iterator: &mut dyn PeekableOutputIterator,
-            (expected_id, expected_message): (QueueId, &RequestOrResponse),
+            expected_message: &RequestOrResponse,
         ) -> RequestOrResponse {
-            let (queue_id, message) = iterator.next().unwrap();
-            debug_assert_eq!((queue_id, &message), (expected_id, expected_message));
+            let message = iterator.next().unwrap();
+            debug_assert_eq!(&message, expected_message);
             message
         }
 
         /// Tests whether a stream is over the message count limit, byte limit or (if
         /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
         fn is_at_limit(
-            stream: &Stream,
+            stream: Option<&Stream>,
             max_stream_messages: usize,
             target_stream_size_bytes: usize,
             is_local_message: bool,
             destination_subnet_type: SubnetType,
         ) -> bool {
+            let stream = match stream {
+                Some(stream) => stream,
+                None => return false,
+            };
             let stream_messages_len = stream.messages().len();
 
             if stream_messages_len >= max_stream_messages
@@ -296,7 +329,6 @@ impl StreamBuilderImpl {
             .collect();
 
         let mut requests_to_reject = Vec::new();
-        let mut invalid_destination_requests = Vec::new();
         let mut oversized_requests = Vec::new();
 
         let mut output_iter = state.output_into_iter();
@@ -305,12 +337,12 @@ impl StreamBuilderImpl {
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
-            let output_size = output_iter.size_hint().0;
+            let output_size = output_iter.size();
             debug_assert!(output_size < last_output_size);
             if output_size >= last_output_size {
                 error!(
@@ -324,46 +356,25 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(queue_id.dst_canister.get()) {
+            match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    let mut msg = match streams.get(&dst_subnet_id) {
-                        // No existing stream to check the limits or flags of. We will route (or reject) the message.
-                        None => validated_next(&mut output_iter, (queue_id, &msg)),
+                    if is_at_limit(
+                        streams.get(&dst_subnet_id),
+                        max_stream_messages,
+                        target_stream_size_bytes,
+                        self.subnet_id == dst_subnet_id,
+                        *subnet_types
+                            .get(&dst_subnet_id)
+                            .unwrap_or(&SubnetType::Application),
+                    ) {
+                        // Stream full, skip all other messages to this destination.
+                        output_iter.exclude_queue();
+                        continue;
+                    }
 
-                        // Got a stream, check if `msg` can be pushed.
-                        Some(stream) => {
-                            if is_at_limit(
-                                stream,
-                                max_stream_messages,
-                                target_stream_size_bytes,
-                                self.subnet_id == dst_subnet_id,
-                                *subnet_types
-                                    .get(&dst_subnet_id)
-                                    .unwrap_or(&SubnetType::Application),
-                            ) {
-                                // Stream full, skip all other messages to this destination.
-                                output_iter.exclude_queue();
-                                continue;
-                            }
-
-                            // We will route (or reject) the message, pop it.
-                            let msg = validated_next(&mut output_iter, (queue_id, &msg));
-
-                            // Check if requests should be rejected locally.
-                            if stream.reverse_stream_flags().responses_only {
-                                if let RequestOrResponse::Request(req) = msg {
-                                    self.observe_message_type_status(
-                                        LABEL_VALUE_TYPE_REQUEST,
-                                        LABEL_VALUE_STATUS_DESTINATION_NOT_ACCEPTING_REQUESTS,
-                                    );
-                                    requests_to_reject.push((req, dst_subnet_id));
-                                    continue;
-                                }
-                            }
-                            msg
-                        }
-                    };
+                    // We will route (or reject) the message, pop it.
+                    let mut msg = validated_next(&mut output_iter, &msg);
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
@@ -436,12 +447,12 @@ impl StreamBuilderImpl {
 
                 // Destination subnet not found.
                 None => {
-                    warn!(self.log, "No route to canister {}", queue_id.dst_canister);
+                    warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, (queue_id, &msg)) {
+                    match validated_next(&mut output_iter, &msg) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
-                            invalid_destination_requests.push(req);
+                            requests_to_reject.push(req);
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
@@ -461,19 +472,7 @@ impl StreamBuilderImpl {
         }
         drop(output_iter);
 
-        for (req, dst_subnet_id) in requests_to_reject {
-            self.reject_local_request(
-                &mut state,
-                &req,
-                RejectCode::SysTransient,
-                format!(
-                    "Destination subnet {} not accepting requests",
-                    dst_subnet_id
-                ),
-            );
-        }
-
-        for req in invalid_destination_requests {
+        for req in requests_to_reject {
             let dst_canister_id = req.receiver;
             self.reject_local_request(
                 &mut state,
@@ -507,9 +506,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin)| {
+            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -522,6 +522,10 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
+                self.metrics
+                    .signals_end
+                    .with_label_values(&[&subnet])
+                    .set(signals_end.get() as i64);
             });
 
         {

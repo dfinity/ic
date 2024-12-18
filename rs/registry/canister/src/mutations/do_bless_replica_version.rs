@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
 /// DEPRECATED
-/// This payload and proposal type is superseded by UpdateElectedReplicaVersions
+/// This payload and proposal type is superseded by ReviseElectedGuestosVersions
 ///
 /// The payload of a proposal to bless a given replica version.
 ///
@@ -11,7 +11,7 @@ use serde::Serialize;
 /// BlessReplicaVersionPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct BlessReplicaVersionPayload {
     /// Version ID. This can be anything, it has not semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step

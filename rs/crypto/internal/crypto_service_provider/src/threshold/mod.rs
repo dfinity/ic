@@ -37,8 +37,8 @@ impl ThresholdSignatureCspClient for Csp {
         let message_len = message.len();
         let result = self.csp_vault.threshold_sign(algorithm_id, message, key_id);
         self.metrics.observe_parameter_size(
-            MetricsDomain::MultiSignature,
-            "sign_multi",
+            MetricsDomain::ThresholdSignature,
+            "threshold_sign",
             "message",
             message_len,
             MetricsResult::from(&result),

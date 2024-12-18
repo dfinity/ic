@@ -16,7 +16,7 @@ use std::time::Duration;
 /// These are runtime flags because it's very easy to accidentally set compile
 /// time flags in rust. It also stops you needing to compile your code against
 /// every possible permutation of compile flags on CI.
-#[derive(Clone, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct MaliciousBehaviour {
     pub allow_malicious_behaviour: bool,
     // No structs apart from 'allow_malicious_behaviour' should be directly accessible
@@ -123,9 +123,9 @@ impl MaliciousBehaviour {
         })
     }
 
-    pub fn set_maliciously_corrupt_ecdsa_dealings(self) -> Self {
+    pub fn set_maliciously_corrupt_idkg_dealings(self) -> Self {
         self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_corrupt_ecdsa_dealings = true;
+            s.malicious_flags.maliciously_corrupt_idkg_dealings = true;
             s
         })
     }

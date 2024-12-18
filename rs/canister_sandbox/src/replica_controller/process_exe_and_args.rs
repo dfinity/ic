@@ -20,7 +20,19 @@ const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
 // These binaries support running in the canister sandbox mode.
-const RUNNABLE_AS_SANDBOX: &[&str] = &["drun", "ic-replay", "ic-recovery"];
+const RUNNABLE_AS_SANDBOX: &[&str] = &[
+    "drun",
+    "ic-replay",
+    "ic-recovery",
+    "pocket-ic",
+    "pocket-ic-server",
+    // To enable fuzzing with canister sandboxing.
+    // TODO(PSEC): The binary name is hardcoded right now, but we would
+    // need a different approach to enable multiple fuzzers use this
+    // approach. The logic can be gated with #[cfg(feature = "fuzzing_code")]
+    "execute_with_wasm_executor_system_api_call",
+    "execute_subnet_message_update_settings",
+];
 
 enum SandboxCrate {
     SandboxLauncher,

@@ -7,12 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -22,9 +21,11 @@ ic-wasm-types = { path = "../types/wasm_types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prost = { workspace = true }
 serde = { workspace = true }
-tower = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 thiserror = { workspace = true }
+tower = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
-proptest = "1.0"
+proptest = { workspace = true }

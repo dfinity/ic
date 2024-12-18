@@ -36,7 +36,10 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
             display_proto::<pb_ingress::IngressHistoryState, IngressHistoryState>(path.clone())
         }
         QUEUES_FILE | SUBNET_QUEUES_FILE => {
-            display_proto::<pb_queues::CanisterQueues, CanisterQueues>(path.clone())
+            display_proto_with_error_metric::<pb_queues::CanisterQueues, CanisterQueues>(
+                path.clone(),
+                &dummy_metrics as &dyn CheckpointLoadingMetrics,
+            )
         }
         CANISTER_FILE => {
             display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())

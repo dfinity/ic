@@ -23,6 +23,30 @@ pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
     pub _marker: PhantomData<(Input, Output)>,
 }
 
+impl<Input, Output> PartialOrd for QueryArchiveFn<Input, Output>
+where
+    Input: CandidType + Eq,
+    Output: CandidType + Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Input, Output> Ord for QueryArchiveFn<Input, Output>
+where
+    Input: CandidType + Eq,
+    Output: CandidType + Eq,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.canister_id.cmp(&other.canister_id) {
+            std::cmp::Ordering::Equal => self.method.cmp(&other.method),
+            c => c,
+        }
+        // the _marker doesn't matter
+    }
+}
+
 impl<Input: CandidType, Output: CandidType> QueryArchiveFn<Input, Output> {
     pub fn new(canister_id: Principal, method: impl Into<String>) -> Self {
         Self {
@@ -92,3 +116,26 @@ pub struct ArchiveInfo {
 }
 pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksRequest, BlockRange>;
 pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GetArchivesArgs {
+    // The last archive seen by the client.
+    // The Ledger will return archives coming
+    // after this one if set, otherwise it
+    // will return the first archives.
+    pub from: Option<Principal>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ICRC3ArchiveInfo {
+    // The id of the archive
+    pub canister_id: Principal,
+
+    // The first block in the archive
+    pub start: Nat,
+
+    // The last block in the archive
+    pub end: Nat,
+}
+
+pub type GetArchivesResult = Vec<ICRC3ArchiveInfo>;

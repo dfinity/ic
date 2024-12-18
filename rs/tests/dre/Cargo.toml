@@ -1,0 +1,19 @@
+[package]
+name = "os_qualification"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+os_qualification_utils = { path = "./utils" }
+ic-system-test-driver = { path = "../driver" }
+ic-protobuf = { path = "../../protobuf" }
+tokio.workspace = true
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+anyhow.workspace = true
+
+[[bin]]
+name = "guest_os_qualification"
+path = "guest_os_qualification.rs"

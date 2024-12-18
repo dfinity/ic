@@ -80,7 +80,7 @@ fn test_safe_truncate_right() {
 
 /// Trait for strings that can be represented in an ellipsis format.
 pub trait StrEllipsize {
-    /// Ellipsize the string with a max length and prefix percentage [0, 100].
+    /// Ellipsize the string with a max length and prefix percentage `[0, 100]`.
     ///
     /// Returns the original string if it's shorter or equal than the max length.
     fn ellipsize(&self, max_len: usize, prefix_percentage: usize) -> String;

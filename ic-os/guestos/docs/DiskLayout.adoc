@@ -1,6 +1,6 @@
-= IC guest OS disk layout
+= GuestOS disk layout
 
-The (virtual) disk of the IC guest OS is structured to allow
+The (virtual) disk of the IC GuestOS is structured to allow
 system upgrades with A/B partition switching (see
 link:Upgrades{outfilesuffix}[upgrades]) while ensuring system
 integrity and confidentiality for secure VMs.

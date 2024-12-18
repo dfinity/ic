@@ -1,9 +1,8 @@
-#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
-use ic_crypto_internal_csp::Csp;
+use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
@@ -356,7 +355,7 @@ fn new_secp256r1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
 }
 
 fn new_secp256k1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
     sk.public_key().serialize_der()
 }
 
@@ -387,7 +386,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
     rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
 
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
@@ -396,7 +395,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
             buf.extend_from_slice(request_id.as_bytes());
             Sha256::hash(&buf)
         };
-        let signature_bytes = sk.sign_digest(&bytes_to_sign).expect("failed to sign");
+        let signature_bytes = sk.sign_digest_with_ecdsa(&bytes_to_sign);
         BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
     };
 
@@ -409,8 +408,13 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
 
-    let csp = Csp::new_from_config(config, None, None, Arc::new(CryptoMetrics::none()));
-    ic_crypto_node_key_generation::generate_node_signing_keys(&csp);
+    let vault = vault_from_config(
+        config,
+        None,
+        no_op_logger(),
+        Arc::new(CryptoMetrics::none()),
+    );
+    ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
 
     CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
 }

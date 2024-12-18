@@ -1,13 +1,13 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
+use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
 use candid::{Decode, Encode};
-use ic_base_types::CanisterId;
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
-use ic_state_machine_tests::{
-    CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload, PayloadBuilder,
-    RejectCode, StateMachine,
-};
+use ic_error_types::RejectCode;
+use ic_management_canister_types::CanisterHttpResponsePayload;
+use ic_state_machine_tests::{PayloadBuilder, StateMachine};
+use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
+use ic_types::messages::CallbackId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::json;
@@ -26,7 +26,7 @@ pub struct MockJsonRpcProviders {
 
 //variants are prefixed by Eth because it's the names of those methods in the Ethereum JSON-RPC API
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, PartialEq, strum_macros::EnumString, Clone, strum_macros::Display)]
+#[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
 pub enum JsonRpcMethod {
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
@@ -45,24 +45,6 @@ pub enum JsonRpcMethod {
 
     #[strum(serialize = "eth_sendRawTransaction")]
     EthSendRawTransaction,
-}
-
-#[derive(Copy, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, strum_macros::EnumIter)]
-pub enum JsonRpcProvider {
-    //order is top-to-bottom and must match order used in production
-    Ankr,
-    PublicNode,
-    LlamaNodes,
-}
-
-impl JsonRpcProvider {
-    fn url(&self) -> &str {
-        match self {
-            JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
-            JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
-            JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -94,7 +76,7 @@ impl FromStr for JsonRpcRequest {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct JsonRpcRequestMatcher {
     http_method: CanisterHttpMethod,
     provider: JsonRpcProvider,
@@ -114,6 +96,12 @@ impl JsonRpcRequestMatcher {
         }
     }
 
+    pub fn new_for_all_providers(method: JsonRpcMethod) -> BTreeMap<JsonRpcProvider, Self> {
+        JsonRpcProvider::iter()
+            .map(|provider| (provider, Self::new(provider, method.clone())))
+            .collect()
+    }
+
     pub fn with_request_params(mut self, params: Option<serde_json::Value>) -> Self {
         self.match_request_params = params;
         self
@@ -122,6 +110,39 @@ impl JsonRpcRequestMatcher {
     pub fn with_max_response_bytes(mut self, max_response_bytes: Option<u64>) -> Self {
         self.max_response_bytes = max_response_bytes;
         self
+    }
+
+    fn tick_until_next_http_request(&self, env: &StateMachine) {
+        let method = self.json_rpc_method.to_string();
+        for _ in 0..MAX_TICKS {
+            let matching_method = env
+                .canister_http_request_contexts()
+                .values()
+                .any(|context| {
+                    JsonRpcRequest::from_str(
+                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                    )
+                    .expect("BUG: invalid JSON RPC method")
+                    .method
+                    .to_string()
+                        == method
+                });
+            if matching_method {
+                break;
+            }
+            env.tick();
+            env.advance_time(Duration::from_nanos(1));
+        }
+    }
+
+    pub fn find_rpc_call(
+        &self,
+        env: &StateMachine,
+    ) -> Option<(CallbackId, CanisterHttpRequestContext)> {
+        self.tick_until_next_http_request(env);
+        env.canister_http_request_contexts()
+            .into_iter()
+            .find(|(_id, context)| self.matches(context))
     }
 }
 
@@ -158,20 +179,30 @@ impl Matcher for JsonRpcRequestMatcher {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct StubOnce {
     matcher: JsonRpcRequestMatcher,
     response_result: serde_json::Value,
 }
 
 impl StubOnce {
-    fn expect_rpc_call(self, env: &StateMachine, canister_id_cleanup_response: CanisterId) {
-        self.tick_until_next_http_request(env);
-        let (id, context) = env
-            .canister_http_request_contexts()
-            .into_iter()
-            .find(|(_id, context)| self.matcher.matches(context))
-            .unwrap_or_else(|| panic!("no request found matching the stub {:?}", self));
+    fn expect_no_matching_rpc_call(self, env: &StateMachine) {
+        if let Some((id, _)) = self.matcher.find_rpc_call(env) {
+            panic!(
+                "expect no request matching the stub {:?} but found one {}",
+                self, id
+            );
+        }
+    }
+
+    fn expect_rpc_call(self, env: &StateMachine) {
+        let (id, context) = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
+            panic!(
+                "no request found matching the stub {:?}. Current requests {}",
+                self,
+                debug_http_outcalls(env)
+            )
+        });
         let request_id = {
             let request_body = context
                 .body
@@ -218,6 +249,7 @@ impl StubOnce {
             },
             context: clean_up_context.to_vec(),
         };
+        let canister_id_cleanup_response = context.request.sender;
         let clean_up_response = Decode!(
             &assert_reply(
                 env.execute_ingress(
@@ -256,29 +288,22 @@ impl StubOnce {
         payload = payload.http_response(id, &http_response);
         env.execute_payload(payload);
     }
+}
 
-    fn tick_until_next_http_request(&self, env: &StateMachine) {
-        let method = self.matcher.json_rpc_method.to_string();
-        for _ in 0..MAX_TICKS {
-            let matching_method = env
-                .canister_http_request_contexts()
-                .values()
-                .any(|context| {
-                    JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
-                    )
-                    .expect("BUG: invalid JSON RPC method")
-                    .method
-                    .to_string()
-                        == method
-                });
-            if matching_method {
-                break;
-            }
-            env.tick();
-            env.advance_time(Duration::from_nanos(1));
-        }
+fn debug_http_outcalls(env: &StateMachine) -> String {
+    let mut debug_str = vec![];
+    for context in env.canister_http_request_contexts().values() {
+        let request_body = context
+            .body
+            .as_ref()
+            .map(|body| std::str::from_utf8(body).unwrap())
+            .expect("BUG: missing request body");
+        debug_str.push(format!(
+            "{:?} {} (max_response_bytes={:?}) {}",
+            context.http_method, context.url, context.max_response_bytes, request_body
+        ));
     }
+    debug_str.join("\n")
 }
 
 impl MockJsonRpcProviders {
@@ -291,9 +316,17 @@ impl MockJsonRpcProviders {
         }
     }
 
-    pub fn expect_rpc_calls(self, cketh: &CkEthSetup) {
+    pub fn expect_rpc_calls<T: AsRef<CkEthSetup>>(self, cketh: T) {
+        let cketh = cketh.as_ref();
         for stub in self.stubs {
-            stub.expect_rpc_call(&cketh.env, cketh.minter_id);
+            stub.expect_rpc_call(&cketh.env);
+        }
+    }
+
+    pub fn expect_no_rpc_calls<T: AsRef<CkEthSetup>>(self, cketh: T) {
+        let cketh = cketh.as_ref();
+        for stub in self.stubs {
+            stub.expect_no_matching_rpc_call(&cketh.env);
         }
     }
 }
@@ -316,9 +349,19 @@ impl MockJsonRpcProvidersBuilder {
         self
     }
 
-    pub fn respond_with<T: Serialize>(mut self, provider: JsonRpcProvider, response: T) -> Self {
-        self.responses
-            .insert(provider, serde_json::to_value(response).unwrap());
+    pub fn respond_with<T: Serialize>(self, provider: JsonRpcProvider, response: T) -> Self {
+        self.respond_for_providers_with(std::iter::once(provider), response)
+    }
+
+    pub fn respond_for_providers_with<T: Serialize, I: IntoIterator<Item = JsonRpcProvider>>(
+        mut self,
+        providers: I,
+        response: T,
+    ) -> Self {
+        let response = serde_json::to_value(response).unwrap();
+        for provider in providers {
+            self.responses.insert(provider, response.clone());
+        }
         self
     }
 
@@ -337,11 +380,8 @@ impl MockJsonRpcProvidersBuilder {
         self.respond_with(provider, previous_response)
     }
 
-    pub fn respond_for_all_with<T: Serialize + Clone>(mut self, response: T) -> Self {
-        for provider in JsonRpcProvider::iter() {
-            self = self.respond_with(provider, response.clone());
-        }
-        self
+    pub fn respond_for_all_with<T: Serialize>(self, response: T) -> Self {
+        self.respond_for_providers_with(JsonRpcProvider::iter(), response)
     }
 
     pub fn modify_response_for_all<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(

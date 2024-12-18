@@ -1,6 +1,6 @@
 use crate::logs::DEBUG;
 use async_trait::async_trait;
-use candid::{CandidType, Principal};
+use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -16,7 +16,7 @@ use std::fmt::Debug;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallError {
     pub method: String,
     pub reason: Reason,
@@ -44,7 +44,7 @@ impl fmt::Display for CallError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// The reason for the management call failure.
 pub enum Reason {
     /// The canister does not have enough cycles to submit the request.
@@ -96,6 +96,14 @@ pub trait CanisterRuntime {
     /// Returns the canister id of the current canister.
     fn id(&self) -> Principal;
 
+    /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
+    fn time(&self) -> u64;
+
+    /// Set a global timer to make the system schedule a call to the exported `canister_global_timer` Wasm method after the specified time.
+    /// The time must be provided as nanoseconds since 1970-01-01.
+    /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
+    fn global_timer_set(&self, timestamp: u64);
+
     /// Creates a new canister with the given cycles.
     async fn create_canister(
         &self,
@@ -103,12 +111,25 @@ pub trait CanisterRuntime {
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError>;
 
+    /// Stops the given canister.
+    async fn stop_canister(&self, canister_id: Principal) -> Result<(), CallError>;
+
+    /// Starts the given canister.
+    async fn start_canister(&self, canister_id: Principal) -> Result<(), CallError>;
+
     /// Installs the given wasm module with the initialization arguments on the given canister.
     async fn install_code(
         &self,
         canister_id: Principal,
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
+    ) -> Result<(), CallError>;
+
+    /// Upgrade the given canister without any upgrade arguments.
+    async fn upgrade_canister(
+        &self,
+        canister_id: Principal,
+        wasm_module: Vec<u8>,
     ) -> Result<(), CallError>;
 
     async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError>;
@@ -126,6 +147,7 @@ pub trait CanisterRuntime {
         O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
+#[derive(Copy, Clone)]
 pub struct IcCanisterRuntime {}
 
 impl IcCanisterRuntime {
@@ -166,6 +188,18 @@ impl CanisterRuntime for IcCanisterRuntime {
         ic_cdk::id()
     }
 
+    fn time(&self) -> u64 {
+        ic_cdk::api::time()
+    }
+
+    fn global_timer_set(&self, timestamp: u64) {
+        // SAFETY: setting the global timer is always safe; it does not
+        // mutate any canister memory.
+        unsafe {
+            ic0::global_timer_set(timestamp as i64);
+        }
+    }
+
     async fn create_canister(
         &self,
         controllers: Vec<Principal>,
@@ -196,6 +230,28 @@ impl CanisterRuntime for IcCanisterRuntime {
         Ok(result.get_canister_id().get().into())
     }
 
+    async fn stop_canister(&self, canister_id: Principal) -> Result<(), CallError> {
+        ic_cdk::api::management_canister::main::stop_canister(
+            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
+        )
+        .await
+        .map_err(|(code, msg)| CallError {
+            method: "stop_canister".to_string(),
+            reason: Reason::from_reject(code, msg),
+        })
+    }
+
+    async fn start_canister(&self, canister_id: Principal) -> Result<(), CallError> {
+        ic_cdk::api::management_canister::main::start_canister(
+            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
+        )
+        .await
+        .map_err(|(code, msg)| CallError {
+            method: "start_canister".to_string(),
+            reason: Reason::from_reject(code, msg),
+        })
+    }
+
     async fn install_code(
         &self,
         canister_id: Principal,
@@ -209,11 +265,30 @@ impl CanisterRuntime for IcCanisterRuntime {
             arg,
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             sender_canister_version: None,
         };
 
-        self.call("install_code", 0, &install_code).await?;
+        () = self.call("install_code", 0, &install_code).await?;
+
+        Ok(())
+    }
+
+    async fn upgrade_canister(
+        &self,
+        canister_id: Principal,
+        wasm_module: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let install_code = InstallCodeArgs {
+            mode: CanisterInstallMode::Upgrade,
+            canister_id: PrincipalId::from(canister_id),
+            wasm_module,
+            arg: Encode!(&()).unwrap(),
+            compute_allocation: None,
+            memory_allocation: None,
+            sender_canister_version: None,
+        };
+
+        () = self.call("install_code", 0, &install_code).await?;
 
         Ok(())
     }

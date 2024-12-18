@@ -1,0 +1,27 @@
+[package]
+name = "sdk-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+backoff = { workspace = true }
+candid = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+nns_dapp = { path = "../nns/nns_dapp" }
+
+[[bin]]
+name = "dfx_check_old_wallet_version_test"
+path = "dfx_check_old_wallet_version_test.rs"
+
+[[bin]]
+name = "dfx_smoke_test"
+path = "dfx_smoke_test.rs"

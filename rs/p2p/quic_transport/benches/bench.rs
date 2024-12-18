@@ -11,14 +11,13 @@ use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion,
     Throughput,
 };
-use either::Either;
 use ic_base_types::NodeId;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     create_registry_handle, temp_crypto_component_with_tls_keys, RegistryConsensusHandle,
 };
-use ic_quic_transport::{DummyUdpSocket, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{create_udp_socket, QuicTransport, SubnetTopology, Transport};
 use ic_types_test_utils::ids::node_test_id;
 use tokio::{
     runtime::{Handle, Runtime},
@@ -58,7 +57,7 @@ fn spawn_transport(
         registry_handle.registry_client.clone(),
         node_id,
         watch_rx,
-        Either::<_, DummyUdpSocket>::Left(node_addr),
+        create_udp_socket(&rt, node_addr),
         Router::new().route("/", any(pong)),
     ));
     (transport, node_id, node_addr)
@@ -69,7 +68,7 @@ async fn all_peers_up(transport: Arc<dyn Transport>, peers: Vec<NodeId>) {
         let mut one_peer_down = false;
         for peer in &peers {
             if transport
-                .push(
+                .rpc(
                     peer,
                     Request::builder().uri("/").body(Bytes::new()).unwrap(),
                 )
@@ -225,7 +224,7 @@ fn bench_inner(
                         let t = transport_c.clone();
                         let p = *peer;
                         futs.push(async move {
-                            t.push(&p, Request::builder().uri("/").body(bytes).unwrap())
+                            t.rpc(&p, Request::builder().uri("/").body(bytes).unwrap())
                                 .await
                                 .unwrap();
                         });

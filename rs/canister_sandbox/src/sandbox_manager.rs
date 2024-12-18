@@ -13,42 +13,33 @@
 //! towards the controller are found in this module.
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::fmt::{Debug, Formatter};
+use std::fs::File;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
-use crate::protocol::sbxsvc::{
-    CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
-};
+use crate::protocol::sbxsvc::{CreateExecutionStateSerializedSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges,
-    wasm_utils::{compile, decoding::decode_wasm, Segments},
-    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModule,
+    SerializedModuleBytes, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
-use ic_replicated_state::page_map::{PageAllocatorRegistry, PageMapSerialization};
-use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
+use ic_replicated_state::{
+    page_map::{PageAllocatorRegistry, PageMapSerialization},
+    EmbedderCache, Global, Memory, PageMap,
+};
 use ic_types::CanisterId;
 
 use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
-
-struct ExecutionInstantiateError;
-
-impl Debug for ExecutionInstantiateError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Failed to instantatiate execution.")
-    }
-}
 
 /// A canister execution currently in progress.
 struct Execution {
@@ -113,9 +104,14 @@ impl Execution {
 
         let message_instruction_limit =
             exec_input.execution_parameters.instruction_limits.message();
+        let instruction_limit_to_report = exec_input
+            .execution_parameters
+            .instruction_limits
+            .limit_to_report();
         let slice_instruction_limit = exec_input.execution_parameters.instruction_limits.slice();
         let sandbox_manager = Arc::clone(&self.sandbox_manager);
         let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
+            i64::try_from(instruction_limit_to_report.get()).unwrap_or(i64::MAX),
             i64::try_from(message_instruction_limit.get()).unwrap_or(i64::MAX),
             i64::try_from(slice_instruction_limit.get()).unwrap_or(i64::MAX),
             move |slice, paused_execution| {
@@ -299,35 +295,6 @@ impl SandboxManager {
         }
     }
 
-    /// Compiles the given Wasm binary and registers it under the given id.
-    /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(
-        &self,
-        wasm_id: WasmId,
-        wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Arc<EmbedderCache>, CompilationResult, SerializedModule)> {
-        let mut guard = self.repr.lock().unwrap();
-        assert!(
-            !guard.caches.contains_key(&wasm_id),
-            "Failed to open wasm session {}: id is already in use",
-            wasm_id,
-        );
-        let wasm = decode_wasm(Arc::new(wasm_src))?;
-        let (cache, result) = compile(&self.embedder, &wasm);
-        let embedder_cache = Arc::new(cache);
-        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
-        // Return as much memory as possible because compiling seems to use up
-        // some extra memory that can be returned.
-        //
-        // SAFETY: 0 is always a valid argument to `malloc_trim`.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            libc::malloc_trim(0);
-        }
-        let (compilation_result, serialized_module) = result?;
-        Ok((embedder_cache, compilation_result, serialized_module))
-    }
-
     pub fn open_wasm_serialized(
         &self,
         wasm_id: WasmId,
@@ -343,6 +310,30 @@ impl SandboxManager {
         let instance_pre = self
             .embedder
             .deserialize_module_and_pre_instantiate(serialized_module);
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
+        let deserialization_time = deserialization_timer.elapsed();
+        guard.caches.insert(wasm_id, Arc::clone(&cache));
+        match instance_pre {
+            Ok(_) => Ok((cache, deserialization_time)),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn open_wasm_via_file(
+        &self,
+        wasm_id: WasmId,
+        serialized_module_file: File,
+    ) -> HypervisorResult<(Arc<EmbedderCache>, Duration)> {
+        let mut guard = self.repr.lock().unwrap();
+        assert!(
+            !guard.caches.contains_key(&wasm_id),
+            "Failed to open wasm session {}: id is already in use",
+            wasm_id,
+        );
+        let deserialization_timer = Instant::now();
+        let instance_pre = self
+            .embedder
+            .read_file_and_pre_instantiate(serialized_module_file);
         let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
         let deserialization_time = deserialization_timer.elapsed();
         guard.caches.insert(wasm_id, Arc::clone(&cache));
@@ -471,37 +462,6 @@ impl SandboxManager {
         paused_execution.abort();
     }
 
-    pub fn create_execution_state(
-        &self,
-        wasm_id: WasmId,
-        wasm_source: Vec<u8>,
-        wasm_page_map: PageMapSerialization,
-        next_wasm_memory_id: MemoryId,
-        canister_id: CanisterId,
-        stable_memory_page_map: PageMapSerialization,
-    ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // Validate, instrument, and compile the binary.
-        let (embedder_cache, compilation_result, serialized_module) =
-            self.open_wasm(wasm_id, wasm_source)?;
-
-        let (wasm_memory_modifications, exported_globals) = self
-            .create_initial_memory_and_globals(
-                &embedder_cache,
-                &serialized_module.data_segments,
-                wasm_page_map,
-                next_wasm_memory_id,
-                canister_id,
-                stable_memory_page_map,
-            )?;
-
-        Ok(CreateExecutionStateSuccessReply {
-            wasm_memory_modifications,
-            exported_globals,
-            compilation_result,
-            serialized_module,
-        })
-    }
-
     pub fn create_execution_state_serialized(
         &self,
         wasm_id: WasmId,
@@ -518,6 +478,71 @@ impl SandboxManager {
             .create_initial_memory_and_globals(
                 &embedder_cache,
                 &serialized_module.data_segments,
+                wasm_page_map,
+                next_wasm_memory_id,
+                canister_id,
+                stable_memory_page_map,
+            )?;
+        Ok(CreateExecutionStateSerializedSuccessReply {
+            wasm_memory_modifications,
+            exported_globals,
+            deserialization_time,
+            total_sandbox_time: timer.elapsed(),
+        })
+    }
+
+    /// Takes ownership of the passed in file descriptors.
+    pub fn create_execution_state_via_file(
+        &self,
+        wasm_id: WasmId,
+        bytes: File,
+        initial_state_data: File,
+        wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
+        canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
+    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
+        let timer = Instant::now();
+        let (embedder_cache, deserialization_time) = self.open_wasm_via_file(wasm_id, bytes)?;
+
+        // Reading from the initial state file would mutate the file descriptor
+        // and later or concurrent uses of the same cache entry would fail. But
+        // we can mmap the data without mutating the fd.
+        let initial_state_data: InitialStateData = {
+            use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+
+            let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
+            let data = if mmap_size == 0 {
+                &[]
+            } else {
+                // SAFETY: The address is valid because it is null, we have checked
+                // the size is positive and the fd is valid since it comes from a
+                // `File`. We're mapping privately so the data won't be mutated.
+                let mmap_ptr = unsafe {
+                    mmap(
+                        std::ptr::null_mut(),
+                        mmap_size,
+                        ProtFlags::PROT_READ,
+                        MapFlags::MAP_PRIVATE,
+                        initial_state_data.as_raw_fd(),
+                        0,
+                    )
+                }
+                .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {:?}", err))
+                    as *mut u8;
+                // SAFETY: We've mmapped `mmap_size` and gotten a succesful
+                // reply at address `mmap_ptr` and the mapping is readonly
+                // private.
+                unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }
+            };
+            bincode::deserialize(data).unwrap()
+        };
+
+        let (wasm_memory_modifications, exported_globals) = self
+            .create_initial_memory_and_globals(
+                &embedder_cache,
+                &initial_state_data.data_segments,
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,

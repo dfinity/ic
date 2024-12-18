@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
@@ -16,7 +15,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -28,6 +27,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/prep",
     "//rs/registry/provisional_whitelist",
     "@crate_index//:tempfile",
@@ -39,11 +39,12 @@ ALIASES = {}
 
 rust_library(
     name = "regedit",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_regedit",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
@@ -52,6 +53,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":regedit"],
 )
 

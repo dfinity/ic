@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Deserialize, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 /// Message Routing replica config.
 ///

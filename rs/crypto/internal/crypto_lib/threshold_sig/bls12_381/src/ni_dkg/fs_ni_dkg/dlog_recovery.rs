@@ -324,7 +324,7 @@ impl CheatingDealerDlogSolver {
     // We limit the maximum table size when compiling without optimizations
     // since otherwise the table becomes so expensive to compute that bazel
     // will fail the test with timeouts.
-    const LARGEST_TABLE_MUL: usize = if cfg!(debug_assertions) { 8 } else { 20 };
+    const LARGEST_TABLE_MUL: usize = if cfg!(debug_assertions) { 2 } else { 20 };
 
     pub fn new(n: usize, m: usize) -> Self {
         let scale_range = 1 << CHALLENGE_BITS;

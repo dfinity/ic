@@ -9,9 +9,9 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -22,7 +22,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }

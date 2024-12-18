@@ -168,7 +168,7 @@ pub(crate) fn put_replicated_state_for_testing(
 ) {
     let (_height, mut state) = state_manager.take_tip();
     state.with_streams(streams);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata, None);
 }
 
 /// Creates a `CertifiedStreamSlice` from the given subnet, containing a stream
@@ -181,7 +181,7 @@ pub(crate) fn make_certified_stream_slice(
     let (_height, mut state) = state_manager.take_tip();
     let stream = generate_stream(&config);
     state.with_streams(btreemap![from => stream]);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata, None);
     state_manager
         .encode_certified_stream_slice(
             from,

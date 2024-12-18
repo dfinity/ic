@@ -8,6 +8,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/types/types",
     "@crate_index//:rand",
@@ -16,14 +17,16 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types_test_utils",
 ]
 
 rust_library(
     name = "prng",
-    srcs = ["src/lib.rs"],
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_crypto_prng",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
@@ -32,7 +35,6 @@ rust_library(
 
 rust_test(
     name = "prng_unit_tests",
-    srcs = ["src/tests.rs"],
     crate = ":prng",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -1,11 +1,8 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
-
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::message_routing::xnet_slo_test::Config;
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use std::time::Duration;
+use xnet_slo_test_lib::Config;
 
 const SUBNETS: usize = 120;
 const NODES_PER_SUBNET: usize = 1;

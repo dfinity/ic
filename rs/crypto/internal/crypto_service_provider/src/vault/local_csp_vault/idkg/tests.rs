@@ -43,7 +43,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     use crate::KeyId;
     use hex::FromHex;
     use ic_crypto_internal_seed::Seed;
-    use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::EccCurveType;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::GENESIS;
     use proptest::prelude::*;
@@ -331,7 +331,7 @@ mod idkg_retain_active_keys {
     use crate::LocalCspVault;
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -877,10 +877,10 @@ mod idkg_create_dealing {
     use super::*;
     use crate::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         CombinedCommitment, EccCurveType, IDkgTranscriptInternal, PolynomialCommitmentType,
     };
-    use ic_crypto_internal_threshold_sig_ecdsa_test_utils::random_polynomial_commitment;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::random_polynomial_commitment;
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -943,7 +943,7 @@ mod idkg_create_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgCreateDealingVaultError::SerializationError(e))
-            if e.contains("ThresholdEcdsaSerializationError")
+            if e.contains("CanisterThresholdSerializationError")
         );
     }
 
@@ -1090,8 +1090,8 @@ mod idkg_load_transcript {
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_seed::Seed;
-    use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         EccCurveType, EccPoint, EccScalar, IDkgComplaintInternal, IDkgTranscriptInternal,
         IDkgTranscriptOperationInternal, MEGaCiphertext,
     };
@@ -1390,6 +1390,7 @@ mod idkg_load_transcript {
             let mut remaining_iterations = 1 + self.load_twice as usize;
             loop {
                 let result = loader_vault.idkg_load_transcript(
+                    self.algorithm_id,
                     signed_dealings.clone(),
                     self.context_data.clone(),
                     DEALER_RECEIVER_INDEX,
@@ -1490,8 +1491,8 @@ mod idkg_load_transcript_with_openings {
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_seed::Seed;
-    use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         EccCurveType, EccPoint, EccScalar, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
         MEGaCiphertext,
     };
@@ -1780,6 +1781,7 @@ mod idkg_load_transcript_with_openings {
 
             let opening = vault
                 .idkg_open_dealing(
+                    self.algorithm_id,
                     correct_signed_dealings_for_open_dealing
                         .values()
                         .next()
@@ -1810,6 +1812,7 @@ mod idkg_load_transcript_with_openings {
             let mut remaining_iterations = 1 + self.load_twice as usize;
             while remaining_iterations != 0 {
                 loader_vault.idkg_load_transcript_with_openings(
+                    self.algorithm_id,
                     signed_dealings.clone(),
                     openings.clone(),
                     self.context_data.clone(),
@@ -1913,7 +1916,9 @@ mod idkg_load_transcript_with_openings {
 mod idkg_open_dealing {
     use super::*;
     use crate::{types::CspSecretKey, vault::api::IDkgDealingInternalBytes};
-    use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpening, MEGaPublicKeyK256Bytes};
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+        CommitmentOpening, MEGaPublicKeyK256Bytes,
+    };
     use ic_types::{
         crypto::{
             canister_threshold_sig::{
@@ -1942,7 +1947,7 @@ mod idkg_open_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgOpenTranscriptError::InternalError { internal_error })
-            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+            if internal_error.contains("Error deserializing a signed dealing: CanisterThresholdSerializationError")
         );
     }
 
@@ -2042,6 +2047,7 @@ mod idkg_open_dealing {
     struct IDkgOpenDealingTest {
         additional_operation: Option<IDkgOpenDealingTestAdditionalOperation>,
         custom_vault_fn: CustomVaultFn,
+        algorithm_id: AlgorithmId,
     }
 
     #[derive(PartialEq)]
@@ -2054,6 +2060,7 @@ mod idkg_open_dealing {
             Self {
                 additional_operation: None,
                 custom_vault_fn: Box::new(|vault| Box::new(vault) as Box<dyn IDkgProtocolCspVault>),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             }
         }
 
@@ -2089,6 +2096,7 @@ mod idkg_open_dealing {
 
             let opener_vault = (self.custom_vault_fn)(vault);
             opener_vault.idkg_open_dealing(
+                self.algorithm_id,
                 dealing,
                 NODE_INDEX,
                 CONTEXT_DATA.to_vec(),

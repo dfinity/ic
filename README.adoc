@@ -42,13 +42,13 @@ Engineering
 
 
 
-=== Network Dashboards from the community
+=== ICP Dashboard
 
 You can observe the state of the Internet Computer's infrastructure (Nodes, data centers, subnets) and traditional blockchain metrics (blocks/second, Token Supply, etc)
 
-- https://dashboard.internetcomputer.org Network dashboard by the Internet Computer Association
-- https://www.dfinityexplorer.org/# by https://github.com/dylancm4[Dylan Miller]
+- https://dashboard.internetcomputer.org
 
+=== The community
 
 To interact with the community, check out the developer forum: https://forum.dfinity.org/
 
@@ -86,11 +86,11 @@ For detailed information on building IC-OS images, please refer to the link:ic-o
 
 Alternatively, to build all IC-OS images using a simple, containerized environment, run:
 
-  $ ./gitlab-ci/container/build-ic.sh -i
+  $ ./ci/container/build-ic.sh -i
 
 To build only the binaries and canisters, use the `-b` and/or `-c` flags:
 
-  $ ./gitlab-ci/container/build-ic.sh -b -c
+  $ ./ci/container/build-ic.sh -b -c
 
 All built artifacts will be located in the top-level artifacts/ directory.
 
@@ -98,13 +98,22 @@ All built artifacts will be located in the top-level artifacts/ directory.
 
 Each https://dashboard.internetcomputer.org/releases[release proposal] includes instructions on how to verify the build reproducibility of IC-OS update images.
 
-To verify the build reproducibility of a specific `Elect Replica` proposal, you can just copy the one liner below to a fresh Ubuntu VM 22.04 or higher:
+To verify the build reproducibility of a specific `IC OS Version Election` proposal, you can just copy the one liner below to a fresh Ubuntu VM 22.04 or higher:
 
-    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/gitlab-ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
+    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
 
 If you have the repository already cloned, you can just run:
 
-    $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
+    $ ./ci/tools/repro-check.sh -c <git revision>
+
+You can also verify only specific components, by specifying --guestos, --hostos, or --setupos flags:
+
+    $ ./ci/tools/repro-check.sh -c <git revision> --guestos
+
+Verifying build reproducibility of GuestOS is sufficient for the `Revise Elected GuestOS Versions` NNS proposals.
+
+For the `Revise Elected HostOS Versions` NNS proposals, you should verify the build reproducibility of HostOS images.
+The default behavior of the script is to verify the build reproducibility of all components.
 
 == Contributing
 
@@ -130,3 +139,14 @@ Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer 
 
 
 While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/.
+
+=== Rust Dependency Policy
+
+To make the mono repository a success, there needs to be some basic rules to make development faster.
+
+* When adding a new external crate dependency please make sure it is necessary. Check that
+** There isn't another already imported crate with similar functionality.
+** The crate is well maintained and comes from reputable authors.
+* When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
+* Keep the rust-lang up-to-date for Bazel and Cargo.
+* Use Cargo workspace for inferring external crate versions by adding the new crate to the section `[workspace.dependencies]` of the workspace `Cargo.toml` and adding `new-crate = { workspace = true }` to each package-specific `Cargo.toml` that needs it.

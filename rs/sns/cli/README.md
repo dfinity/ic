@@ -12,7 +12,7 @@
 
 
 ## Requirements
-- You have downloaded and installed `dfx`, i.e. the [DFINITY Canister SDK](https://sdk.dfinity.org).
+- You have downloaded and installed `dfx`, i.e. the [DFINITY Canister SDK](https://internetcomputer.org/docs/current/developer-docs/getting-started/install/).
 
 ## Installation
 

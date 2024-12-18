@@ -1,8 +1,9 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
 use ic_registry_subnet_type::SubnetType;
@@ -23,6 +24,8 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
+
+const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn test_can_charge_application_subnets() {
@@ -262,6 +265,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             NumInstructions::from(1_000_000),
             subnet_size,
             false,
+            WASM_EXECUTION_MODE,
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_balance);
@@ -274,6 +278,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         cycles,
         &no_op_counter,
         subnet_size,
+        WASM_EXECUTION_MODE,
         &no_op_logger(),
     );
     assert_eq!(system_state.balance(), initial_balance);
@@ -320,7 +325,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         let mut canister = new_canister_state(
             canister_test_id(1),
             canister_test_id(11).get(),
-            Cycles::from(std::u128::MAX),
+            Cycles::from(u128::MAX),
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
@@ -538,7 +543,7 @@ fn cycles_withdraw_for_execution() {
     let message_memory_usage = NumBytes::from(8 * 1024 * 1024);
     let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
-    let initial_amount = std::u128::MAX;
+    let initial_amount = u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
     let freeze_threshold = NumSeconds::from(10);
     let canister_id = canister_test_id(1);
@@ -690,9 +695,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
@@ -702,11 +705,10 @@ fn withdraw_execution_cycles_consumes_cycles() {
             NumInstructions::from(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
             false,
+            WASM_EXECUTION_MODE,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
     assert!(consumed_cycles_before < consumed_cycles_after);
 }
 
@@ -717,9 +719,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
     let mut balance = Cycles::new(5_000_000_000_000);
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .withdraw_cycles_for_transfer(
             system_state.canister_id,
@@ -735,9 +735,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
 
     // Cycles are not consumed
     assert_eq!(consumed_cycles_before, consumed_cycles_after);
@@ -750,9 +748,7 @@ fn consume_cycles_updates_consumed_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .consume_cycles(
             &mut system_state,
@@ -765,9 +761,7 @@ fn consume_cycles_updates_consumed_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,

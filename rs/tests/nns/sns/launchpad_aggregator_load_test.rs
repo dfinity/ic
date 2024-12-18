@@ -1,14 +1,13 @@
 use anyhow::Result;
-use std::time::Duration;
-
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::nns_tests::sns_aggregator::{
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
+use sns_system_test_lib::sns_aggregator::{
     benchmark_config_with_aggregator, validate_aggregator_data, wait_until_aggregator_finds_sns,
     workload_via_aggregator,
 };
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
-use ic_tests::systest;
+use sns_system_test_lib::sns_deployment::initiate_token_swap_with_oc_parameters;
+use std::time::Duration;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
 
@@ -73,8 +72,8 @@ fn workload_via_aggregator_rps9600(env: TestEnv) {
 ///
 /// 1. Install NNS, SNS, and the Aggregator canister
 /// 2. Wait until the aggregator finds the SNS
-/// 3. Initiate the token sale
-/// 4. Wait until the aggregator finds sale params, and validate these params
+/// 3. Initiate the token swap
+/// 4. Wait until the aggregator finds swap params, and validate these params
 /// 5. Generate workload (http requests to aggregator) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()

@@ -3,9 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
-    "//rs/crypto/tls_interfaces",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:thiserror",
     "@crate_index//:x509-parser",
 ]
 

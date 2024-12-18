@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_state_machine_tests::{IngressState, WasmResult};
+use ic_state_machine_tests::WasmResult;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::ingress::IngressState;
 use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use maplit::btreeset;
@@ -47,7 +47,7 @@ const LOOP_10K_WAT: &str = r#"
 // Helpers
 
 /// Function to generate WAT for
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Function {
     PreUpgrade,
     Start,
@@ -55,7 +55,7 @@ enum Function {
 }
 
 /// WAT successful or failed execution
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Execution {
     /// Short successful execution
     Short,
@@ -77,10 +77,7 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
         .with_log(
             LogEntryLogger::new(
                 slog::Logger::root(slog::Discard, slog::o!()),
-                slog::Level::Trace,
-                vec![],
-                HashMap::new(),
-                vec![],
+                ic_config::logger::Level::Trace,
             )
             .into(),
         )
@@ -171,7 +168,7 @@ fn func(function: Function, execution: Execution) -> String {
     }
 }
 
-/// Returns a new WASM binary for a specified slice of functions.
+/// Returns a new Wasm binary for a specified slice of functions.
 fn binary(functions: &[(Function, Execution)]) -> Vec<u8> {
     let wat = module(
         functions
@@ -183,12 +180,12 @@ fn binary(functions: &[(Function, Execution)]) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
-/// Returns an old empty WASM binary.
+/// Returns an old empty Wasm binary.
 fn old_empty_binary() -> Vec<u8> {
     wat::parse_str(module("")).unwrap()
 }
 
-/// Returns a new empty WASM binary.
+/// Returns a new empty Wasm binary.
 fn new_empty_binary() -> Vec<u8> {
     wat::parse_str(module(r#"(func (export "new"))"#)).unwrap()
 }
@@ -224,9 +221,11 @@ fn upgrade_fails_on_invalid_input() {
 fn upgrade_fails_on_not_enough_cycles() {
     let mut test = execution_test_with_max_rounds(1);
     // Should be enough cycles to create the canister, but not enough to upgrade it
-    let balance_cycles = test
-        .cycles_account_manager()
-        .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
+    let balance_cycles = test.cycles_account_manager().execution_cost(
+        (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
+        test.subnet_size(),
+        WasmExecutionMode::Wasm32,
+    );
 
     let (canister_memory_usage, canister_message_memory_usage) = {
         // Create a dummy canister just to get its memory usage.
@@ -360,7 +359,10 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             new_empty_binary(),
-            CanisterUpgradeOptions { skip_pre_upgrade },
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                wasm_memory_persistence: None,
+            },
         );
 
         if skip_pre_upgrade == Some(true) {
@@ -392,7 +394,10 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
-            CanisterUpgradeOptions { skip_pre_upgrade },
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                wasm_memory_persistence: None,
+            },
         );
 
         assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
@@ -968,13 +973,12 @@ fn dts_uninstall_with_aborted_upgrade() {
     }
 
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-    assert_eq!(
-        err.description(),
-        format!(
-            "Attempt to execute a message on canister {} which contains no Wasm module",
-            canister_id,
-        )
+    err.assert_contains(
+        ErrorCode::CanisterWasmModuleNotFound,
+        &format!(
+            "Error from Canister {canister_id}: Attempted to execute a message, \
+            but the canister contains no Wasm module.",
+        ),
     );
 }
 
@@ -990,6 +994,7 @@ fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
         new_empty_binary(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     );
     assert_eq!(
@@ -1010,6 +1015,7 @@ fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
         new_empty_binary(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     );
     assert_eq!(result, Ok(()));

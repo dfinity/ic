@@ -1,0 +1,4 @@
+# Update controllers of the ckETH index canister
+
+This proposal changes the controllers of the ckETH index canister to add, in addition to the NNS root ([`r7inp-6aaaa-aaaaa-aaabq-cai`](https://dashboard.internetcomputer.org/canister/r7inp-6aaaa-aaaaa-aaabq-cai)), the ledger suite orchestrator ([`vxkom-oyaaa-aaaar-qafda-cai`](https://dashboard.internetcomputer.org/canister/vxkom-oyaaa-aaaar-qafda-cai)) as a controller.
+A future upgrade proposal targeting the ledger suite orchestrator ([`vxkom-oyaaa-aaaar-qafda-cai`](https://dashboard.internetcomputer.org/canister/vxkom-oyaaa-aaaar-qafda-cai)) will add the ckETH index to the canisters managed by the ledger suite orchestrator. The aim is that the ckETH ledger suite, similarly to the other ckERC20 ledger suites already managed by the ledger suite orchestrator, will be managed by the orchestrator to facilitate the management of those canisters (e.g., cycles top-up and upgrades).

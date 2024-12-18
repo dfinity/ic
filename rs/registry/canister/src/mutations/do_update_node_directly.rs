@@ -1,10 +1,9 @@
 use std::time::{Duration, SystemTime};
 
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use prost::Message;
 
-use candid::{CandidType, Deserialize};
 use dfn_core::api::now;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -12,6 +11,7 @@ use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
+use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
 use ic_types::{crypto::KeyPurpose, PrincipalId};
@@ -28,8 +28,8 @@ impl Registry {
     ///
     /// This method is called directly by the node itself that needs to update its iDKG key.
     /// The update is only executed, if the previous key does not exist at all or is older than
-    /// `ecdsa_config.idkg_key_rotation_period_ms` and the most recent key update in the node's
-    /// subnet happened more than `ecdsa_config.idkg_key_rotation_period_ms / subnet_size` ago.
+    /// `chain_key_config.idkg_key_rotation_period_ms` and the most recent key update in the node's
+    /// subnet happened more than `chain_key_config.idkg_key_rotation_period_ms / subnet_size` ago.
     pub fn do_update_node_directly(
         &mut self,
         payload: UpdateNodeDirectlyPayload,
@@ -55,22 +55,22 @@ impl Registry {
             "{}do_update_node_directly: Node Id {:} not found in the registry, aborting node update.",
             LOG_PREFIX, node_id))?;
 
-        // 2. Disallow updating if the node is not on an ECDSA subnet or key rotation is disabled.
+        // 2. Disallow updating if the node is not on an signing subnet or key rotation is disabled.
         let subnet_record = self.get_subnet_from_node_id_or_panic(node_id);
         let subnet_size = subnet_record.membership.len();
         if subnet_record
-            .ecdsa_config
+            .chain_key_config
             .as_ref()
-            .map(|config| config.key_ids.is_empty())
+            .map(|chain_key_config| chain_key_config.key_configs.is_empty())
             .unwrap_or(true)
         {
-            return Err("the node is not on an ECDSA subnet".to_string());
+            return Err("the node is not on a signing subnet".to_string());
         }
         // Get key rotation period (delta) from config.
         let idkg_key_rotation_period_ms = subnet_record
-            .ecdsa_config
+            .chain_key_config
             .as_ref()
-            .and_then(|c| c.idkg_key_rotation_period_ms)
+            .and_then(|chain_key_config| chain_key_config.idkg_key_rotation_period_ms)
             .ok_or_else(|| "the key rotation feature is disabled".to_string())?;
 
         // 3. Disallow updating if the existing key is sufficiently fresh.
@@ -88,7 +88,7 @@ impl Registry {
                     )
                 })?;
                 // If the timestamp exists, we reject if it's recent enough, otherwise we accept the
-                // update as this is a new node joining the ECDSA subnet.
+                // update as this is a new node joining the signing subnet.
                 match pk.timestamp {
                     Some(last_update_timestamp) => {
                         let sum = last_update_timestamp
@@ -111,7 +111,7 @@ impl Registry {
         //    If the node has no timestamp, skip all checks.
         if previous_timestamp_set {
             if let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
-                // The node is on ECDSA subnet, and has a timestamp
+                // The node is on a signing subnet, and has a timestamp
                 let key_rotation_period_on_subnet =
                     (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
                         as u64;
@@ -121,7 +121,7 @@ impl Registry {
                         "Integer overflow when adding key rotation period on subnet.".to_string()
                     })?;
                 if Duration::from_millis(sum) > duration_since_unix_epoch {
-                    return Err("the ECDSA subnet had a key update recently".to_string());
+                    return Err("the signing subnet had a key update recently".to_string());
                 }
             }
         }
@@ -149,7 +149,7 @@ impl Registry {
         // 6. Create mutation for new record
         let insert_idkg_key = update(
             idkg_pk_key.as_bytes(),
-            encode_or_panic(valid_idkg_dealing_encryption_pk.get()),
+            valid_idkg_dealing_encryption_pk.get().encode_to_vec(),
         );
 
         let mutations = vec![insert_idkg_key];
@@ -194,12 +194,6 @@ impl Registry {
     }
 }
 
-/// The payload of an request to update keys of the existing node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateNodeDirectlyPayload {
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -210,9 +204,9 @@ mod test {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
-    use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+    use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
+    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_test_utilities_types::ids::subnet_test_id;
     use std::ops::Add;
 
@@ -250,8 +244,8 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "the node is not on an ECDSA subnet")]
-    fn test_node_not_on_ecdsa_subnet() {
+    #[should_panic(expected = "the node is not on a signing subnet")]
+    fn test_node_not_on_a_signing_subnet() {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
@@ -261,7 +255,7 @@ mod test {
 
         let subnet_id = subnet_test_id(1000);
 
-        // Create the subnet record with disabled ecdsa feature.
+        // Create the subnet record with disabled signing feature.
         let subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -305,20 +299,20 @@ mod test {
         // Create the subnet record with disabled key rotation feature.
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let key_id = EcdsaKeyId {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
+        });
+        let key_config = KeyConfig {
+            key_id,
+            pre_signatures_to_create_in_advance: 1,
+            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+            key_configs: vec![key_config],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -361,20 +355,20 @@ mod test {
         // Create the subnet record.
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let key_id = EcdsaKeyId {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
+        });
+        let key_config = KeyConfig {
+            key_id,
+            pre_signatures_to_create_in_advance: 1,
+            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
-            }
-            .into(),
-        );
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+            key_configs: vec![key_config],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
+        }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -425,22 +419,22 @@ mod test {
         let idkg_key_rotation_period_ms = 14 * 24 * 60 * 60 * 1000; // 2 weeks
 
         // Create the subnet record.
-        let mut subnet_record: SubnetRecord =
+        let mut subnet_record =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let key_id = EcdsaKeyId {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
+        });
+        let key_config = KeyConfig {
+            key_id,
+            pre_signatures_to_create_in_advance: 1,
+            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
-            }
-            .into(),
-        );
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+            key_configs: vec![key_config],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
+        }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -464,7 +458,7 @@ mod test {
                     );
                     update(
                         make_crypto_node_key(*id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                        encode_or_panic(&idkg_public_key),
+                        idkg_public_key.encode_to_vec(),
                     )
                 })
                 .collect(),
@@ -507,7 +501,7 @@ mod test {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
                 }
             ),
-            Err("the ECDSA subnet had a key update recently".to_string())
+            Err("the signing subnet had a key update recently".to_string())
         );
 
         // subnet limit passes

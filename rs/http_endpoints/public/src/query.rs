@@ -1,17 +1,16 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::Cbor, validator_executor::ValidatorExecutor, verify_cbor_content_header,
+    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
 };
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
@@ -22,23 +21,26 @@ use ic_interfaces::{
     execution_environment::{QueryExecutionError, QueryExecutionService},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
+use ic_logger::{error, ReplicaLogger};
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
         HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
-        NodeSignature, QueryResponseHash, SignedRequestBytes, UserQuery,
+        NodeSignature, Query, QueryResponseHash,
     },
+    time::current_time,
     CanisterId, NodeId,
 };
-use std::sync::{Arc, RwLock};
+use ic_validator::HttpRequestVerifier;
+use std::sync::Arc;
 use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
+use tokio::sync::OnceCell;
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
@@ -47,19 +49,19 @@ pub struct QueryService {
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    validator_executor: ValidatorExecutor<UserQuery>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
 }
 
 pub struct QueryServiceBuilder {
-    log: Option<ReplicaLogger>,
+    log: ReplicaLogger,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
@@ -73,15 +75,16 @@ impl QueryService {
 
 impl QueryServiceBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         node_id: NodeId,
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
-            log: None,
+            log,
             node_id,
             signer,
             health_status: None,
@@ -91,11 +94,6 @@ impl QueryServiceBuilder {
             registry_client,
             query_execution_service,
         }
-    }
-
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
     }
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
@@ -112,8 +110,7 @@ impl QueryServiceBuilder {
     }
 
     pub fn build_router(self) -> Router {
-        let log = self.log.unwrap_or(no_op_logger());
-        let _default_metrics_registry = MetricsRegistry::default();
+        let log = self.log;
         let state = QueryService {
             log: log.clone(),
             node_id: self.node_id,
@@ -122,20 +119,15 @@ impl QueryServiceBuilder {
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client.clone(),
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
         };
         Router::new().route_service(
             QueryService::route(),
-            axum::routing::post(query).with_state(state).layer(
-                ServiceBuilder::new().layer(axum::middleware::from_fn(verify_cbor_content_header)),
-            ),
+            axum::routing::post(query)
+                .with_state(state)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
     }
 
@@ -151,40 +143,29 @@ pub(crate) async fn query(
         log,
         node_id,
         registry_client,
-        validator_executor,
+        validator,
         health_status,
         signer,
         delegation_from_nns,
         query_execution_service,
     }): State<QueryService>,
-    body: Bytes,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = format!(
-            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            "Replica is unhealthy: {:?}. Check the /api/v2/status for more information.",
             health_status.load(),
         );
         return (status, text).into_response();
     }
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
 
     let registry_version = registry_client.get_latest_version();
 
-    let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-        &SignedRequestBytes::from(body.to_vec()),
-    ) {
-        Ok(request) => request,
-        Err(e) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = format!("Could not parse body as read request: {}", e);
-            return (status, text).into_response();
-        }
-    };
-
     // Convert the message to a strongly-typed struct, making structural validations
     // on the way.
-    let request = match HttpRequest::<UserQuery>::try_from(request) {
+    let request = match HttpRequest::<Query>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
@@ -201,11 +182,24 @@ pub(crate) async fn query(
         );
         return (status, text).into_response();
     }
-    if let Err(http_err) = validator_executor
-        .validate_request(request.clone(), registry_version)
-        .await
+
+    let root_of_trust_provider =
+        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    // Since spawn blocking requires 'static we can't use any references
+    let request_c = request.clone();
+    match tokio::task::spawn_blocking(move || {
+        validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+    })
+    .await
     {
-        return (http_err.status, http_err.message).into_response();
+        Ok(Ok(_)) => {}
+        Ok(Err(err)) => {
+            let http_err = validation_error_to_http_error(request.id(), err, &log);
+            return (http_err.status, http_err.message).into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     let user_query = request.take_content();

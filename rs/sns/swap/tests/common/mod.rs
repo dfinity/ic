@@ -5,14 +5,13 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount_bytes, E8};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_sns_governance::{
-    pb::v1::{
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-        ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
-    },
-    types::{DEFAULT_TRANSFER_FEE, ONE_MONTH_SECONDS},
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
 };
 use ic_sns_swap::{
     memory,
@@ -20,10 +19,10 @@ use ic_sns_swap::{
         error_refund_icp_response,
         set_mode_call_result::SetModeResult,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
-        CanisterCallError, CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest,
-        ErrorRefundIcpResponse, ListDirectParticipantsRequest, Participant,
-        RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
-        SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+        CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
+        ListDirectParticipantsRequest, Participant, SetDappControllersCallResult,
+        SetDappControllersResponse, SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult,
+        TransferableAmount,
     },
     swap::{
         principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
@@ -134,34 +133,6 @@ pub fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
     MockLedger { expect: e }
 }
 
-pub fn extract_canister_call_error(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &CanisterCallError {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Ok(_)) | None => panic!(
-            "Extracting CanisterCallError failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Err(canister_call_error)) => canister_call_error,
-    }
-}
-
-pub fn extract_set_dapp_controller_response(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &SetDappControllersResponse {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Err(_)) | None => panic!(
-            "Extracting SetDappControllersResponse failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Ok(response)) => response,
-    }
-}
-
 /// Helper method for constructing a successful response in tests
 pub fn successful_set_dapp_controllers_call_result() -> SetDappControllersCallResult {
     use ic_sns_swap::pb::v1::set_dapp_controllers_call_result::Possibility;
@@ -269,9 +240,25 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
 
 pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
     (1..count + 1)
-        .map(|i| CfParticipant {
-            hotkey_principal: i2principal_id_string(i),
-            cf_neurons: vec![CfNeuron::try_new(i, E8).unwrap()],
+        .map(|i| {
+            let i = i * 3;
+            #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+            CfParticipant {
+                controller: Some(PrincipalId::new_user_test_id(i)),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(
+                    i,
+                    E8,
+                    vec![
+                        PrincipalId::new_user_test_id(i + 1),
+                        PrincipalId::new_user_test_id(i + 2),
+                    ],
+                )
+                .unwrap()],
+            }
         })
         .collect()
 }

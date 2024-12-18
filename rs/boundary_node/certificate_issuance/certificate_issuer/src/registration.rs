@@ -13,7 +13,7 @@ use crate::work::ProcessError;
 
 pub type Id = String;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum State {
     Failed(String),
     PendingOrder,
@@ -22,9 +22,10 @@ pub enum State {
     Available,
 }
 
-impl ToString for State {
-    fn to_string(&self) -> String {
-        serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into())
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into());
+        write!(f, "{}", string)
     }
 }
 
@@ -64,7 +65,7 @@ impl From<State> for ifc::State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Registration {
     pub name: String,
     pub canister: Principal,
@@ -81,7 +82,7 @@ impl From<ifc::Registration> for Registration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum UpdateType {
     Canister(Principal),
     State(State),

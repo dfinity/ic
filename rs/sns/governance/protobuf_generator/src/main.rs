@@ -11,7 +11,7 @@ fn main() {
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
     let nervous_system_proto = manifest_dir.join("../../../nervous_system/proto/proto");
     let management_canister_types_proto = manifest_dir.join("../../../protobuf/def");
-    let ledger_proto = manifest_dir.join("../../../rosetta-api/icp_ledger/proto");
+    let ledger_proto = manifest_dir.join("../../../ledger_suite/icp/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),

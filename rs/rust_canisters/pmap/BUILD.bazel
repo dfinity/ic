@@ -5,16 +5,19 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/utils",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_macro",
 ]
 

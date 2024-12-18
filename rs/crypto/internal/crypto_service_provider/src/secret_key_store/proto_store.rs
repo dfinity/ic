@@ -1,5 +1,4 @@
 //! Filesystem-backed secret key store
-#![allow(clippy::unwrap_used)]
 use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::key_id::KeyId;
 use crate::secret_key_store::{
@@ -315,10 +314,7 @@ impl ProtoSecretKeyStore {
                 }
             }
         };
-        match proto_file {
-            Some(sks_proto) => sks_proto,
-            None => SecretKeys::new(),
-        }
+        proto_file.unwrap_or_default()
     }
 
     fn migrate_to_current_version(sks_proto: pb::SecretKeyStore) -> SecretKeys {

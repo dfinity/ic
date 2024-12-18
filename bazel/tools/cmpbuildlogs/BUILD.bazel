@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "cmpbuildlogs_lib",
@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/dfinity/ic/bazel/tools/cmpbuildlogs",
     visibility = ["//visibility:private"],
     deps = [
+        # Keep sorted.
         "@com_github_google_go_cmp//cmp",
         "@com_github_google_go_cmp//cmp/cmpopts",
     ],

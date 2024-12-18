@@ -1,11 +1,12 @@
+---
 - name: URL to be checked
   debug:
-          msg: "{{ hostvars[item].guest_hostname }}: http://[{{ hostvars[item].ipv6_address }}]:8080/api/v2/status"
-  tags: [ "ic_guest" ]
+    msg: "{{ hostvars[item].guest_hostname }}: http://[{{ hostvars[item].ipv6_address }}]:8080/api/v2/status"
+  tags: [ic_guest]
 
 - name: Wait for listener to respond on port 8080
   uri:
-    url: "http://[{{ hostvars[item].ipv6_address }}]:8080/api/v2/status"
+    url: http://[{{ hostvars[item].ipv6_address }}]:8080/api/v2/status
   register: _result
   until: _result.status == 200
   retries: 80 # 80 * 9 = 720 seconds
@@ -13,5 +14,4 @@
   become: false
   delegate_to: localhost
   run_once: true
-  tags: [ "ic_guest" ]
-
+  tags: [ic_guest]

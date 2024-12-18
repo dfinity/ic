@@ -1,0 +1,8 @@
+type spinup_canisters_args = record {
+    canisters_number : nat64;
+    wasm_module : blob;
+};
+
+service : {
+    "spinup_canisters" : (spinup_canisters_args) -> ();
+};

@@ -23,16 +23,16 @@ use std::ops::{Add, Div, Mul, Sub};
 
 // A timestamp in IC time -- that is, relative to the initialization of the
 // governance canister.
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct IcTimestamp {
     pub days_since_ic_genesis: f64,
 }
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Duration {
     pub days: f64,
 }
 /// A dimensionless quantity divided by a duration.
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct InverseDuration {
     pub per_day: f64,
 }

@@ -1,22 +1,23 @@
-use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
-use ic_async_utils::start_tcp_listener;
+use axum::{
+    body::Body,
+    error_handling::HandleErrorLayer,
+    extract::{Request, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::get,
+};
 use ic_config::metrics::{Config, Exporter};
-use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_registry::RegistryClient;
+use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_metrics::registry::MetricsRegistry;
 use prometheus::{Encoder, IntCounterVec, TextEncoder};
-use slog::{error, trace, warn};
+use slog::{error, trace};
 use std::net::SocketAddr;
 use std::string::String;
-use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
-use tokio_io_timeout::TimeoutStream;
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    timeout::error::Elapsed, util::BoxCloneService, BoxError, Service, ServiceBuilder, ServiceExt,
+    timeout::error::Elapsed, BoxError, ServiceBuilder,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;
@@ -34,12 +35,11 @@ pub struct MetricsHttpEndpoint {
     rt_handle: tokio::runtime::Handle,
     config: Config,
     metrics_registry: MetricsRegistry,
-    crypto_tls: Option<(Arc<dyn RegistryClient>, Arc<dyn TlsHandshake + Send + Sync>)>,
     log: slog::Logger,
     metrics: MetricsEndpointMetrics,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 struct HttpError {
     response: Response<Body>,
 }
@@ -88,8 +88,6 @@ impl MetricsHttpEndpoint {
         rt_handle: tokio::runtime::Handle,
         config: Config,
         metrics_registry: MetricsRegistry,
-        registry_client: Arc<dyn RegistryClient>,
-        crypto: Arc<dyn TlsHandshake + Send + Sync>,
         log: &slog::Logger,
     ) -> Self {
         let log = log.new(slog::o!("Application" => "MetricsRuntime"));
@@ -98,35 +96,6 @@ impl MetricsHttpEndpoint {
             rt_handle,
             config,
             metrics_registry: metrics_registry.clone(),
-            crypto_tls: Some((registry_client, crypto)),
-            log,
-            metrics: MetricsEndpointMetrics::new(metrics_registry),
-        };
-
-        match metrics.config.exporter {
-            Exporter::Http(socket_addr) => metrics.start_http(socket_addr),
-            Exporter::Log => metrics.start_log(),
-            Exporter::File(_) => {}
-        };
-
-        metrics
-    }
-
-    /// Create a MetricsHttpEndpoint supporting only HTTP for insecure use cases
-    /// e.g. testing binaries where the node certificate may not be available.
-    pub fn new_insecure(
-        rt_handle: tokio::runtime::Handle,
-        config: Config,
-        metrics_registry: MetricsRegistry,
-        log: &slog::Logger,
-    ) -> Self {
-        let log = log.new(slog::o!("Application" => "MetricsRuntime"));
-
-        let metrics = Self {
-            rt_handle,
-            config,
-            metrics_registry: metrics_registry.clone(),
-            crypto_tls: None,
             log,
             metrics: MetricsEndpointMetrics::new(metrics_registry),
         };
@@ -180,113 +149,27 @@ impl MetricsHttpEndpoint {
     fn start_http(&self, address: SocketAddr) {
         // we need to enter the tokio context in order to create the timeout layer and the tcp
         // socket
-        let _enter = self.rt_handle.enter();
 
-        let metrics_registry = self.metrics_registry.clone();
-        let metrics_svc = ServiceBuilder::new()
-            .load_shed()
-            .timeout(Duration::from_secs(self.config.request_timeout_seconds))
-            .layer(GlobalConcurrencyLimitLayer::new(
-                self.config.max_concurrent_requests,
-            ))
-            .service_fn(move |req: Request<Body>| {
-                // Clone again to ensure that `metrics_registry` outlives this closure.
-                let metrics_registry = metrics_registry.clone();
-                let encoder = TextEncoder::new();
-                async move {
-                    // Replica metrics need to be served even if some adapters are unresponsive.
-                    // To guarantee this, each adapter enforces either the default timeout (1s) or
-                    // a fraction of the timeout provided by Prometheus in the scrape request header.
-                    let metrics_registry_replica = metrics_registry.clone();
-                    let metrics_registry_adapter = metrics_registry.clone();
-                    let (mf_replica, mut mf_adapters) = tokio::join!(
-                        tokio::spawn(async move {
-                            metrics_registry_replica.prometheus_registry().gather()
-                        }),
-                        metrics_registry_adapter.adapter_registry().gather(
-                            req.headers()
-                                .get(PROMETHEUS_TIMEOUT_HEADER)
-                                .and_then(|h| h.to_str().ok())
-                                .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
-                                .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
-                                .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
-                        )
-                    );
-                    mf_adapters.append(&mut mf_replica.unwrap_or_default());
-
-                    let mut buffer = Vec::with_capacity(mf_adapters.len());
-                    encoder.encode(&mf_adapters, &mut buffer).unwrap();
-
-                    Ok::<_, std::convert::Infallible>(Response::new(Body::from(buffer)))
-                }
-            })
-            .map_result(move |result| -> Result<Response<Body>, HttpError> {
-                match result {
-                    Ok(response) => Ok(response),
-                    Err(err) => Ok(HttpError::from(err).response),
-                }
-            });
-        let metrics_svc = BoxCloneService::new(metrics_svc);
-
-        let log = self.log.clone();
-        let crypto_tls = self.crypto_tls.clone();
-        let metrics = self.metrics.clone();
-        let config = self.config.clone();
-        let conn_svc = ServiceBuilder::new().service_fn(move |tcp_stream: TcpStream| {
-            let log = log.clone();
-            let metrics_svc = metrics_svc.clone();
-            let metrics = metrics.clone();
-            let crypto_tls = crypto_tls.clone();
-            let config = config.clone();
-
-            async move {
-                match crypto_tls {
-                    Some((registry_client, crypto)) => {
-                        handshake_and_serve_connection(
-                            log,
-                            config,
-                            tcp_stream,
-                            metrics_svc,
-                            registry_client,
-                            crypto,
-                            metrics,
-                        )
-                        .await
-                    }
-                    None => {
-                        metrics.connections_total.with_label_values(&["http"]).inc();
-                        serve_connection_with_read_timeout(
-                            tcp_stream,
-                            metrics_svc,
-                            config.connection_read_timeout_seconds,
-                        )
-                        .await
-                    }
-                }
-            }
-        });
-        let conn_svc = BoxCloneService::new(conn_svc);
-
-        // Temporarily listen on [::] so that we accept both IPv4 and IPv6 connections.
-        // This requires net.ipv6.bindv6only = 0.  TODO: revert this once we have rolled
-        // out IPv6 in prometheus and ic_p8s_service_discovery.
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
-        let tcp_listener = start_tcp_listener(addr);
+        let tcp_listener = start_tcp_listener(addr, &self.rt_handle);
+        let _enter: tokio::runtime::EnterGuard = self.rt_handle.enter();
+        let metrics_service = get(metrics_endpoint)
+            .layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .timeout(Duration::from_secs(self.config.request_timeout_seconds))
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        self.config.max_concurrent_requests,
+                    )),
+            )
+            .with_state((self.metrics_registry.clone(), self.metrics.clone()))
+            .into_make_service();
         self.rt_handle.spawn(async move {
-            loop {
-                let mut conn_svc = conn_svc.clone();
-                if let Ok((tcp_stream, _)) = tcp_listener.accept().await {
-                    tokio::spawn(async move {
-                        let _ = conn_svc
-                            .ready()
-                            .await
-                            .expect("The load shedder must always be ready.")
-                            .call(tcp_stream)
-                            .await;
-                    });
-                }
-            }
+            axum::serve(tcp_listener, metrics_service)
+                .await
+                .expect("Failed to serve.")
         });
     }
 }
@@ -322,58 +205,51 @@ impl Drop for MetricsHttpEndpoint {
     }
 }
 
-async fn handshake_and_serve_connection(
-    log: slog::Logger,
-    config: Config,
-    tcp_stream: TcpStream,
-    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
-    registry_client: Arc<dyn RegistryClient>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    metrics: MetricsEndpointMetrics,
-) -> Result<(), hyper::Error> {
-    let mut b = [0_u8; 1];
-    if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
-        let registry_version = registry_client.get_latest_version();
-        match tls_handshake
-            .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-            .await
-        {
-            Err(err) => {
-                warn!(log, "TLS handshake failed {}", err);
-                Ok(())
-            }
-            Ok(stream) => {
-                metrics
-                    .connections_total
-                    .with_label_values(&["https"])
-                    .inc();
-                serve_connection_with_read_timeout(
-                    stream,
-                    metrics_svc,
-                    config.connection_read_timeout_seconds,
-                )
-                .await
-            }
-        }
-    } else {
-        metrics.connections_total.with_label_values(&["http"]).inc();
-        serve_connection_with_read_timeout(
-            tcp_stream,
-            metrics_svc,
-            config.connection_read_timeout_seconds,
+async fn metrics_endpoint(
+    State((metrics_registry, metrics)): State<(MetricsRegistry, MetricsEndpointMetrics)>,
+    req: Request<Body>,
+) -> impl IntoResponse {
+    metrics.connections_total.with_label_values(&["http"]).inc();
+    let encoder = TextEncoder::new();
+    // Replica metrics need to be served even if some adapters are unresponsive.
+    // To guarantee this, each adapter enforces either the default timeout (1s) or
+    // a fraction of the timeout provided by Prometheus in the scrape request header.
+    let metrics_registry_replica = metrics_registry.clone();
+    let metrics_registry_adapter = metrics_registry.clone();
+    let (mf_replica, mut mf_adapters) = tokio::join!(
+        tokio::spawn(async move { metrics_registry_replica.prometheus_registry().gather() }),
+        metrics_registry_adapter.adapter_registry().gather(
+            req.headers()
+                .get(PROMETHEUS_TIMEOUT_HEADER)
+                .and_then(|h| h.to_str().ok())
+                .and_then(|h| Some(Duration::from_secs_f64(h.parse().ok()?)))
+                .map(|h| { h.mul_f64(PROMETHEUS_TIMEOUT_FRACTION) })
+                .unwrap_or(DEFAULT_ADAPTER_COLLECTION_TIMEOUT),
         )
-        .await
-    }
+    );
+    mf_adapters.append(&mut mf_replica.unwrap_or_default());
+
+    let mut buffer = Vec::with_capacity(mf_adapters.len());
+    encoder.encode(&mf_adapters, &mut buffer).unwrap();
+
+    Response::new(Body::from(buffer))
 }
 
-async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
-    stream: T,
-    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
-    connection_read_timeout_seconds: u64,
-) -> Result<(), hyper::Error> {
-    let http = Http::new();
-    let mut stream = TimeoutStream::new(stream);
-    stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
-    let stream = Box::pin(stream);
-    http.serve_connection(stream, metrics_svc).await
+async fn map_box_error_to_response(err: BoxError) -> (StatusCode, String) {
+    if err.is::<Overloaded>() {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            "The service is overloaded.".to_string(),
+        )
+    } else if err.is::<Elapsed>() {
+        (
+            StatusCode::GATEWAY_TIMEOUT,
+            "Request took longer than the deadline.".to_string(),
+        )
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unexpected error: {}", err),
+        )
+    }
 }

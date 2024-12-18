@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, EnumIter)]
 enum VaultType {
     Local,
     #[default]
@@ -453,7 +453,6 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
                                 receivers,
                                 test_case.alg(),
                                 key_transcript,
-                                false,
                                 rng,
                             )
                         };
@@ -822,6 +821,7 @@ impl TestCase {
         let curve = match self.alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
+            AlgorithmId::ThresholdEd25519 => "ed25519",
             unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
         };
         format!("crypto_idkg_{}_{}_nodes", curve, self.num_of_nodes)
@@ -835,13 +835,19 @@ impl TestCase {
 fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
     let mut test_cases = vec![];
 
-    let tecdsa_algs = AlgorithmId::all_threshold_ecdsa_algorithms();
+    // We don't include `AlgorithmId::ThresholdSchnorrBip340` because it uses the same curve
+    // as `AlgorithmId::ThresholdEcdsaSecp256k1`, so the results are equivalent.
+    let canister_threshold_algs = [
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        AlgorithmId::ThresholdEcdsaSecp256r1,
+        AlgorithmId::ThresholdEd25519,
+    ];
 
     for num_of_nodes in node_counts.iter().copied() {
         // reduce the number of samples for long-running benchmarks
         let sample_size = if num_of_nodes < 10 { 100 } else { 10 };
 
-        for alg in tecdsa_algs {
+        for alg in canister_threshold_algs {
             let tc = TestCase {
                 num_of_nodes,
                 sample_size,

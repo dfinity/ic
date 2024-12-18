@@ -1,5 +1,5 @@
 use sha3::{
-    digest::{ExtendableOutput, Update, XofReader},
+    digest::{ExtendableOutputReset, Update, XofReader},
     Shake256,
 };
 
@@ -25,13 +25,13 @@ impl RandomOracle {
 
     pub(crate) fn update_bin(&mut self, v: &[u8]) {
         let v_len = v.len() as u64;
-        self.shake.update(v_len.to_be_bytes());
+        self.shake.update(&v_len.to_be_bytes());
         self.shake.update(v);
     }
 
     fn finalize(&mut self, output: &mut [u8]) {
         let o_len = output.len() as u64;
-        self.shake.update(o_len.to_be_bytes());
+        self.shake.update(&o_len.to_be_bytes());
 
         let mut xof = self.shake.finalize_xof_reset();
         xof.read(output);

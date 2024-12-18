@@ -12,14 +12,14 @@ pub const FIELD_SIZE: usize = 32;
 /// ECDSA secp256k1 secret key bytes.
 ///
 /// RFC5915 DER encoding
-#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub SecretVec);
 
 /// ECDSA secp256k1 public key bytes, in uncompressed format
 ///
 /// The public key is a point (x, y) on secp256k1, uncompressed.
 /// Affine coordinates of the public key.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct PublicKeyBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 impl PublicKeyBytes {
     // 1-byte prefix + 2 coordinates.

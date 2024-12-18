@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/runtime",
@@ -24,7 +25,7 @@ ALIASES = {}
 
 rust_library(
     name = "root",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_root",
     proc_macro_deps = MACRO_DEPENDENCIES,

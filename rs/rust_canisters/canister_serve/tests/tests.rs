@@ -8,12 +8,12 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Debug, serde::Deserialize)]
 struct LogsResponseBody {
     entries: Vec<JsonLogEntry>,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Debug, serde::Deserialize)]
 struct JsonLogEntry {
     severity: String,
     timestamp: u128,
@@ -319,7 +319,7 @@ fn test_serve_logs_malformed_request() {
 
     // Step 3.2: Inspect body.
     let body = String::from_utf8(body).unwrap();
-    #[derive(serde::Deserialize, Debug)]
+    #[derive(Debug, serde::Deserialize)]
     struct ResponseBody {
         error_description: String,
     }

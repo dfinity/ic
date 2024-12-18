@@ -1,0 +1,15 @@
+[package]
+name = "ic-btc-replica-types"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-btc-interface = { workspace = true }
+ic-error-types = { path = "../../types/error_types" }
+ic-protobuf = { path = "../../protobuf" }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

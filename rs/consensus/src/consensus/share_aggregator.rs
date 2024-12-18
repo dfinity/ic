@@ -3,23 +3,22 @@
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
 use ic_consensus_utils::{
-    active_high_threshold_transcript, active_low_threshold_transcript, aggregate,
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
     registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
-use ic_types::consensus::{
-    CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
-    RandomTapeContent,
+use ic_types::{
+    consensus::{
+        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+        RandomTapeContent,
+    },
+    crypto::Signed,
+    Height,
 };
-use ic_types::crypto::Signed;
-use ic_types::Height;
-use std::cmp::min;
-use std::sync::Arc;
+use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
@@ -62,13 +61,12 @@ impl ShareAggregator {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
-        let dkg_id = active_low_threshold_transcript(state_reader, height)
-            .map(|transcript| transcript.dkg_id);
+        let dkg_id = active_low_threshold_nidkg_id(state_reader, height);
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
-            Box::new(|_| dkg_id),
+            Box::new(|_| dkg_id.clone()),
             shares,
         ))
     }
@@ -92,8 +90,7 @@ impl ShareAggregator {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
-                active_low_threshold_transcript(state_reader, content.height())
-                    .map(|transcript| transcript.dkg_id)
+                active_low_threshold_nidkg_id(state_reader, content.height())
             }),
             shares,
         ))
@@ -134,7 +131,7 @@ impl ShareAggregator {
 
     /// Attempt to construct `CatchUpPackage`s.
     fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
-        let mut start_block = pool.get_highest_summary_block();
+        let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
         while start_block.height() > current_cup_height {
@@ -151,13 +148,12 @@ impl ShareAggregator {
                 }
             });
             let state_reader = pool.as_cache();
-            let dkg_id = active_high_threshold_transcript(state_reader, height)
-                .map(|transcript| transcript.dkg_id);
+            let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
             let result = aggregate(
                 &self.log,
                 self.membership.as_ref(),
                 self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id),
+                Box::new(|_| dkg_id.clone()),
                 shares,
             );
             if !result.is_empty() {
@@ -200,9 +196,8 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            ecdsa::ECDSA_IMPROVED_LATENCY, CatchUpPackage, CatchUpPackageShare,
-            CatchUpShareContent, FinalizationShare, HashedBlock, HashedRandomBeacon,
-            NotarizationShare, RandomBeaconShare,
+            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
+            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
@@ -303,11 +298,7 @@ mod tests {
         );
         assert_eq!(
             cup.get_oldest_registry_version_in_use(),
-            if ECDSA_IMPROVED_LATENCY {
-                RegistryVersion::from(0)
-            } else {
-                RegistryVersion::from(INITIAL_REGISTRY_VERSION)
-            }
+            RegistryVersion::from(0),
         );
     }
 

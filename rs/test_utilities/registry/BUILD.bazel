@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/limits",
     "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
@@ -18,6 +19,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "registry",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_registry",
     version = "0.9.0",

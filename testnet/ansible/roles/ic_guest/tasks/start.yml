@@ -1,6 +1,5 @@
 ---
-
-- name: start guest
+- name: Start guest
   shell: |
     set -eExuo pipefail
     virsh start "{{ item }}" || true
@@ -10,4 +9,4 @@
     label:
   args:
     executable: /bin/bash
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]
