@@ -494,7 +494,6 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>) {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
@@ -524,7 +523,6 @@ fn icrc1_test_downgrade_from_incompatible_version() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
@@ -535,7 +533,6 @@ fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_v2() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
@@ -555,7 +552,6 @@ fn icrc1_test_incomplete_migration_from_mainnet() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration_from_v2() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
@@ -574,7 +570,6 @@ fn icrc1_test_incomplete_migration_to_current_from_mainnet() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration_to_current_from_v2() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
@@ -593,7 +588,6 @@ fn icrc1_test_migration_resumes_from_frozen_from_mainnet() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_migration_resumes_from_frozen_from_v2() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
