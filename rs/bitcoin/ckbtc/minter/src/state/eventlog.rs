@@ -213,11 +213,11 @@ pub struct Event {
     pub payload: EventType,
 }
 
-impl Event {
-    pub fn from_event_type(payload: EventType) -> Event {
-        Event {
+impl From<EventType> for Event {
+    fn from(value: EventType) -> Self {
+        Self {
             timestamp: None,
-            payload,
+            payload: value,
         }
     }
 }

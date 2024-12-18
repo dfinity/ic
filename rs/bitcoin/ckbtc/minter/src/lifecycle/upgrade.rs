@@ -3,7 +3,7 @@ use crate::state::eventlog::{replay, EventType};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{replace_state, Mode};
 use crate::storage::{count_events, events, record_event};
-use crate::CanisterRuntime;
+use crate::IC_CANISTER_RUNTIME;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -46,14 +46,14 @@ pub struct UpgradeArgs {
     pub kyt_principal: Option<CanisterId>,
 }
 
-pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
+pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
     if let Some(upgrade_args) = upgrade_args {
         log!(
             P0,
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(EventType::Upgrade(upgrade_args), runtime);
+        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
     };
 
     let start = ic_cdk::api::instruction_counter();

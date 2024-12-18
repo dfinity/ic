@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::state::eventlog::{Event, EventType};
 use crate::CanisterRuntime;
 use ic_stable_structures::{
@@ -70,6 +73,14 @@ fn encode_event(event: &Event) -> Vec<u8> {
 ///
 /// This function panics if the event decoding fails.
 fn decode_event(buf: &[u8]) -> Event {
+    // For backwards compatibility, we have to handle two cases:
+    //  1. Legacy events: raw instances of the event type enum
+    //  2. New events: a struct containing a timestamp and an event type
+    // To differentiate the two, we use a dummy intermediate enum whose variants
+    // correspond to the two cases above. The `untagged` attribute tells serde
+    // that instances of each variant are not labeled, and that it should tell
+    // the two apart based on their contents (e.g. presence of timestamp attribute
+    // suggests a new event).
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum SerializedEvent {
@@ -77,7 +88,7 @@ fn decode_event(buf: &[u8]) -> Event {
         Event(Event),
     }
     match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event::from_event_type(payload),
+        SerializedEvent::Legacy(payload) => Event::from(payload),
         SerializedEvent::Event(event) => event,
     }
 }

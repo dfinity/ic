@@ -231,7 +231,7 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
     Decode!(&raw_result, Vec<EventType>)
         .unwrap()
         .into_iter()
-        .map(Event::from_event_type)
+        .map(Event::from)
         .collect()
 }
 
@@ -250,11 +250,7 @@ pub struct GetEventsResult {
 impl From<GetEventTypesResult> for GetEventsResult {
     fn from(value: GetEventTypesResult) -> Self {
         Self {
-            events: value
-                .events
-                .into_iter()
-                .map(Event::from_event_type)
-                .collect(),
+            events: value.events.into_iter().map(Event::from).collect(),
             total_event_count: value.total_event_count,
         }
     }
