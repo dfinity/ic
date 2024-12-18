@@ -673,11 +673,15 @@ fn test_check_transaction_error() {
 
     // Test for malformatted txid in string form
     let cycles_before = setup.env.cycle_balance(setup.caller);
-    let txid = "a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475".to_string();
+    let too_short_txid =
+        "a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475".to_string();
     let call_id = setup
         .submit_btc_checker_call(
             "check_transaction_str",
-            Encode!(&CheckTransactionStrArgs { txid }).unwrap(),
+            Encode!(&CheckTransactionStrArgs {
+                txid: too_short_txid
+            })
+            .unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
         )
         .expect("submit_call failed to return call id");

@@ -43,10 +43,10 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
         && (message.contains("size limit") || message.contains("length limit"))
 }
 
-#[ic_cdk::query]
 /// Return `Passed` if the given bitcion address passed the check, or
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
+#[ic_cdk::query]
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
@@ -70,7 +70,6 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     }
 }
 
-#[ic_cdk::update]
 /// Return `Passed` if all input addresses of the transaction of the given
 /// transaction id passed the check, or `Failed` if any of them did not.
 ///
@@ -88,6 +87,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// If a permanent error occurred in the process, e.g, when a transaction data
 /// fails to decode or its transaction id does not match, then `Error` is returned
 /// together with a text description.
+#[ic_cdk::update]
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
     check_transaction_with(|| Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string()))
         .await
