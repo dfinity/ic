@@ -2,10 +2,15 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:crossbeam-channel",
+]
+
 rust_library(
     name = "thread",
     srcs = glob(["src/**"]),
     crate_name = "ic_utils_thread",
     version = "0.1.0",
-    deps = [],
+    deps = DEPENDENCIES,
 )

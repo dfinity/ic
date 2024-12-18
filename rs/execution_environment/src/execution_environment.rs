@@ -79,6 +79,7 @@ use ic_types::{
     CanisterId, Cycles, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
+use ic_utils_thread::deallocation_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
@@ -290,6 +291,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.
@@ -345,6 +347,7 @@ pub struct ExecutionEnvironment {
     // parallel and potentially reserving resources. It should be initialized to
     // the number of scheduler cores.
     resource_saturation_scaling: usize,
+    deallocator_thread: DeallocatorThread,
 }
 
 /// This is a helper enum that indicates whether the current DTS execution of
@@ -418,6 +421,7 @@ impl ExecutionEnvironment {
             Arc::clone(&ingress_history_writer),
             fd_factory,
         );
+        let deallocator_thread = DeallocatorThread::new("ExecutionDeallocator", 10000);
         Self {
             log,
             hypervisor,
@@ -431,6 +435,7 @@ impl ExecutionEnvironment {
             own_subnet_type,
             paused_execution_registry: Default::default(),
             resource_saturation_scaling,
+            deallocator_thread,
         }
     }
 
@@ -1750,6 +1755,7 @@ impl ExecutionEnvironment {
                     subnet_size,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
+                    self.deallocator_thread.sender(),
                 )
             }
             WasmMethod::System(_) => {
@@ -1787,6 +1793,7 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
+            self.deallocator_thread.sender(),
         )
     }
 
@@ -2347,6 +2354,7 @@ impl ExecutionEnvironment {
             scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
+            self.deallocator_thread.sender(),
         )
     }
 
@@ -3790,6 +3798,7 @@ pub fn execute_canister(
                     round_limits,
                     subnet_size,
                     &exec_env.call_tree_metrics,
+                    exec_env.deallocator_thread.sender(),
                 );
                 let (canister, instructions_used, heap_delta, ingress_status) =
                     exec_env.process_result(result);
