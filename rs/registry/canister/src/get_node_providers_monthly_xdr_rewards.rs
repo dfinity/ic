@@ -1,16 +1,16 @@
 use crate::{
-    mutations::node_management::common::{get_key_family, get_key_family_iter},
+    mutations::node_management::common::{get_key_family, get_key_family_between_versions_iter, get_key_family_iter},
     pb::v1::NodeProvidersMonthlyXdrRewards,
     registry::Registry,
 };
 use ic_protobuf::registry::{
-    dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,
-    node_rewards::v2::NodeRewardsTable,
+    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, node_rewards::v2::NodeRewardsTable
 };
 use ic_registry_keys::{
-    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY
 };
 use ic_registry_node_provider_rewards::calculate_rewards_v0;
+use ic_types::PrincipalId;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -48,6 +48,68 @@ impl Registry {
         rewards.registry_version = Some(self.latest_version());
 
         Ok(rewards)
+    }
+
+    pub fn get_node_providers_monthly_xdr_rewards_v1(
+        &self,
+        from_ts: u64,
+        from_registry_version: u64
+    ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+        let mut nodes = BTreeMap::new();
+        let mut rewardable_nodes = BTreeMap::new();
+
+        // Management canister call for getting metrics 
+        
+        let node_records: Vec<(String, NodeRecord)> = get_key_family_between_versions_iter::<NodeRecord>(self, NODE_RECORD_KEY_PREFIX, from_registry_version, self.latest_version()).collect();
+
+        for (p, node_record) in node_records {
+            let principal = PrincipalId::from_str(p.as_str()).unwrap();
+
+            if let Entry::Vacant(node) = nodes.entry(principal) {
+                let node_operator_id: PrincipalId = node_record.node_operator_id.try_into().unwrap();
+                let key = make_node_operator_record_key(node_operator_id);
+                let node_operator_record = self.local_registry.get_versioned_value::<NodeOperatorRecord>(key.as_str(), registry_version).unwrap();
+
+                if let Entry::Vacant(rewardables) = rewardable_nodes.entry(node_operator_id) {
+                    rewardables.insert(node_operator_record.rewardable_nodes);
+                }
+
+                let node_provider_id: PrincipalId = node_operator_record.node_provider_principal_id.try_into().unwrap();
+                let key = make_data_center_record_key(&node_operator_record.dc_id);
+                let data_center_record = self.local_registry.get_versioned_value::<DataCenterRecord>(key.as_str(), registry_version).unwrap();
+
+                node.insert(Node {
+                    node_id: principal,
+                    node_provider_id,
+                    region: data_center_record.region,
+                    node_type:  match rewardable_nodes.get_mut(&node_operator_id) {
+                        Some(rewardable_nodes) => {
+                            if rewardable_nodes.is_empty() {
+                                "unknown:no_rewardable_nodes_found".to_string()
+                            } else {
+                                let (k, mut v) = loop {
+                                    let (k, v) = match rewardable_nodes.pop_first() {
+                                        Some(kv) => kv,
+                                        None => break ("unknown:rewardable_nodes_used_up".to_string(), 0),
+                                    };
+                                    if v != 0 {
+                                        break (k, v);
+                                    }
+                                };
+                                v = v.saturating_sub(1);
+                                if v != 0 {
+                                    rewardable_nodes.insert(k.clone(), v);
+                                }
+                                k
+                            }
+                        }
+        
+                        None => "unknown".to_string(),
+                    }
+                });
+            }
+        }
+        Ok(())
     }
 }
 

@@ -203,6 +203,15 @@ pub fn deserialize_get_changes_since_request(request: Vec<u8>) -> Result<u64, Er
     }
 }
 
+/// Deserializes the response obtained from the registry canister for a
+/// get_changes_since() call, from protobuf.
+pub fn deserialize_node_providers_rewards_request(request: Vec<u8>) -> Result<(u64, u64), Error> {
+    match pb::v1::NodeProvidersRewardsRequest::decode(&request[..]) {
+        Ok(request) => Ok((request.from_ts, request.from_registry_version)),
+        Err(error) => Err(Error::MalformedMessage(error.to_string())),
+    }
+}
+
 /// Serializes a response for a get_changes_since() request to the registry
 /// canister.
 //
