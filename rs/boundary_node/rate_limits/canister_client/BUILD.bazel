@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/boundary_node/rate_limits/api:rate_limits_api",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:ic-agent",
+    "@crate_index//:k256",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_yaml",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:uuid",
+]
+
+rust_binary(
+    name = "rate-limiting-canister-client",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = [],
+    version = "0.1.0",
+    visibility = ["//rs:release-pkg"],
+    deps = DEPENDENCIES,
+)

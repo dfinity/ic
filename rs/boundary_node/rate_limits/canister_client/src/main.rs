@@ -13,8 +13,6 @@ use uuid::Uuid;
 
 const SERVICE_NAME: &str = "rate-limiting-canister-client";
 
-const SCHEMA_VERSION: u64 = 1;
-
 #[derive(Parser, Debug)]
 #[command(name = SERVICE_NAME)]
 struct Cli {
@@ -22,9 +20,9 @@ struct Cli {
     #[arg(long)]
     canister_id: Principal,
 
-    /// Path to the rules file
+    /// Path to the file containing all the rules
     #[arg(long)]
-    rules_file: PathBuf,
+    config_file: PathBuf,
 
     /// Identity key
     #[arg(long)]
@@ -51,16 +49,14 @@ async fn main() {
         .init();
 
     // read the rules
-    let rules = read_yaml_file(&cli.rules_file);
+    let (schema_version, rules) = read_yaml_file(&cli.config_file);
 
     // information
     info!(
-        "{} rules read from {}",
+        "{} rules with schema version {} read from {}",
         rules.len(),
-        cli.rules_file
-            .into_os_string()
-            .into_string()
-            .expect("failed to turn rate-limiting file path into string")
+        schema_version,
+        cli.config_file.display()
     );
 
     for rule in &rules {
@@ -82,7 +78,7 @@ async fn main() {
 
     // submit the rules
     let args = Encode!(&InputConfig {
-        schema_version: SCHEMA_VERSION,
+        schema_version,
         rules
     })
     .unwrap();
@@ -111,22 +107,31 @@ async fn main() {
 }
 
 #[derive(Debug, Deserialize)]
-struct YamlEntry {
+struct YamlConfig {
+    schema_version: u64,
+    rules: Vec<YamlRule>,
+}
+
+#[derive(Debug, Deserialize)]
+struct YamlRule {
     #[serde(flatten)]
     rate_limit_rule: RateLimitRule,
     incident_id: IncidentId,
     description: String,
 }
 
-fn read_yaml_file(file_path: &PathBuf) -> Vec<InputRule> {
+fn read_yaml_file(file_path: &PathBuf) -> (u64, Vec<InputRule>) {
     let yaml_str = fs::read_to_string(file_path).expect("Unable to read file");
 
-    // Deserialize directly into `YamlEntry`
-    let yaml_entries: Vec<YamlEntry> =
-        serde_yaml::from_str(&yaml_str).expect("Failed to parse YAML");
+    // Deserialize directly into `YamlConfig`
+    let yaml_config: YamlConfig = serde_yaml::from_str(&yaml_str).expect("Failed to parse YAML");
 
-    // Transform into `InputRule`
-    yaml_entries
+    // Get the api version
+    let schema_version = yaml_config.schema_version;
+
+    // Transform `YamlRule` into `InputRule`
+    let yaml_rules = yaml_config.rules;
+    let input_rules = yaml_rules
         .into_iter()
         .map(|entry| InputRule {
             incident_id: Uuid::parse_str(&entry.incident_id)
@@ -138,7 +143,9 @@ fn read_yaml_file(file_path: &PathBuf) -> Vec<InputRule> {
                 .expect("Unable to serialize rate-limiting rule"),
             description: entry.description,
         })
-        .collect()
+        .collect();
+
+    (schema_version, input_rules)
 }
 
 fn create_agent<I: Identity + 'static>(identity: I, ic_domain: String) -> Agent {

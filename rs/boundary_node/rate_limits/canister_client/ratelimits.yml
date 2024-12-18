@@ -1,3 +1,5 @@
+schema_version: 1
+rules:
 - canister_id: ryjl3-tyaaa-aaaaa-aaaba-cai
   methods_regex: ^canister_method$
   limit: 2500/1s
@@ -5,7 +7,7 @@
   description: "Protecting Canister Method 1"
 
 - canister_id: ryjl3-tyaaa-aaaaa-aaaba-cai
-  methods_regex: ^(canister_method1|canister_method2$
+  methods_regex: ^(canister_method1|canister_method2)$
   request_types:
     - call
   limit: 5/1min
