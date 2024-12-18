@@ -1028,6 +1028,7 @@ impl SchedulerImpl {
                                 state.metadata.own_subnet_type,
                                 InputQueueType::LocalSubnet,
                             )
+                            .map(|_| ())
                             .map_err(|(err, msg)| {
                                 error!(
                                     self.log,
