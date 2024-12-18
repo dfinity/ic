@@ -92,7 +92,9 @@ def commit_and_create_pr(
                     "--repo",
                     repo,
                     "--body",
-                    description
+                    description,
+                    "--title",
+                    commit_message
                 ],
                 cwd=repo_root,
             )
