@@ -346,7 +346,7 @@ pub fn add_transport_to_sim<F>(
 
         async move {
             let metrics_registry = MetricsRegistry::default();
-            let mut consensus_builder = ic_consensus_manager::ConsensusManagerBuilder::new(
+            let mut consensus_builder = ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
                 log.clone(),
                 tokio::runtime::Handle::current(),
                 metrics_registry,

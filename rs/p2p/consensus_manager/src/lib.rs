@@ -28,7 +28,7 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub struct ConsensusManagerBuilder {
+pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
@@ -36,7 +36,7 @@ pub struct ConsensusManagerBuilder {
     router: Option<Router>,
 }
 
-impl ConsensusManagerBuilder {
+impl AbortableBroadcastChannelBuilder {
     pub fn new(log: ReplicaLogger, rt_handle: Handle, metrics_registry: MetricsRegistry) -> Self {
         Self {
             log,

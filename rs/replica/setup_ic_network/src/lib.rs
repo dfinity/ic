@@ -15,7 +15,7 @@ use ic_consensus::{
     consensus::{dkg_key_manager::DkgKeyManager, ConsensusBouncer, ConsensusImpl},
     dkg, idkg,
 };
-use ic_consensus_manager::ConsensusManagerBuilder;
+use ic_consensus_manager::AbortableBroadcastChannelBuilder;
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
@@ -246,11 +246,11 @@ fn start_consensus(
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
-    ConsensusManagerBuilder,
+    AbortableBroadcastChannelBuilder,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
-    let mut new_p2p_consensus: ic_consensus_manager::ConsensusManagerBuilder =
-        ic_consensus_manager::ConsensusManagerBuilder::new(
+    let mut new_p2p_consensus: ic_consensus_manager::AbortableBroadcastChannelBuilder =
+        ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
             log.clone(),
             rt_handle.clone(),
             metrics_registry.clone(),
@@ -305,13 +305,6 @@ fn start_consensus(
         &PoolReader::new(&*consensus_pool.read().unwrap()),
     )));
 
-    let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (idkg_tx, idkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-
     {
         let consensus_impl = ConsensusImpl::new(
             replica_config.clone(),
@@ -337,6 +330,7 @@ fn start_consensus(
 
         let consensus_pool = Arc::clone(&consensus_pool);
 
+        let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
         // Create the consensus client.
         let (client, jh) = create_artifact_handler(
             consensus_tx,
@@ -373,6 +367,7 @@ fn start_consensus(
     };
 
     let ingress_sender = {
+        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(
             ingress_tx,
@@ -413,7 +408,7 @@ fn start_consensus(
             log.clone(),
             max_certified_height_tx,
         );
-
+        let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
         // Create the certification client.
         let (client, jh) = create_artifact_handler(
             certification_tx,
@@ -436,6 +431,7 @@ fn start_consensus(
     };
 
     {
+        let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
         // Create the DKG client.
         let (client, jh) = create_artifact_handler(
             dkg_tx,
@@ -478,6 +474,7 @@ fn start_consensus(
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_idkg().is_some(),
         );
+        let (idkg_tx, idkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
         let (client, jh) = create_artifact_handler(
             idkg_tx,
@@ -514,6 +511,7 @@ fn start_consensus(
     };
 
     {
+        let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
         let (client, jh) = create_artifact_handler(
             http_outcalls_tx,
             CanisterHttpPoolManagerImpl::new(
