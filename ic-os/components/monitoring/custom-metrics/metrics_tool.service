@@ -31,3 +31,7 @@ SystemCallArchitectures=native
 SystemCallErrorNumber=EPERM
 SystemCallFilter=@system-service
 UMask=022
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SysLogLevel=2
