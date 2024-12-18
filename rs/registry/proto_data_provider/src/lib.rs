@@ -13,6 +13,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
+use ic_types::time::current_time;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -200,6 +201,7 @@ impl ProtoRegistryDataProvider {
         let mut records = self.records.read().unwrap().clone();
         records.sort_by(|a, b| Ord::cmp(&a.version, &b.version));
         let mut mutations_by_version: HashMap<u64, Vec<RegistryMutation>> = HashMap::new();
+        let timestamp = current_time().as_nanos_since_unix_epoch();
 
         for record in records {
             let version = record.version;
@@ -222,6 +224,7 @@ impl ProtoRegistryDataProvider {
             .map(|(_, mutations)| RegistryAtomicMutateRequest {
                 mutations: mutations.to_vec(),
                 preconditions: vec![],
+                timestamp: Some(timestamp),
             })
             .collect()
     }

@@ -54,12 +54,14 @@ impl Registry {
             value: FirewallRuleSet { entries: vec![] }.encode_to_vec(),
             version: 0,
             deletion_marker: false,
+            timestamp: None
         };
 
         let RegistryValue {
             value: current_ruleset_vec,
             version: _,
             deletion_marker: _,
+            timestamp: _
         } = self
             .get(&key, self.latest_version())
             .unwrap_or(&default_registry_value);
