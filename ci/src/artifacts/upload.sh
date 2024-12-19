@@ -2,27 +2,25 @@
 
 set -eEuo pipefail
 
-while read -r k v
-do
+while read -r k v; do
     case "$k" in
         HOME)
             # Required by rclone to get credentials from $HOME/.aws/credentials
             export HOME="$v"
             ;;
     esac
-done < "$VERSION_FILE"
+done <"$VERSION_FILE"
 
 VERSION="$(cat $VERSION_TXT)"
 
-if [ "${VERSION}" == "$FAKE_IC_VERSION" ]
-then
+if [ "${VERSION}" == "$FAKE_IC_VERSION" ]; then
     echo "Attempt to upload an artifacts with fake ic version: ${VERSION}" >&2
     exit 1
 fi
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.
 f="$1"
-if [ -L "$f" ];then
+if [ -L "$f" ]; then
     f=$(readlink "$f")
 fi
 
@@ -67,5 +65,5 @@ AWS_PROFILE=cf "$RCLONE" \
     "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
-echo "https://download.dfinity.systems/${URL_PATH}" > "$2"
-echo "http://download.proxy-global.dfinity.network:8080/${URL_PATH}" > "$3"
+echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
+echo "http://download.proxy-global.dfinity.network:8080/${URL_PATH}" >"$3"
