@@ -407,7 +407,7 @@ mod test {
         // This method should be blocked always
         for _ in 0..100 {
             assert!(!limiter.acquire_token(Context {
-                subnet_id: subnet_id,
+                subnet_id,
                 canister_id: Some(id2),
                 method: Some("baz"),
                 request_type: RequestType::Query,
