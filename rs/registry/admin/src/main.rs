@@ -1198,11 +1198,14 @@ struct ProposeToUpdateCanisterSettingsCmd {
     /// If set, it will update the canister's freezing threshold to this value.
     freezing_threshold: Option<u64>,
     #[clap(long)]
-    /// If set, it will update the canister's log wasm memory limit to this value.
+    /// If set, it will update the canister's wasm memory limit to this value.
     wasm_memory_limit: Option<u64>,
     #[clap(long)]
     /// If set, it will update the canister's log visibility to this value.
     log_visibility: Option<LogVisibility>,
+    #[clap(long)]
+    /// If set, it will update the canister's wasm memory threshold to this value.
+    wasm_memory_threshold: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1232,6 +1235,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         let memory_allocation = self.memory_allocation;
         let freezing_threshold = self.freezing_threshold;
         let wasm_memory_limit = self.wasm_memory_limit;
+        let wasm_memory_threshold = self.wasm_memory_threshold;
         let log_visibility = match self.log_visibility {
             Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
@@ -1247,6 +1251,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 freezing_threshold,
                 wasm_memory_limit,
                 log_visibility,
+                wasm_memory_threshold,
             }),
         };
 
