@@ -231,12 +231,6 @@ impl<Entity, Repr> From<Repr> for Id<Entity, Repr> {
     }
 }
 
-// impl<Entity> From<&Id<Entity, u64>> for u64 {
-//     fn from(id: &Id<Entity, u64>) -> u64 {
-//         id.get()
-//     }
-// }
-
 impl<Entity, Repr: Eq> Eq for Id<Entity, Repr> {}
 
 impl<Entity, Repr: fmt::Debug> fmt::Debug for Id<Entity, Repr> {

@@ -48,44 +48,6 @@ pub async fn start_all_canisters(
         });
     }
     futures::future::join_all(futures).await;
-
-    // // Start canisters in batches to avoid running into HTTP endpoint rate limits.
-    // const BATCH_SIZE: usize = 40;
-    // for batch in 0.. {
-    //     let mut futures = vec![];
-    //     for (subnet_idx, canister_idx, canister) in
-    //         canisters.iter().enumerate().flat_map(|(x, v)| {
-    //             v.iter()
-    //                 .enumerate()
-    //                 .skip(batch * BATCH_SIZE)
-    //                 .take(BATCH_SIZE)
-    //                 .map(move |(y, v)| (x, y, v))
-    //         })
-    //     {
-    //         let input = StartArgs {
-    //             network_topology: topology.clone(),
-    //             canister_to_subnet_rate,
-    //             payload_size_bytes,
-    //             response_payload_size_bytes,
-    //             deadline_seconds,
-    //         };
-    //         futures.push(async move {
-    //             let _: String = canister
-    //                 .update_("start", candid, (input,))
-    //                 .await
-    //                 .unwrap_or_else(|e| {
-    //                     panic!(
-    //                         "Starting canister_idx={} on subnet_idx={} failed because of: {}",
-    //                         canister_idx, subnet_idx, e
-    //                     )
-    //                 });
-    //         });
-    //     }
-    //     if futures.is_empty() {
-    //         break;
-    //     }
-    //     futures::future::join_all(futures).await;
-    // }
 }
 
 /// Concurrently installs `canisters_per_subnet` instances of the XNet test canister
