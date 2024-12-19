@@ -52,11 +52,6 @@ impl TlsConfig for FailingTlsConfig {
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<ClientConfig, TlsConfigError> {
-        if self.should_fail.load(Ordering::Relaxed) {
-            return Err(TlsConfigError::MalformedSelfCertificate {
-                internal_error: "".to_string(),
-            });
-        }
         self.crypto.client_config(server, registry_version)
     }
 }
