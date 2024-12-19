@@ -1,5 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
+use futures::stream;
+use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
@@ -2230,28 +2232,34 @@ pub mod sns {
         const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 2000;
 
         // Generate a bunch of SNS token transactions.
-        for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {
-            let user_principal_id = PrincipalId::new_user_test_id(i);
-            let direct_participant_swap_account = Account {
-                owner: user_principal_id.0,
-                subaccount: None,
-            };
-            let _block_height = ledger::icrc1_transfer(
-                pocket_ic,
-                sns_ledger_canister_id,
-                sns_governance_canister_id,
-                TransferArg {
-                    from_subaccount: None,
-                    to: direct_participant_swap_account,
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
-                },
-            )
-            .await
-            .unwrap();
-        }
+        stream::iter(0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE)
+            .map(|i| {
+                async move {
+                    let user_principal_id = PrincipalId::new_user_test_id(i);
+                    let direct_participant_swap_account = Account {
+                        owner: user_principal_id.0,
+                        subaccount: None,
+                    };
+                    let _block_height = ledger::icrc1_transfer(
+                        pocket_ic,
+                        sns_ledger_canister_id,
+                        sns_governance_canister_id,
+                        TransferArg {
+                            from_subaccount: None,
+                            to: direct_participant_swap_account,
+                            fee: None,
+                            created_at_time: None,
+                            memo: None,
+                            amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+            })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
 
         let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
 
