@@ -87,6 +87,7 @@ fn default_init_args() -> InitArgs {
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     }
 }
 
