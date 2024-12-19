@@ -37,7 +37,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
@@ -538,7 +538,9 @@ pub async fn install_sns_directly_with_snsw_versions(
         index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
     };
 
-    governance.deployed_version = Some(deployed_version);
+    governance.deployed_version = Some(ic_sns_governance::pb::v1::governance::Version::from(
+        deployed_version,
+    ));
 
     install_canister(
         root_canister_id,
@@ -1217,10 +1219,16 @@ pub mod nns {
                 .cloned()
                 .expect("No upgrade steps found")
                 .version
-                .expect("No version found")
-                .into();
+                .expect("No version found");
 
-            latest_version
+            Version {
+                root_wasm_hash: latest_version.root_wasm_hash,
+                governance_wasm_hash: latest_version.governance_wasm_hash,
+                ledger_wasm_hash: latest_version.ledger_wasm_hash,
+                swap_wasm_hash: latest_version.swap_wasm_hash,
+                archive_wasm_hash: latest_version.archive_wasm_hash,
+                index_wasm_hash: latest_version.index_wasm_hash,
+            }
         }
 
         /// Modify the WASM for a given canister type and add it to SNS-W.
@@ -1403,7 +1411,7 @@ pub mod sns {
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::GovernanceCanister;
         use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-        use ic_sns_governance::pb::v1::get_neuron_response;
+        use ic_sns_governance_api::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
 
         pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
@@ -1419,7 +1427,9 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             command: sns_pb::manage_neuron::Command,
         ) -> sns_pb::ManageNeuronResponse {
-            let sub_account = neuron_id.subaccount().unwrap();
+            let sub_account = ic_sns_governance::pb::v1::NeuronId::from(neuron_id)
+                .subaccount()
+                .unwrap();
             let result = pocket_ic
                 .update_call(
                     canister_id.into(),
@@ -1603,14 +1613,15 @@ pub mod sns {
         ) -> Option<(sns_pb::NeuronId, PrincipalId)> {
             let sns_neurons = list_neurons(pocket_ic, canister_id).await.neurons;
             sns_neurons
-                .iter()
+                .into_iter()
+                .map(ic_sns_governance::pb::v1::Neuron::from)
                 .find(|neuron| {
                     neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
                         >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
                     (
-                        sns_neuron.id.clone().unwrap(),
+                        sns_pb::NeuronId::from(sns_neuron.id.clone().unwrap()),
                         sns_neuron.permissions.last().unwrap().principal.unwrap(),
                     )
                 })
@@ -1779,8 +1790,15 @@ pub mod sns {
         pub async fn assert_upgrade_journal(
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
-            expected_entries: &[sns_pb::upgrade_journal_entry::Event],
+            expected_entries: &[ic_sns_governance::pb::v1::upgrade_journal_entry::Event],
         ) {
+            // convert expected_entries to api types
+            let expected_entries: Vec<_> = expected_entries
+                .iter()
+                .cloned()
+                .map(sns_pb::upgrade_journal_entry::Event::from)
+                .collect();
+
             let response =
                 sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
 

@@ -1,6 +1,6 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetRunningSnsVersionRequest,
     GetRunningSnsVersionResponse, NervousSystemParameters,
 };
