@@ -219,7 +219,6 @@ fn compute_next_difficulty(
     let actual_interval =
         std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
 
-    //TODO(mihailjianu): explain why last_adjustment_header is needed instead of prev_header
     CompactTarget::from_next_work_required(last_adjustment_header.bits, actual_interval, *network)
 }
 
