@@ -141,8 +141,8 @@ pub struct RateLimitRule {
     #[serde(default, with = "serde_regex")]
     pub methods_regex: Option<Regex>,
     pub ip: Option<IpNet>,
-    pub ip_prefix_group: Option<IpPrefixes>,
     pub request_types: Option<Vec<RequestType>>,
+    pub ip_prefix_group: Option<IpPrefixes>,
     pub limit: Action,
 }
 
@@ -171,6 +171,17 @@ impl<'de> Deserialize<'de> for RateLimitRule {
         if this.ip_prefix_group.is_some() && !matches!(this.limit, Action::Limit(_, _)) {
             return Err(D::Error::custom(
                 "ip_prefix_group doesn't make sense with 'limit: block'",
+            ));
+        }
+
+        if this.canister_id.is_none()
+            && this.subnet_id.is_none()
+            && this.methods_regex.is_none()
+            && this.request_types.is_none()
+            && this.ip.is_none()
+        {
+            return Err(D::Error::custom(
+                "at least one filtering condition must be specified",
             ));
         }
 
@@ -332,6 +343,16 @@ mod test {
           v4: 24
           v6: 64
         limit: block
+        "};
+
+        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
+
+        // No conditions
+        let rule_raw = indoc! {"
+        ip_prefix_group:
+            v4: 33
+            v6: 64
+        limit: 100/1s
         "};
 
         assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
