@@ -11,6 +11,7 @@ documentation.workspace = true
 [dependencies]
 bitcoin = { workspace = true }
 hex = { workspace = true }
+primitive-types = "0.12"
 
 [dev-dependencies]
 csv = "1.1"

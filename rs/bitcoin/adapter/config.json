@@ -1,0 +1,22 @@
+{
+    "network": "testnet4",
+    "dns_seeds": [
+      "seed.testnet4.bitcoin.sprovoost.nl",
+      "seed.testnet4.wiz.biz"
+    ],
+    "nodes": [],
+    "socks_proxy": null,
+    "idle_seconds": 300,
+    "ipv6_only": true,
+    "logger": {
+      "level": "debug",
+      "format": "text_full",
+      "log_destination": {
+        "File": "bitcoin_adapter.log"
+      },
+      "block_on_overflow": true
+    },
+    "incoming_source": {
+        "Path": "bitcoin_adapter.sock"
+    }
+  }

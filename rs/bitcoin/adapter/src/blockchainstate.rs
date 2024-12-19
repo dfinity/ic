@@ -341,8 +341,8 @@ impl HeaderStore for BlockchainState {
         self.get_cached_header(hash).map(|cached| cached.header)
     }
 
-    // TODO: this is terribly innefficient. We should: either have and index for this, or
-    // rething how this is used.
+    // TODO(mihailjianu): this is terribly innefficient. We should: either have and index for this, or
+    // rethinking how this is used.
     fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
         self.header_cache
             .values()

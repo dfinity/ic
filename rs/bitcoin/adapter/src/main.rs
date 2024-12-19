@@ -30,7 +30,7 @@ pub async fn main() {
         "Starting the adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
-    let metrics_registry = MetricsRegistry::global();
+    let metrics_registry = MetricsRegistry::new();
 
     // Metrics server should only be started if we are managed by systemd and receive the
     // metrics socket as FD(4).
