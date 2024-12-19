@@ -1,10 +1,10 @@
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
-    LedgerArgument,
+    LedgerArgument, UpgradeArgs,
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -155,6 +155,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         feature_flags: args.feature_flags,
         maximum_number_of_accounts: args.maximum_number_of_accounts,
         accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+        index_principal: args.index_principal,
     })
 }
 
@@ -415,6 +416,47 @@ fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
 
+fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
+    LedgerArgument::Upgrade(Some(UpgradeArgs {
+        metadata: None,
+        token_name: None,
+        token_symbol: None,
+        transfer_fee: None,
+        change_fee_collector: None,
+        max_memo_length: None,
+        feature_flags: None,
+        accounts_overflow_trim_quantity: None,
+        change_archive_options: None,
+        index_principal,
+    }))
+}
+
+#[test]
+fn test_icrc106_unsupported_if_index_not_set() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_unsupported_if_index_not_set(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
+        ledger_wasm(),
+        encode_init_args,
+        encode_icrc106_upgrade_args,
+    );
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_ledger_suite_state_machine_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
@@ -640,6 +682,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         feature_flags: Some(FeatureFlags { icrc2: false }),
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -816,6 +859,7 @@ fn test_icrc3_get_archives() {
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -893,6 +937,7 @@ fn test_icrc3_get_blocks() {
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1169,6 +1214,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     });
 
     let args = Encode!(&args).unwrap();
@@ -1605,6 +1651,7 @@ mod verify_written_blocks {
                 feature_flags: Some(FeatureFlags { icrc2: true }),
                 maximum_number_of_accounts: None,
                 accounts_overflow_trim_quantity: None,
+                index_principal: None,
             });
 
             let args = Encode!(&ledger_arg_init).unwrap();
@@ -1823,6 +1870,7 @@ mod incompatible_token_type_upgrade {
             feature_flags: Some(FeatureFlags { icrc2: false }),
             maximum_number_of_accounts: None,
             accounts_overflow_trim_quantity: None,
+            index_principal: None,
         }))
         .unwrap()
     }
