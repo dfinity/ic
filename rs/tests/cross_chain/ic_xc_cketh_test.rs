@@ -75,10 +75,6 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-
-    env.topology_snapshot()
-        .subnets()
-        .for_each(|subnet| subnet.await_all_nodes_healthy().unwrap());
 }
 
 fn setup_anvil(env: &TestEnv) {
