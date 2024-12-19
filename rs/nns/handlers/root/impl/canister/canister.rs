@@ -99,7 +99,7 @@ async fn canister_status(canister_id_record: CanisterIdRecord) -> CanisterStatus
     canister_status_response.unwrap()
 }
 
-#[update]
+#[update(hidden = true)]
 async fn submit_root_proposal_to_upgrade_governance_canister(
     expected_governance_wasm_sha: serde_bytes::ByteBuf,
     proposal: ChangeCanisterRequest,
@@ -112,7 +112,7 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
     .await
 }
 
-#[update]
+#[update(hidden = true)]
 async fn vote_on_root_proposal_to_upgrade_governance_canister(
     proposer: PrincipalId,
     wasm_sha256: serde_bytes::ByteBuf,
@@ -127,7 +127,7 @@ async fn vote_on_root_proposal_to_upgrade_governance_canister(
     .await
 }
 
-#[update]
+#[update(hidden = true)]
 fn get_pending_root_proposals_to_upgrade_governance_canister() -> Vec<GovernanceUpgradeRootProposal>
 {
     ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
@@ -174,7 +174,7 @@ async fn add_nns_canister(request: AddCanisterRequest) {
 
 // Executes a proposal to stop/start an nns canister.
 #[update]
-async fn stop_or_start_nns_canister_(request: StopOrStartCanisterRequest) {
+async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
     check_caller_is_governance();
     // It is a mistake to stop the root or governance canister, because if either of them is
     // stopped, there is no way to restore them to the running state. That would require executing a
@@ -195,7 +195,7 @@ async fn stop_or_start_nns_canister_(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[update]
+#[update(hidden = true)]
 fn call_canister(proposal: CallCanisterProposal) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
@@ -220,7 +220,7 @@ async fn change_canister_controllers(
 /// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
 /// Governance.
 #[update]
-async fn update_canister_settings_(
+async fn update_canister_settings(
     update_settings: UpdateCanisterSettingsRequest,
 ) -> UpdateCanisterSettingsResponse {
     check_caller_is_governance();
@@ -233,7 +233,7 @@ async fn update_canister_settings_(
 
 /// Resources to serve for a given http_request
 /// Serve an HttpRequest made to this canister
-#[query]
+#[query(hidden = true)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
