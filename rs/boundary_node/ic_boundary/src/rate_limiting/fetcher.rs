@@ -270,6 +270,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^foo|bar$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Block,
                 },
                 RateLimitRule {
@@ -279,6 +281,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^baz|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(1, Duration::from_secs(10)),
                 },
                 RateLimitRule {
@@ -286,6 +290,8 @@ mod test {
                     subnet_id: None,
                     methods_regex: Some(Regex::new("^foo|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(10, Duration::from_secs(60)),
                 }
             ]
