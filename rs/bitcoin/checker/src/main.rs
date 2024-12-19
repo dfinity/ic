@@ -227,7 +227,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             for ((provider, status), count) in stats.https_outcall_status.iter() {
                 counter = counter
                     .value(
-                        &[("provider", provider.as_str()), ("status", &status)],
+                        &[("provider", provider.as_str()), ("status", status)],
                         *count as f64,
                     )
                     .unwrap();
