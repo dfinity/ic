@@ -198,12 +198,16 @@ pub fn main() -> Result<()> {
             let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             if let Some(ref node_reward_type) = node_reward_type {
-                let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
-                if !node_reward_type_pattern.is_match(node_reward_type) {
-                    anyhow::bail!(
-                        "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                        node_reward_type
-                    );
+                if node_reward_type.is_empty() {
+                    println!("Node reward type is empty. Skipping validation.");
+                } else {
+                    let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+                    if !node_reward_type_pattern.is_match(node_reward_type) {
+                        anyhow::bail!(
+                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                            node_reward_type
+                        );
+                    }
                 }
             } else {
                 println!("Node reward type is not set. Skipping validation.");
