@@ -181,6 +181,7 @@ impl InitArgsBuilder {
             feature_flags: None,
             maximum_number_of_accounts: None,
             accounts_overflow_trim_quantity: None,
+            index_principal: None,
         })
     }
 
@@ -265,6 +266,7 @@ pub struct InitArgs {
     pub feature_flags: Option<FeatureFlags>,
     pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -636,6 +638,7 @@ impl Ledger {
             feature_flags,
             maximum_number_of_accounts,
             accounts_overflow_trim_quantity,
+            index_principal,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -678,7 +681,7 @@ impl Ledger {
                 .try_into()
                 .unwrap(),
             ledger_version: LEDGER_VERSION,
-            index_principal: None,
+            index_principal,
         };
 
         for (account, balance) in initial_balances.into_iter() {

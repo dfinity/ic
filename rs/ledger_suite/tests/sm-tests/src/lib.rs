@@ -63,6 +63,7 @@ use std::{
 };
 
 pub mod fee_collector;
+pub mod icrc_106;
 pub mod in_memory_ledger;
 pub mod metrics;
 
@@ -104,6 +105,7 @@ pub struct InitArgs {
     pub feature_flags: Option<FeatureFlags>,
     pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
@@ -910,6 +912,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         feature_flags: Some(FeatureFlags { icrc2: true }),
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     }
 }
 
@@ -1685,6 +1688,7 @@ pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
             feature_flags: args.feature_flags,
             maximum_number_of_accounts: args.maximum_number_of_accounts,
             accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+            index_principal: None,
         })
     }
 
@@ -1715,6 +1719,7 @@ pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
             feature_flags: args.feature_flags,
             maximum_number_of_accounts: args.maximum_number_of_accounts,
             accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+            index_principal: None,
         })
     }
 
@@ -1750,6 +1755,7 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
             feature_flags: args.feature_flags,
             maximum_number_of_accounts: args.maximum_number_of_accounts,
             accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+            index_principal: None,
         })
     }
     let p100 = PrincipalId::new_user_test_id(100);
@@ -4525,52 +4531,6 @@ where
         from_account,
         spender_account,
         receiver_account,
-    );
-}
-
-pub fn test_icrc106_standard<T, U>(
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-    encode_upgrade_args: fn(Option<Principal>) -> U,
-) where
-    T: CandidType,
-    U: CandidType,
-{
-    fn assert_icrc106_supported(env: &StateMachine, canister_id: CanisterId) {
-        let mut found = false;
-        for standard in supported_standards(env, canister_id) {
-            if standard.name == "ICRC-106" {
-                found = true;
-                break;
-            }
-        }
-        assert!(found, "ICRC-106 should be supported");
-    }
-
-    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
-    assert_icrc106_supported(&env, canister_id);
-    assert_eq!(
-        Err(Icrc106Error::IndexPrincipalNotSet),
-        icrc106_get_index_principal(&env, canister_id)
-    );
-    assert!(!metadata(&env, canister_id).contains_key("icrc106:index_principal"));
-
-    let index_principal = PrincipalId::new_user_test_id(1).0;
-    let args = encode_upgrade_args(Some(index_principal));
-    let encoded_upgrade_args = Encode!(&args).unwrap();
-    env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args.clone())
-        .expect("should successfully upgrade ledger canister");
-
-    assert_icrc106_supported(&env, canister_id);
-    assert_eq!(
-        Ok(index_principal),
-        icrc106_get_index_principal(&env, canister_id)
-    );
-    assert_eq!(
-        &Value::Text(index_principal.to_text()),
-        metadata(&env, canister_id)
-            .get("icrc106:index_principal")
-            .expect("should have index principal metadata")
     );
 }
 

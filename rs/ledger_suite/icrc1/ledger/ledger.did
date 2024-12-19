@@ -119,6 +119,7 @@ type InitArgs = record {
         controller_id : principal;
         more_controller_ids : opt vec principal;
     };
+    index_principal : opt principal;
 };
 
 type ChangeFeeCollector = variant {
