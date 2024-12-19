@@ -337,28 +337,15 @@ impl BlockchainState {
 }
 
 impl HeaderStore for BlockchainState {
-    fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader> {
-        self.get_cached_header(hash).map(|cached| cached.header)
-    }
-
-    // TODO(mihailjianu): this is terribly innefficient. We should: either have and index for this, or
-    // rethinking how this is used.
-    fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
-        self.header_cache
-            .values()
-            .find(|cached| cached.height == height)
-            .map(|cached| cached.header)
-    }
-
-    fn height(&self) -> BlockHeight {
-        self.get_active_chain_tip().height
+    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+        self.get_cached_header(hash)
+            .map(|cached| (cached.header, cached.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {
         self.genesis().block_hash()
     }
 }
-
 #[cfg(test)]
 mod test {
     use bitcoin::TxMerkleNode;

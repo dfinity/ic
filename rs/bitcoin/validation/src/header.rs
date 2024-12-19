@@ -37,20 +37,10 @@ pub enum ValidateHeaderError {
 
 pub trait HeaderStore {
     /// Returns the header with the given block hash.
-    fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader>;
-
-    /// Returns the header at the given height.
-    fn get_with_height(&self, height: u32) -> Option<BlockHeader>;
-
-    /// Returns the height of the tip that the new header will extend.
-    fn height(&self) -> u32;
+    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)>;
 
     /// Returns the initial hash the store starts from.
-    fn get_initial_hash(&self) -> BlockHash {
-        self.get_with_height(0)
-            .expect("genesis block header not found")
-            .block_hash()
-    }
+    fn get_initial_hash(&self) -> BlockHash;
 }
 
 /// Validates a header. If a failure occurs, a
@@ -60,8 +50,7 @@ pub fn validate_header(
     store: &impl HeaderStore,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
-    let prev_height = store.height();
-    let prev_header = match store.get_with_block_hash(&header.prev_blockhash) {
+    let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
         Some(result) => result,
         None => {
             return Err(ValidateHeaderError::PrevHeaderNotFound);
@@ -170,8 +159,8 @@ fn find_next_difficulty_in_chain(
 
                 // Traverse to the previous header.
                 let prev_blockhash = current_header.prev_blockhash;
-                current_header = store
-                    .get_with_block_hash(&prev_blockhash)
+                (current_header, _) = store
+                    .get_header(&prev_blockhash)
                     .expect("previous header should be in the header store");
                 // Update the current height and hash.
                 current_height -= 1;
@@ -262,16 +251,15 @@ fn compute_next_difficulty(
         return prev_header.bits;
     }
 
-    // Computing the `last_adjustment_header`.
-    // `last_adjustment_header` is the last header with height multiple of 2016
-    let last_adjustment_height = if height < DIFFICULTY_ADJUSTMENT_INTERVAL {
-        0
-    } else {
-        height - DIFFICULTY_ADJUSTMENT_INTERVAL
-    };
-    let last_adjustment_header = store
-        .get_with_height(last_adjustment_height)
-        .expect("Last adjustment header must exist");
+    // Computing the last header with height multiple of 2016
+    let mut current_header = *prev_header;
+    for _i in 0..(DIFFICULTY_ADJUSTMENT_INTERVAL - 1) {
+        if let Some((header, _)) = store.get_header(&current_header.prev_blockhash) {
+            current_header = header;
+        }
+    }
+    // last_adjustment_header is the last header with height multiple of 2016
+    let last_adjustment_header = current_header;
     let last_adjustment_time = last_adjustment_header.time;
 
 
@@ -376,21 +364,10 @@ mod test {
     }
 
     impl HeaderStore for SimpleHeaderStore {
-        fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader> {
-            self.headers.get(hash).map(|stored| stored.header)
-        }
-
-        fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
-            let blocks_to_traverse = self.height - height;
-            let mut header = self.headers.get(&self.tip_hash).unwrap().header;
-            for _ in 0..blocks_to_traverse {
-                header = self.headers.get(&header.prev_blockhash).unwrap().header;
-            }
-            Some(header)
-        }
-
-        fn height(&self) -> u32 {
-            self.height
+        fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+            self.headers
+                .get(hash)
+                .map(|stored| (stored.header, stored.height))
         }
 
         fn get_initial_hash(&self) -> BlockHash {
@@ -576,7 +553,6 @@ mod test {
         let expected_pow = CompactTarget::from_consensus(7); // Some non-limit PoW, the actual value is not important.
         for chain_length in 1..10 {
             let (store, last_header) = create_chain(&network, expected_pow, chain_length);
-            assert_eq!(store.height() + 1, chain_length);
             // Act.
             let compact_target = get_next_compact_target(
                 &network,

@@ -243,7 +243,7 @@ pub fn test_batching(env: TestEnv) {
         .await;
 
         // Let's wait for the transaction to appear on the mempool
-        //TODO(mihailjianu): revisit the usefulness of this test.
+        //TODO(mihailjianu): revisit the usefulness of this check.
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         let txid = mempool_txids[0];
         let btc_txid = Txid::from_raw_hash(Hash::from_slice(&txid[..]).unwrap());
