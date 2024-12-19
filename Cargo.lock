@@ -5740,6 +5740,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
+ "ipnet",
  "lazy_static",
  "maxminddb",
  "mockall",
@@ -14562,6 +14563,9 @@ name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ipnetwork"
@@ -18182,6 +18186,7 @@ dependencies = [
  "humantime",
  "ic-bn-lib",
  "indoc",
+ "ipnet",
  "regex",
  "serde",
  "serde_bytes",
