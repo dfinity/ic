@@ -165,7 +165,6 @@ fn maliciously_propose_empty_block(
     parent: HashedBlock,
 ) -> Option<BlockProposal> {
     let height = parent.height().increment();
-    let certified_height = block_maker.state_manager.latest_certified_height();
     let context = parent.as_ref().context.clone();
 
     // Note that we will skip blockmaking if registry versions or replica_versions
@@ -185,7 +184,6 @@ fn maliciously_propose_empty_block(
         context,
         parent,
         height,
-        certified_height,
         rank,
         registry_version,
         &subnet_records,
