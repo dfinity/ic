@@ -1,42 +1,43 @@
 use std::{
-    collections::BTreeSet,
-    sync::{Arc, Mutex},
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
 };
 
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{TlsConfig, TlsConfigError};
 use ic_p2p_test_utils::{temp_crypto_component_with_tls_keys, RegistryConsensusHandle};
 use rustls::{ClientConfig, ServerConfig};
 
-pub struct PeerRestrictedTlsConfig {
-    allowed_peers: Arc<Mutex<Vec<NodeId>>>,
+pub struct FailingTlsConfig {
+    should_fail: AtomicBool,
     crypto: Arc<dyn TlsConfig + Send + Sync>,
 }
 
-impl PeerRestrictedTlsConfig {
+impl FailingTlsConfig {
     pub fn new(node_id: NodeId, registry_handler: &RegistryConsensusHandle) -> Self {
         let crypto = temp_crypto_component_with_tls_keys(registry_handler, node_id);
         Self {
-            allowed_peers: Arc::new(Mutex::new(Vec::new())),
+            should_fail: AtomicBool::new(true),
             crypto,
         }
     }
 
-    pub fn set_allowed_peers(&self, peers: Vec<NodeId>) {
-        *self.allowed_peers.lock().unwrap() = peers;
+    pub fn set_should_fail(&self, should_fail: bool) {
+        self.should_fail.store(should_fail, Ordering::Relaxed);
     }
 }
 
-impl TlsConfig for PeerRestrictedTlsConfig {
+impl TlsConfig for FailingTlsConfig {
     fn server_config(
         &self,
-        _allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError> {
-        let allowed_clients = SomeOrAllNodes::Some(BTreeSet::from_iter(
-            self.allowed_peers.lock().unwrap().clone(),
-        ));
-        self.crypto.server_config(allowed_clients, registry_version)
+        if self.should_fail.load(Ordering::Relaxed) {
+            return Err(TlsConfigError::MalformedSelfCertificate {
+                internal_error: "".to_string(),
+            });
+        }
+        self.crypto.server_config(registry_version)
     }
 
     fn server_config_without_client_auth(
@@ -51,6 +52,11 @@ impl TlsConfig for PeerRestrictedTlsConfig {
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<ClientConfig, TlsConfigError> {
+        if self.should_fail.load(Ordering::Relaxed) {
+            return Err(TlsConfigError::MalformedSelfCertificate {
+                internal_error: "".to_string(),
+            });
+        }
         self.crypto.client_config(server, registry_version)
     }
 }

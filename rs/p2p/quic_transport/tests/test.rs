@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::common::PeerRestrictedTlsConfig;
+use crate::common::FailingTlsConfig;
 use axum::{http::Request, Router};
 use bytes::Bytes;
 use futures::FutureExt;
@@ -733,8 +733,7 @@ fn test_transient_failing_tls() {
 
         let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2]);
 
-        let tls_2 = Arc::new(PeerRestrictedTlsConfig::new(NODE_2, &registry_handle));
-        tls_2.set_allowed_peers(vec![NODE_2]);
+        let tls_2 = Arc::new(FailingTlsConfig::new(NODE_2, &registry_handle));
 
         // Client
         add_transport_to_sim(
@@ -784,7 +783,7 @@ fn test_transient_failing_tls() {
         .expect("Nodes should not connect");
 
         // Node 2 is server here. Allow node 1 to connect again.
-        tls_2.set_allowed_peers(vec![NODE_2, NODE_1]);
+        tls_2.set_should_fail(false);
         // This triggers a tls reconfiguration because it is a topology change.
         registry_handle.set_oldest_consensus_registry_version(RegistryVersion::from(2));
         wait_for(&mut sim, || conn_checker.fully_connected()).expect("Nodes failed to reconnect");

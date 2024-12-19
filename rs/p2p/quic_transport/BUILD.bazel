@@ -79,9 +79,10 @@ rust_test_suite_with_extra_srcs(
     size = "small",
     srcs = glob(
         ["tests/**/*.rs"],
+        exclude = ["tests/common.rs"],
     ),
     aliases = ALIASES,
-    extra_srcs = [],
+    extra_srcs = ["tests/common.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":quic_transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
