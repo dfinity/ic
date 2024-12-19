@@ -302,7 +302,6 @@ members = [
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
     "rs/rust_canisters/canister_creator",
