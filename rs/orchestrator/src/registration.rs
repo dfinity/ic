@@ -219,7 +219,13 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
-            node_reward_type: self.node_config.registration.node_reward_type.clone(),
+            node_reward_type: if self.node_config.registration.node_reward_type.as_deref()
+                == Some("")
+            {
+                None
+            } else {
+                self.node_config.registration.node_reward_type.clone()
+            },
 
             // The following fields are unused.
             p2p_flow_endpoints: Default::default(), // unused field

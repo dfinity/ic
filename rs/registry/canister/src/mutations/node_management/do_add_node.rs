@@ -78,23 +78,19 @@ impl Registry {
 
         // 3. Check if node reward type is valid, if node rewards table is not empty, and the field is in the request
         // The node rewards table is empty on testnets and local deployments such as UTOPIA.
-        let node_reward_type = if self.is_node_rewards_table_empty() {
-            None
-        } else {
-            payload
-                .node_reward_type
-                .as_ref()
-                .map(|t| {
-                    validate_str_as_node_reward_type(t).map_err(|e| {
-                        format!(
-                            "{}do_add_node: Error parsing node type from payload: {}",
-                            LOG_PREFIX, e
-                        )
-                    })
+        let node_reward_type = payload
+            .node_reward_type
+            .as_ref()
+            .map(|t| {
+                validate_str_as_node_reward_type(t).map_err(|e| {
+                    format!(
+                        "{}do_add_node: Error parsing node type from payload: {}",
+                        LOG_PREFIX, e
+                    )
                 })
-                .transpose()?
-                .map(|node_reward_type| node_reward_type as i32)
-        };
+            })
+            .transpose()?
+            .map(|node_reward_type| node_reward_type as i32);
 
         // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -178,7 +174,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
-        _ => return Err(format!("Invalid node type: {}", type_string)),
+        _ => return Err(format!("Invalid node type: '{}'", type_string)),
     })
 }
 
