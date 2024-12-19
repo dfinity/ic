@@ -197,6 +197,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -205,6 +206,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -213,6 +215,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 

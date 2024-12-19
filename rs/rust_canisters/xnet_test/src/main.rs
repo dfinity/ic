@@ -70,6 +70,7 @@ struct Request {
     /// Local time observed in the round when this message was sent.
     time_nanos: u64,
     /// Optional padding, to bring the payload to the desired byte size.
+    #[serde(with = "serde_bytes")]
     padding: Vec<u8>,
 }
 
@@ -80,6 +81,7 @@ struct Reply {
     /// roundtrip latency on the caller side.
     time_nanos: u64,
     /// Optional padding, to bring the payload to the desired byte size.
+    #[serde(with = "serde_bytes")]
     padding: Vec<u8>,
 }
 

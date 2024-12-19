@@ -29,10 +29,10 @@ rust_binary(
     srcs = [
         "src/main.rs",
     ],
-    args = ["$(location //:mainnet-canisters.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
+    args = ["$(location //:mainnet-canister-revisions.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [
         ":tools",
-        "//:mainnet-canisters.json",
+        "//:mainnet-canister-revisions.json",
     ],
     deps = DEPENDENCIES,
 )
