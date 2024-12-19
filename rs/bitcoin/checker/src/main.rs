@@ -4,7 +4,7 @@ use ic_btc_checker::{
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
     CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -227,10 +227,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             for ((provider, status), count) in stats.https_outcall_status.iter() {
                 counter = counter
                     .value(
-                        &[
-                            ("provider", provider.as_str()),
-                            ("status", status.to_string().as_str()),
-                        ],
+                        &[("provider", provider.as_str()), ("status", &status)],
                         *count as f64,
                     )
                     .unwrap();
@@ -413,7 +410,18 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 }
                 Ok(tx)
             }
-            Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
+            Err((r, m)) if is_response_too_large(&r, &m) => {
+                if max_response_bytes >= RETRY_MAX_RESPONSE_BYTES {
+                    STATS.with(|s| {
+                        let mut stat = s.borrow_mut();
+                        *stat
+                            .https_outcall_status
+                            .entry((provider.name(), "ResponseTooLarge".to_string()))
+                            .or_default() += 1;
+                    });
+                }
+                Err(HttpGetTxError::ResponseTooLarge)
+            }
             Err((r, m)) => {
                 STATS.with(|s| {
                     let mut stat = s.borrow_mut();
