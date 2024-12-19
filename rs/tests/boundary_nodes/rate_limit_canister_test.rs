@@ -14,18 +14,21 @@ Coverage:: The rate-limit canister interface works as expected.
 
 end::catalog[] */
 
+use anyhow::bail;
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
+use ic_system_test_driver::retry_with_msg_async;
 use k256::elliptic_curve::SecretKey;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use slog::{info, Logger};
 use std::time::Duration;
 use std::{env, net::SocketAddr};
-use tokio::{runtime::Runtime, time::sleep};
+use tokio::runtime::Runtime;
+use tokio::time::timeout;
 
 use ic_agent::{
     agent::http_transport::{reqwest_transport::reqwest::Client, ReqwestTransport},
@@ -51,7 +54,32 @@ use rate_limits_api::{
     AddConfigResponse, GetConfigResponse, InitArg, InputConfig, InputRule, RuleId, Version,
 };
 
+const RATE_LIMIT_CANISTER_ID: &str = "u637p-5aaaa-aaaaq-qaaca-cai";
+
+/* tag::catalog[]
+Title:: Rate-limit canister integration with API boundary nodes
+
+Goal:: Ensure rate-limit rules can be added to the canister and are properly enforced by API Boundary Nodes.
+
+Runbook:
+1. Set up an Internet Computer (IC) with a system-subnet and an API boundary node.
+2. Install the rate-limit canister at a specified mainnet ID.
+3. Create two `ic-agent` instances:
+   - nns_agent associated with an NNS node.
+   - api_bn_agent associated with an API boundary node.
+4. Verify that both agents can successfully read configurations from the rate-limit canister.
+5. Add a rate-limit rule to the canister that blocks requests to itself.
+6. Verify that the api_bn_agent can no longer send requests to the rate-limit canister.
+7. Update the rate-limit rule via nns_agent, which unblocks requests to the canister.
+8. Verify that the api_bn_agent can send requests to the rate-limit canister again.
+
+end::catalog[] */
+
 pub fn setup(env: TestEnv) {
+    info!(
+        &env.logger(),
+        "Step 1. Set up an Internet Computer (IC) with a system-subnet and an API boundary node"
+    );
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .use_specified_ids_allocation_range()
@@ -79,44 +107,23 @@ pub fn setup(env: TestEnv) {
 pub fn complete_flow_test(env: TestEnv) {
     let logger = env.logger();
 
-    let rt = Runtime::new().expect("Could not create tokio runtime.");
-
     let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
     let full_access_identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
     let full_access_principal = full_access_identity.sender().unwrap();
-    let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-
-    let api_bn_ipv6 = SocketAddr::new(api_bn.get_ip_addr(), 0).into();
-    let api_bn_domain = api_bn.get_domain().unwrap();
-
-    let client = Client::builder()
-        .danger_accept_invalid_certs(true)
-        .resolve(&api_bn_domain, api_bn_ipv6)
-        .build()
-        .expect("Could not create HTTP client.");
-
-    let transport =
-        ReqwestTransport::create_with_client(format!("https://{api_bn_domain}"), client).unwrap();
-
-    let api_bn_agent = Agent::builder()
-        .with_transport(transport)
-        .with_identity(full_access_identity.clone())
-        .build()
-        .unwrap();
-    let _ = rt.block_on(api_bn_agent.fetch_root_key());
-
-    info!(&logger, "installing rate-limit canister ...");
-
-    let canister_id = Principal::from_text("u637p-5aaaa-aaaaq-qaaca-cai").unwrap();
 
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let agent_nns = nns_node.build_default_agent();
+    let mut nns_agent = nns_node.build_default_agent();
+    nns_agent.set_identity(full_access_identity.clone());
+
+    let canister_id = Principal::from_text(RATE_LIMIT_CANISTER_ID).unwrap();
 
     info!(
         &logger,
-        "creating rate-limit canister at specific id={canister_id} ..."
+        "Step 2. Install the rate-limit canister at a specified mainnet ID {canister_id}"
     );
+
+    let rt = Runtime::new().expect("Could not create tokio runtime.");
 
     let mut rate_limit_canister = rt
         .block_on(nns.create_canister_at_id(PrincipalId(canister_id)))
@@ -128,7 +135,7 @@ pub fn complete_flow_test(env: TestEnv) {
     })
     .unwrap();
 
-    info!(&logger, "installing rate-limit canister wasm");
+    info!(&logger, "Installing rate-limit canister wasm ...");
 
     rt.block_on(install_rust_canister_from_path(
         &mut rate_limit_canister,
@@ -141,44 +148,122 @@ pub fn complete_flow_test(env: TestEnv) {
 
     info!(
         &logger,
-        "rate-limit canister with id={canister_id} installed successfully"
+        "Rate-limit canister with id={canister_id} installed successfully"
     );
 
+    info!(
+        &logger,
+        "Step 3. Create two ic-agent instances, one for nns-node and one API node"
+    );
+
+    let api_bn_agent = {
+        let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
+        let api_bn_ipv6 = SocketAddr::new(api_bn.get_ip_addr(), 0);
+        let api_bn_domain = api_bn.get_domain().unwrap();
+        let client = Client::builder()
+            .danger_accept_invalid_certs(true)
+            .resolve(&api_bn_domain, api_bn_ipv6)
+            .build()
+            .expect("Could not create HTTP client.");
+        let transport =
+            ReqwestTransport::create_with_client(format!("https://{api_bn_domain}"), client)
+                .unwrap();
+        let agent = Agent::builder()
+            .with_transport(transport)
+            .with_identity(full_access_identity)
+            .build()
+            .unwrap();
+        let _ = rt.block_on(agent.fetch_root_key());
+        agent
+    };
+
     rt.block_on(async move {
-        info!(&logger, "Reading a config from rate-limit canister");
-        let _config = read_config(logger.clone(), &api_bn_agent, 1, canister_id).await;
-        info!(&logger, "Add a new config (version = 2) containing some rules (FullAccess level of the caller is required)");
-        add_config_1(logger.clone(), &api_bn_agent, canister_id).await;
+        info!(
+                &logger,
+                "Step 4. Verify that both agents can successfully read configurations from the rate-limit canister"
+            );
 
-        let logger = env.logger();
-        tokio::spawn(async move {
-            loop {
-                info!(logger, "Trying to read config via nns ...");
-                let _config = read_config(logger.clone(), &agent_nns, 2, canister_id).await;
-                sleep(Duration::from_secs(5)).await;
+        let _ = read_config(logger.clone(), &api_bn_agent, 1, canister_id).await;
+        let _ = read_config(logger.clone(), &nns_agent, 1, canister_id).await;
+
+        info!(
+            &logger,
+            "Step 5. Add a rate-limit rule to the canister that blocks access to itself"
+        );
+        add_config(logger.clone(), &api_bn_agent, canister_id, Action::Block).await;
+
+        info!(
+            &logger,
+            "Step 6. Verify canister becomes unreachable for the agent associated with API node"
+        );
+
+        retry_with_msg_async!(
+            "check_canister_becomes_unreachable".to_string(),
+            &logger,
+            Duration::from_secs(180),
+            Duration::from_secs(5),
+            || async {
+                match timeout(
+                    Duration::from_secs(2),
+                    read_config(logger.clone(), &api_bn_agent, 2, canister_id),
+                )
+                .await
+                {
+                    Ok(_) => bail!("rate-limit canister is still reachable, retrying"),
+                    Err(_) => Ok(()),
+                }
             }
-        });
+        )
+        .await
+        .expect("failed to check that canister becomes unreachable");
 
-        let logger = env.logger();
-        tokio::spawn(async move {
-            loop {
-                info!(logger, "Trying to read config via api ...");
-                let _config = read_config(logger.clone(), &api_bn_agent, 2, canister_id).await;
-                sleep(Duration::from_secs(5)).await;
+        info!(
+            &logger,
+            "Step 7. Update the rate-limit rule to unblock access to the canister"
+        );
+
+        add_config(
+            logger.clone(),
+            &nns_agent,
+            canister_id,
+            Action::Limit(300, Duration::from_secs(60)),
+        )
+        .await;
+
+        info!(
+            &logger,
+            "Step 8. Verify canister becomes reachable for the agent associated with API node"
+        );
+
+        retry_with_msg_async!(
+            "check_canister_becomes_reachable".to_string(),
+            &logger,
+            Duration::from_secs(180),
+            Duration::from_secs(5),
+            || async {
+                match timeout(
+                    Duration::from_secs(2),
+                    read_config(logger.clone(), &api_bn_agent, 3, canister_id),
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(_) => bail!("rate-limit canister is still unreachable, retrying"),
+                }
             }
-        });
-
-        sleep(Duration::from_secs(200)).await;
+        )
+        .await
+        .expect("failed to check that canister becomes reachable");
     });
 }
 
-async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
+async fn add_config(logger: Logger, agent: &Agent, canister_id: Principal, action: Action) {
     let rule = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: None,
         request_types: None,
-        limit: Action::Block,
+        limit: action,
     };
 
     let args = Encode!(&InputConfig {
@@ -186,9 +271,7 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         rules: vec![InputRule {
             incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
             rule_raw: rule.to_bytes_json().unwrap(),
-            description:
-                "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
-                    .to_string(),
+            description: "Setting a rate-limit rule for the canister".to_string(),
         },],
     })
     .unwrap();
