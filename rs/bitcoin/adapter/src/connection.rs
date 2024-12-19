@@ -1,5 +1,5 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::network::message::NetworkMessage;
+use bitcoin::p2p::message::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};

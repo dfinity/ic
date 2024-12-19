@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 askama = { workspace = true }
 base64 = { workspace = true }
-bitcoin = { version = "0.32.2", default-features = false }
+bitcoin = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }

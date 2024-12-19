@@ -272,12 +272,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bit-vec": crate.spec(
                 version = "^0.6.3",
             ),
-            "bitcoin-0-32": crate.spec(
-                package = "bitcoin",
-                version = "^0.32.2",
-                default_features = False,
-            ),
             "bitcoin": crate.spec(
+                version = "^0.32.5",
+                features = [
+                    "default",
+                    "rand",
+                    "serde",
+                ],
+            ),
+            "bitcoin-0-28": crate.spec(
+                package = "bitcoin",
                 version = "^0.28.2",
                 features = [
                     "default",
@@ -286,7 +290,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
-                version = "^0.15.0",
+                version = "^0.19.0",
             ),
             "bitcoind": crate.spec(
                 version = "^0.32.0",
@@ -1122,6 +1126,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.17.1",
             ),
             "secp256k1": crate.spec(
+                version = "^0.29",
+                features = [
+                    "global-context",
+                    "rand-std",
+                ],
+            ),
+            "secp256k1-0-22": crate.spec(
+                package = "secp256k1",
                 version = "^0.22",
                 features = [
                     "global-context",

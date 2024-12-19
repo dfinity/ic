@@ -1,7 +1,9 @@
+use bitcoin::io as bitcoin_io;
 use bitcoin::{
     consensus::serialize,
-    network::message::RawNetworkMessage,
-    {consensus::encode, network::message::NetworkMessage},
+    p2p::message::RawNetworkMessage,
+    p2p::Magic,
+    {consensus::encode, p2p::message::NetworkMessage},
 };
 use futures::TryFutureExt;
 use http::Uri;
@@ -69,7 +71,7 @@ pub struct StreamConfig {
     pub logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    pub magic: u32,
+    pub magic: Magic,
     /// This field is used to receive network messages to send out to the connected
     /// BTC node.
     pub network_message_receiver: UnboundedReceiver<NetworkMessage>,
@@ -116,8 +118,8 @@ pub struct Stream {
     read_half: OwnedReadHalf,
     write_half: OwnedWriteHalf,
     /// This field is used to provide the magic value to the raw network message.
-    /// The magic number is used to identity the type of Bitcoin network being accessed.
-    magic: u32,
+    /// The magic number is used to identify the type of Bitcoin network being accessed.
+    magic: Magic,
     /// This field contains the receiver used to intake messages that are to be
     /// sent to the connected node.
     network_message_receiver: UnboundedReceiver<NetworkMessage>,
@@ -228,7 +230,9 @@ impl Stream {
                 // If the read successfully received bytes, then the bytes are added to the
                 // unparsed buffer to attempt another deserialize call. If no bytes found,
                 // return the unexpected end-of-file error.
-                Err(encode::Error::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                Err(encode::Error::Io(ref err))
+                    if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof =>
+                {
                     let count = self
                         .read_half
                         .try_read(&mut self.data)
@@ -248,7 +252,7 @@ impl Stream {
                 // and then re-wrap it into a StreamError.
                 Err(err) => {
                     return Err(match err {
-                        encode::Error::Io(err) => StreamError::Io(err),
+                        encode::Error::Io(err) => StreamError::Io(err.into()),
                         err => StreamError::Encode(err),
                     });
                 }
@@ -265,10 +269,7 @@ impl Stream {
     /// This function is used to write a network message to the connected Bitcoin
     /// node.
     async fn write_message(&mut self, network_message: NetworkMessage) -> StreamResult<()> {
-        let raw_network_message = RawNetworkMessage {
-            magic: self.magic,
-            payload: network_message,
-        };
+        let raw_network_message = RawNetworkMessage::new(self.magic, network_message);
         let bytes = serialize(&raw_network_message);
         self.write_half
             .write_all(bytes.as_slice())
@@ -290,7 +291,7 @@ impl Stream {
         let raw_message = self.read_message()?;
         let result = self
             .network_message_sender
-            .send((self.address, raw_message.payload))
+            .send((self.address, raw_message.payload().clone()))
             .await;
         if result.is_err() {
             return Err(StreamError::UnableToReceiveMessages);
@@ -411,10 +412,10 @@ pub mod test {
         // Send message that exceeds size limit.
         tokio::spawn(async move {
             let (mut socket, _addr) = listener.accept().await.unwrap();
-            let addr = RawNetworkMessage {
-                magic: network.magic(),
-                payload: NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE + 10]),
-            };
+            let addr = RawNetworkMessage::new(
+                network.magic(),
+                NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE + 10]),
+            );
             let mut buf = Vec::new();
             let raw_addr = addr.consensus_encode(&mut buf).unwrap();
             socket.write_all(&buf[..raw_addr]).await.unwrap();
@@ -492,18 +493,18 @@ pub mod test {
         );
 
         // Large messgage just below limit.
-        let payload_large = RawNetworkMessage {
-            magic: network.magic(),
-            payload: NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE - 30]),
-        };
+        let payload_large = RawNetworkMessage::new(
+            network.magic(),
+            NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE - 30]),
+        );
         let mut buf_large = Vec::new();
         let _ = payload_large.consensus_encode(&mut buf_large).unwrap();
 
         // Message that crosses the boundary limit.
-        let payload_small = RawNetworkMessage {
-            magic: network.magic(),
-            payload: NetworkMessage::Alert(vec![0; 31 + STREAM_BUFFER_SIZE]),
-        };
+        let payload_small = RawNetworkMessage::new(
+            network.magic(),
+            NetworkMessage::Alert(vec![0; 31 + STREAM_BUFFER_SIZE]),
+        );
         let mut buf_small = Vec::new();
         let _ = payload_small.consensus_encode(&mut buf_small).unwrap();
 
@@ -515,11 +516,11 @@ pub mod test {
 
         assert_eq!(
             net_rx.recv().await.unwrap(),
-            (address, payload_large.payload)
+            (address, payload_large.payload().clone())
         );
         assert_eq!(
             net_rx.recv().await.unwrap(),
-            (address, payload_small.payload)
+            (address, payload_small.payload().clone())
         );
     }
 }
