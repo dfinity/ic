@@ -27,10 +27,11 @@ where
     T: HasTestEnv + Send + Sync,
 {
     async fn deploy_legacy_asset_canister(&self) -> Result<AssetCanisterClient> {
-        self.deploy_asset_canister("ASSET_CANISTER_WASM_PATH")
+        self.deploy_asset_canister("ASSET_CANISTER_WASM_PATH").await
     }
     async fn deploy_long_asset_canister(&self) -> Result<AssetCanisterClient> {
         self.deploy_asset_canister("LONG_ASSET_CANISTER_WASM_PATH")
+            .await
     }
     async fn deploy_asset_canister(&self, wasm_env_var_name: &str) -> Result<AssetCanisterClient> {
         let env = self.test_env();
@@ -39,9 +40,11 @@ where
 
         let canister_id = task::spawn_blocking({
             let app_node = app_node.clone();
+            let wasm_env_var_name = wasm_env_var_name.to_string();
             move || {
                 app_node.create_and_install_canister_with_arg(
-                    &env::var(wasm_env_var_name).expect(&format!("{} not set", wasm_env_var_name)),
+                    &env::var(wasm_env_var_name.clone())
+                        .expect(&format!("{} not set", wasm_env_var_name)),
                     None,
                 )
             }

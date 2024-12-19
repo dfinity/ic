@@ -764,7 +764,6 @@ const ASSET_CHUNK_SIZE: usize = 2_000_000;
 const ONE_CHUNK_ASSET_LEN: usize = ASSET_CHUNK_SIZE;
 const TWO_CHUNKS_ASSET_LEN: usize = ASSET_CHUNK_SIZE + 1;
 const SIX_CHUNKS_ASSET_LEN: usize = 5 * ASSET_CHUNK_SIZE + 12;
-const TEN_CHUNKS_ASSET_LEN: usize = 10 * ASSET_CHUNK_SIZE;
 
 pub fn long_asset_canister_test(env: TestEnv) {
     let logger_orig = env.logger();
@@ -801,7 +800,6 @@ pub fn long_asset_canister_test(env: TestEnv) {
     futs.push(rt.spawn({
         let host = host_orig.clone();
         let logger = logger_orig.clone();
-        let asset_canister = asset_canister_orig.clone();
         let http_client = http_client.clone();
         let name = "Requesting a single chunk asset";
         info!(&logger, "Starting subtest {}", name);
@@ -819,6 +817,58 @@ pub fn long_asset_canister_test(env: TestEnv) {
 
             if res.len() != ONE_CHUNK_ASSET_LEN {
                 bail!("/long_asset_one_chunk response did not match uploaded content")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a two chunk asset";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "Requesting /long_asset_two_chunks ...");
+            let res = http_client
+                .get(format!("https://{host}/long_asset_two_chunks"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res.len() != TWO_CHUNKS_ASSET_LEN {
+                bail!("/long_asset_two_chunks response did not match uploaded content")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a six chunk asset";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "Requesting /long_asset_six_chunks ...");
+            let res = http_client
+                .get(format!("https://{host}/long_asset_six_chunks"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res.len() != SIX_CHUNKS_ASSET_LEN {
+                bail!("/long_asset_six_chunks response did not match uploaded content")
             }
 
             Ok(())
