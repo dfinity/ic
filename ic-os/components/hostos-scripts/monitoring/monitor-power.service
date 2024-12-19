@@ -7,5 +7,9 @@ After=node_exporter.service
 Type=oneshot
 ExecStart=/opt/ic/bin/monitor-power.sh
 
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2
+
 [Install]
 WantedBy=multi-user.target
