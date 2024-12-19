@@ -111,7 +111,7 @@ function configure_netplan() {
     sed -i "s|{IPV6_GATEWAY}|${IPV6_GATEWAY}|g" "$NETPLAN_OUTPUT"
 
     # Dynamically add ethernets for each interface in descending speed
-    for IFACE in ${SORTED_INTERFACES}; do
+    for IFACE in $SORTED_INTERFACES; do
         sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      emit-lldp: true\n" "$NETPLAN_OUTPUT"
     done
 
