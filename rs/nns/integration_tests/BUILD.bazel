@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:pocket-ic-tests.bzl", "pocket_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -155,7 +156,6 @@ DEV_DATA = [
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
@@ -184,7 +184,6 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
     "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
@@ -266,7 +265,7 @@ rust_canister(
     ],
 )
 
-rust_ic_test_suite_with_extra_srcs(
+pocket_ic_test(
     name = "integration_tests_test",
     timeout = "long",
     srcs = glob(
@@ -286,13 +285,14 @@ rust_ic_test_suite_with_extra_srcs(
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
     flaky = True,
+    macro = rust_ic_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
 # See the .bazelrc for more configuration information.
-rust_ic_test(
+pocket_ic_test(
     name = "governance_mem_test",
     size = "large",
     srcs = [
@@ -303,6 +303,7 @@ rust_ic_test(
     crate_root = "src/governance_mem_test.rs",
     data = DEV_DATA,
     env = DEV_ENV,
+    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -310,7 +311,7 @@ rust_ic_test(
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:canister_playground` --test_output=all
 # See the .bazelrc for more configuration information.
-rust_ic_test(
+pocket_ic_test(
     name = "canister_playground",
     srcs = [
         "src/canister_playground.rs",
@@ -320,6 +321,7 @@ rust_ic_test(
     crate_root = "src/canister_playground.rs",
     data = DEV_DATA,
     env = DEV_ENV,
+    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -345,7 +347,7 @@ rust_ic_test(
 # at the end.
 #
 # See the .bazelrc for more configuration information.
-rust_ic_test(
+pocket_ic_test(
     name = "copy_inactive_neurons_to_stable_memory_test",
     # This uses on the order of 10 GB of disk space.
     # Therefore, size = "large" is not large enough.
@@ -357,6 +359,7 @@ rust_ic_test(
     crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
     data = DEV_DATA,
     env = DEV_ENV,
+    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "manual",  # CI should not be downloading nns_state.tar.zst.
@@ -406,7 +409,7 @@ rust_ic_test(
 # is required in order to proceed with upgrading the CMC.
 #
 # TODO: When the plaform supports best-effort requests, make the CMC use that.
-rust_ic_test(
+pocket_ic_test(
     name = "upgrade_canisters_with_golden_nns_state",
     # This uses on the order of 10 GB of disk space.
     # Therefore, size = "large" is not large enough.
@@ -418,6 +421,7 @@ rust_ic_test(
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
+    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
