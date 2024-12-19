@@ -37,7 +37,7 @@ use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{init, post_upgrade, query, spawn, update};
+use ic_cdk::{post_upgrade, query, spawn, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -68,7 +68,7 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error
 // messages are quite obscure.
-#[init]
+#[export_name = "canister_init"]
 fn canister_init() {
     println!("{}canister_init", LOG_PREFIX);
 }
