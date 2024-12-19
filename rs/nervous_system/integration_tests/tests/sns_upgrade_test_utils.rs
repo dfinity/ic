@@ -11,7 +11,7 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-use ic_sns_governance::pb::v1::upgrade_journal_entry;
+use ic_sns_governance_api::pb::v1::upgrade_journal_entry;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 
