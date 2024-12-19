@@ -22,7 +22,7 @@ impl From<NodeRewardType> for String {
 
 impl std::fmt::Display for NodeRewardType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", String::from(self.clone()))
+        write!(f, "{}", String::from(*self))
     }
 }
 
