@@ -104,12 +104,14 @@ rust_test(
             conf["ledger_wasm"],
         ],
         env = {
+            "RUST_TEST_THREADS": "4",
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
             "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
         extra_srcs = ["tests/common/mod.rs"],
+        tags = ["cpu:4"],
         deps = [
             # Keep sorted.
             ":index-ng",
