@@ -60,7 +60,6 @@ checkpolicy
 
 # HostOS additions
 dosfstools
-ethtool
 ipmitool
 libarchive-zip-perl
 libusb-1.0-0

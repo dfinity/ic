@@ -20,7 +20,6 @@ ssh
 attr
 ca-certificates
 curl
-ethtool
 efibootmgr
 faketime
 gdisk

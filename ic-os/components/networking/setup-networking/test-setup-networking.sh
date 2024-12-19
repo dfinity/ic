@@ -18,22 +18,20 @@ SHELL=/bin/bash
 function mock_tools() {
     export SYS_NET_PATH="${TEST_DIR}/sys/class/net"
     mkdir -p "${SYS_NET_PATH}"
-    mkdir -p "${TEST_DIR}/sys/devices/mock_devices/"
-    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth0"
-    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth1"
-    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth2"
 
-    cat >"${TEST_DIR}/ethtool" <<'EOF'
-#!/bin/bash
-IFACE="$1"
-case "$IFACE" in
-    eth0) echo "Speed: 100Mb/s" ;;
-    eth1) echo "Speed: 1000Mb/s" ;;
-    eth2) echo "Speed: 10000Mb/s" ;;
-    *) echo "Speed: Unknown" ;;
-esac
-EOF
-    chmod +x "${TEST_DIR}/ethtool"
+    mkdir -p "${TEST_DIR}/sys/devices/mock_devices_eth0"
+    mkdir -p "${TEST_DIR}/sys/devices/mock_devices_eth1"
+    mkdir -p "${TEST_DIR}/sys/devices/mock_devices_eth2"
+
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices_eth0" "${SYS_NET_PATH}/eth0"
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices_eth1" "${SYS_NET_PATH}/eth1"
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices_eth2" "${SYS_NET_PATH}/eth2"
+
+    # Intentionally absent eth0/speed:
+    # echo "0" > "$SYS_NET_PATH/eth0/speed"
+
+    echo "1000" > "$SYS_NET_PATH/eth1/speed"
+    echo "2500" > "$SYS_NET_PATH/eth2/speed"
 
     mkdir -p "${TEST_DIR}/opt/ic/bin"
     cat >"${TEST_DIR}/opt/ic/bin/setupos_tool" <<'EOF'

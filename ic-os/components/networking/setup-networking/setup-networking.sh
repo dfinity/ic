@@ -72,8 +72,12 @@ function gather_interfaces_by_speed() {
     declare -A SPEED_MAP
 
     for IFACE in "${INTERFACES[@]}"; do
-        SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
-        SPEED=$(echo "$SPEED_STR" | grep -Eo '[0-9]+' || echo 0)
+        if [ -f "$SYS_NET_PATH/$IFACE/speed" ]; then
+            SPEED=$(cat "$SYS_NET_PATH/$IFACE/speed" 2>/dev/null || echo 0)
+        else
+            SPEED=0
+            echo "Warning: Unable to determine speed for interface $IFACE, defaulting to 0." >&2
+        fi
         SPEED_MAP["$IFACE"]=$SPEED
     done
 
