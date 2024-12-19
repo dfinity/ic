@@ -91,14 +91,14 @@ pub fn test_icrc106_set_index_in_upgrade<T, U>(
         ledger_canister_id: CanisterId,
         index_principal: Principal,
     ) {
-        assert_icrc106_supported(&env, ledger_canister_id);
+        assert_icrc106_supported(env, ledger_canister_id);
         assert_eq!(
             Ok(index_principal),
-            icrc106_get_index_principal(&env, ledger_canister_id)
+            icrc106_get_index_principal(env, ledger_canister_id)
         );
         assert_eq!(
             &Value::Text(index_principal.to_text()),
-            metadata(&env, ledger_canister_id)
+            metadata(env, ledger_canister_id)
                 .get("icrc106:index_principal")
                 .expect("should have index principal metadata")
         );
