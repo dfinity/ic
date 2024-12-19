@@ -4,14 +4,13 @@ use ic_btc_checker::{
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
     CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
-use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -28,10 +27,9 @@ use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
 #[derive(Default)]
 struct Stats {
-    https_outcall_status: BTreeMap<(String, u16), u64>,
+    https_outcall_status: BTreeMap<(String, String), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
-    check_address_count: u64,
 }
 
 thread_local! {
@@ -57,7 +55,6 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
-    STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
@@ -230,10 +227,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             for ((provider, status), count) in stats.https_outcall_status.iter() {
                 counter = counter
                     .value(
-                        &[
-                            ("provider", provider.as_str()),
-                            ("status", status.to_string().as_str()),
-                        ],
+                        &[("provider", provider.as_str()), ("status", status)],
                         *count as f64,
                     )
                     .unwrap();
@@ -258,11 +252,6 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 .value(
                     &[("type", "check_transaction")],
                     stats.check_transaction_count as f64,
-                )
-                .unwrap()
-                .value(
-                    &[("type", "check_address")],
-                    stats.check_address_count as f64,
                 )
                 .unwrap();
         });
@@ -373,7 +362,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((provider.name(), response.status.0.to_u16().unwrap()))
+                        .entry((provider.name(), response.status.0.to_string()))
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
@@ -421,8 +410,26 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 }
                 Ok(tx)
             }
-            Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
+            Err((r, m)) if is_response_too_large(&r, &m) => {
+                if max_response_bytes >= RETRY_MAX_RESPONSE_BYTES {
+                    STATS.with(|s| {
+                        let mut stat = s.borrow_mut();
+                        *stat
+                            .https_outcall_status
+                            .entry((provider.name(), "ResponseTooLarge".to_string()))
+                            .or_default() += 1;
+                    });
+                }
+                Err(HttpGetTxError::ResponseTooLarge)
+            }
             Err((r, m)) => {
+                STATS.with(|s| {
+                    let mut stat = s.borrow_mut();
+                    *stat
+                        .https_outcall_status
+                        .entry((provider.name(), format!("{:?}", r)))
+                        .or_default() += 1;
+                });
                 log!(
                     DEBUG,
                     "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}, Request: {request:?}"

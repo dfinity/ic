@@ -24,7 +24,6 @@ ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
-num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = {workspace = true }
 time = { workspace = true }
@@ -39,4 +38,5 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 tokio = { workspace = true }
+regex = { workspace = true }
 scraper = "0.17.1"
