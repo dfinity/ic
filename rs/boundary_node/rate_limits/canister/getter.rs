@@ -121,7 +121,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
             rules.push(output_rule);
         }
 
-        let mut config = OutputConfig {
+        let config = OutputConfig {
             schema_version: stored_config.schema_version,
             is_redacted: false,
             rules,
@@ -131,18 +131,20 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
             == AccessLevel::FullAccess
             || self.access_resolver.get_access_level() == AccessLevel::FullRead;
 
-        // Hide non-disclosed rules from unauthorized viewers.
-        if !is_authorized_viewer {
-            config = self.formatter.format(config);
+        if is_authorized_viewer {
+            return Ok(api::ConfigResponse {
+                version,
+                active_since: stored_config.active_since,
+                config: config.into(),
+            });
         }
 
-        let config_response = api::ConfigResponse {
+        // Hide non-disclosed rules from unauthorized viewers.
+        Ok(api::ConfigResponse {
             version,
             active_since: stored_config.active_since,
-            config: config.into(),
-        };
-
-        Ok(config_response)
+            config: self.formatter.format(config).into(),
+        })
     }
 }
 
@@ -165,6 +167,10 @@ impl<
             .get_incident(&incident_id)
             .ok_or_else(|| GetEntityError::NotFound(incident_id.0.to_string()))?;
 
+        let is_authorized_viewer = self.access_resolver.get_access_level()
+            == AccessLevel::FullAccess
+            || self.access_resolver.get_access_level() == AccessLevel::FullRead;
+
         let mut output_rules = Vec::with_capacity(stored_incident.rule_ids.len());
 
         for rule_id in stored_incident.rule_ids.into_iter() {
@@ -173,7 +179,7 @@ impl<
                 GetEntityError::Internal(anyhow::anyhow!("Rule with id={rule_id} not found"))
             })?;
 
-            let mut output_rule = OutputRuleMetadata {
+            let output_rule = OutputRuleMetadata {
                 id: rule_id,
                 incident_id,
                 rule_raw: Some(stored_rule.rule_raw),
@@ -183,15 +189,13 @@ impl<
                 removed_in_version: stored_rule.removed_in_version,
             };
 
-            // Hide non-disclosed rule from unauthorized viewers.
-            let is_authorized_viewer = self.access_resolver.get_access_level()
-                == AccessLevel::FullAccess
-                || self.access_resolver.get_access_level() == AccessLevel::FullRead;
-            if !is_authorized_viewer {
-                output_rule = self.formatter.format(output_rule);
+            if is_authorized_viewer {
+                output_rules.push(output_rule.into());
+            } else {
+                // Hide non-disclosed rule from unauthorized viewers.
+                let output_rule = self.formatter.format(output_rule);
+                output_rules.push(output_rule.into());
             }
-
-            output_rules.push(output_rule.into());
         }
 
         Ok(output_rules)
@@ -217,7 +221,7 @@ impl<
             .get_rule(&rule_id)
             .ok_or_else(|| GetEntityError::NotFound(rule_id.0.to_string()))?;
 
-        let mut output_rule = OutputRuleMetadata {
+        let output_rule = OutputRuleMetadata {
             id: rule_id,
             incident_id: stored_rule.incident_id,
             rule_raw: Some(stored_rule.rule_raw),
@@ -232,9 +236,11 @@ impl<
             == AccessLevel::FullAccess
             || self.access_resolver.get_access_level() == AccessLevel::FullRead;
 
-        if !is_authorized_viewer {
-            output_rule = self.formatter.format(output_rule);
+        if is_authorized_viewer {
+            return Ok(output_rule.into());
         }
+
+        let output_rule = self.formatter.format(output_rule);
 
         Ok(output_rule.into())
     }
