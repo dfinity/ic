@@ -5888,7 +5888,6 @@ dependencies = [
  "ic-metrics",
  "ic-test-utilities-logger",
  "parking_lot 0.12.3",
- "primitive-types",
  "prometheus",
  "prost 0.13.3",
  "rand 0.8.5",

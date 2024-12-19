@@ -22,8 +22,6 @@ ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = { workspace = true }
-#TODO(mihailjianu): this is likely useless. 
-primitive-types = "0.12"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
