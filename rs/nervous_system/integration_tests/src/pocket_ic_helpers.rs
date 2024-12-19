@@ -1047,20 +1047,29 @@ pub mod nns {
         use super::*;
         use icp_ledger::{Memo, TransferArgs};
 
-        pub async fn icrc1_transfer(
+        pub async fn icrc1_transfer_request(
             pocket_ic: &PocketIc,
             sender: PrincipalId,
             transfer_arg: TransferArg,
-        ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
                     LEDGER_CANISTER_ID.into(),
                     Principal::from(sender),
                     "icrc1_transfer",
                     Encode!(&transfer_arg).unwrap(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+        }
+
+        pub async fn icrc1_transfer(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> Result<Nat, TransferError> {
+            let call_id = icrc1_transfer_request(pocket_ic, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             let result = match result {
                 WasmResult::Reply(result) => result,
                 WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
@@ -1974,21 +1983,32 @@ pub mod sns {
             Decode!(&result, Nat).unwrap()
         }
 
-        pub async fn icrc1_transfer(
+        pub async fn icrc1_transfer_request(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             sender: PrincipalId,
             transfer_arg: TransferArg,
-        ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
                     canister_id.into(),
                     Principal::from(sender),
                     "icrc1_transfer",
                     Encode!(&transfer_arg).unwrap(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+        }
+
+        pub async fn icrc1_transfer(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> Result<Nat, TransferError> {
+            let call_id =
+                icrc1_transfer_request(pocket_ic, canister_id, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             let result = match result {
                 WasmResult::Reply(result) => result,
                 WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
@@ -2232,7 +2252,9 @@ pub mod sns {
         const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 2000;
 
         // Generate a bunch of SNS token transactions.
-        stream::iter(0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE)
+        // Sending all the requests, then awaiting all the responses, is much faster than sending each request in
+        // serial.
+        let transfer_requests = stream::iter(0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE)
             .map(|i| {
                 async move {
                     let user_principal_id = PrincipalId::new_user_test_id(i);
@@ -2240,7 +2262,7 @@ pub mod sns {
                         owner: user_principal_id.0,
                         subaccount: None,
                     };
-                    let _block_height = ledger::icrc1_transfer(
+                    ledger::icrc1_transfer_request(
                         pocket_ic,
                         sns_ledger_canister_id,
                         sns_governance_canister_id,
@@ -2254,9 +2276,13 @@ pub mod sns {
                         },
                     )
                     .await
-                    .unwrap();
                 }
             })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
+        let _transfer_responses = stream::iter(transfer_requests)
+            .map(|call_id| async move { pocket_ic.await_call(call_id).await.unwrap() })
             .buffer_unordered(100)
             .collect::<Vec<_>>()
             .await;
