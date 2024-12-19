@@ -21,7 +21,10 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
 
-    info!(log, "Checking readiness of all honest nodes after the IC setup...");
+    info!(
+        log,
+        "Checking readiness of all honest nodes after the IC setup..."
+    );
     for subnet in topology.subnets() {
         for node in subnet.nodes() {
             // Note that we don't check that malicious nodes are healthy, because it could happen
@@ -29,7 +32,8 @@ pub fn test(env: TestEnv) {
             // their own artifact pools and breaking some invariants resulting in a crash.
             // TODO(CON-1455): investigate if we can prevent malicious nodes from crashing.
             if !node.is_malicious() {
-                node.await_status_is_healthy().expect("Honest node should become healthy eventually")
+                node.await_status_is_healthy()
+                    .expect("Honest node should become healthy eventually")
             }
         }
     }
