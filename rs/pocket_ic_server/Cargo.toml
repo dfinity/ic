@@ -12,7 +12,7 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
-bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
+bitcoin = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
@@ -84,7 +84,7 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }

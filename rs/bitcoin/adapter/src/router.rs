@@ -7,7 +7,7 @@ use crate::{
     Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
     TransactionManagerRequest,
 };
-use bitcoin::network::message::NetworkMessage;
+use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
