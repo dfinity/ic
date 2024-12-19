@@ -39,7 +39,7 @@ pub mod internal {
     use ic_crypto_temp_crypto_vault::{
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
-    use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
+    use ic_crypto_tls_interfaces::{TlsConfig, TlsConfigError, TlsPublicKeyCert};
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
@@ -741,11 +741,10 @@ pub mod internal {
     {
         fn server_config(
             &self,
-            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<ServerConfig, TlsConfigError> {
             self.crypto_component
-                .server_config(allowed_clients, registry_version)
+                .server_config( registry_version)
         }
 
         fn server_config_without_client_auth(

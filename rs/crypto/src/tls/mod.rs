@@ -1,6 +1,6 @@
 use super::*;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
+use ic_crypto_tls_interfaces::{TlsConfig, TlsConfigError, TlsPublicKeyCert};
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
@@ -15,7 +15,6 @@ where
 {
     fn server_config(
         &self,
-        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger);
@@ -27,14 +26,12 @@ where
         debug!(logger;
             crypto.description => "start",
             crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config(
             &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
-            allowed_clients,
             registry_version,
         );
         self.metrics.observe_duration_seconds(
@@ -65,7 +62,6 @@ where
         debug!(logger;
             crypto.description => "start",
             crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => "all clients allowed",
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config_without_client_auth(
@@ -91,7 +87,7 @@ where
 
     fn client_config(
         &self,
-        server: NodeId,
+        _server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ClientConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger);
@@ -103,14 +99,12 @@ where
         debug!(logger;
             crypto.description => "start",
             crypto.registry_version => registry_version.get(),
-            crypto.tls_server => format!("{}", server),
         );
         let start_time = self.metrics.now();
         let result = rustls::client_handshake::client_config(
             &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
-            server,
             registry_version,
         );
         self.metrics.observe_duration_seconds(
