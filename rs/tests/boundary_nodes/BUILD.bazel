@@ -137,8 +137,11 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
