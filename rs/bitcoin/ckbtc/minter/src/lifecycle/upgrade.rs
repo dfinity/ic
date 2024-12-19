@@ -1,8 +1,9 @@
 use crate::logs::P0;
-use crate::state::eventlog::{replay, Event};
+use crate::state::eventlog::{replay, EventType};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{replace_state, Mode};
 use crate::storage::{count_events, events, record_event};
+use crate::IC_CANISTER_RUNTIME;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -52,7 +53,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(&Event::Upgrade(upgrade_args));
+        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
     };
 
     let start = ic_cdk::api::instruction_counter();
