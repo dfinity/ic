@@ -92,3 +92,35 @@ pocket_ic_mainnet_test = rule(
     executable = True,
     test = True,
 )
+
+def pocket_ic_test(name, macro, **kwargs):
+    """
+    Runs a test using the pocket-ic-server.
+
+    The test will add //rs/pocket_ic_server:pocket-ic-server as a data dependency
+    and will point the environment variable POCKET_IC_BIN to it.
+
+    Args:
+      name: the name of the test target.
+      macro: which test macro to use like rust_test, rust_test_suite_with_extra_srcs, etc.
+      **kwargs: keyword arguments passed to the test macro.
+    """
+    data = kwargs.pop("data", [])
+    env = kwargs.pop("env", {})
+    tags = kwargs.pop("tags", [])
+    macro(
+        name = name,
+        data = data + ["//rs/pocket_ic_server:pocket-ic-server"],
+        env = env | {
+            "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        },
+        tags = tags + [
+            # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple is identified and fixed.
+            # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+            #
+            # Ideally we use a condition here to only require the network on darwin
+            # but conditions are not supported in tags: https://github.com/bazelbuild/bazel/issues/2971.
+            "requires-network",
+        ],
+        **kwargs
+    )

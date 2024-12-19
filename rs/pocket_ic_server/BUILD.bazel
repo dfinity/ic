@@ -1,6 +1,7 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:pocket-ic-tests.bzl", "pocket_ic_test")
 
 BUILD_DEPENDENCIES = []
 
@@ -166,7 +167,7 @@ rust_ic_test(
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
-rust_test(
+pocket_ic_test(
     name = "test",
     size = "medium",
     srcs = [
@@ -175,18 +176,17 @@ rust_test(
     ],
     aliases = {},
     data = [
-        ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "RUST_TEST_THREADS": "2",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
+    macro = rust_test,
     tags = [
         "cpu:8",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
@@ -205,7 +205,7 @@ rust_test(
     deps = TEST_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "spec_test",
     size = "medium",
     srcs = [
@@ -213,24 +213,23 @@ rust_test(
         "tests/spec_test.rs",
     ],
     data = [
-        ":pocket-ic-server",
         "//rs/tests/httpbin-rs:httpbin",
         "//rs/tests/research:ic-hs",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
+    macro = rust_test,
     tags = [
         "cpu:8",
     ],
     deps = SPEC_TEST_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "bitcoin_integration_tests",
     size = "small",
     srcs = [
@@ -238,19 +237,18 @@ rust_test(
     ],
     aliases = {},
     data = [
-        ":pocket-ic-server",
         "//:bitcoind",
         "@bitcoin_example_canister//file",
         "@btc_canister//file",
         "@mozilla_root_ca_store//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath //:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
+    macro = rust_test,
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)

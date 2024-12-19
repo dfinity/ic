@@ -119,7 +119,6 @@ LOCAL_REPLICA_DATA = [
     "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
     "//rs/rosetta-api/icrc1:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin",
-    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
@@ -128,14 +127,13 @@ LOCAL_REPLICA_ENV = {
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
     "IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "REPLICA_BIN": "$(rootpath //rs/replica)",
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1:ic-icrc-rosetta-bin)",
     "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin)",
     "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
 }
 
-rust_test_suite_with_extra_srcs(
+pocket_ic_test(
     name = "icrc_rosetta_integration",
     size = "large",
     srcs = [
@@ -150,11 +148,12 @@ rust_test_suite_with_extra_srcs(
         "tests/integration_test_components/storage/*.rs",
     ]),
     flaky = True,
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+pocket_ic_test(
     name = "icrc_rosetta_system",
     srcs = [
         "tests/system_tests.rs",
@@ -173,6 +172,7 @@ rust_test_suite_with_extra_srcs(
         "tests/common/*.rs",
     ]),
     flaky = True,
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
