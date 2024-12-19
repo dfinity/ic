@@ -4,6 +4,8 @@ Description=Generate IC Configuration
 # state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
+After=update-config.service
+Wants=update-config.service
 # We must also wait for storage permission fixup to have finished.
 After=setup-permissions.service
 Wants=setup-permissions.service
@@ -16,7 +18,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/generate-ic-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -m /boot/config/malicious_behavior.conf -q /boot/config/query_stats.conf -t /boot/config/jaeger_addr.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStart=/opt/ic/bin/generate-ic-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
 
 [Install]
 WantedBy=multi-user.target
