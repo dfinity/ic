@@ -2,7 +2,6 @@
 Description=Setup networking configuration for SetupOS
 Before=setupos.service
 Before=network.target network-online.target
-Before=systemd-networkd-wait-online.service
 
 [Service]
 Type=oneshot
