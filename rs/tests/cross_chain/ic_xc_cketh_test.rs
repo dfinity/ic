@@ -136,11 +136,30 @@ fn ic_xc_cketh_test(env: TestEnv) {
         let minter_canister = create_canister(&application_subnet_runtime).await;
         let minter = minter_canister.canister_id().get().0;
         let cketh_ledger_canister = install_cketh_ledger(&application_subnet_runtime, minter).await;
-        let ledger_id = cketh_ledger_canister.canister.canister_id().get().0;
-        let minter_canister = install_cketh_minter(minter_canister, &ecdsa_key_id, ledger_id).await;
+        info!(
+            logger,
+            "Installed ckETH ledger at {}",
+            cketh_ledger_canister.principal()
+        );
+
+        let minter_canister = install_cketh_minter(
+            minter_canister,
+            &ecdsa_key_id,
+            cketh_ledger_canister.principal(),
+        )
+        .await;
+        info!(
+            logger,
+            "Installed ckETH minter at {}",
+            minter_canister.principal()
+        );
         (cketh_ledger_canister, minter_canister)
     });
 
+    info!(
+        logger,
+        "Supporting deposit of ETH and testing deposit flows."
+    );
     block_on(async {
         support_eth_deposit(
             &foundry,
@@ -156,10 +175,23 @@ fn ic_xc_cketh_test(env: TestEnv) {
 
     let (erc20_contract_address, _contract_creation_block_number) =
         deploy_erc20_contract(&foundry, &logger);
+    info!(
+        logger,
+        "Deployed ERC20 contract EXL at {}", erc20_contract_address
+    );
     let mut ledger_orchestrator = block_on(async {
         install_ledger_suite_orchestrator(&application_subnet_runtime, minter.principal()).await
     });
+    info!(
+        logger,
+        "Ledger suite orchestrator installed at {}",
+        ledger_orchestrator.principal()
+    );
 
+    info!(
+        logger,
+        "Supporting deposit of ERC-20 and testing deposit flows."
+    );
     block_on(async {
         support_erc20_deposit(
             &foundry,
@@ -174,6 +206,10 @@ fn ic_xc_cketh_test(env: TestEnv) {
         test_ckerc20_deposit(&foundry, &minter, &erc20_contract_address, &logger).await;
     });
 
+    info!(
+        logger,
+        "Supporting deposit with subaccounts and testing deposit flows."
+    );
     block_on(async {
         support_deposit_with_subaccount(&foundry, &mut minter, &logger).await;
 
