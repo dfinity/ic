@@ -5,7 +5,7 @@ use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::CspVault;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError};
+use ic_crypto_tls_interfaces::TlsConfigError;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
@@ -33,11 +33,7 @@ pub fn client_config(
     })?;
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
-    let server_cert_verifier = NodeServerCertVerifier::new(
-        SomeOrAllNodes::new_with_single_node(server),
-        registry_client,
-        registry_version,
-    );
+    let server_cert_verifier = NodeServerCertVerifier::new(registry_client, registry_version);
     let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
     ring_crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
 

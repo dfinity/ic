@@ -21,7 +21,6 @@ message CryptoLogEntry {
   google.protobuf.StringValue dkg_dealer = 13;
   google.protobuf.StringValue dkg_transcript = 14;
   google.protobuf.StringValue signed_bytes = 15;
-  google.protobuf.StringValue allowed_tls_clients = 16;
   google.protobuf.StringValue tls_server = 17;
   google.protobuf.UInt32Value dkg_epoch = 18;
   google.protobuf.StringValue complainer = 19;
@@ -34,4 +33,6 @@ message CryptoLogEntry {
   google.protobuf.StringValue signature_shares = 26;
   google.protobuf.StringValue signature_inputs = 27;
   google.protobuf.UInt64Value log_id = 28;
+
+  reserved 16;
 }

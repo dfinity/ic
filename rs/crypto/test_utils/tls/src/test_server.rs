@@ -2,12 +2,11 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
-use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -17,7 +16,6 @@ pub struct ServerBuilder {
     node_id: NodeId,
     msg_for_client: Option<String>,
     msg_expected_from_client: Option<String>,
-    allowed_nodes: Option<SomeOrAllNodes>,
 }
 
 impl ServerBuilder {
@@ -31,50 +29,13 @@ impl ServerBuilder {
         self
     }
 
-    pub fn add_allowed_client(mut self, client: NodeId) -> Self {
-        match self.allowed_nodes {
-            None => {
-                self.allowed_nodes = {
-                    let mut allowed = BTreeSet::new();
-                    allowed.insert(client);
-                    Some(SomeOrAllNodes::Some(allowed))
-                };
-                self
-            }
-            Some(SomeOrAllNodes::Some(mut nodes)) => {
-                nodes.insert(client);
-                self.allowed_nodes = Some(SomeOrAllNodes::Some(nodes));
-                self
-            }
-            Some(SomeOrAllNodes::All) => {
-                panic!("invalid use of builder: cannot add node if all nodes are allowed")
-            }
-        }
-    }
-
-    pub fn allow_all_nodes(mut self) -> Self {
-        match self.allowed_nodes {
-            None => {
-                self.allowed_nodes = Some(SomeOrAllNodes::All);
-                self
-            }
-            Some(SomeOrAllNodes::Some(_)) => panic!(
-                "invalid use of builder: cannot allow all nodes if some individual nodes are allowed"
-            ),
-            Some(SomeOrAllNodes::All) => self,
-        }
-    }
 
     pub fn build(self, registry: Arc<FakeRegistryClient>) -> Server {
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("failed to bind");
         let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id);
-        let allowed_clients = self
-            .allowed_nodes
-            .unwrap_or_else(|| SomeOrAllNodes::Some(BTreeSet::new()));
         Server {
             listener,
             crypto,
-            allowed_clients,
             msg_for_client: self.msg_for_client,
             msg_expected_from_client: self.msg_expected_from_client,
             cert,
@@ -87,7 +48,6 @@ impl ServerBuilder {
 pub struct Server {
     listener: std::net::TcpListener,
     crypto: TempCryptoComponent,
-    allowed_clients: SomeOrAllNodes,
     msg_for_client: Option<String>,
     msg_expected_from_client: Option<String>,
     cert: TlsPublicKeyCert,
@@ -102,7 +62,6 @@ impl Server {
             node_id,
             msg_for_client: None,
             msg_expected_from_client: None,
-            allowed_nodes: None,
         }
     }
 
@@ -111,7 +70,7 @@ impl Server {
 
         let server_config = self
             .crypto
-            .server_config(self.allowed_clients.clone(), REG_V1)
+            .server_config( REG_V1)
             .map_err(|e| {
                 TlsTestServerRunError(format!("handshake error when creating config: {e}"))
             })?;
@@ -199,10 +158,4 @@ impl Server {
         self.cert.to_proto()
     }
 
-    pub fn allowed_clients(&self) -> &BTreeSet<NodeId> {
-        match &self.allowed_clients {
-            SomeOrAllNodes::Some(nodes) => nodes,
-            SomeOrAllNodes::All => unimplemented!(),
-        }
-    }
 }
