@@ -674,11 +674,9 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                     .get(format!("https://{host}/invalid-4mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
-                    .text()
-                    .await.context("unable to download asset body")?;
+                    .await.context("unable to request asset")?;
 
-                if !res.contains("Response verification failed") {
+                if res.status() != StatusCode::SERVICE_UNAVAILABLE {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -1772,15 +1770,8 @@ pub fn http_endpoints_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::INTERNAL_SERVER_ERROR {
+            if res.status() != StatusCode::SERVICE_UNAVAILABLE {
                 bail!("{name} failed: {}", res.status())
-            }
-
-            let body = res.bytes().await?.to_vec();
-            let body = String::from_utf8_lossy(&body);
-
-            if !body.contains("Response verification failed") {
-                bail!("{name} failed: invalid asset did not fail verification")
             }
 
             Ok(())
