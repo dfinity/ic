@@ -7,7 +7,7 @@ use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
-    state::{eventlog::Event, Mode, RetrieveBtcRequest},
+    state::{eventlog::EventType, Mode, RetrieveBtcRequest},
     updates::{
         get_withdrawal_account::compute_subaccount,
         retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
@@ -191,14 +191,17 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .expect("Error in retrieve_btc");
         assert_eq!(4, retrieve_result.block_index);
 
-        let events = minter_agent
+        let events: Vec<_> = minter_agent
             .get_events(0, 1000)
             .await
-            .expect("failed to fetch minter's event log");
+            .expect("failed to fetch minter's event log")
+            .iter()
+            .map(|event| event.payload.clone())
+            .collect();
         assert!(
             events.iter().any(|e| matches!(
                 e,
-                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 4, .. })
+                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 4, .. })
             )),
             "missing accepted_retrieve_btc_request event in the log: {:?}",
             events

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_SRCS = [
     "src/blocklist.rs",
+    "src/blocklist/tests.rs",
     "src/lib.rs",
     "src/types.rs",
 ]

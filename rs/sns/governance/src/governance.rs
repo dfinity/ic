@@ -5042,16 +5042,8 @@ impl Governance {
         let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
 
         // Unwrap response.
-        let maturity_modulation = match maturity_modulation {
-            Ok(ok) => ok,
-            Err(err) => {
-                println!(
-                    "{}Couldn't update maturity modulation. Error: {}",
-                    log_prefix(),
-                    err,
-                );
-                return;
-            }
+        let Ok(maturity_modulation) = maturity_modulation else {
+            return;
         };
 
         // Construct new MaturityModulation.
