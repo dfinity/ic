@@ -116,7 +116,6 @@ impl From<BtcNetwork> for bitcoin::Network {
     fn from(btc_network: BtcNetwork) -> Self {
         match btc_network {
             BtcNetwork::Mainnet => Self::Bitcoin,
-            //TODO(mihailjianu): check that we don't need testnet4 here. 
             BtcNetwork::Testnet => Self::Testnet,
             BtcNetwork::Regtest { .. } => Self::Regtest,
         }

@@ -69,16 +69,24 @@ pub fn validate_header(
     let compact_target =
         get_next_compact_target(network, store, &prev_header, prev_height, header.time);
     //println!("debuggg actual: {:?}", header.bits);
-    println!("debuggg {:?} target: {:?}", prev_height + 1, header.target());
+    println!(
+        "debuggg {:?} target: {:?}",
+        prev_height + 1,
+        header.target()
+    );
     if let Err(err) = header.validate_pow(Target::from_compact(compact_target)) {
         match err {
             ValidationError::BadProofOfWork => println!("bad proof of work"),
-            ValidationError::BadTarget => println!("bad target debuggg {:?}, {:?}", Target::from_compact(compact_target), header.target()),
+            ValidationError::BadTarget => println!(
+                "bad target debuggg {:?}, {:?}",
+                Target::from_compact(compact_target),
+                header.target()
+            ),
             _ => {}
         };
         return Err(ValidateHeaderError::InvalidPoWForComputedTarget);
     }
-    
+
     Ok(())
 }
 
@@ -134,7 +142,7 @@ fn find_next_difficulty_in_chain(
 ) -> CompactTarget {
     // This is the maximum difficulty target for the network
     let pow_limit_bits = pow_limit_bits(network);
-    
+
     match network {
         Network::Testnet | Network::Regtest | Network::Testnet4 => {
             let mut current_header = *prev_header;
@@ -173,68 +181,8 @@ fn find_next_difficulty_in_chain(
     }
 }
 
-fn compute_next_difficulty1(
-    network: &Network,
-    store: &impl HeaderStore,
-    prev_header: &BlockHeader,
-    prev_height: BlockHeight,
-) -> CompactTarget {
-    use primitive_types::U256;
-    // Difficulty is adjusted only once in every interval of 2 weeks (2016 blocks)
-    // If an interval boundary is not reached, then previous difficulty target is
-    // returned Regtest network doesn't adjust PoW difficult levels. For
-    // regtest, simply return the previous difficulty target
-
-    let height = prev_height + 1;
-    if height % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network) {
-        return prev_header.bits;
-    }
-
-    // Computing the `last_adjustment_header`.
-    // `last_adjustment_header` is the last header with height multiple of 2016
-    let last_adjustment_height = if height < DIFFICULTY_ADJUSTMENT_INTERVAL {
-        0
-    } else {
-        height - DIFFICULTY_ADJUSTMENT_INTERVAL
-    };
-    let last_adjustment_header = store
-        .get_with_height(last_adjustment_height)
-        .expect("Last adjustment header must exist");
-    let last_adjustment_time = last_adjustment_header.time;
-
-    // Computing the time interval between the last adjustment header time and
-    // current time. The expected value actual_interval is 2 weeks assuming
-    // the expected block time is 10 mins. But most of the time, the
-    // actual_interval will deviate slightly from 2 weeks. Our goal is to
-    // readjust the difficulty target so that the expected time taken for the next
-    // 2016 blocks is again 2 weeks.
-    let actual_interval = prev_header.time - last_adjustment_time;
-    let mut adjusted_interval = actual_interval;
-
-    // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
-    let target_adjustment_interval_time: u32 = DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES; //Number of seconds in 2 weeks
-
-    // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
-    // actual_interval deviates too much from the expected 2 weeks.
-    adjusted_interval = u32::max(adjusted_interval, target_adjustment_interval_time / 4);
-    adjusted_interval = u32::min(adjusted_interval, target_adjustment_interval_time * 4);
-
-    // Computing new difficulty target.
-    // new difficulty target = old difficult target * (adjusted_interval /
-    // 2_weeks);
-    let mut target = U256::from_big_endian(&prev_header.target().to_be_bytes());
-    target *= U256::from(adjusted_interval);
-    target /= U256::from(target_adjustment_interval_time);
-    let target = Target::from_be_bytes(target.into());
-
-    // Adjusting the newly computed difficulty target so that it doesn't exceed the
-    // max_difficulty_target limit
-    target.min(max_target(network)).to_compact_lossy()
-}
-
 /// This function returns the difficult target to be used for the current
 /// header given the previous header
-//TODO(mihailjianu): get rid of this. 
 fn compute_next_difficulty(
     network: &Network,
     store: &impl HeaderStore,
@@ -262,12 +210,6 @@ fn compute_next_difficulty(
     let last_adjustment_header = current_header;
     let last_adjustment_time = last_adjustment_header.time;
 
-
-    let mut last_adjustment_header1 = prev_header.clone();
-    for _i in 0..2015 {
-        last_adjustment_header1 = store.get_with_block_hash(&last_adjustment_header1.prev_blockhash).expect("Header must exist");
-    }
-
     // Computing the time interval between the last adjustment header time and
     // current time. The expected value actual_interval is 2 weeks assuming
     // the expected block time is 10 mins. But most of the time, the
@@ -276,25 +218,9 @@ fn compute_next_difficulty(
     // 2016 blocks is again 2 weeks.
     let actual_interval =
         std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
-        
-    //TODO(mihailjianu): we should send here the last header that was not "a difference of 20 minutes", instead of the previous header. 
-    let rs = CompactTarget::from_next_work_required(last_adjustment_header1.bits, actual_interval, *network);
-    //let rs = CompactTarget::from_header_difficulty_adjustment(last_adjustment_header, *prev_header, *network);
 
-    if prev_height % 2016 == 2015 {
-        println!("debuggg");
-        println!("prev_height: {:?}", prev_height);
-        println!("last_adjustment_header: {:?}", last_adjustment_header.block_hash());
-        println!("last_adjustment_header1: {:?}", last_adjustment_header1.block_hash());
-        println!("prev_header.bits: {:?}", prev_header.bits);
-        println!("prev_header.time: {:?}", prev_header.time);
-        println!("last_adjustment_time: {:?}", last_adjustment_time);
-        println!("actual_interval: {:?}", actual_interval);
-        println!("network: {:?}", network);
-        println!("new: {:?}", rs);
-    }
-
-    rs
+    //TODO(mihailjianu): explain why last_adjustment_header is needed instead of prev_header
+    CompactTarget::from_next_work_required(last_adjustment_header.bits, actual_interval, *network)
 }
 
 #[cfg(test)]
