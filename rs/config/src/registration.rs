@@ -30,6 +30,16 @@ pub struct Config {
 
     /// If this Sec256k1 PEM is available, use it instead of the HSM.
     pub node_operator_pem: Option<PathBuf>,
+
+    /// Specifies the type of node rewards that the node operator expects to receive.
+    /// Examples include "type3.1" or "type1", corresponding to entries in the node reward table in the NNS.
+    /// The value must match a community-approved value in the NNS.
+    /// If not provided, the NNS will attempt to assign a value based on the operator's reward configuration.
+    /// If there is no operator's reward configuration, registration will succeed but the node_reward_type
+    /// will be unspecified in the registry for the node and the node will not receive rewards.
+    /// If the reward configuration for the operator has more than 1 value, node_reward_type must be provided
+    /// to resolve the ambiguity.
+    pub node_reward_type: Option<String>,
 }
 
 // We allow for the operator to only specify some of the fields while the others
@@ -57,6 +67,7 @@ impl Default for Config {
             nns_url: None,
             nns_pub_key_pem: None,
             node_operator_pem: None,
+            node_reward_type: None,
         }
     }
 }

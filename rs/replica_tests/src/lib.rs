@@ -218,6 +218,7 @@ pub fn get_ic_config() -> IcConfig {
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             domain: None,
+            node_reward_type: None,
         },
     );
 
