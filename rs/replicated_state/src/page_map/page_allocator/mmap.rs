@@ -262,11 +262,11 @@ impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
     pub fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
     where
-        I: IntoIterator<Item = (PageIndex, &'a Page)>,
+        I: IntoIterator<Item = (&'a PageIndex, &'a Page)>,
     {
         let pages: Vec<_> = page_delta
             .into_iter()
-            .map(|(page_index, page)| MmapPageSerialization {
+            .map(|(&page_index, page)| MmapPageSerialization {
                 page_index,
                 file_offset: page.0.offset,
                 validation: page.0.validation,
@@ -629,7 +629,7 @@ impl MmapBasedPageAllocatorCore {
                         MmapAdvise::MADV_HUGEPAGE,
                     )
                 }.unwrap_or_else(|err| {
-                    // We don't need to panic, madvise failing is not a problem, 
+                    // We don't need to panic, madvise failing is not a problem,
                     // it will only mean that we are not using huge pages.
                     println!(
                     "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",

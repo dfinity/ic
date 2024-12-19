@@ -562,7 +562,7 @@ fn write_overlays_and_verify_with_tempdir(
                 page_map.update(
                     combined_delta
                         .iter()
-                        .map(|(i, p)| (i, p.contents()))
+                        .map(|(i, p)| (*i, p.contents()))
                         .collect::<Vec<_>>()
                         .as_slice(),
                 );

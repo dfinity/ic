@@ -473,7 +473,7 @@ impl OverlayFile {
         for (index, data) in delta.iter() {
             let shard = index.get() / lsmt_config.shard_num_pages;
             page_data[shard as usize].push(data.contents());
-            page_indices[shard as usize].push(index);
+            page_indices[shard as usize].push(*index);
         }
 
         for shard in 0..num_shards {
