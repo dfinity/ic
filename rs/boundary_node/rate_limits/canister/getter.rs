@@ -231,7 +231,6 @@ impl<
             removed_in_version: stored_rule.removed_in_version,
         };
 
-        // Hide non-disclosed rules from unauthorized viewers.
         let is_authorized_viewer = self.access_resolver.get_access_level()
             == AccessLevel::FullAccess
             || self.access_resolver.get_access_level() == AccessLevel::FullRead;
@@ -240,6 +239,7 @@ impl<
             return Ok(output_rule.into());
         }
 
+        // Hide non-disclosed rules from unauthorized viewers.
         let output_rule = self.formatter.format(output_rule);
 
         Ok(output_rule.into())
