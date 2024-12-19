@@ -1808,18 +1808,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "canister_client"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-agent 0.37.1",
- "k256",
- "rate-limits-api",
- "regex",
- "tokio",
-]
-
-[[package]]
 name = "canister_http"
 version = "0.9.0"
 dependencies = [
@@ -18139,6 +18127,25 @@ dependencies = [
  "rate-limits-api",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "rate-limiting-canister-client"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "clap 4.5.20",
+ "ic-agent 0.37.1",
+ "k256",
+ "rate-limits-api",
+ "regex",
+ "serde",
+ "serde_yaml",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
