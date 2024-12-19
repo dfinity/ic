@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup networking configuration for SetupOS
+Before=setupos.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setup-networking.sh SetupOS
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
