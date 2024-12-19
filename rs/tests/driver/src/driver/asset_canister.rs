@@ -44,7 +44,7 @@ where
             move || {
                 app_node.create_and_install_canister_with_arg(
                     &env::var(wasm_env_var_name.clone())
-                        .expect(&format!("{} not set", wasm_env_var_name)),
+                        .unwrap_or_else(|_| panic!("{} not set", wasm_env_var_name)),
                     None,
                 )
             }
