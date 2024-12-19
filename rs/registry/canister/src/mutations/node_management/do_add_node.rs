@@ -76,8 +76,7 @@ impl Registry {
             ));
         }
 
-        // 3. Check if node reward type is valid, if node rewards table is not empty, and the field is in the request
-        // The node rewards table is empty on testnets and local deployments such as UTOPIA.
+        // 3. Get valid type if type is in request
         let node_reward_type = payload
             .node_reward_type
             .as_ref()
@@ -174,7 +173,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
-        _ => return Err(format!("Invalid node type: '{}'", type_string)),
+        _ => return Err(format!("Invalid node type: {}", type_string)),
     })
 }
 

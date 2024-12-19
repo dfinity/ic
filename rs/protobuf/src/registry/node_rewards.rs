@@ -67,11 +67,6 @@ pub mod v2 {
 
             None
         }
-
-        /// Quickly check if the rewards table is empty
-        pub fn is_empty(&self) -> bool {
-            self.table.is_empty()
-        }
     }
 
     impl fmt::Display for NodeRewardsTable {
