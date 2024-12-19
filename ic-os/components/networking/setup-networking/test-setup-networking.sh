@@ -28,10 +28,10 @@ function mock_tools() {
     ln -sf "${TEST_DIR}/sys/devices/mock_devices_eth2" "${SYS_NET_PATH}/eth2"
 
     # Intentionally absent eth0/speed:
-    # echo "0" > "$SYS_NET_PATH/eth0/speed"
+    # echo "0" >"$SYS_NET_PATH/eth0/speed"
 
-    echo "1000" > "$SYS_NET_PATH/eth1/speed"
-    echo "2500" > "$SYS_NET_PATH/eth2/speed"
+    echo "1000" >"$SYS_NET_PATH/eth1/speed"
+    echo "2500" >"$SYS_NET_PATH/eth2/speed"
 
     mkdir -p "${TEST_DIR}/opt/ic/bin"
     cat >"${TEST_DIR}/opt/ic/bin/setupos_tool" <<'EOF'
