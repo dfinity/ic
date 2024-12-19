@@ -1,13 +1,13 @@
 [Unit]
 Description=Setup networking configuration for SetupOS
 Before=setupos.service
+Before=network.target network-online.target
+Before=systemd-networkd-wait-online.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setup-networking.sh SetupOS
-StandardOutput=tty
-StandardError=tty
+ExecStart=/opt/ic/bin/setup-networking.sh SetupOS
 
 [Install]
 WantedBy=multi-user.target
