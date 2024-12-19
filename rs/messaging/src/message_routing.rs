@@ -2,7 +2,9 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig, Config as HypervisorConfig, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -656,6 +658,8 @@ impl BatchProcessorImpl {
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            hypervisor_config.max_stream_messages,
+            hypervisor_config.target_stream_size_bytes.get() as usize,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -1508,6 +1512,8 @@ impl MessageRoutingImpl {
     ) -> Self {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
+            MAX_STREAM_MESSAGES,
+            TARGET_STREAM_SIZE_BYTES.get() as usize,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
