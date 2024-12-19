@@ -41,13 +41,12 @@ use ic_system_test_driver::{
 use ic_types::Height;
 use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
-use serde_json::json;
 use slog::{info, Logger};
 use std::env;
 use std::future::Future;
 use std::time::Duration;
 
-const UNIVERSAL_VM_NAME: &str = "foundry";
+const FOUNDRY_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
 const FOUNDRY_PORT: u16 = 8545;
 const ENCODED_PRINCIPAL: &str =
@@ -83,7 +82,7 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
 }
 
 fn setup_anvil(env: &TestEnv) {
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+    UniversalVm::new(String::from(FOUNDRY_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKETH_UVM_CONFIG_PATH").expect("CKETH_UVM_CONFIG_PATH not set"),
         ))
@@ -91,7 +90,7 @@ fn setup_anvil(env: &TestEnv) {
         .start(env)
         .expect("failed to setup universal VM");
 
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let deployed_universal_vm = env.get_deployed_universal_vm(FOUNDRY_VM_NAME).unwrap();
 
     println!(
         "{}",
@@ -135,32 +134,13 @@ fn ic_xc_cketh_test(env: TestEnv) {
         )
     };
 
-    let docker_host = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let docker_host_ip = docker_host.get_vm().unwrap().ipv6;
-    let client = Client::new();
+    let foundry = env.get_deployed_universal_vm(FOUNDRY_VM_NAME).unwrap();
+    assert_eq!(
+        block_on(async { eth_block_number(&foundry).await }),
+        BlockNumber::ZERO
+    );
 
-    let url = format!("http://[{:?}]:{:?}", docker_host_ip, 8545);
-
-    block_on(async {
-        let response = client
-            .post(&url)
-            .body(r#"{"method":"eth_blockNumber","params":[],"id":1,"jsonrpc":"2.0"}"#)
-            .header("Content-Type", "application/json")
-            .send()
-            .await
-            .expect("failed to get the zone");
-
-        let response_json: serde_json::Value = response
-            .json()
-            .await
-            .expect("failed to decode the response");
-        assert_eq!(
-            response_json,
-            json!({"jsonrpc":"2.0","id":1,"result":"0x0"})
-        )
-    });
-
-    let (_cketh_ledger, mut minter) = block_on(async {
+    let (cketh_ledger, mut minter) = block_on(async {
         let minter_canister = create_canister(&application_subnet_runtime).await;
         let minter = minter_canister.canister_id().get().0;
         let cketh_ledger_canister = install_cketh_ledger(&application_subnet_runtime, minter).await;
@@ -169,116 +149,44 @@ fn ic_xc_cketh_test(env: TestEnv) {
         (cketh_ledger_canister, minter_canister)
     });
 
-    let minter_address: Address = block_on(async { minter.minter_address().await })
-        .parse()
-        .unwrap();
-
-    let (eth_deposit_helper_contract_address, eth_deposit_contract_creation_block_number) =
-        deploy_eth_deposit_helper_contract(&docker_host, &minter_address);
-
     block_on(async {
-        minter
-            .upgrade(MinterUpgradeArg {
-                ethereum_contract_address: Some(eth_deposit_helper_contract_address.to_string()),
-                ..Default::default()
-            })
-            .await
+        support_eth_deposit(
+            &foundry,
+            &mut minter,
+            &ecdsa_key_id,
+            cketh_ledger.principal(),
+            &logger,
+        )
+        .await;
+
+        test_cketh_deposit(&foundry, &minter, &logger).await
     });
 
-    block_on(async { test_cketh_deposit(&docker_host, &minter, &logger).await });
-
-    let (erc20_contract_address, _contract_creation_block_number) =
-        deploy_erc20_contract(&docker_host);
-    let (erc20_deposit_helper_contract_address, erc20_contract_creation_block_number) =
-        deploy_erc20_helper_contract(&docker_host, &minter_address);
+    let (erc20_contract_address, _contract_creation_block_number) = deploy_erc20_contract(&foundry);
     let mut ledger_orchestrator = block_on(async {
-        let mut lso =
-            install_ledger_suite_orchestrator(&application_subnet_runtime, minter.principal())
-                .await;
-        lso.register_embedded_wasms().await;
-        minter
-            .upgrade(MinterUpgradeArg {
-                ledger_suite_orchestrator_id: Some(lso.principal()),
-                erc20_helper_contract_address: Some(
-                    erc20_deposit_helper_contract_address.to_string(),
-                ),
-                last_erc20_scraped_block_number: Some(Nat::from(
-                    erc20_contract_creation_block_number,
-                )),
-                ..Default::default()
-            })
-            .await;
-        lso
-    });
-    let ckexl_token = block_on(async {
-        ledger_orchestrator
-            .add_erc20(
-                AddErc20Arg {
-                    contract: Erc20Contract {
-                        chain_id: Nat::from(1_u8),
-                        address: erc20_contract_address.to_string(),
-                    },
-                    ledger_init_arg: LedgerInitArg {
-                        transfer_fee: 1_u8.into(),
-                        decimals: 18,
-                        token_name: "ckEXL".to_string(),
-                        token_symbol: "ckEXL".to_string(),
-                        token_logo: "".to_string(),
-                    },
-                },
-                &logger,
-            )
-            .await;
-        try_async("minter supports ckEXL", &logger, || {
-            minter.get_minter_info().map(|info| {
-                info.supported_ckerc20_tokens
-                    .clone()
-                    .into_iter()
-                    .flatten()
-                    .find(|t| t.ckerc20_token_symbol == "ckEXL")
-                    .ok_or(format!(
-                        "ckEXL not found. Supported ckERC20: {:?}",
-                        info.supported_ckerc20_tokens
-                    ))
-            })
-        })
-        .await
-    });
-    assert_eq!(
-        ckexl_token
-            .erc20_contract_address
-            .parse::<Address>()
-            .unwrap(),
-        erc20_contract_address
-    );
-
-    block_on(async {
-        test_cketh_deposit(&docker_host, &minter, &logger).await;
-        test_ckerc20_deposit(&docker_host, &minter, &erc20_contract_address, &logger).await;
-    });
-
-    let (
-        deposit_with_subaccount_helper_contract_address,
-        deposit_with_subaccount_contract_creation_block_number,
-    ) = deploy_deposit_with_subaccount_helper_contract(&docker_host, &minter_address);
-    block_on(async {
-        minter
-            .upgrade(MinterUpgradeArg {
-                deposit_with_subaccount_helper_contract_address: Some(
-                    deposit_with_subaccount_helper_contract_address.to_string(),
-                ),
-                last_deposit_with_subaccount_scraped_block_number: Some(Nat::from(
-                    deposit_with_subaccount_contract_creation_block_number,
-                )),
-                ..Default::default()
-            })
-            .await
+        install_ledger_suite_orchestrator(&application_subnet_runtime, minter.principal()).await
     });
 
     block_on(async {
-        test_cketh_deposit(&docker_host, &minter, &logger).await;
-        test_ckerc20_deposit(&docker_host, &minter, &erc20_contract_address, &logger).await;
-        test_deposit_with_subaccount(&docker_host, &minter, &erc20_contract_address, &logger).await;
+        support_erc20_deposit(
+            &foundry,
+            &mut minter,
+            &mut ledger_orchestrator,
+            &erc20_contract_address,
+            &logger,
+        )
+        .await;
+
+        test_cketh_deposit(&foundry, &minter, &logger).await;
+        test_ckerc20_deposit(&foundry, &minter, &erc20_contract_address, &logger).await;
+    });
+
+    block_on(async {
+        support_deposit_with_subaccount(&foundry, &mut minter, &logger).await;
+
+        test_cketh_deposit(&foundry, &minter, &logger).await;
+        test_ckerc20_deposit(&foundry, &minter, &erc20_contract_address, &logger).await;
+        test_deposit_with_subaccount(&foundry, &minter, &erc20_contract_address, &logger).await;
     });
 }
 
@@ -297,6 +205,29 @@ async fn activate_threshold_ecdsa(
         .await
         .expect("Should successfully create and verify the signature");
     ecdsa_key_id
+}
+
+// TODO: XC-258: setup EVM RPC canister to target anvil via IPv6
+async fn eth_block_number(foundry: &DeployedUniversalVm) -> BlockNumber {
+    let foundry_ip = foundry.get_vm().unwrap().ipv6;
+    let client = Client::new();
+
+    let url = format!("http://[{:?}]:{:?}", foundry_ip, FOUNDRY_PORT);
+
+    let response = client
+        .post(&url)
+        .body(r#"{"method":"eth_blockNumber","params":[],"id":1,"jsonrpc":"2.0"}"#)
+        .header("Content-Type", "application/json")
+        .send()
+        .await
+        .expect("failed to get the zone");
+
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .expect("failed to decode the response");
+
+    serde_json::from_value(response_json["result"].clone()).unwrap()
 }
 
 async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCanister {
@@ -348,16 +279,7 @@ async fn install_cketh_minter<'a>(
     ecdsa_key_id: &EcdsaKeyId,
     cketh_ledger: Principal,
 ) -> CkEthMinterCanister<'a> {
-    let minter_init_args = MinterArg::InitArg(MinterInitArgs {
-        ethereum_network: EthereumNetwork::Mainnet,
-        ecdsa_key_name: ecdsa_key_id.name.clone(),
-        ethereum_contract_address: None,
-        ledger_id: cketh_ledger,
-        ethereum_block_height: CandidBlockTag::Finalized,
-        minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
-        next_transaction_nonce: Nat::from(0_u8),
-        last_scraped_block_number: Nat::from(0_u8),
-    });
+    let minter_init_args = MinterArg::InitArg(minter_init_args(ecdsa_key_id, cketh_ledger));
     let minter_wasm = Wasm::from_file(
         env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
     );
@@ -372,6 +294,19 @@ async fn install_cketh_minter<'a>(
 
     CkEthMinterCanister {
         canister: minter_canister,
+    }
+}
+
+fn minter_init_args(ecdsa_key_id: &EcdsaKeyId, cketh_ledger: Principal) -> MinterInitArgs {
+    MinterInitArgs {
+        ethereum_network: EthereumNetwork::Mainnet,
+        ecdsa_key_name: ecdsa_key_id.name.clone(),
+        ethereum_contract_address: None,
+        ledger_id: cketh_ledger,
+        ethereum_block_height: CandidBlockTag::Finalized,
+        minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
+        next_transaction_nonce: Nat::from(0_u8),
+        last_scraped_block_number: Nat::from(0_u8),
     }
 }
 
@@ -424,6 +359,31 @@ fn deploy_eth_deposit_helper_contract(
         minter_address.to_string()
     );
     (contract_address, block_number)
+}
+
+async fn support_eth_deposit(
+    foundry: &DeployedUniversalVm,
+    minter: &mut CkEthMinterCanister<'_>,
+    ecdsa_key_id: &EcdsaKeyId,
+    cketh_ledger: Principal,
+    logger: &slog::Logger,
+) {
+    let minter_address = minter.minter_address().await.parse().unwrap();
+    info!(logger, "Retrieved ckETH minter address {minter_address}");
+
+    let (eth_deposit_helper_contract_address, eth_deposit_contract_creation_block_number) =
+        deploy_eth_deposit_helper_contract(foundry, &minter_address);
+    minter
+        .reinstall(MinterInitArgs {
+            ethereum_contract_address: Some(eth_deposit_helper_contract_address.to_string()),
+            last_scraped_block_number: Nat::from(eth_deposit_contract_creation_block_number),
+            ..minter_init_args(ecdsa_key_id, cketh_ledger)
+        })
+        .await;
+    info!(
+        logger,
+        "ckETH minter re-installed to set `last_scraped_block_number`"
+    );
 }
 
 async fn test_cketh_deposit(
@@ -479,6 +439,68 @@ fn test_eth_deposit(
     let minter_balance_after = eth_balance_of(foundry, minter_address);
 
     assert_eq!(minter_balance_after - minter_balance_before, deposit_amount);
+}
+
+async fn support_erc20_deposit(
+    foundry: &DeployedUniversalVm,
+    minter: &mut CkEthMinterCanister<'_>,
+    ledger_orchestrator: &mut LedgerSuiteOrchestratorCanister<'_>,
+    erc20_contract_address: &Address,
+    logger: &slog::Logger,
+) {
+    let minter_address = minter.minter_address().await.parse().unwrap();
+    let (erc20_deposit_helper_contract_address, erc20_contract_creation_block_number) =
+        deploy_erc20_helper_contract(foundry, &minter_address);
+
+    ledger_orchestrator.register_embedded_wasms().await;
+    minter
+        .upgrade(MinterUpgradeArg {
+            ledger_suite_orchestrator_id: Some(ledger_orchestrator.principal()),
+            erc20_helper_contract_address: Some(erc20_deposit_helper_contract_address.to_string()),
+            last_erc20_scraped_block_number: Some(Nat::from(erc20_contract_creation_block_number)),
+            ..Default::default()
+        })
+        .await;
+
+    ledger_orchestrator
+        .add_erc20(
+            AddErc20Arg {
+                contract: Erc20Contract {
+                    chain_id: Nat::from(1_u8),
+                    address: erc20_contract_address.to_string(),
+                },
+                ledger_init_arg: LedgerInitArg {
+                    transfer_fee: 1_u8.into(),
+                    decimals: 18,
+                    token_name: "ckEXL".to_string(),
+                    token_symbol: "ckEXL".to_string(),
+                    token_logo: "".to_string(),
+                },
+            },
+            logger,
+        )
+        .await;
+    let ckexl_token = try_async("minter supports ckEXL", logger, || {
+        minter.get_minter_info().map(|info| {
+            info.supported_ckerc20_tokens
+                .clone()
+                .into_iter()
+                .flatten()
+                .find(|t| t.ckerc20_token_symbol == "ckEXL")
+                .ok_or(format!(
+                    "ckEXL not found. Supported ckERC20: {:?}",
+                    info.supported_ckerc20_tokens
+                ))
+        })
+    })
+    .await;
+    assert_eq!(
+        &ckexl_token
+            .erc20_contract_address
+            .parse::<Address>()
+            .unwrap(),
+        erc20_contract_address
+    );
 }
 
 async fn test_ckerc20_deposit(
@@ -564,6 +586,35 @@ fn test_erc20_deposit(
 
     let minter_balance_after = erc20_balance_of(foundry, erc20_contract_address, minter_address);
     assert_eq!(minter_balance_after - minter_balance_before, deposit_amount);
+}
+
+async fn support_deposit_with_subaccount(
+    foundry: &DeployedUniversalVm,
+    minter: &mut CkEthMinterCanister<'_>,
+    logger: &slog::Logger,
+) {
+    let minter_address = minter.minter_address().await.parse().unwrap();
+    let (
+        deposit_with_subaccount_helper_contract_address,
+        deposit_with_subaccount_contract_creation_block_number,
+    ) = deploy_deposit_with_subaccount_helper_contract(foundry, &minter_address);
+    info!(
+        logger,
+        "Deposit with subaccount helper smart contract deployed at {} in block {}",
+        deposit_with_subaccount_helper_contract_address,
+        deposit_with_subaccount_contract_creation_block_number
+    );
+    minter
+        .upgrade(MinterUpgradeArg {
+            deposit_with_subaccount_helper_contract_address: Some(
+                deposit_with_subaccount_helper_contract_address.to_string(),
+            ),
+            last_deposit_with_subaccount_scraped_block_number: Some(Nat::from(
+                deposit_with_subaccount_contract_creation_block_number,
+            )),
+            ..Default::default()
+        })
+        .await
 }
 
 async fn test_deposit_with_subaccount(
@@ -774,6 +825,12 @@ struct LedgerCanister<'a> {
     canister: Canister<'a>,
 }
 
+impl<'a> LedgerCanister<'a> {
+    fn principal(&self) -> Principal {
+        self.canister.canister_id().get().0
+    }
+}
+
 struct CkEthMinterCanister<'a> {
     canister: Canister<'a>,
 }
@@ -791,6 +848,13 @@ impl<'a> CkEthMinterCanister<'a> {
             .update_("get_minter_info", candid, ())
             .await
             .unwrap()
+    }
+
+    async fn reinstall(&mut self, arg: MinterInitArgs) {
+        self.canister
+            .reinstall_with_self_binary(Encode!(&MinterArg::InitArg(arg)).unwrap())
+            .await
+            .unwrap();
     }
 
     async fn upgrade(&mut self, arg: MinterUpgradeArg) {
