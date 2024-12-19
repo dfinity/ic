@@ -33,7 +33,7 @@
 #       //rs/pocket_ic_server:__pkg__ depends on
 #           //rs/tests/research:ic-hs
 #           //rs/tests/httpbin-rs:httpbin
-#           //rs/tests/testing_verification:spec_compliance
+#           //rs/tests/research:spec_compliance
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],

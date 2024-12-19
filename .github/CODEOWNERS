@@ -235,6 +235,8 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/state/                               @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
+/rs/tests/idx/                                          @dfinity/idx
+/rs/tests/testnets/                                     @dfinity/idx
 /rs/tests/research                                      @dfinity/research
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node

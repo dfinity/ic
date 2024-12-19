@@ -90,7 +90,7 @@ func NewTestCmd() *cobra.Command {
 		Use:     "test <system_test_target> [flags] [-- <bazel_args>]",
 		Aliases: []string{"system_test", "t"},
 		Short:   "Run system_test target with Bazel",
-		Example: "  ict test //rs/tests/testing_verification:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors\n  ict test //rs/tests/testing_verification:basic_health_test --set-required-host-features \"performance,host=dm1-dll01.dm1.dfinity.network\"",
+		Example: "  ict test //rs/tests/idx:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors\n  ict test //rs/tests/idx:basic_health_test --set-required-host-features \"performance,host=dm1-dll01.dm1.dfinity.network\"",
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
