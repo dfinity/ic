@@ -24,6 +24,7 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 icp-ledger = { path = "../../ledger_suite/icp" }

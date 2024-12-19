@@ -9,7 +9,6 @@ pub mod logs;
 pub mod neuron;
 pub mod pb;
 pub mod proposal;
-mod request_impls;
 pub mod reward;
 pub mod sns_upgrade;
 mod treasury;
