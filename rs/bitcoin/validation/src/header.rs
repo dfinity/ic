@@ -205,17 +205,18 @@ fn compute_next_difficulty(
     // actual_interval will deviate slightly from 2 weeks. Our goal is to
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
-    let actual_interval = prev_header.time - last_adjustment_time;
+    let actual_interval = (prev_header.time as i64) - (last_adjustment_time as i64);
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
-    let target_adjustment_interval_time: u32 = DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES; //Number of seconds in 2 weeks
+    let target_adjustment_interval_time: i64 =
+        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64; //Number of seconds in 2 weeks
 
     // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
     // actual_interval deviates too much from the expected 2 weeks.
     let adjusted_interval = actual_interval.clamp(
         target_adjustment_interval_time / 4,
         target_adjustment_interval_time * 4,
-    );
+    ) as u32;
 
     // Computing new difficulty target.
     // new difficulty target = old difficult target * (adjusted_interval /
@@ -496,5 +497,33 @@ mod test {
                 BlockHeader::u256_from_compact_target(expected_pow)
             );
         }
+    }
+
+    #[test]
+    fn test_compute_next_difficulty_for_backdated_blocks() {
+        // Arrange: Set up the test network and parameters
+        let network = Network::Testnet;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = 486604799;
+
+        // Create the genesis header and initialize the header store
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..chain_length {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time - 1, // Each new block is 1 second earlier
+                ..last_header
+            };
+            store.add(new_header);
+            last_header = new_header;
+        }
+
+        // Act.
+        let difficulty = compute_next_difficulty(&network, &store, &last_header, chain_length);
+
+        // Assert.
+        assert_eq!(difficulty, 473956288);
     }
 }
