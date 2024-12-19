@@ -2445,6 +2445,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         } = manage_dapp_canister_settings;
 
         ManageDappCanisterSettingsRequest {
@@ -2455,6 +2456,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         }
     }
 }
