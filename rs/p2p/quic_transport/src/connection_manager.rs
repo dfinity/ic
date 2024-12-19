@@ -23,7 +23,7 @@
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     net::SocketAddr,
     sync::{Arc, RwLock},
     time::Duration,
@@ -35,7 +35,7 @@ use axum::{
 };
 use futures::StreamExt;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
@@ -204,10 +204,7 @@ pub(crate) fn start_connection_manager(
     // Maybe in the future we could derive a key from our tls key.
     let endpoint_config = EndpointConfig::default();
     let rustls_server_config = tls_config
-        .server_config(
-            SomeOrAllNodes::Some(BTreeSet::new()),
-            registry_client.get_latest_version(),
-        )
+        .server_config(registry_client.get_latest_version())
         .expect(
             "The rustls server config must be locally available, otherwise transport can't start.",
         );
@@ -396,11 +393,10 @@ impl ConnectionManager {
 
         let subnet_node_set = self.topology.get_subnet_nodes();
         self.metrics.topology_size.set(subnet_node_set.len() as i64);
-        let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
         let rustls_server_config = self.tls_config
-            .server_config(subnet_nodes, self.topology.latest_registry_version())
+            .server_config(self.topology.latest_registry_version())
             .expect("The rustls server config must be locally available, otherwise transport can't run.");
 
         let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
