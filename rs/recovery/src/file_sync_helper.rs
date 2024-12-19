@@ -4,8 +4,8 @@ use crate::{
     error::{RecoveryError, RecoveryResult},
     ssh_helper,
 };
-use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
+use ic_replay::consent_given;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
@@ -13,7 +13,6 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::Command,
-    thread,
     time::Duration,
 };
 
@@ -74,9 +73,10 @@ pub fn rsync_with_retries(
     target: &str,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
-    retries: usize,
+    auto_retry: bool,
+    max_retries: usize,
 ) -> RecoveryResult<Option<String>> {
-    for _ in 0..retries {
+    for _ in 0..max_retries {
         match rsync(
             logger,
             excludes.clone(),
@@ -85,12 +85,25 @@ pub fn rsync_with_retries(
             require_confirmation,
             key_file,
         ) {
-            Err(e) => warn!(logger, "Rsync failed: {:?}, retrying...", e),
+            Err(e) => {
+                if auto_retry {
+                    // In non-interactive cases, we wait a short while
+                    // before re-trying rsync.
+                    warn!(logger, "Rsync failed: {:?}, retrying in 10 seconds...", e);
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                } else if !consent_given(&format!(
+                    "Rsync failed: {e:?}. Do you want to retry the \
+                    download for this node?"
+                )) {
+                    break;
+                }
+            }
             success => return success,
         }
-        thread::sleep(time::Duration::from_secs(10));
     }
-    Err(RecoveryError::UnexpectedError("All retries failed".into()))
+    Err(RecoveryError::UnexpectedError(
+        "Rsync failed, too many retries".into(),
+    ))
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.

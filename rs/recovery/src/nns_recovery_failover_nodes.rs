@@ -257,10 +257,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
-            StepType::DownloadCertifications => Ok(Box::new(
-                self.recovery
-                    .get_download_certs_step(self.params.subnet_id, true),
-            )),
+            StepType::DownloadCertifications => {
+                Ok(Box::new(self.recovery.get_download_certs_step(
+                    self.params.subnet_id,
+                    true,
+                    !self.interactive(),
+                )))
+            }
 
             StepType::MergeCertificationPools => {
                 Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
