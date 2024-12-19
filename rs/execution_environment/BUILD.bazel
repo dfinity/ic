@@ -75,7 +75,6 @@ DEV_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
     "@crate_index//:itertools",
     "@crate_index//:libflate",
@@ -114,10 +113,12 @@ rust_ic_test(
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = ENV | {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved
@@ -136,11 +137,13 @@ rust_ic_test_suite(
     compile_data = glob(["tests/test-data/**"]),
     data = DATA + [
         "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
+        ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
     ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [

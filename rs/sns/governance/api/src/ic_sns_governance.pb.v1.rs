@@ -612,6 +612,8 @@ pub struct ManageDappCanisterSettings {
     pub log_visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "8")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
 }
 /// Unlike `Governance.Version`, this message has optional fields and is the recommended one
 /// to use in APIs that can evolve. For example, the SNS Governance could eventually support
@@ -1723,6 +1725,9 @@ pub struct Governance {
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
+    use crate::format_full_hash;
+    use serde::ser::SerializeStruct;
+
     /// The commands that require a neuron lock.
     #[derive(
         candid::CandidType,
@@ -1898,6 +1903,32 @@ pub mod governance {
         #[prost(string, optional, tag = "4")]
         pub description: ::core::option::Option<::prost::alloc::string::String>,
     }
+
+    impl serde::Serialize for Version {
+        fn serialize<S>(self: &Version, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut version = serializer.serialize_struct("Version", 6)?;
+            version.serialize_field("root_wasm_hash", &format_full_hash(&self.root_wasm_hash))?;
+            version.serialize_field(
+                "governance_wasm_hash",
+                &format_full_hash(&self.governance_wasm_hash),
+            )?;
+            version.serialize_field("swap_wasm_hash", &format_full_hash(&self.swap_wasm_hash))?;
+            version.serialize_field("index_wasm_hash", &format_full_hash(&self.index_wasm_hash))?;
+            version.serialize_field(
+                "ledger_wasm_hash",
+                &format_full_hash(&self.ledger_wasm_hash),
+            )?;
+            version.serialize_field(
+                "archive_wasm_hash",
+                &format_full_hash(&self.archive_wasm_hash),
+            )?;
+            version.end()
+        }
+    }
+
     /// A version of the SNS defined by the WASM hashes of its canisters.
     #[derive(
         candid::CandidType,
@@ -1905,7 +1936,6 @@ pub mod governance {
         comparable::Comparable,
         Eq,
         std::hash::Hash,
-        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3438,6 +3468,28 @@ pub struct AdvanceTargetVersionRequest {
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionResponse {}
+/// A test-only API that refreshes the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsRequest {}
+/// The response to a request to refresh the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsResponse {}
 /// Represents a single entry in the upgrade journal.
 #[derive(
     candid::CandidType,
@@ -3653,7 +3705,16 @@ pub struct UpgradeJournal {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetUpgradeJournalRequest {}
+pub struct GetUpgradeJournalRequest {
+    /// Maximum number of journal entries to return.
+    /// If not specified, defaults to 100. Values larger than 100 will be capped at 100.
+    #[prost(uint64, optional, tag = "1")]
+    pub limit: ::core::option::Option<u64>,
+    /// The starting index from which to return entries, counting from the oldest entry (0).
+    /// If not specified, return the most recent entries.
+    #[prost(uint64, optional, tag = "2")]
+    pub offset: ::core::option::Option<u64>,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3676,6 +3737,8 @@ pub struct GetUpgradeJournalResponse {
     pub deployed_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
+    #[prost(uint64, optional, tag = "6")]
+    pub upgrade_journal_entry_count: ::core::option::Option<u64>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is

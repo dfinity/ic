@@ -937,6 +937,10 @@ impl DefiniteCanisterSettingsArgs {
         self.wasm_memory_limit.clone()
     }
 
+    pub fn wasm_memory_threshold(&self) -> candid::Nat {
+        self.wasm_memory_threshold.clone()
+    }
+
     pub fn compute_allocation(&self) -> candid::Nat {
         self.compute_allocation.clone()
     }
@@ -2711,12 +2715,38 @@ impl ReshareChainKeyResponse {
     }
 }
 
+/// Represents the BIP341 aux argument of the sign_with_schnorr API.
+/// ```text
+/// (record {
+///   merkle_root_hash: blob;
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct SignWithBip341Aux {
+    pub merkle_root_hash: ByteBuf,
+}
+
+/// Represents the aux argument of the sign_with_schnorr API.
+/// ```text
+/// (variant {
+///    bip341: record {
+///      merkle_root_hash: blob;
+///   }
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum SignWithSchnorrAux {
+    #[serde(rename = "bip341")]
+    Bip341(SignWithBip341Aux),
+}
+
 /// Represents the argument of the sign_with_schnorr API.
 /// ```text
 /// (record {
 ///   message : blob;
 ///   derivation_path : vec blob;
 ///   key_id : schnorr_key_id;
+///   aux: opt schnorr_aux;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -2725,6 +2755,7 @@ pub struct SignWithSchnorrArgs {
     pub message: Vec<u8>,
     pub derivation_path: DerivationPath,
     pub key_id: SchnorrKeyId,
+    pub aux: Option<SignWithSchnorrAux>,
 }
 
 impl Payload<'_> for SignWithSchnorrArgs {}

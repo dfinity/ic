@@ -42,12 +42,9 @@ use std::mem::size_of;
 mod canister_task;
 
 #[cfg(test)]
-mod compilation;
-#[cfg(test)]
-mod orthogonal_persistence;
-
-#[cfg(test)]
 mod canister_snapshots;
+#[cfg(test)]
+mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 const ONE_GIB: i64 = 1 << 30;
@@ -171,6 +168,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_schnorr(key_id),
+            aux: None,
         }
         .encode(),
         Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
@@ -2284,9 +2282,16 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
-fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
+fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
+        name: name.to_string(),
+    })
+}
+
+fn make_bip340_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
         name: name.to_string(),
     })
 }
@@ -3113,64 +3118,71 @@ fn test_sign_with_schnorr_api_is_enabled() {
     // TODO(EXC-1629): upgrade to more of e2e test with mocking the response
     // from consensus and producing the response to the canister.
 
-    // Arrange.
-    let key_id = make_schnorr_key("correct_key");
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(key_id.clone())
-        .build();
-    let canister_id = test.universal_canister().unwrap();
-    // Check that the SubnetCallContextManager is empty.
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_count(&key_id),
-        0
-    );
+    let test_cases = [
+        make_ed25519_key("correct_ed25519_key"),
+        make_bip340_key("correct_bip340_key"),
+    ];
 
-    // Act.
-    let method = Method::SignWithSchnorr;
-    let run = wasm()
-        .call_with_cycles(
-            ic00::IC_00,
-            method,
-            call_args()
-                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::from(100_000_000_000u128),
-        )
-        .build();
-    let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+    for key_id in &test_cases {
+        // Arrange.
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_chain_key(key_id.clone())
+            .build();
+        let canister_id = test.universal_canister().unwrap();
+        // Check that the SubnetCallContextManager is empty.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_threshold_contexts_count(key_id),
+            0
+        );
 
-    // Assert.
-    // Check that the request is accepted and processing.
-    assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: canister_id.get(),
-            user_id: test.user_id(),
-            time: test.time(),
-            state: IngressState::Processing,
-        }
-    );
-    // Check that the SubnetCallContextManager contains the request.
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_count(&key_id),
-        1
-    );
+        // Act.
+        let method = Method::SignWithSchnorr;
+        let run = wasm()
+            .call_with_cycles(
+                ic00::IC_00,
+                method,
+                call_args()
+                    .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::from(100_000_000_000u128),
+            )
+            .build();
+        let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+
+        // Assert.
+        // Check that the request is accepted and processing.
+        assert_eq!(
+            ingress_status,
+            IngressStatus::Known {
+                receiver: canister_id.get(),
+                user_id: test.user_id(),
+                time: test.time(),
+                state: IngressState::Processing,
+            }
+        );
+        // Check that the SubnetCallContextManager contains the request.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_threshold_contexts_count(key_id),
+            1
+        );
+    }
 }
 
 #[test]
-fn test_vetkd_public_key_api_is_disabled() {
+fn test_vetkd_public_key_api_is_enabled() {
+    let key_id = make_vetkd_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3178,22 +3190,50 @@ fn test_vetkd_public_key_api_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
         .build();
+
+    let nonexistent_key_id = into_inner_vetkd(make_vetkd_key("nonexistent_key_id"));
     test.inject_call_to_ic00(
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_vetkd(make_vetkd_key("some_key")),
+            key_id: nonexistent_key_id.clone(),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.inject_call_to_ic00(
+        Method::VetKdPublicKey,
+        ic00::VetKdPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: into_inner_vetkd(key_id),
         }
         .encode(),
         Cycles::new(0),
     );
     test.execute_all();
+
+    // Check, that call fails for a key that doesn't exist
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vetkd_public_key API is not yet implemented.",
+        format!(
+            "Subnet {} does not hold threshold key vetkd:{}.",
+            own_subnet, nonexistent_key_id
+        ),
+    );
+
+    // NOTE: Since the public keys delivered to execution by the test framework
+    // are not well formed Bls G2 points, the deserialization of this function will
+    // fail. However, the fact that we get this error message indicates, that we
+    // requested a key that actually exists.
+    let response = test.xnet_messages()[1].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "failed to retrieve VetKD public key: InvalidPublicKey",
     )
 }
 

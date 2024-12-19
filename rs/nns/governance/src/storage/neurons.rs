@@ -46,7 +46,7 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
 
 /// A section of a neuron represents a part of neuron that can potentially be large, and when a
 /// neuron is read, the caller can specify which sections of the neuron they want to read.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) struct NeuronSections {
     pub hot_keys: bool,
     pub recent_ballots: bool,
@@ -56,15 +56,21 @@ pub(crate) struct NeuronSections {
 }
 
 impl NeuronSections {
-    pub fn all() -> Self {
-        Self {
-            hot_keys: true,
-            recent_ballots: true,
-            followees: true,
-            known_neuron_data: true,
-            transfer: true,
-        }
-    }
+    pub const NONE: Self = Self {
+        hot_keys: false,
+        recent_ballots: false,
+        followees: false,
+        known_neuron_data: false,
+        transfer: false,
+    };
+
+    pub const ALL: Self = Self {
+        hot_keys: true,
+        recent_ballots: true,
+        followees: true,
+        known_neuron_data: true,
+        transfer: true,
+    };
 }
 
 impl<Memory> StableNeuronStoreBuilder<Memory>
@@ -282,6 +288,24 @@ where
         Ok(())
     }
 
+    /// Updates the main part of an existing neuron.
+    pub fn with_main_part_mut<R>(
+        &mut self,
+        neuron_id: NeuronId,
+        f: impl FnOnce(&mut AbridgedNeuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let mut main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let result = f(&mut main_neuron_part);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(result)
+    }
+
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
@@ -397,7 +421,7 @@ where
     where
         R: RangeBounds<NeuronId> + Clone,
     {
-        self.range_neurons_sections(range, NeuronSections::all())
+        self.range_neurons_sections(range, NeuronSections::ALL)
     }
 
     /// Returns the next neuron_id equal to or higher than the provided neuron_id

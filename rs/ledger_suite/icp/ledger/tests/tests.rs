@@ -14,11 +14,12 @@ use ic_ledger_suite_state_machine_tests::{
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
-    CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
+    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
+    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
+    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
+    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
+    SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
@@ -30,7 +31,7 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -62,6 +63,14 @@ fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-allowance-getter",
+        &[],
+    )
+}
+
+fn ledger_wasm_low_instruction_limits() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-low-limits",
         &[],
     )
 }
@@ -104,11 +113,7 @@ fn query_blocks(
             PrincipalId(caller),
             ledger,
             "query_blocks",
-            Encode!(&GetBlocksArgs {
-                start,
-                length: length as usize
-            })
-            .unwrap()
+            Encode!(&GetBlocksArgs { start, length }).unwrap()
         )
         .expect("failed to query blocks")
         .bytes(),
@@ -129,11 +134,7 @@ fn query_encoded_blocks(
             PrincipalId(caller),
             ledger,
             "query_encoded_blocks",
-            Encode!(&GetBlocksArgs {
-                start,
-                length: length as usize
-            })
-            .unwrap()
+            Encode!(&GetBlocksArgs { start, length }).unwrap()
         )
         .expect("failed to query blocks")
         .bytes(),
@@ -154,9 +155,12 @@ fn get_blocks_pb(
             PrincipalId(caller),
             ledger,
             "get_blocks_pb",
-            ProtoBuf(GetBlocksArgs { start, length })
-                .into_bytes()
-                .unwrap(),
+            ProtoBuf(GetBlocksArgs {
+                start,
+                length: length as u64,
+            })
+            .into_bytes()
+            .unwrap(),
         )
         .expect("failed to query blocks")
         .bytes();
@@ -744,7 +748,7 @@ fn check_block_endpoint_limits() {
 
     let get_blocks_args = Encode!(&GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64
     })
     .unwrap();
 
@@ -799,7 +803,7 @@ fn check_block_endpoint_limits() {
     // get_blocks_pb
     let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1,
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
     })
     .into_bytes()
     .unwrap();
@@ -953,7 +957,7 @@ fn check_archive_block_endpoint_limits() {
 
     let get_blocks_args = Encode!(&GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64
     })
     .unwrap();
 
@@ -1046,7 +1050,7 @@ fn check_archive_block_endpoint_limits() {
     // get_blocks_pb
     let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1,
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
     })
     .into_bytes()
     .unwrap();
@@ -1249,82 +1253,14 @@ fn test_upgrade_serialization() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_upgrade_serialization_fixed_tx() {
-    let ledger_wasm_mainnet = ledger_wasm_mainnet();
-    let ledger_wasm_current = ledger_wasm();
-
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let p3 = PrincipalId::new_user_test_id(3);
-    let accounts = vec![
-        Account::from(p1.0),
-        Account::from(p2.0),
-        Account::from(p3.0),
-    ];
-
-    let env = StateMachine::new();
-    let mut initial_balances = HashMap::new();
-    for account in &accounts {
-        initial_balances.insert((*account).into(), Tokens::from_e8s(10_000_000));
-    }
-
-    let payload = LedgerCanisterInitPayload::builder()
-        .minting_account(MINTER.into())
-        .icrc1_minting_account(MINTER)
-        .initial_values(initial_balances)
-        .transfer_fee(Tokens::from_e8s(10_000))
-        .token_symbol_and_name("ICP", "Internet Computer")
-        .build()
-        .unwrap();
-    let canister_id = env
-        .install_canister(
-            ledger_wasm_mainnet.clone(),
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
-        .expect("Unable to install the Ledger canister with the new init");
-
-    let approve_args = default_approve_args(p2.0, 120_000);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-    let mut approve_args = default_approve_args(p3.0, 130_000);
-    let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
-    approve_args.expires_at = Some(expiration);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-
-    let mut balances = BTreeMap::new();
-    for account in &accounts {
-        balances.insert(account, balance_of(&env, canister_id, *account));
-    }
-
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
-        env.upgrade_canister(
-            canister_id,
-            ledger_wasm,
-            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
-
-        let allowance = Account::get_allowance(&env, canister_id, p1.0, p2.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
-        assert_eq!(allowance.expires_at, None);
-
-        let allowance = Account::get_allowance(&env, canister_id, p1.0, p3.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
-        assert_eq!(allowance.expires_at, Some(expiration));
-
-        for account in &accounts {
-            assert_eq!(balances[account], balance_of(&env, canister_id, *account));
-        }
-    };
-
-    // Test if the old serialized approvals and balances are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone());
-    // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current);
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
+fn test_multi_step_migration() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1333,6 +1269,75 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_mainnet(),
         ledger_wasm_next_version(),
         ledger_wasm(),
+        encode_init_args,
+        true,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn test_stable_migration_endpoints_disabled() {
+    let send_args = SendArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: PrincipalId::new_user_test_id(2).into(),
+        created_at_time: None,
+    };
+
+    let send_dfx_args = Encode!(&send_args).unwrap();
+    let send_pb_args = ProtoBuf(send_args).into_bytes().unwrap();
+
+    let ai = AccountIdentifier { hash: [1u8; 28] };
+    let transfer_args = Encode!(&icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: ai.to_address(),
+        created_at_time: None,
+    })
+    .unwrap();
+
+    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+        vec![
+            ("send_pb", send_pb_args),
+            ("send_dfx", send_dfx_args),
+            ("transfer", transfer_args),
+        ],
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn test_incomplete_migration() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn test_incomplete_migration_to_current() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn test_metrics_while_migrating() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
 }
@@ -1506,11 +1511,6 @@ fn test_balances_overflow() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn account_identifier_test() {
     let env = StateMachine::new();
     let payload = LedgerCanisterInitPayload::builder()
@@ -1643,7 +1643,7 @@ fn test_query_archived_blocks() {
             callback.method.to_owned(),
             Encode!(&GetBlocksArgs {
                 start: *start,
-                length: *length as usize
+                length: *length
             })
             .unwrap()
         )
@@ -1712,6 +1712,108 @@ fn test_query_archived_blocks() {
 #[test]
 fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_query_blocks_large_length() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    for i in 0..MAX_BLOCKS_PER_REQUEST + 1 {
+        let user = PrincipalId::new_user_test_id(i as u64);
+        initial_balances.insert(Account::from(user.0).into(), Tokens::from_e8s(100_000));
+    }
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    // query_blocks
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "query_blocks",
+            Encode!(&GetBlocksArgs {
+                start: 0,
+                // If this is cast (in a wasm32 ledger) using `as usize`, it will overflow to 0u32.
+                length: (u32::MAX as u64) + 1
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        QueryBlocksResponse
+    )
+    .expect("should successfully decode QueryBlocksResponse");
+    // Verify that we have more blocks in the ledger than can be returned in a single query.
+    assert_eq!(res.chain_length, (MAX_BLOCKS_PER_REQUEST + 1) as u64);
+    // Verify that the number of blocks in the response is limited to MAX_BLOCKS_PER_REQUEST.
+    assert_eq!(res.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+    // Also verify that the maximum number of blocks per request is larger than 0, in case the
+    // length `(u32::MAX as u64) + 1` in the request was incorrectly cast to a wasm32 `usize`
+    // (`u32`)).
+    if MAX_BLOCKS_PER_REQUEST == 0 {
+        panic!("MAX_BLOCKS_PER_REQUEST should be larger than 0");
+    }
+}
+
+#[test]
+fn test_account_balance_non_standard_account_identifier_length() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let expected_balance = Tokens::from_e8s(100_000);
+    initial_balances.insert(
+        AccountIdentifier::from(Account::from(p1.0)),
+        expected_balance,
+    );
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    // account balance of account identifier of correct length
+    let valid_account_identifier_bytes = ByteBuf::from(AccountIdentifier::from(p1.0).to_vec());
+    assert_eq!(valid_account_identifier_bytes.len(), 32);
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierByteBuf {
+                account: valid_account_identifier_bytes
+            })
+            .unwrap()
+        )
+        .expect("failed to query account_balance")
+        .bytes(),
+        Tokens
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, expected_balance);
+
+    // account balance of account identifier of zero length
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierByteBuf {
+                account: ByteBuf::from(vec![0; 0])
+            })
+            .unwrap()
+        )
+        .expect("failed to query account_balance")
+        .bytes(),
+        Tokens
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, Tokens::from_e8s(0));
 }
 
 mod metrics {

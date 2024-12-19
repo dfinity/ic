@@ -1,15 +1,4 @@
-use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::str;
-use std::time::Duration;
-use std::{env, fs};
-#[rustfmt::skip]
-
 use anyhow::Result;
-
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
@@ -17,12 +6,20 @@ use ic_system_test_driver::driver::driver_setup::{
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
 use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use slog::{error, info, Logger};
 use ssh2::Session;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::str;
+use std::time::Duration;
+use std::{env, fs};
 
 const UVM_NAME: &str = "test-driver";
 const COLOCATED_TEST: &str = "COLOCATED_TEST";
@@ -31,6 +28,7 @@ const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
 
 pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
+const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -197,6 +195,43 @@ fn setup(env: TestEnv) {
         }
     };
 
+    // The user specified some dashboards to be used in the uvm
+    let dashboards_uvm_host_path = format!("/home/admin/{DASHBOARDS_TAR_ZST}");
+    let dashboards_path_in_docker = match std::env::var("IC_DASHBOARDS_DIR") {
+        Ok(provided_path) => {
+            info!(
+                log,
+                "Dashboards dir is specified and its contents will be copied over to the UVM"
+            );
+
+            let output = Command::new("tar")
+                .arg("-cf")
+                .arg(DASHBOARDS_TAR_ZST)
+                .arg("-C")
+                .arg(&provided_path)
+                .arg(".")
+                .output()
+                .unwrap_or_else(|e| panic!("Failed to create a tar of dashboards because: {e}"));
+
+            if !output.status.success() {
+                let err = str::from_utf8(&output.stderr).unwrap_or("");
+                panic!("Tarring the dashboards directory failed with error: {err}");
+            }
+
+            let source = Path::new(&DASHBOARDS_TAR_ZST).to_path_buf();
+            scp(
+                log.clone(),
+                &session,
+                source,
+                Path::new(&dashboards_uvm_host_path).to_path_buf(),
+            );
+            provided_path
+        }
+        // Will be an empty dir in a resulting docker image
+        // if the dashboards are not provided
+        _ => "/home/root/dashboards".to_string(),
+    };
+
     info!(log, "Creating final docker image ...");
 
     let forward_ssh_agent =
@@ -209,6 +244,11 @@ cd /home/admin
 
 tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level=runfiles
 tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level=root_env
+if [ -e "/home/admin/{DASHBOARDS_TAR_ZST}" ]; then
+    tar -xf /home/admin/{DASHBOARDS_TAR_ZST} --one-top-level=dashboards
+else
+    mkdir -p /home/admin/dashboards
+fi
 
 docker load -i /config/ubuntu_test_runtime.tar
 
@@ -216,6 +256,7 @@ cat <<EOF > /home/admin/Dockerfile
 FROM ubuntu_test_runtime:image
 COPY runfiles /home/root/runfiles
 COPY root_env /home/root/root_env
+COPY dashboards {dashboards_path_in_docker}
 RUN chmod 700 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
 RUN chmod 600 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
 EOF

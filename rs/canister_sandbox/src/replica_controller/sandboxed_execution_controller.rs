@@ -13,7 +13,8 @@ use ic_embedders::wasm_executor::{
     SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{
-    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
+    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, StoredCompilation,
+    WasmExecutionInput,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_interfaces_state_manager::StateReader;
@@ -39,6 +40,7 @@ use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
+use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::mpsc::Receiver;
@@ -671,6 +673,8 @@ pub struct SandboxedExecutionController {
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    /// A channel to communicate with the `monitoring_and_evict` thread.
+    /// Send `true` to stop monitoring, `false` to trigger the monitoring.
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
@@ -903,33 +907,63 @@ impl WasmExecutor for SandboxedExecutionController {
 
                     match reply {
                         Err(err) => {
-                            compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                            compilation_cache.insert_err(&wasm_binary.binary, err.clone());
                             return Err(err);
                         }
                         Ok((compilation_result, serialized_module)) => {
-                            let serialized_module = Arc::new(serialized_module);
-                            compilation_cache
-                                .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
+                            let serialized_module =
+                                compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
 
-                            sandbox_process.history.record(format!(
-                                "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
-                                wasm_id, next_wasm_memory_id
-                            ));
-                            let sandbox_result = sandbox_process
-                                .sandbox_service
-                                .create_execution_state_serialized(
-                                    protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                        wasm_id,
-                                        serialized_module: Arc::clone(&serialized_module),
-                                        wasm_page_map: wasm_page_map.serialize(),
-                                        next_wasm_memory_id,
-                                        canister_id,
-                                        stable_memory_page_map: stable_memory_page_map.serialize(),
-                                    },
-                                )
-                                .sync()
-                                .unwrap()
-                                .0?;
+                            let sandbox_result = match &serialized_module {
+                                StoredCompilation::Disk(serialized_module) => {
+                                    sandbox_process.history.record(format!(
+                                        "CreateExecutionStateViaFile(wasm_id={}, \
+                                        next_wasm_memory_id={})",
+                                        wasm_id, next_wasm_memory_id
+                                    ));
+                                    sandbox_process
+                                        .sandbox_service
+                                        .create_execution_state_via_file(
+                                            protocol::sbxsvc::CreateExecutionStateViaFileRequest {
+                                                wasm_id,
+                                                bytes: serialized_module.bytes.as_raw_fd(),
+                                                initial_state_data: serialized_module
+                                                    .initial_state_data
+                                                    .as_raw_fd(),
+                                                wasm_page_map: wasm_page_map.serialize(),
+                                                next_wasm_memory_id,
+                                                canister_id,
+                                                stable_memory_page_map: stable_memory_page_map
+                                                    .serialize(),
+                                            },
+                                        )
+                                        .sync()
+                                        .unwrap()
+                                        .0?
+                                }
+                                StoredCompilation::Memory(serialized_module) => {
+                                    sandbox_process.history.record(format!(
+                                        "CreateExecutionStateSerialized(wasm_id={}, \
+                                        next_wasm_memory_id={})",
+                                        wasm_id, next_wasm_memory_id
+                                    ));
+                                    sandbox_process
+                                        .sandbox_service
+                                        .create_execution_state_serialized(
+                                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                                wasm_id,
+                                                serialized_module: Arc::clone(serialized_module),
+                                                wasm_page_map: wasm_page_map.serialize(),
+                                                next_wasm_memory_id,
+                                                canister_id,
+                                                stable_memory_page_map: stable_memory_page_map.serialize(),
+                                            },
+                                        )
+                                        .sync()
+                                        .unwrap()
+                                        .0?
+                                }
+                            };
                             self.metrics
                                 .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
                                 .observe(sandbox_result.total_sandbox_time.as_secs_f64());
@@ -956,25 +990,55 @@ impl WasmExecutor for SandboxedExecutionController {
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
                         .start_timer();
-                    sandbox_process.history.record(format!(
-                        "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
-                        wasm_id, next_wasm_memory_id
-                    ));
-                    let sandbox_result = sandbox_process
-                        .sandbox_service
-                        .create_execution_state_serialized(
-                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                wasm_id,
-                                serialized_module: Arc::clone(&serialized_module),
-                                wasm_page_map: wasm_page_map.serialize(),
-                                next_wasm_memory_id,
-                                canister_id,
-                                stable_memory_page_map: stable_memory_page_map.serialize(),
-                            },
-                        )
-                        .sync()
-                        .unwrap()
-                        .0?;
+                    let sandbox_result = match &serialized_module {
+                        StoredCompilation::Memory(serialized_module) => {
+                            sandbox_process.history.record(format!(
+                                "CreateExecutionStateSerialized(wasm_id={}, \
+                                next_wasm_memory_id={})",
+                                wasm_id, next_wasm_memory_id
+                            ));
+                            sandbox_process
+                                .sandbox_service
+                                .create_execution_state_serialized(
+                                    protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                        wasm_id,
+                                        serialized_module: Arc::clone(serialized_module),
+                                        wasm_page_map: wasm_page_map.serialize(),
+                                        next_wasm_memory_id,
+                                        canister_id,
+                                        stable_memory_page_map: stable_memory_page_map.serialize(),
+                                    },
+                                )
+                                .sync()
+                                .unwrap()
+                                .0?
+                        }
+                        StoredCompilation::Disk(serialized_module) => {
+                            sandbox_process.history.record(format!(
+                                "CreateExecutionStateViaFile(wasm_id={}, \
+                                next_wasm_memory_id={})",
+                                wasm_id, next_wasm_memory_id
+                            ));
+                            sandbox_process
+                                .sandbox_service
+                                .create_execution_state_via_file(
+                                    protocol::sbxsvc::CreateExecutionStateViaFileRequest {
+                                        wasm_id,
+                                        bytes: serialized_module.bytes.as_raw_fd(),
+                                        initial_state_data: serialized_module
+                                            .initial_state_data
+                                            .as_raw_fd(),
+                                        wasm_page_map: wasm_page_map.serialize(),
+                                        next_wasm_memory_id,
+                                        canister_id,
+                                        stable_memory_page_map: stable_memory_page_map.serialize(),
+                                    },
+                                )
+                                .sync()
+                                .unwrap()
+                                .0?
+                        }
+                    };
                     self.metrics
                         .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
                         .observe(sandbox_result.total_sandbox_time.as_secs_f64());
@@ -993,7 +1057,7 @@ impl WasmExecutor for SandboxedExecutionController {
             .metrics
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
-        observe_metrics(&self.metrics, &serialized_module.imports_details);
+        observe_metrics(&self.metrics, &serialized_module.imports_details());
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -1025,15 +1089,16 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory_page_map,
             ic_replicated_state::NumWasmPages::from(0),
         );
-        let is_wasm64 = serialized_module.is_wasm64;
+        let is_wasm64 = serialized_module.is_wasm64();
+        let (exports, metadata) = serialized_module.exports_and_metadata();
         let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            exports: ExportedFunctions::new(serialized_module.exported_functions.clone()),
+            exports: ExportedFunctions::new(exports),
             wasm_memory,
             stable_memory,
             exported_globals,
-            metadata: serialized_module.wasm_metadata.clone(),
+            metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
             is_wasm64,
@@ -1041,7 +1106,7 @@ impl WasmExecutor for SandboxedExecutionController {
 
         Ok((
             execution_state,
-            serialized_module.compilation_cost,
+            serialized_module.compilation_cost(),
             compilation_result,
         ))
     }
@@ -1087,6 +1152,7 @@ impl SandboxedExecutionController {
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        spawn_monitor_thread: bool,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
@@ -1105,17 +1171,19 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
-        std::thread::spawn(move || {
-            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
-                logger_copy,
-                backends_copy,
-                metrics_copy,
-                max_sandbox_count,
-                max_sandbox_idle_time,
-                rx,
-                state_reader_copy,
-            );
-        });
+        if spawn_monitor_thread {
+            std::thread::spawn(move || {
+                SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+                    logger_copy,
+                    backends_copy,
+                    metrics_copy,
+                    max_sandbox_count,
+                    max_sandbox_idle_time,
+                    rx,
+                    state_reader_copy,
+                );
+            });
+        }
 
         let exit_watcher = Arc::new(ExitWatcher {
             logger: logger.clone(),
@@ -1656,11 +1724,11 @@ fn open_wasm(
                         .on_completion(|_| ());
                     cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
                     observe_metrics(metrics, &serialized_module.imports_details);
-                    compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
+                    compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
                     Ok((wasm_id, Some(compilation_result)))
                 }
                 Err(err) => {
-                    compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                    compilation_cache.insert_err(&wasm_binary.binary, err.clone());
                     cache_errored_wasm(&mut embedder_cache, err.clone());
                     Err(err)
                 }
@@ -1673,17 +1741,39 @@ fn open_wasm(
         }
         Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
-            observe_metrics(metrics, &serialized_module.imports_details);
-            sandbox_process
-                .history
-                .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
-            sandbox_process
-                .sandbox_service
-                .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
-                    wasm_id,
-                    serialized_module: Arc::clone(&serialized_module.bytes),
-                })
-                .on_completion(|_| ());
+            observe_metrics(metrics, &serialized_module.imports_details());
+            match serialized_module {
+                StoredCompilation::Memory(serialized_module) => {
+                    sandbox_process
+                        .history
+                        .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
+                    sandbox_process
+                        .sandbox_service
+                        .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
+                            wasm_id,
+                            serialized_module: Arc::clone(&serialized_module.bytes),
+                        })
+                        .on_completion(|_| ())
+                }
+                StoredCompilation::Disk(serialized_module) => {
+                    sandbox_process
+                        .history
+                        .record(format!("OpenWasmViaFile(wasm_id={})", wasm_id));
+                    // The IPC message may be sent later on a background thread
+                    // and it's possible this entry has been dropped from the
+                    // cache in the mean time. In order to keep the file
+                    // descriptors alive, we clone the entry and defer dropping
+                    // of the clone until the response has arrived.
+                    let copy = Arc::clone(&serialized_module);
+                    sandbox_process
+                        .sandbox_service
+                        .open_wasm_via_file(protocol::sbxsvc::OpenWasmViaFileRequest {
+                            wasm_id,
+                            serialized_module: serialized_module.bytes.as_raw_fd(),
+                        })
+                        .on_completion(move |_| drop(copy))
+                }
+            }
             cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
             Ok((wasm_id, None))
         }
@@ -1999,6 +2089,7 @@ mod tests {
 
     fn sandboxed_execution_controller_dir_and_path(
         max_sandbox_count: usize,
+        spawn_monitor_thread: bool,
     ) -> (SandboxedExecutionController, TempDir, PathBuf) {
         let tempdir = tempfile::tempdir().unwrap();
         let log_path = tempdir.path().join("log");
@@ -2021,6 +2112,7 @@ mod tests {
             },
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            spawn_monitor_thread,
         )
         .unwrap();
         (controller, tempdir, log_path)
@@ -2028,7 +2120,8 @@ mod tests {
 
     #[test]
     fn sandbox_history_logged_on_sandbox_crash() {
-        let (controller, _dir, log_path) = sandboxed_execution_controller_dir_and_path(usize::MAX);
+        let (controller, _dir, log_path) =
+            sandboxed_execution_controller_dir_and_path(usize::MAX, false);
 
         let wat = "(module)";
         let canister_module = CanisterModule::new(wat::parse_str(wat).unwrap());
@@ -2138,7 +2231,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2180,7 +2274,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2227,7 +2322,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2268,5 +2364,113 @@ mod tests {
             partitioned_backends.1.len()
         );
         assert_eq!(0, partitioned_backends.2.len());
+    }
+
+    #[test]
+    fn monitor_and_evict_thread_is_spawned() {
+        let active = 1;
+        let spawn_monitor_thread = true;
+        let (controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        assert!(controller.stop_monitoring_thread.send(true).is_ok());
+
+        let spawn_monitor_thread = false;
+        let (controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        assert!(controller.stop_monitoring_thread.send(true).is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn monitor_and_evict_thread_collects_rss() {
+        let active = 1;
+        let spawn_monitor_thread = false;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        add_controller_backends(&mut controller, 0, active, 0, 0);
+        let stats = get_sandbox_process_stats(&controller.backends);
+        assert_eq!(stats.len(), active);
+        assert_ne!(stats[0].1.pid, 0);
+        assert!(stats[0].2.last_used <= Instant::now());
+        assert!(stats[0].2.last_used >= Instant::now() - Duration::from_secs(1_000));
+        assert_eq!(stats[0].2.rss, DEFAULT_SANDBOX_PROCESS_RSS);
+
+        let spawn_monitor_thread = true;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        add_controller_backends(&mut controller, 0, active, 0, 0);
+
+        // Trigger the monitoring and wait for the monitoring results.
+        let _ = controller.stop_monitoring_thread.send(false);
+        for _ in 0..10_000 {
+            let stats = get_sandbox_process_stats(&controller.backends);
+            if stats[0].2.rss != DEFAULT_SANDBOX_PROCESS_RSS {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let stats = get_sandbox_process_stats(&controller.backends);
+        assert!(stats[0].2.rss < DEFAULT_SANDBOX_PROCESS_RSS);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn monitor_and_evict_thread_collects_metrics() {
+        let active = 1;
+        let evicted = 1;
+        let spawn_monitor_thread = true;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active + evicted, spawn_monitor_thread);
+        let m = &controller.metrics;
+        let metric = &m.sandboxed_execution_subprocess_anon_rss;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        assert_eq!(m.sandboxed_execution_subprocess_rss.get_sample_count(), 0);
+        assert_eq!(m.sandboxed_execution_subprocess_rss.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_active_last_used;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_evicted_last_used;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_anon_rss_total;
+        assert_eq!(metric.get(), 0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss_total;
+        assert_eq!(metric.get(), 0);
+
+        add_controller_backends(&mut controller, 0, active, evicted, 0);
+
+        // Trigger the monitoring twice and wait for the monitoring results.
+        let _ = controller.stop_monitoring_thread.send(false);
+        let _ = controller.stop_monitoring_thread.send(false);
+        for _ in 0..10_000 {
+            let m = &controller.metrics;
+            if m.sandboxed_execution_subprocess_anon_rss.get_sample_count() > 1 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let m = &controller.metrics;
+        let metric = &m.sandboxed_execution_subprocess_anon_rss;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_ne!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0); // no memfd.
+        assert_ne!(m.sandboxed_execution_subprocess_rss.get_sample_count(), 0);
+        assert_ne!(m.sandboxed_execution_subprocess_rss.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_active_last_used;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_ne!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_evicted_last_used;
+        assert_eq!(metric.get_sample_count(), 0); // no eviction.
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_anon_rss_total;
+        assert_ne!(metric.get(), 0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss_total;
+        assert_eq!(metric.get(), 0); // no memfd.
     }
 }

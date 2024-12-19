@@ -527,4 +527,6 @@ service : (ledger_arg : LedgerArg) -> {
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
     icrc106_get_index_principal: () -> (GetIndexPrincipalResult) query;
+
+    is_ledger_ready: () -> (bool) query;
 }

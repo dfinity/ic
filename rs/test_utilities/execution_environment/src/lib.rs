@@ -66,7 +66,7 @@ use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
 use std::convert::TryFrom;
@@ -108,7 +108,7 @@ pub fn generate_subnets(
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
     }
@@ -216,7 +216,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     replica_version: ReplicaVersion,
 
     // The actual implementation.
@@ -1288,7 +1288,7 @@ impl ExecutionTest {
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.idkg_subnet_public_keys,
+            &self.chain_key_subnet_public_keys,
             &self.replica_version,
             &self.registry_settings,
             &mut round_limits,
@@ -1722,7 +1722,7 @@ pub struct ExecutionTestBuilder {
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
-    idkg_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1739,6 +1739,7 @@ pub struct ExecutionTestBuilder {
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
+    precompiled_universal_canister: bool,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1761,7 +1762,7 @@ impl Default for ExecutionTestBuilder {
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
-            idkg_keys_with_signing_enabled: Default::default(),
+            chain_keys_enabled_status: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1781,6 +1782,7 @@ impl Default for ExecutionTestBuilder {
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
             replica_version: ReplicaVersion::default(),
+            precompiled_universal_canister: true,
         }
     }
 }
@@ -1854,13 +1856,13 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled.insert(key_id, true);
+    pub fn with_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_enabled_status.insert(key_id, true);
         self
     }
 
-    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled.insert(key_id, false);
+    pub fn with_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_enabled_status.insert(key_id, false);
         self
     }
 
@@ -2154,6 +2156,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_precompiled_universal_canister(
+        mut self,
+        precompiled_universal_canister: bool,
+    ) -> Self {
+        self.precompiled_universal_canister = precompiled_universal_canister;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2206,8 +2216,8 @@ impl ExecutionTestBuilder {
         if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
             config.schnorr_signature_fee = schnorr_signature_fee;
         }
-        for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
-            // Populate hte chain key settings
+        for (key_id, is_enabled) in &self.chain_keys_enabled_status {
+            // Populate the chain key settings
             self.registry_settings.chain_key_settings.insert(
                 key_id.clone(),
                 ChainKeySettings {
@@ -2216,11 +2226,11 @@ impl ExecutionTestBuilder {
                 },
             );
 
-            if *is_signing_enabled {
+            if *is_enabled {
                 state
                     .metadata
                     .network_topology
-                    .idkg_signing_subnets
+                    .chain_key_enabled_subnets
                     .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state
@@ -2229,7 +2239,7 @@ impl ExecutionTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
+                .chain_keys_held
                 .insert(key_id.clone());
         }
 
@@ -2239,8 +2249,8 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.bitcoin_testnet_canister_id =
             self.execution_config.bitcoin.testnet_canister_id;
 
-        let idkg_subnet_public_keys = self
-            .idkg_keys_with_signing_enabled
+        let chain_key_subnet_public_keys = self
+            .chain_keys_enabled_status
             .into_keys()
             .map(|key_id| match key_id {
                 MasterPublicKeyId::Ecdsa(_) => (
@@ -2299,6 +2309,13 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
         );
+        if self.precompiled_universal_canister {
+            hypervisor.compilation_cache_insert_for_testing(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
+                    .expect("Failed to deserialize universal canister module"),
+            )
+        }
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_reader = Arc::new(FakeStateManager::new());
@@ -2383,7 +2400,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
             replica_version: self.replica_version,

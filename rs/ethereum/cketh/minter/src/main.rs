@@ -1,4 +1,6 @@
+use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
+use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -227,6 +229,8 @@ async fn get_minter_info() -> MinterInfo {
             last_eth_scraped_block_number,
             erc20_helper_contract_address,
             last_erc20_scraped_block_number,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
         } = s.log_scrapings.info();
 
         MinterInfo {
@@ -234,6 +238,7 @@ async fn get_minter_info() -> MinterInfo {
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
             erc20_helper_contract_address,
+            deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -249,6 +254,7 @@ async fn get_minter_info() -> MinterInfo {
             erc20_balances,
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
+            last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
@@ -1028,7 +1034,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         }
     } else if req.path() == "/dashboard" {
         use askama::Template;
-        let dashboard = read_state(dashboard::DashboardTemplate::from_state);
+
+        let paging_parameters = match DashboardPaginationParameters::from_query_params(&req) {
+            Ok(args) => args,
+            Err(error) => {
+                return HttpResponseBuilder::bad_request()
+                    .with_body_and_content_length(error)
+                    .build()
+            }
+        };
+        let dashboard = read_state(|state| DashboardTemplate::from_state(state, paging_parameters));
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard.render().unwrap())
