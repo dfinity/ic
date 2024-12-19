@@ -213,6 +213,7 @@ pub struct Event {
     pub payload: EventType,
 }
 
+// TODO XC-261: Inline logic
 impl From<EventType> for Event {
     fn from(value: EventType) -> Self {
         Self {

@@ -202,10 +202,10 @@ impl GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        // todo() The logic here assumes the compressed events in the file still use the 'old'
-        //  Candid interface (i.e. a vector of `EventTypes`). Once the deployed minter canisters
-        //  on mainnet/testnet return a result with the new interface, the explicit conversion
-        //  from `EventType` to `Event` must be removed.
+        // TODO XC-261 The logic here assumes the compressed events in the file still use the
+        //  'old' Candid interface (i.e. a vector of `EventTypes`). Once the deployed minter
+        //  canister on mainnet/testnet return a result with the new interface, the explicit
+        //  conversion from `EventType` to `Event` must be removed.
         Decode!(&decompressed_buffer, GetEventTypesResult)
             .expect("Failed to decode events")
             .into()
@@ -224,10 +224,10 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
         .call_and_wait()
         .await
         .expect("Failed to call get_events");
-    // todo() The logic here assumes the result we get from the minter canister `get_events` call
-    //  still uses the 'old' Candid interface (i.e. a vector of `EventTypes`). Once the deployed
-    //  minter canisters on mainnet/testnet return a result with the new interface, the explicit
-    //  conversion from `EventType` to `Event` must be removed.
+    // TODO XC-261 The logic here assumes the result we get from the minter canister `get_events`
+    //  endpoint still uses the 'old' Candid interface (i.e. a vector of `EventTypes`). Once the
+    //  deployed minter canisters on mainnet/testnet return a result with the new interface, the
+    //  explicit conversion from `EventType` to `Event` must be removed.
     Decode!(&raw_result, Vec<EventType>)
         .unwrap()
         .into_iter()
@@ -235,6 +235,7 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
         .collect()
 }
 
+// TODO XC-261: Remove
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventTypesResult {
     pub events: Vec<EventType>,
@@ -247,6 +248,7 @@ pub struct GetEventsResult {
     pub total_event_count: u64,
 }
 
+// TODO XC-261: Remove
 impl From<GetEventTypesResult> for GetEventsResult {
     fn from(value: GetEventTypesResult) -> Self {
         Self {
