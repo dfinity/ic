@@ -34,4 +34,4 @@ UMask=022
 
 # Disable systemd start and stop logs
 LogLevelMax=1
-SysLogLevel=2
+SyslogLevel=2

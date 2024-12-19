@@ -10,4 +10,4 @@ ExecStart=/opt/ic/bin/ipv4-connectivity-check.sh
 
 # Disable systemd start and stop logs
 LogLevelMax=1
-SysLogLevel=2
+SyslogLevel=2

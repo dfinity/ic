@@ -9,7 +9,7 @@ ExecStart=/opt/ic/bin/monitor-power.sh
 
 # Disable systemd start and stop logs
 LogLevelMax=1
-SysLogLevel=2
+SyslogLevel=2
 
 [Install]
 WantedBy=multi-user.target
