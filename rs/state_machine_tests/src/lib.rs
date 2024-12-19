@@ -903,7 +903,6 @@ impl StateMachineStateDir for PathBuf {
 }
 
 pub struct StateMachineBuilder {
-    state_dir: Box<dyn StateMachineStateDir>,
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
@@ -928,6 +927,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    state_dir: Box<dyn StateMachineStateDir>,
 }
 
 impl StateMachineBuilder {
@@ -1804,13 +1804,27 @@ impl StateMachine {
         }
     }
 
-    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+    fn into_components_inner(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
+    }
+
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+        let state_manager = Arc::downgrade(&self.state_manager);
+        let result = self.into_components_inner();
+        let mut i = 0i32;
+        while state_manager.upgrade().is_some() {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            i += 1;
+            if i >= 100 {
+                panic!("Failed to wait for StateManager drop");
+            }
+        }
+        result
     }
 
     /// Emulates a node restart, including checkpoint recovery.
