@@ -114,11 +114,7 @@ fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             &ledger_orchestrator,
             OrchestratorArg::UpgradeArg(UpgradeArg {
                 git_commit_hash: Some("6a8e5fca2c6b4e12966638c444e994e204b42989".to_string()),
-                ledger_compressed_wasm_hash: None,
-                index_compressed_wasm_hash: None,
-                archive_compressed_wasm_hash: None,
-                cycles_management: None,
-                manage_ledger_suites: None,
+                ..Default::default()
             }),
         )
         .await
