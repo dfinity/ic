@@ -293,19 +293,12 @@ impl Summary {
     }
 }
 
-fn build_tagged_transcripts_vec(
+fn build_transcripts_vec(
     transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Vec<pb::TaggedNiDkgTranscript> {
+) -> Vec<pb::NiDkgTranscript> {
     transcripts
-        .iter()
-        .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
-            tag: pb::NiDkgTag::from(tag) as i32,
-            transcript: Some(pb::NiDkgTranscript::from(transcript)),
-            key_id: match tag {
-                NiDkgTag::HighThresholdForKey(k) => Some(pb::MasterPublicKeyId::from(k)),
-                _ => None,
-            },
-        })
+        .values()
+        .map(pb::NiDkgTranscript::from)
         .collect()
 }
 
@@ -355,12 +348,10 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts_deprecated: build_tagged_transcripts_vec(
-                &summary.current_transcripts,
-            ),
-            current_transcripts_new: Vec::new(),
-            next_transcripts_deprecated: build_tagged_transcripts_vec(&summary.next_transcripts),
-            next_transcripts_new: Vec::new(),
+            current_transcripts_new: build_transcripts_vec(&summary.current_transcripts),
+            current_transcripts_deprecated: Vec::new(),
+            next_transcripts_new: build_transcripts_vec(&summary.next_transcripts),
+            next_transcripts_deprecated: Vec::new(),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
