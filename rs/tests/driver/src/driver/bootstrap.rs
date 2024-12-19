@@ -582,6 +582,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
+        node_reward_type: None,
     }
 }
 

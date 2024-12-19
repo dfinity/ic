@@ -277,7 +277,8 @@ function read_variables() {
 function validate_node_reward() {
     read_variables
     if [[ -z "$node_reward_type" ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is not set"
+        echo "Node reward type is not set. Skipping validation."
+        return 0
     fi
 
     if [[ ! "$node_reward_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then

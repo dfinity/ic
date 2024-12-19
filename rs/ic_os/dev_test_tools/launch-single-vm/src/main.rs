@@ -150,6 +150,7 @@ fn main() {
             node_operator_principal_id: None,
             secret_key_store: None,
             domain: None,
+            node_reward_type: None,
         },
     )]);
 
