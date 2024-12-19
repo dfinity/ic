@@ -1,10 +1,11 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 
-use crate::systemd::generate_systemd_config_files;
+use crate::systemd::{generate_systemd_config_files, generate_systemd_config_files_new_config};
+use config_types::{Ipv6Config, NetworkSettings};
 use deterministic_ips::MacAddr6Ext;
 use info::NetworkInfo;
 use macaddr::MacAddr6;
@@ -12,6 +13,35 @@ use macaddr::MacAddr6;
 pub mod info;
 pub mod interfaces;
 pub mod systemd;
+
+/// Write SetupOS or HostOS systemd network configuration.
+/// Requires superuser permissions to run `ipmitool` and write to the systemd directory
+/// TODO(NODE-1466): Consolidate generate_network_config_new_config and generate_network_config
+pub fn generate_network_config_new_config(
+    network_settings: &NetworkSettings,
+    generated_mac: &MacAddr6,
+    output_directory: &Path,
+) -> Result<()> {
+    eprintln!("Generating IPv6 address");
+
+    match &network_settings.ipv6_config {
+        Ipv6Config::RouterAdvertisement => {
+            Err(anyhow!("IC-OS router advertisement is not yet supported"))
+        }
+        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
+        Ipv6Config::Deterministic(ipv6_config) => {
+            let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
+            eprintln!("Using IPv6 address: {ipv6_address}");
+
+            generate_systemd_config_files_new_config(
+                output_directory,
+                ipv6_config,
+                Some(generated_mac),
+                &ipv6_address,
+            )
+        }
+    }
+}
 
 /// Write SetupOS or HostOS systemd network configuration.
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
