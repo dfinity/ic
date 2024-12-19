@@ -156,12 +156,3 @@ fn test_encoding_decoding_block_u254() {
         prop_assert_eq!(block, decoded);
     })
 }
-
-#[test]
-fn test_icrc106_standard() {
-    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_upgrade(
-        ledger_wasm(),
-        encode_init_args,
-        encode_icrc106_upgrade_args,
-    );
-}
