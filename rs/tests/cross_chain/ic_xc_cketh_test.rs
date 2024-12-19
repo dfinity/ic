@@ -88,19 +88,15 @@ fn setup_anvil(env: &TestEnv) {
 
     let deployed_universal_vm = env.get_deployed_universal_vm(FOUNDRY_VM_NAME).unwrap();
 
-    println!(
-        "{}",
-        deployed_universal_vm
+    deployed_universal_vm
             .block_on_bash_script(&format!(
                 r#"
 docker load -i /config/foundry.tar
 docker network create {DOCKER_NETWORK_NAME}
 docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
-docker logs anvil
 "#
             ))
-            .unwrap()
-    );
+            .unwrap();
 }
 
 fn ic_xc_cketh_test(env: TestEnv) {
@@ -158,7 +154,8 @@ fn ic_xc_cketh_test(env: TestEnv) {
         test_cketh_deposit(&foundry, &minter, &logger).await
     });
 
-    let (erc20_contract_address, _contract_creation_block_number) = deploy_erc20_contract(&foundry);
+    let (erc20_contract_address, _contract_creation_block_number) =
+        deploy_erc20_contract(&foundry, &logger);
     let mut ledger_orchestrator = block_on(async {
         install_ledger_suite_orchestrator(&application_subnet_runtime, minter.principal()).await
     });
@@ -337,6 +334,7 @@ async fn install_ledger_suite_orchestrator(
 fn deploy_eth_deposit_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
+    logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let (contract_address, block_number) = deploy_smart_contract(
         docker_host,
@@ -344,6 +342,7 @@ fn deploy_eth_deposit_helper_contract(
         "EthDepositHelper.sol",
         "CkEthDeposit",
         &minter_address.to_string(),
+        logger,
     );
     assert_eq!(
         call_smart_contract(
@@ -368,7 +367,7 @@ async fn support_eth_deposit(
     info!(logger, "Retrieved ckETH minter address {minter_address}");
 
     let (eth_deposit_helper_contract_address, eth_deposit_contract_creation_block_number) =
-        deploy_eth_deposit_helper_contract(foundry, &minter_address);
+        deploy_eth_deposit_helper_contract(foundry, &minter_address, logger);
     minter
         .reinstall(MinterInitArgs {
             ethereum_contract_address: Some(eth_deposit_helper_contract_address.to_string()),
@@ -446,7 +445,7 @@ async fn support_erc20_deposit(
 ) {
     let minter_address = minter.minter_address().await.parse().unwrap();
     let (erc20_deposit_helper_contract_address, erc20_contract_creation_block_number) =
-        deploy_erc20_helper_contract(foundry, &minter_address);
+        deploy_erc20_helper_contract(foundry, &minter_address, logger);
 
     ledger_orchestrator.register_embedded_wasms().await;
     minter
@@ -593,7 +592,7 @@ async fn support_deposit_with_subaccount(
     let (
         deposit_with_subaccount_helper_contract_address,
         deposit_with_subaccount_contract_creation_block_number,
-    ) = deploy_deposit_with_subaccount_helper_contract(foundry, &minter_address);
+    ) = deploy_deposit_with_subaccount_helper_contract(foundry, &minter_address, logger);
     info!(
         logger,
         "Deposit with subaccount helper smart contract deployed at {} in block {}",
@@ -665,6 +664,7 @@ async fn test_deposit_with_subaccount(
 fn deploy_erc20_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
+    logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let (erc20_deposit_helper_contract_address, block_number) = deploy_smart_contract(
         docker_host,
@@ -672,6 +672,7 @@ fn deploy_erc20_helper_contract(
         "ERC20DepositHelper.sol",
         "CkErc20Deposit",
         &minter_address.to_string(),
+        logger,
     );
     assert_eq!(
         call_smart_contract(
@@ -685,7 +686,10 @@ fn deploy_erc20_helper_contract(
     (erc20_deposit_helper_contract_address, block_number)
 }
 
-fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> (Address, BlockNumber) {
+fn deploy_erc20_contract(
+    foundry: &DeployedUniversalVm,
+    logger: &slog::Logger,
+) -> (Address, BlockNumber) {
     let initial_supply: u128 = 1_000_000_000_000_000_000_000;
     let (erc20_address, block_number) = deploy_smart_contract(
         foundry,
@@ -693,6 +697,7 @@ fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> (Address, BlockNumber
         "ERC20.sol",
         "EXLToken",
         &format!("0x{:x}", initial_supply),
+        logger,
     );
     //deployer has initial supply, transfer some ERC-20 tokens to user to play with
     let user_initial_balance = initial_supply / 1_000;
@@ -715,6 +720,7 @@ fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> (Address, BlockNumber
 fn deploy_deposit_with_subaccount_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
+    logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let (deposit_helper_contract_with_subaccount_address, block_number) = deploy_smart_contract(
         docker_host,
@@ -722,6 +728,7 @@ fn deploy_deposit_with_subaccount_helper_contract(
         "DepositHelperWithSubaccount.sol",
         "CkDeposit",
         &minter_address.to_string(),
+        logger,
     );
     assert_eq!(
         call_smart_contract(
@@ -763,12 +770,13 @@ fn deploy_smart_contract(
     filename: &str,
     contract_name: &str,
     constructor_args: &str,
+    logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
     let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
-    println!(
-        "Deployed {filename} with constructor args {constructor_args}: {}",
-        json_output
+    info!(
+        logger,
+        "Deployed {filename} with constructor args {constructor_args}: {}", json_output
     );
     let parsed_output: serde_json::Value = serde_json::from_str(&json_output).unwrap();
     let tx_hash = parsed_output["transactionHash"].as_str().unwrap();
