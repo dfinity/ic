@@ -21,7 +21,6 @@ pub fn client_config(
     vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
-    server: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<ClientConfig, TlsConfigError> {
     let self_tls_cert =

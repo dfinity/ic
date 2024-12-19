@@ -245,7 +245,6 @@ fn start_server(
                             // Creates a new TLS server config and uses it to accept the request.
                             let registry_version = registry_client.get_latest_version();
                             let mut server_config = match tls.server_config(
-                                ic_crypto_tls_interfaces::SomeOrAllNodes::All,
                                 registry_version,
                             ) {
                                 Ok(config) => config,

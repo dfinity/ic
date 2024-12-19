@@ -87,7 +87,7 @@ where
 
     fn client_config(
         &self,
-        server: NodeId,
+        _server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ClientConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger);
@@ -99,14 +99,12 @@ where
         debug!(logger;
             crypto.description => "start",
             crypto.registry_version => registry_version.get(),
-            crypto.tls_server => format!("{}", server),
         );
         let start_time = self.metrics.now();
         let result = rustls::client_handshake::client_config(
             &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
-            server,
             registry_version,
         );
         self.metrics.observe_duration_seconds(

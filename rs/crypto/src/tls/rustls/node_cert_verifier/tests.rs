@@ -5,16 +5,13 @@ use ic_base_types::NodeId;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::registry::{TlsRegistry, REG_V1};
 use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
-use ic_crypto_tls_interfaces::SomeOrAllNodes;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
-use maplit::btreeset;
 use rustls::{
     client::danger::ServerCertVerifier,
     pki_types::{CertificateDer, ServerName, UnixTime},
     server::danger::ClientCertVerifier,
     CertificateError, Error as TLSError,
 };
-use std::collections::BTreeSet;
 use std::time::Duration;
 
 mod client_cert_verifier_tests {
@@ -27,7 +24,7 @@ mod client_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -48,11 +45,8 @@ mod client_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-            SomeOrAllNodes::All,
-            registry.get(),
-            REG_V1,
-        );
+        let verifier =
+            NodeClientCertVerifier::new_with_mandatory_client_auth(registry.get(), REG_V1);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -78,7 +72,7 @@ mod client_cert_verifier_tests {
             .not_before_unix(NOT_BEFORE)
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -97,38 +91,6 @@ mod client_cert_verifier_tests {
     }
 
     #[test]
-    fn should_return_error_if_presented_cert_node_id_not_allowed() {
-        let rng = &mut reproducible_rng();
-        const UNTRUSTED_NODE_ID: NodeId = NODE_3;
-        let untrusted_node_cert = CertWithPrivateKey::builder()
-            .cn(UNTRUSTED_NODE_ID.to_string())
-            .build_ed25519(rng);
-        let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
-        registry
-            .add_cert(
-                UNTRUSTED_NODE_ID,
-                x509_public_key_cert(&untrusted_node_cert.x509()),
-            )
-            .update();
-
-        let result = verifier.verify_client_cert(
-            &CertificateDer::from(untrusted_node_cert.cert_der()),
-            &[],
-            UnixTime::now(),
-        );
-
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The peer certificate with node ID 32uhy-eydaa-aaaaa-aaaap-2ai is not allowed. \
-                Allowed node IDs: Some({3jo2y-lqbaa-aaaaa-aaaap-2ai, gfvbo-licaa-aaaaa-aaaap-2ai})"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[test]
     fn should_return_error_if_node_id_allowed_but_cert_does_not_match_registry_cert() {
         let rng = &mut reproducible_rng();
         let presented_node_1_cert = CertWithPrivateKey::builder()
@@ -142,7 +104,7 @@ mod client_cert_verifier_tests {
             registry_node_1_cert_different_from_presented_cert.cert_der()
         );
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(
                 NODE_1,
@@ -171,7 +133,7 @@ mod client_cert_verifier_tests {
         let cert_with_no_node_id_as_cn = CertWithPrivateKey::builder()
             .cn("This CN cannot be parsed as node ID".to_string())
             .build_ed25519(rng);
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
+        let verifier = verifier_with_allowed_nodes(&TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
             &CertificateDer::from(cert_with_no_node_id_as_cn.cert_der()),
@@ -193,7 +155,7 @@ mod client_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .with_duplicate_subject_cn()
             .build_ed25519(rng);
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
+        let verifier = verifier_with_allowed_nodes(&TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
             &CertificateDer::from(cert_with_duplicate_cn.cert_der()),
@@ -216,7 +178,7 @@ mod client_cert_verifier_tests {
         let node_1_cert_2 = CertWithPrivateKey::builder()
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
+        let verifier = verifier_with_allowed_nodes(&TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
             &CertificateDer::from(node_1_cert_1.cert_der()),
@@ -240,7 +202,7 @@ mod client_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let empty_registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &empty_registry);
+        let verifier = verifier_with_allowed_nodes(&empty_registry);
 
         let result = verifier.verify_client_cert(
             &CertificateDer::from(node_1_cert.cert_der()),
@@ -267,8 +229,7 @@ mod client_cert_verifier_tests {
             .cn(NODE_2.to_string())
             .build_ed25519(rng);
         let registry_without_node_1_cert = TlsRegistry::new();
-        let verifier =
-            verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry_without_node_1_cert);
+        let verifier = verifier_with_allowed_nodes(&registry_without_node_1_cert);
         registry_without_node_1_cert
             .add_cert(NODE_2, x509_public_key_cert(&node_2_cert.x509()))
             .update();
@@ -291,7 +252,6 @@ mod client_cert_verifier_tests {
     #[test]
     fn should_set_client_auth_to_mandatory_in_new_with_mandatory_client_auth() {
         let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-            SomeOrAllNodes::All,
             TlsRegistry::new().get(),
             REG_V1,
         );
@@ -302,7 +262,6 @@ mod client_cert_verifier_tests {
     #[test]
     fn should_offer_client_auth_if_client_auth_mandatory() {
         let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-            SomeOrAllNodes::All,
             TlsRegistry::new().get(),
             REG_V1,
         );
@@ -313,7 +272,6 @@ mod client_cert_verifier_tests {
     #[test]
     fn should_return_empty_root_hint_subjects() {
         let verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-            SomeOrAllNodes::All,
             TlsRegistry::new().get(),
             REG_V1,
         );
@@ -327,7 +285,7 @@ mod client_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -349,16 +307,8 @@ mod client_cert_verifier_tests {
         );
     }
 
-    fn verifier_with_allowed_nodes(
-        allowed_nodes: BTreeSet<NodeId>,
-        registry: &TlsRegistry,
-    ) -> NodeClientCertVerifier {
-        let allowed_nodes = SomeOrAllNodes::Some(allowed_nodes);
-        NodeClientCertVerifier::new_with_mandatory_client_auth(
-            allowed_nodes,
-            registry.get(),
-            REG_V1,
-        )
+    fn verifier_with_allowed_nodes(registry: &TlsRegistry) -> NodeClientCertVerifier {
+        NodeClientCertVerifier::new_with_mandatory_client_auth(registry.get(), REG_V1)
     }
 }
 
@@ -374,7 +324,7 @@ mod server_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -401,7 +351,7 @@ mod server_cert_verifier_tests {
             .not_before_unix(NOT_BEFORE)
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -422,46 +372,13 @@ mod server_cert_verifier_tests {
     }
 
     #[test]
-    fn should_return_error_if_presented_cert_node_id_not_allowed() {
-        let rng = &mut reproducible_rng();
-        const UNTRUSTED_NODE_ID: NodeId = NODE_3;
-        let untrusted_node_cert = CertWithPrivateKey::builder()
-            .cn(UNTRUSTED_NODE_ID.to_string())
-            .build_ed25519(rng);
-        let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
-        registry
-            .add_cert(
-                UNTRUSTED_NODE_ID,
-                x509_public_key_cert(&untrusted_node_cert.x509()),
-            )
-            .update();
-
-        let result = verifier.verify_server_cert(
-            &CertificateDer::from(untrusted_node_cert.cert_der()),
-            &[],
-            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
-            &[],
-            UnixTime::now(),
-        );
-
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The peer certificate with node ID 32uhy-eydaa-aaaaa-aaaap-2ai is not allowed. Allowed node IDs: \
-                Some({3jo2y-lqbaa-aaaaa-aaaap-2ai, gfvbo-licaa-aaaaa-aaaap-2ai})".to_string(),
-            ))
-        );
-    }
-
-    #[test]
     fn should_return_error_if_intermediate_certs_not_empty() {
         let rng = &mut reproducible_rng();
         let node_1_cert = CertWithPrivateKey::builder()
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -487,7 +404,7 @@ mod server_cert_verifier_tests {
             .cn(NODE_1.to_string())
             .build_ed25519(rng);
         let registry = TlsRegistry::new();
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        let verifier = verifier_with_allowed_nodes(&registry);
         registry
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
@@ -511,11 +428,7 @@ mod server_cert_verifier_tests {
         );
     }
 
-    fn verifier_with_allowed_nodes(
-        allowed_nodes: BTreeSet<NodeId>,
-        registry: &TlsRegistry,
-    ) -> NodeServerCertVerifier {
-        let allowed_nodes = SomeOrAllNodes::Some(allowed_nodes);
-        NodeServerCertVerifier::new(allowed_nodes, registry.get(), REG_V1)
+    fn verifier_with_allowed_nodes(registry: &TlsRegistry) -> NodeServerCertVerifier {
+        NodeServerCertVerifier::new(registry.get(), REG_V1)
     }
 }
