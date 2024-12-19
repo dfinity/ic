@@ -1228,6 +1228,33 @@ pub mod nns {
             version.insert(canister_type, wasm);
             version
         }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_master_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = match canister_type {
+                SnsCanisterType::Root => build_root_sns_wasm(),
+                SnsCanisterType::Governance => build_governance_sns_wasm(),
+                SnsCanisterType::Ledger => build_ledger_sns_wasm(),
+                SnsCanisterType::Swap => build_swap_sns_wasm(),
+                SnsCanisterType::Index => build_index_ng_sns_wasm(),
+                SnsCanisterType::Unspecified => {
+                    panic!("Where did you get this canister type from?")
+                }
+                SnsCanisterType::Archive => build_archive_sns_wasm(),
+            };
+            let wasm = create_modified_sns_wasm(&wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
+        }
     }
 }
 

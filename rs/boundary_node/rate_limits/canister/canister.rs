@@ -44,6 +44,10 @@ fn inspect_message() {
     if called_method == REPLICATED_QUERY_METHOD {
         if has_full_access || has_full_read_access {
             ic_cdk::api::call::accept_message();
+        } else {
+            ic_cdk::api::trap(
+                "message_inspection_failed: method call is prohibited in the current context",
+            );
         }
     } else if UPDATE_METHODS.contains(&called_method.as_str()) {
         if has_full_access {
