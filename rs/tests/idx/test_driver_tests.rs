@@ -14,7 +14,7 @@ use tempfile::Builder;
 // println!("{}", String::from_utf8_lossy(&result.stdout));
 // println!("{}", String::from_utf8_lossy(&result.stderr));
 
-const BINARY_PATH: &str = "rs/tests/testing_verification/test-driver-e2e-scenarios";
+const BINARY_PATH: &str = "rs/tests/idx/test-driver-e2e-scenarios";
 const SUCCESS: Option<&str> = Some("Exited with code 0.");
 const SKIP: Option<&str> = Some("Task skipped.");
 
