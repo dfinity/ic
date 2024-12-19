@@ -45,7 +45,7 @@ pub fn spawn_launcher_process(
     // Set up thread to handle incoming channel -- replies are routed
     // to reply buffer, requests to the RPC request handler given.
     let _ = std::thread::Builder::new()
-        .name("CanisterSandbox".to_string())
+        .name("SandboxLauncherIPC".to_string())
         .spawn(move || {
             let demux = transport::Demux::<_, _, protocol::transport::LauncherToController>::new(
                 Arc::new(rpc::ServerStub::new(
@@ -113,7 +113,7 @@ pub fn spawn_canister_sandbox_process(
     // Set up thread to handle incoming channel -- replies are routed
     // to reply buffer, requests to the RPC request handler given.
     let thread_handle = std::thread::Builder::new()
-        .name("CanisterSandbox".to_string())
+        .name("CanisterSandboxIPC".to_string())
         .spawn(move || {
             let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
                 Arc::new(rpc::ServerStub::new(

@@ -104,7 +104,7 @@ impl LauncherServer {
         let watcher_process_info_map = Arc::clone(&pid_to_process_info);
         let watcher_has_children = Arc::clone(&has_children);
         std::thread::Builder::new()
-            .name("CanisterSandbox".to_string())
+            .name("LauncherChildWatch".to_string())
             .spawn(move || loop {
                 // Explicitly drop the lock on the id map before waiting on children
                 // (to avoid a deadlock with the `launch_sandbox`).

@@ -138,7 +138,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         });
         let copy_instance = Arc::clone(&instance);
         std::thread::Builder::new()
-            .name("CanisterSandbox".to_string())
+            .name("IPCBackgroundSend".to_string())
             .spawn(move || {
                 copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
             })
