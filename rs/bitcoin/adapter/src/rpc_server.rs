@@ -153,7 +153,6 @@ pub fn start_grpc_server(
 
     match config.incoming_source {
         IncomingSource::Path(uds_path) => {
-            println!("debuggg {:?}", uds_path);
             let incoming = incoming_from_path(uds_path);
             let server_fut = Server::builder()
                 .add_service(BtcServiceServer::new(btc_adapter_impl))

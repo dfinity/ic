@@ -68,17 +68,11 @@ pub fn validate_header(
 
     let compact_target =
         get_next_compact_target(network, store, &prev_header, prev_height, header.time);
-    //println!("debuggg actual: {:?}", header.bits);
-    println!(
-        "debuggg {:?} target: {:?}",
-        prev_height + 1,
-        header.target()
-    );
     if let Err(err) = header.validate_pow(Target::from_compact(compact_target)) {
         match err {
             ValidationError::BadProofOfWork => println!("bad proof of work"),
             ValidationError::BadTarget => println!(
-                "bad target debuggg {:?}, {:?}",
+                "bad target {:?}, {:?}",
                 Target::from_compact(compact_target),
                 header.target()
             ),
