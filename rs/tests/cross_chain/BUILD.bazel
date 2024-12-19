@@ -86,6 +86,7 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:futures",
+        "@crate_index//:hex-literal",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "@crate_index//:slog",

@@ -3,9 +3,11 @@ use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use futures::future::FutureExt;
+use hex_literal::hex;
 use ic_cketh_minter::endpoints::{CandidBlockTag, MinterInfo};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg as MinterUpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
+use ic_cketh_minter::numeric::BlockNumber;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing, get_public_key_and_test_signature, make_key,
@@ -171,13 +173,13 @@ fn ic_xc_cketh_test(env: TestEnv) {
         .parse()
         .unwrap();
 
-    let eth_deposit_helper_contract_address =
+    let (eth_deposit_helper_contract_address, eth_deposit_contract_creation_block_number) =
         deploy_eth_deposit_helper_contract(&docker_host, &minter_address);
 
     block_on(async {
         minter
             .upgrade(MinterUpgradeArg {
-                ethereum_contract_address: Some(eth_deposit_helper_contract_address),
+                ethereum_contract_address: Some(eth_deposit_helper_contract_address.to_string()),
                 ..Default::default()
             })
             .await
@@ -185,8 +187,9 @@ fn ic_xc_cketh_test(env: TestEnv) {
 
     block_on(async { test_cketh_deposit(&docker_host, &minter, &logger).await });
 
-    let erc20_contract_address = deploy_erc20_contract(&docker_host);
-    let erc20_deposit_helper_contract_address =
+    let (erc20_contract_address, _contract_creation_block_number) =
+        deploy_erc20_contract(&docker_host);
+    let (erc20_deposit_helper_contract_address, erc20_contract_creation_block_number) =
         deploy_erc20_helper_contract(&docker_host, &minter_address);
     let mut ledger_orchestrator = block_on(async {
         let mut lso =
@@ -196,8 +199,12 @@ fn ic_xc_cketh_test(env: TestEnv) {
         minter
             .upgrade(MinterUpgradeArg {
                 ledger_suite_orchestrator_id: Some(lso.principal()),
-                erc20_helper_contract_address: Some(erc20_deposit_helper_contract_address),
-                last_erc20_scraped_block_number: Some(Nat::from(0_u8)), //TODO: XC-256 get block number from contract creation
+                erc20_helper_contract_address: Some(
+                    erc20_deposit_helper_contract_address.to_string(),
+                ),
+                last_erc20_scraped_block_number: Some(Nat::from(
+                    erc20_contract_creation_block_number,
+                )),
                 ..Default::default()
             })
             .await;
@@ -209,7 +216,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
                 AddErc20Arg {
                     contract: Erc20Contract {
                         chain_id: Nat::from(1_u8),
-                        address: erc20_contract_address.clone(),
+                        address: erc20_contract_address.to_string(),
                     },
                     ledger_init_arg: LedgerInitArg {
                         transfer_fee: 1_u8.into(),
@@ -237,22 +244,32 @@ fn ic_xc_cketh_test(env: TestEnv) {
         })
         .await
     });
-    assert_eq!(ckexl_token.erc20_contract_address, erc20_contract_address);
+    assert_eq!(
+        ckexl_token
+            .erc20_contract_address
+            .parse::<Address>()
+            .unwrap(),
+        erc20_contract_address
+    );
 
     block_on(async {
         test_cketh_deposit(&docker_host, &minter, &logger).await;
         test_ckerc20_deposit(&docker_host, &minter, &erc20_contract_address, &logger).await;
     });
 
-    let deposit_with_subaccount_helper_contract_address =
-        deploy_deposit_with_subaccount_helper_contract(&docker_host, &minter_address);
+    let (
+        deposit_with_subaccount_helper_contract_address,
+        deposit_with_subaccount_contract_creation_block_number,
+    ) = deploy_deposit_with_subaccount_helper_contract(&docker_host, &minter_address);
     block_on(async {
         minter
             .upgrade(MinterUpgradeArg {
                 deposit_with_subaccount_helper_contract_address: Some(
-                    deposit_with_subaccount_helper_contract_address.clone(),
+                    deposit_with_subaccount_helper_contract_address.to_string(),
                 ),
-                last_deposit_with_subaccount_scraped_block_number: Some(Nat::from(0_u8)),
+                last_deposit_with_subaccount_scraped_block_number: Some(Nat::from(
+                    deposit_with_subaccount_contract_creation_block_number,
+                )),
                 ..Default::default()
             })
             .await
@@ -389,8 +406,8 @@ async fn install_ledger_suite_orchestrator(
 fn deploy_eth_deposit_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
-) -> String {
-    let eth_deposit_helper_contract_address = deploy_smart_contract(
+) -> (Address, BlockNumber) {
+    let (contract_address, block_number) = deploy_smart_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "EthDepositHelper.sol",
@@ -400,13 +417,13 @@ fn deploy_eth_deposit_helper_contract(
     assert_eq!(
         call_smart_contract(
             docker_host,
-            &eth_deposit_helper_contract_address,
+            &contract_address,
             "getMinterAddress()(address)",
             &[]
         ),
         minter_address.to_string()
     );
-    eth_deposit_helper_contract_address
+    (contract_address, block_number)
 }
 
 async fn test_cketh_deposit(
@@ -415,11 +432,15 @@ async fn test_cketh_deposit(
     logger: &slog::Logger,
 ) {
     let minter_info = minter.get_minter_info().await;
-    let minter_address = minter_info.minter_address.unwrap();
+    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
-    let eth_deposit_helper_contract_address = minter_info.eth_helper_contract_address.unwrap();
+    let eth_deposit_helper_contract_address: Address = minter_info
+        .eth_helper_contract_address
+        .unwrap()
+        .parse()
+        .unwrap();
     let deposit_amount: u128 = 42_000;
-    assert!(eth_balance_of(foundry, EthereumAccount::User.address()) > deposit_amount);
+    assert!(eth_balance_of(foundry, &EthereumAccount::User.address()) > deposit_amount);
 
     test_eth_deposit(
         foundry,
@@ -433,14 +454,14 @@ async fn test_cketh_deposit(
 
 fn test_eth_deposit(
     foundry: &DeployedUniversalVm,
-    minter_address: &str,
-    helper_contract_address: &str,
+    minter_address: &Address,
+    helper_contract_address: &Address,
     helper_contract_method: &str,
     helper_contract_args: &[&str],
     logger: &slog::Logger,
 ) {
     let deposit_amount: u128 = 42_000;
-    assert!(eth_balance_of(foundry, EthereumAccount::User.address()) > deposit_amount);
+    assert!(eth_balance_of(foundry, &EthereumAccount::User.address()) > deposit_amount);
 
     let minter_balance_before = eth_balance_of(foundry, minter_address);
     info!(
@@ -463,13 +484,17 @@ fn test_eth_deposit(
 async fn test_ckerc20_deposit(
     foundry: &DeployedUniversalVm,
     minter: &CkEthMinterCanister<'_>,
-    erc20_contract_address: &str,
+    erc20_contract_address: &Address,
     logger: &slog::Logger,
 ) {
     let minter_info = minter.get_minter_info().await;
-    let minter_address = minter_info.minter_address.unwrap();
+    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
-    let erc20_deposit_helper_contract_address = minter_info.erc20_helper_contract_address.unwrap();
+    let erc20_deposit_helper_contract_address: Address = minter_info
+        .erc20_helper_contract_address
+        .unwrap()
+        .parse()
+        .unwrap();
     let deposit_amount: u128 = 1000;
 
     test_erc20_deposit(
@@ -479,7 +504,7 @@ async fn test_ckerc20_deposit(
         &erc20_deposit_helper_contract_address,
         "deposit(address,uint256,bytes32)",
         &[
-            erc20_contract_address,
+            &erc20_contract_address.to_string(),
             &deposit_amount.to_string(),
             ENCODED_PRINCIPAL,
         ],
@@ -490,9 +515,9 @@ async fn test_ckerc20_deposit(
 
 fn test_erc20_deposit(
     foundry: &DeployedUniversalVm,
-    minter_address: &str,
-    erc20_contract_address: &str,
-    helper_contract_address: &str,
+    minter_address: &Address,
+    erc20_contract_address: &Address,
+    helper_contract_address: &Address,
     helper_contract_method: &str,
     helper_contract_args: &[&str],
     deposit_amount: u128,
@@ -502,7 +527,7 @@ fn test_erc20_deposit(
         erc20_balance_of(
             foundry,
             erc20_contract_address,
-            EthereumAccount::User.address()
+            &EthereumAccount::User.address()
         ) > deposit_amount
     );
 
@@ -518,7 +543,10 @@ fn test_erc20_deposit(
         &EthereumAccount::User,
         erc20_contract_address,
         "approve(address,uint256)",
-        &[helper_contract_address, &deposit_amount.to_string()],
+        &[
+            &helper_contract_address.to_string(),
+            &deposit_amount.to_string(),
+        ],
         None,
     );
     info!(
@@ -541,7 +569,7 @@ fn test_erc20_deposit(
 async fn test_deposit_with_subaccount(
     foundry: &DeployedUniversalVm,
     minter: &CkEthMinterCanister<'_>,
-    erc20_contract_address: &str,
+    erc20_contract_address: &Address,
     logger: &slog::Logger,
 ) {
     const ENCODED_NO_SUBACCOUNT: &str =
@@ -550,10 +578,12 @@ async fn test_deposit_with_subaccount(
         "0xff00000000000000000000000000000000000000000000000000000000000000";
 
     let minter_info = minter.get_minter_info().await;
-    let minter_address = minter_info.minter_address.unwrap();
+    let minter_address: Address = minter_info.minter_address.unwrap().parse().unwrap();
     // retrieve helper contract address from minter to ensure ABI does not change
-    let deposit_with_subaccount_helper_contract_address = minter_info
+    let deposit_with_subaccount_helper_contract_address: Address = minter_info
         .deposit_with_subaccount_helper_contract_address
+        .unwrap()
+        .parse()
         .unwrap();
     let erc20_deposit_amount: u128 = 1000;
 
@@ -574,7 +604,7 @@ async fn test_deposit_with_subaccount(
             &deposit_with_subaccount_helper_contract_address,
             "depositErc20(address,uint256,bytes32,bytes32)",
             &[
-                erc20_contract_address,
+                &erc20_contract_address.to_string(),
                 &erc20_deposit_amount.to_string(),
                 ENCODED_PRINCIPAL,
                 subaccount,
@@ -588,8 +618,8 @@ async fn test_deposit_with_subaccount(
 fn deploy_erc20_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
-) -> String {
-    let erc20_deposit_helper_contract_address = deploy_smart_contract(
+) -> (Address, BlockNumber) {
+    let (erc20_deposit_helper_contract_address, block_number) = deploy_smart_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "ERC20DepositHelper.sol",
@@ -605,12 +635,12 @@ fn deploy_erc20_helper_contract(
         ),
         minter_address.to_string()
     );
-    erc20_deposit_helper_contract_address
+    (erc20_deposit_helper_contract_address, block_number)
 }
 
-fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> String {
+fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> (Address, BlockNumber) {
     let initial_supply: u128 = 1_000_000_000_000_000_000_000;
-    let erc20_address = deploy_smart_contract(
+    let (erc20_address, block_number) = deploy_smart_contract(
         foundry,
         &EthereumAccount::Erc20Deployer,
         "ERC20.sol",
@@ -625,21 +655,21 @@ fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> String {
         &EthereumAccount::Erc20Deployer,
         &erc20_address,
         "transfer(address,uint256)",
-        &[user_address, &user_initial_balance.to_string()],
+        &[&user_address.to_string(), &user_initial_balance.to_string()],
         None,
     );
     assert_eq!(
-        erc20_balance_of(foundry, &erc20_address, user_address),
+        erc20_balance_of(foundry, &erc20_address, &user_address),
         user_initial_balance
     );
-    erc20_address
+    (erc20_address, block_number)
 }
 
 fn deploy_deposit_with_subaccount_helper_contract(
     docker_host: &DeployedUniversalVm,
     minter_address: &Address,
-) -> String {
-    let deposit_helper_contract_with_subaccount_address = deploy_smart_contract(
+) -> (Address, BlockNumber) {
+    let (deposit_helper_contract_with_subaccount_address, block_number) = deploy_smart_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "DepositHelperWithSubaccount.sol",
@@ -655,25 +685,28 @@ fn deploy_deposit_with_subaccount_helper_contract(
         ),
         minter_address.to_string()
     );
-    deposit_helper_contract_with_subaccount_address
+    (
+        deposit_helper_contract_with_subaccount_address,
+        block_number,
+    )
 }
 
 fn erc20_balance_of(
     foundry: &DeployedUniversalVm,
-    contract_address: &str,
-    user_address: &str,
+    contract_address: &Address,
+    user_address: &Address,
 ) -> u128 {
     let user_balance = call_smart_contract(
         foundry,
         contract_address,
         "balanceOf(address)(uint256)",
-        &[user_address],
+        &[&user_address.to_string()],
     ); //Output is formatted as "1000000000000000000 [1e18]"
     let user_balance = user_balance.split_ascii_whitespace().next().unwrap();
     user_balance.parse::<u128>().unwrap()
 }
 
-fn eth_balance_of(foundry: &DeployedUniversalVm, user_address: &str) -> u128 {
+fn eth_balance_of(foundry: &DeployedUniversalVm, user_address: &Address) -> u128 {
     foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast balance {user_address} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string().parse::<u128>().unwrap()
 }
 
@@ -683,7 +716,7 @@ fn deploy_smart_contract(
     filename: &str,
     contract_name: &str,
     constructor_args: &str,
-) -> String {
+) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
     let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
     println!(
@@ -691,12 +724,18 @@ fn deploy_smart_contract(
         json_output
     );
     let parsed_output: serde_json::Value = serde_json::from_str(&json_output).unwrap();
-    parsed_output["deployedTo"].as_str().unwrap().to_string()
+    let tx_hash = parsed_output["transactionHash"].as_str().unwrap();
+    let tx_receipt_json = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast receipt --json {tx_hash} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap();
+    let parsed_tx_receipt: serde_json::Value = serde_json::from_str(&tx_receipt_json).unwrap();
+    let contract_address =
+        serde_json::from_value(parsed_tx_receipt["contractAddress"].clone()).unwrap();
+    let block_number = serde_json::from_value(parsed_tx_receipt["blockNumber"].clone()).unwrap();
+    (contract_address, block_number)
 }
 
 fn call_smart_contract(
     foundry: &DeployedUniversalVm,
-    contract_address: &str,
+    contract_address: &Address,
     method: &str,
     args: &[&str],
 ) -> String {
@@ -707,7 +746,7 @@ fn call_smart_contract(
 fn send_smart_contract(
     foundry: &DeployedUniversalVm,
     sender: &EthereumAccount,
-    contract_address: &str,
+    contract_address: &Address,
     method: &str,
     args: &[&str],
     eth: Option<&str>,
@@ -836,26 +875,26 @@ enum EthereumAccount {
 }
 
 impl EthereumAccount {
-    const ACCOUNT_0: (&str, &str) = (
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    const ACCOUNT_0: (Address, &str) = (
+        Address::new(hex!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")),
         "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     );
-    const ACCOUNT_1: (&str, &str) = (
-        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    const ACCOUNT_1: (Address, &str) = (
+        Address::new(hex!("70997970C51812dc3A010C7d01b50e0d17dc79C8")),
         "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     );
-    const ACCOUNT_2: (&str, &str) = (
-        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    const ACCOUNT_2: (Address, &str) = (
+        Address::new(hex!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")),
         "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
     );
-    fn account(&self) -> (&str, &str) {
+    fn account(&self) -> (Address, &str) {
         match self {
             EthereumAccount::Erc20Deployer => Self::ACCOUNT_0,
             EthereumAccount::HelperContractDeployer => Self::ACCOUNT_1,
             EthereumAccount::User => Self::ACCOUNT_2,
         }
     }
-    pub fn address(&self) -> &str {
+    pub fn address(&self) -> Address {
         self.account().0
     }
 
