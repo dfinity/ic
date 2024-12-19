@@ -498,7 +498,8 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
-const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
+const BLOCKS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(4);
+const BLOCKS_DATA_MEMORY_ID: MemoryId = MemoryId::new(5);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -527,8 +528,8 @@ thread_local! {
 
     // vector storing ledger blocks.
     pub static BLOCKS_MEMORY: RefCell<StableLog<EncodedBlock, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID),
-        memory_manager.borrow().get(BLOCKS_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCKS_INDEX_MEMORY_ID),
+        memory_manager.borrow().get(BLOCKS_DATA_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
 
 }
 
@@ -1026,18 +1027,15 @@ impl Ledger {
         start: BlockIndex,
         length: usize,
         decode: impl Fn(&EncodedBlock) -> B,
-    ) -> (u64, Vec<B>) {
+    ) -> Vec<B> {
         let range = range_utils::make_range(start, length);
-        let max_blocks_range = range_utils::take(&range, MAX_TRANSACTIONS_PER_REQUEST);
+        let max_range = range_utils::take(&range, MAX_TRANSACTIONS_PER_REQUEST);
 
-        let local_blocks: Vec<B> = self
-            .stable_blockchain
-            .get_blocks(max_blocks_range)
+        self.stable_blockchain
+            .get_blocks(max_range)
             .iter()
             .map(decode)
-            .collect();
-
-        (start, local_blocks)
+            .collect()
     }
 
     /// Returns transactions in the specified range.
@@ -1063,14 +1061,13 @@ impl Ledger {
 
     /// Returns blocks in the specified range.
     pub fn get_archiveless_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
-        let (first_index, local_blocks) =
-            self.query_archiveless_blocks(start, length, encoded_block_to_generic_block);
+        let blocks = self.query_archiveless_blocks(start, length, encoded_block_to_generic_block);
 
         GetBlocksResponse {
-            first_index: Nat::from(first_index),
+            first_index: Nat::from(start),
             chain_length: self.stable_blockchain.len(),
             certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
-            blocks: local_blocks,
+            blocks,
             archived_blocks: vec![],
         }
     }
@@ -1368,10 +1365,10 @@ impl ArchivelessBlockchain for StableBlockchain {
     fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         let mut result = vec![];
         BLOCKS_MEMORY.with_borrow(|blocks| {
-            let full_range = range_utils::make_range(0, self.len() as usize);
-            let available_range = range_utils::intersect(&range, &full_range)
+            let available_range = range_utils::make_range(0, self.len() as usize);
+            let intersection = range_utils::intersect(&range, &available_range)
                 .unwrap_or_else(|_| range_utils::make_range(0, 0));
-            for i in available_range {
+            for i in intersection {
                 result.push(blocks.get(i).unwrap())
             }
         });

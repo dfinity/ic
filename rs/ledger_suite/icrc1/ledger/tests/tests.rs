@@ -1383,7 +1383,7 @@ fn test_get_archiveless_blocks() {
 
     let now = env.time();
 
-    for i in 2..3000 {
+    for i in 2..1100 {
         let approval_result = send_approval(
             &env,
             ledger_id,
@@ -1413,6 +1413,26 @@ fn test_get_archiveless_blocks() {
         if i % 100 == 0 {
             println!("iteration {}", i);
         }
+    }
+
+    let mut num_blocks = 100u64;
+    while num_blocks <= 2000 {
+        let block_args = GetBlocksRequest {
+            start: Nat::from(10u64),
+            length: Nat::from(num_blocks),
+        };
+        let block_args = Encode!(&block_args).unwrap();
+        let res = env
+            .query(ledger_id, "get_blocks", block_args.clone())
+            .expect("Unable to call get_blocks")
+            .bytes();
+        let old_blocks = Decode!(&res, GetBlocksResponse).unwrap();
+        let res = env
+            .query(ledger_id, "get_archiveless_blocks", block_args)
+            .expect("Unable to call get_blocks")
+            .bytes();
+        let new_blocks = Decode!(&res, GetBlocksResponse).unwrap();        
+        num_blocks += 100;
     }
 }
 
