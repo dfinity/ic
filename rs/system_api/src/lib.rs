@@ -1486,6 +1486,7 @@ impl SystemApiImpl {
     }
 
     pub fn update_on_low_wasm_memory_hook_status(&mut self) {
+        println!("Updating!");
         self.sandbox_safe_system_state
             .check_on_low_wasm_memory_hook_condition(
                 match self.memory_usage.memory_allocation {
