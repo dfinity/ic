@@ -5109,7 +5109,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     http: record.http.map(|v| format!("[{}]:{}", v.ip_addr, v.port)),
                     node_operator_id: PrincipalId::try_from(record.node_operator_id)
                         .expect("Error decoding principal"),
-                    chip_id: record.chip_id.map(|id| hex::encode(id)),
+                    chip_id: record.chip_id.map(hex::encode),
                     hostos_version_id: record.hostos_version_id,
                     public_ipv4_config: record.public_ipv4_config.map(|v| {
                         format!(
