@@ -18,7 +18,7 @@ pub struct InitArg {
     pub cycles_management: Option<CyclesManagement>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct UpgradeArg {
     pub git_commit_hash: Option<String>,
     pub ledger_compressed_wasm_hash: Option<String>,
