@@ -6748,16 +6748,9 @@ impl Governance {
         };
 
         let now_seconds = self.env.now();
-        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
-        if maturity_modulation.is_err() {
-            println!(
-                "{}Couldn't update maturity modulation. Error: {}",
-                LOG_PREFIX,
-                maturity_modulation.err().unwrap()
-            );
+        let Ok(maturity_modulation) = self.cmc.neuron_maturity_modulation().await else {
             return;
-        }
-        let maturity_modulation = maturity_modulation.unwrap();
+        };
         println!(
             "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
             LOG_PREFIX, maturity_modulation, now_seconds, self.heap_data.maturity_modulation_last_updated_at_timestamp_seconds,
