@@ -50,6 +50,7 @@ component_files = {
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
+    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
@@ -62,6 +63,8 @@ component_files = {
     Label("misc/guestos/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
+    Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
+    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
 
     # monitoring

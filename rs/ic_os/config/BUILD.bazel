@@ -35,6 +35,10 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "config",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
