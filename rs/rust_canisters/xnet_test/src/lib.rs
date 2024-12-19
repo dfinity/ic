@@ -15,6 +15,8 @@ pub struct StartArgs {
     pub network_topology: NetworkTopology,
     pub canister_to_subnet_rate: u64,
     pub payload_size_bytes: u64,
+    pub response_payload_size_bytes: u64,
+    pub deadline_seconds: u32,
 }
 
 /// Metrics observed by this canister.
