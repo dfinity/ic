@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
 
+### Fixed
+- Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+  are created on an arbitrary subnet.
+
 
 
 ## 7.0.0 - 2024-11-13
