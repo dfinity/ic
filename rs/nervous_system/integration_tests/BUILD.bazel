@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:pocket-ic-tests.bzl", "pocket_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -93,7 +94,6 @@ DEV_DATA = [
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister-test",
@@ -147,7 +147,6 @@ DEV_ENV = {
     "MAINNET_SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-swap-canister//file)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
 
@@ -162,7 +161,7 @@ rust_library(
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
-rust_test_suite_with_extra_srcs(
+pocket_ic_test(
     name = "integration_tests_test",
     timeout = "long",
     srcs = glob(
@@ -189,10 +188,11 @@ rust_test_suite_with_extra_srcs(
     tags = [
         "cpu:6",
     ],
+    test_rule = rust_test_suite_with_extra_srcs,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "upgrade_everything_test",
     timeout = "long",
     srcs = [
@@ -208,10 +208,11 @@ rust_test(
     tags = [
         "cpu:6",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "advance_target_version_upgrades_all_canisters_test",
     timeout = "long",
     srcs = [
@@ -225,10 +226,11 @@ rust_test(
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "upgrade_existing_sns_test",
     timeout = "long",
     srcs = [
@@ -242,10 +244,11 @@ rust_test(
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "deploy_fresh_sns_test",
     timeout = "long",
     srcs = [
@@ -259,10 +262,11 @@ rust_test(
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_test(
     name = "sns_release_qualification_legacy",
     timeout = "long",
     srcs = [
@@ -277,5 +281,6 @@ rust_test(
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
