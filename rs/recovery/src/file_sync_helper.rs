@@ -66,6 +66,7 @@ pub async fn download_binary(
     Ok(file)
 }
 
+/// If auto-retry is set to false, the user will be prompted for retries on rsync failures.
 pub fn rsync_with_retries(
     logger: &Logger,
     excludes: Vec<&str>,
@@ -86,16 +87,16 @@ pub fn rsync_with_retries(
             key_file,
         ) {
             Err(e) => {
+                warn!(logger, "Rsync failed: {:?}", e);
                 if auto_retry {
                     // In non-interactive cases, we wait a short while
                     // before re-trying rsync.
-                    warn!(logger, "Rsync failed: {:?}, retrying in 10 seconds...", e);
+                    info!(logger, "Retrying in 10 seconds...");
                     std::thread::sleep(std::time::Duration::from_secs(10));
-                } else if !consent_given(&format!(
-                    "Rsync failed: {e:?}. Do you want to retry the \
-                    download for this node?"
-                )) {
-                    break;
+                } else if !consent_given("Do you want to retry the  download for this node?") {
+                    return Err(RecoveryError::UnexpectedError(
+                        "Rsync failed, skipped manually".into(),
+                    ));
                 }
             }
             success => return success,
