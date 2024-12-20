@@ -1308,9 +1308,6 @@ fn registry_canister() {
 }
 
 #[test]
-#[should_panic(
-    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
-)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
