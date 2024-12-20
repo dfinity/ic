@@ -891,7 +891,7 @@ proptest! {
 
         for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
             let btc_net = network_to_btc_network(*network);
-            let btc_addr = bitcoin::Address::p2pkh(&pk, btc_net);
+            let btc_addr = bitcoin::Address::p2pkh(pk, btc_net);
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2pkh(tx::hash160(&pkbytes))),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
