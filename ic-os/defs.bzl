@@ -123,7 +123,7 @@ def icos_build(
             build_args = image_deps["build_args"],
             file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
@@ -192,7 +192,7 @@ def icos_build(
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     # Inherit tags for this test, to avoid triggering builds for local base images
@@ -213,16 +213,16 @@ def icos_build(
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
             },
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual"])
+        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual"])
+            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
         native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
@@ -235,7 +235,7 @@ def icos_build(
             cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
             tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
         native.genrule(
@@ -257,7 +257,7 @@ def icos_build(
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
                 cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
                 tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-                tags = ["manual"],
+                tags = ["manual", "no-cache"],
             )
 
             native.genrule(
@@ -285,7 +285,7 @@ def icos_build(
                 ]
             )
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     if upgrades:
@@ -303,7 +303,7 @@ def icos_build(
                     ]
                 )
             },
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # -------------------- Assemble disk partitions ---------------
@@ -326,7 +326,7 @@ def icos_build(
             ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -343,7 +343,7 @@ def icos_build(
             ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-remote-cache"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -363,7 +363,7 @@ def icos_build(
             name = "update-img.tar",
             boot_partition = ":partition-boot.tzst",
             root_partition = ":partition-root.tzst",
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -381,7 +381,7 @@ def icos_build(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
             root_partition = ":partition-root-test.tzst",
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -671,7 +671,7 @@ def boundary_node_icos_build(
         build_args = image_deps["build_args"],
         file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     # Helpful tool to print a hash of all input component files
@@ -740,7 +740,7 @@ EOF
                 ]
             )
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
@@ -764,7 +764,7 @@ EOF
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     native.genrule(
@@ -774,7 +774,7 @@ EOF
         cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
         tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     native.genrule(
@@ -799,7 +799,7 @@ EOF
             ":partition-root.tzst",
         ],
         expanded_size = "50G",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
