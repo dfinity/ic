@@ -16,7 +16,9 @@ use tokio::task;
 
 #[async_trait]
 pub trait DeployAssetCanister {
-    async fn deploy_asset_canister(&self) -> Result<AssetCanisterClient>;
+    async fn deploy_legacy_asset_canister(&self) -> Result<AssetCanisterClient>;
+    async fn deploy_long_asset_canister(&self) -> Result<AssetCanisterClient>;
+    async fn deploy_asset_canister(&self, wasm_env_var_name: &str) -> Result<AssetCanisterClient>;
 }
 
 #[async_trait]
@@ -24,17 +26,25 @@ impl<T> DeployAssetCanister for T
 where
     T: HasTestEnv + Send + Sync,
 {
-    async fn deploy_asset_canister(&self) -> Result<AssetCanisterClient> {
+    async fn deploy_legacy_asset_canister(&self) -> Result<AssetCanisterClient> {
+        self.deploy_asset_canister("ASSET_CANISTER_WASM_PATH").await
+    }
+    async fn deploy_long_asset_canister(&self) -> Result<AssetCanisterClient> {
+        self.deploy_asset_canister("LONG_ASSET_CANISTER_WASM_PATH")
+            .await
+    }
+    async fn deploy_asset_canister(&self, wasm_env_var_name: &str) -> Result<AssetCanisterClient> {
         let env = self.test_env();
         let logger = env.logger();
         let app_node = env.get_first_healthy_application_node_snapshot();
 
         let canister_id = task::spawn_blocking({
             let app_node = app_node.clone();
+            let wasm_env_var_name = wasm_env_var_name.to_string();
             move || {
                 app_node.create_and_install_canister_with_arg(
-                    &env::var("ASSET_CANISTER_WASM_PATH")
-                        .expect("ASSET_CANISTER_WASM_PATH not set"),
+                    &env::var(wasm_env_var_name.clone())
+                        .unwrap_or_else(|_| panic!("{} not set", wasm_env_var_name)),
                     None,
                 )
             }

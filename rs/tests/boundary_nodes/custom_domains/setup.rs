@@ -883,7 +883,7 @@ pub async fn setup_asset_canister(
     index_content: Option<&str>,
 ) -> Result<Principal, Error> {
     let asset_canister = env
-        .deploy_asset_canister()
+        .deploy_legacy_asset_canister()
         .await
         .expect("Could not install asset canister");
 
