@@ -76,7 +76,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
-    node::v1::NodeRecord,
+    node::v1::{NodeRecord, NodeRewardType},
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -99,8 +99,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -1198,11 +1198,14 @@ struct ProposeToUpdateCanisterSettingsCmd {
     /// If set, it will update the canister's freezing threshold to this value.
     freezing_threshold: Option<u64>,
     #[clap(long)]
-    /// If set, it will update the canister's log wasm memory limit to this value.
+    /// If set, it will update the canister's wasm memory limit to this value.
     wasm_memory_limit: Option<u64>,
     #[clap(long)]
     /// If set, it will update the canister's log visibility to this value.
     log_visibility: Option<LogVisibility>,
+    #[clap(long)]
+    /// If set, it will update the canister's wasm memory threshold to this value.
+    wasm_memory_threshold: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1232,6 +1235,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         let memory_allocation = self.memory_allocation;
         let freezing_threshold = self.freezing_threshold;
         let wasm_memory_limit = self.wasm_memory_limit;
+        let wasm_memory_threshold = self.wasm_memory_threshold;
         let log_visibility = match self.log_visibility {
             Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
@@ -1247,6 +1251,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 freezing_threshold,
                 wasm_memory_limit,
                 log_visibility,
+                wasm_memory_threshold,
             }),
         };
 
@@ -5076,6 +5081,48 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     dc_id: record.dc_id,
                     rewardable_nodes: record.rewardable_nodes,
                     ipv6: record.ipv6,
+                };
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    record,
+                    as_json,
+                );
+            } else if key.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
+                #[derive(Debug, Serialize)]
+                pub struct Node {
+                    pub xnet: Option<String>,
+                    pub http: Option<String>,
+                    pub node_operator_id: PrincipalId,
+                    pub chip_id: Option<String>,
+                    pub hostos_version_id: Option<String>,
+                    pub public_ipv4_config: Option<String>,
+                    pub domain: Option<String>,
+                    pub node_reward_type: Option<String>,
+                }
+                let record =
+                    NodeRecord::decode(&bytes[..]).expect("Error decoding value from registry.");
+                let record = Node {
+                    xnet: record.xnet.map(|v| format!("[{}]:{}", v.ip_addr, v.port)),
+                    http: record.http.map(|v| format!("[{}]:{}", v.ip_addr, v.port)),
+                    node_operator_id: PrincipalId::try_from(record.node_operator_id)
+                        .expect("Error decoding principal"),
+                    chip_id: record.chip_id.map(hex::encode),
+                    hostos_version_id: record.hostos_version_id,
+                    public_ipv4_config: record.public_ipv4_config.map(|v| {
+                        format!(
+                            "ip_addr {} gw {:#?} prefix_length {}",
+                            v.ip_addr, v.gateway_ip_addr, v.prefix_length
+                        )
+                    }),
+                    domain: record.domain,
+                    node_reward_type: record.node_reward_type.map(|t: i32| {
+                        NodeRewardType::try_from(t)
+                            .expect("Invalid node_reward_type value")
+                            .to_string()
+                    }),
                 };
                 print_value(
                     &std::str::from_utf8(&key)

@@ -80,7 +80,7 @@ system_test_nns(
     name = "bn_update_workload_test",
     flaky = True,
     tags = [
-        "manual",  # TODO(BOUN-1039): remove "manual" and add back "system_test_hourly" and "system_test_nightly" when the test is not flaky anymore
+        "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
