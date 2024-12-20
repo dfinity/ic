@@ -171,6 +171,8 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
@@ -178,6 +180,8 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
+        ip: None,
+        ip_prefix_group: None,
         request_types: Some(vec![RequestType::Query]),
         limit: Action::Limit(2, Duration::from_secs(60)),
     };
@@ -187,6 +191,8 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_3)$").unwrap()),
         request_types: None,
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(3, Duration::from_secs(60)),
     };
 
@@ -195,6 +201,8 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(4, Duration::from_secs(60)),
     };
 
@@ -248,6 +256,8 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
@@ -256,6 +266,8 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
         request_types: Some(vec![RequestType::Query]),
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(2, Duration::from_secs(60)),
     };
 
@@ -265,6 +277,8 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_33)$").unwrap()),
         request_types: None,
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(33, Duration::from_secs(60)),
     };
 
@@ -273,6 +287,8 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
         subnet_id: None,
         methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
+        ip: None,
+        ip_prefix_group: None,
         limit: Action::Limit(4, Duration::from_secs(60)),
     };
 

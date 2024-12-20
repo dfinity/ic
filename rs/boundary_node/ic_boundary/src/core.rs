@@ -88,6 +88,7 @@ pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 pub const SECOND: Duration = Duration::from_secs(1);
+pub const HOUR: Duration = Duration::from_secs(3600);
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
@@ -284,13 +285,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Generic Ratelimiter
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
-        Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
+        Some(Arc::new(generic::GenericLimiter::new_from_file(v.clone())))
     } else {
         cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
             Arc::new(if cli.misc.crypto_config.is_some() {
-                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
+                generic::GenericLimiter::new_from_canister_update(x, agent.clone().unwrap())
             } else {
-                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
+                generic::GenericLimiter::new_from_canister_query(x, agent.clone().unwrap())
             })
         })
     };
@@ -818,7 +819,7 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
-    generic_limiter: Option<Arc<generic::Limiter>>,
+    generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
