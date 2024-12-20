@@ -375,7 +375,6 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        // Check metrics
         MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
@@ -421,7 +420,6 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    // Check metrics
     MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
@@ -466,7 +464,6 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    // Check metrics
     MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
@@ -755,22 +752,22 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    // Check metrics
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
-    );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"500\"\} 1 \d+"#,
-    );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"200\"\} 1 \d+"#,
-    );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"404\"\} 1 \d+"#,
-    );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"SysTransient\"\} 1 \d+"#,
-    );
+    MetricsAssert::from_querying_metrics(&setup)
+        .assert_contains_metric_matching(
+            r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"500\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"200\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"404\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"SysTransient\"\} 1 \d+"#,
+        );
 }
 
 fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
