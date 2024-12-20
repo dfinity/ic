@@ -109,7 +109,7 @@ async fn test_async(env: TestEnv) {
         .unwrap();
 
     let args = Encode!(&InitArg {
-        registry_polling_period_secs: 60,
+        registry_polling_period_secs: 5,
         authorized_principal: Some(full_access_principal),
     })
     .unwrap();
