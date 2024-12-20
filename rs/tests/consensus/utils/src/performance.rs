@@ -78,6 +78,9 @@ pub fn test_with_rt_handle(
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
 
+    info!(log, "Sleeping for 60 seconds");
+    std::thread::sleep(Duration::from_secs(60));
+
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
     let generator = {
@@ -212,12 +215,12 @@ impl std::fmt::Display for TestMetrics {
         )?;
         writeln!(
             f,
-            "Average time to receive a rank 0 block: {:.1}s",
+            "Average time to receive a rank 0 block: {:.2}s",
             self.average_time_to_receive_block
         )?;
         write!(
             f,
-            "Avarage E2E ingress message latency: {:.1}s",
+            "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
         )
     }
@@ -338,6 +341,9 @@ pub async fn persist_metrics(
     metrics: TestMetrics,
     message_size: usize,
     rps: f64,
+    latency: Duration,
+    bandwidth_bits_per_seconds: u32,
+    subnet_size: usize,
     log: &Logger,
 ) {
     // elastic search url
@@ -355,6 +361,9 @@ pub async fn persist_metrics(
             "benchmark_settings": {
                 "message_size": message_size,
                 "rps": rps,
+                "latency_seconds": latency.as_secs_f64(),
+                "bandwith_bits_per_second": bandwidth_bits_per_seconds,
+                "subnet_size": subnet_size,
             },
             "benchmark_results": {
                 "success_rate": metrics.success_rate,
