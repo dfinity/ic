@@ -1,4 +1,5 @@
 use criterion::*;
+use ic_crypto_internal_bls12_381_type::{Polynomial, Scalar};
 use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
@@ -124,22 +125,25 @@ fn vetkd_bench(c: &mut Criterion) {
             node_info.push((node as u32, node_pk, eks));
         }
 
-        group.bench_function(format!("EncryptedKey::combine (n={})", nodes), |b| {
-            b.iter(|| {
-                EncryptedKey::combine(
-                    &node_info,
-                    threshold,
-                    &master_pk,
-                    &tpk,
-                    &derivation_path,
-                    &did,
-                )
-                .unwrap()
-            })
-        });
+        group.bench_function(
+            format!("EncryptedKey::combine_valid_shares (n={})", nodes),
+            |b| {
+                b.iter(|| {
+                    EncryptedKey::combine_valid_shares(
+                        &node_info,
+                        threshold,
+                        &master_pk,
+                        &tpk,
+                        &derivation_path,
+                        &did,
+                    )
+                    .unwrap()
+                })
+            },
+        );
 
         if threshold == 9 {
-            let ek = EncryptedKey::combine(
+            let ek = EncryptedKey::combine_valid_shares(
                 &node_info,
                 threshold,
                 &master_pk,
