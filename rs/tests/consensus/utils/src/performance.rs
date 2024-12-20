@@ -78,8 +78,8 @@ pub fn test_with_rt_handle(
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
 
-    info!(log, "Sleeping for 30 seconds");
-    std::thread::sleep(Duration::from_secs(30));
+    info!(log, "Sleeping for 60 seconds");
+    std::thread::sleep(Duration::from_secs(60));
 
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
@@ -215,12 +215,12 @@ impl std::fmt::Display for TestMetrics {
         )?;
         writeln!(
             f,
-            "Average time to receive a rank 0 block: {:.1}s",
+            "Average time to receive a rank 0 block: {:.2}s",
             self.average_time_to_receive_block
         )?;
         write!(
             f,
-            "Avarage E2E ingress message latency: {:.1}s",
+            "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
         )
     }
