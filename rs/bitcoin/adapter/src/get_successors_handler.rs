@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
@@ -168,7 +168,7 @@ fn get_successor_blocks(
             // Retrieve the block from the cache.
             match state.get_block(block_hash) {
                 Some(block) => {
-                    let block_size = block.size();
+                    let block_size = block.total_size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
@@ -238,6 +238,7 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
     match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
         Network::Testnet | Network::Signet | Network::Regtest => true,
+        other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 

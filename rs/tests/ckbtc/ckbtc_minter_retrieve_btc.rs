@@ -45,11 +45,15 @@ pub fn test_retrieve_btc(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,
-        "Generating 10 blocks to default address: {}", &default_btc_address
+        "Generating 10 blocks to default address: {}",
+        &default_btc_address.to_string()
     );
     btc_rpc
         .generate_to_address(10, &default_btc_address)
