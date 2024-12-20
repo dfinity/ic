@@ -22,6 +22,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
+const PHASE_TIME_OUT_CALLBACKS: &str = "time_out_callbacks";
 const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 const PHASE_SHED_MESSAGES: &str = "shed_messages";
 
@@ -59,7 +60,8 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
-            best_effort_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
+            best_effort_message_memory_capacity: hypervisor_config
+                .best_effort_message_memory_capacity,
             log,
             metrics,
         }
@@ -124,8 +126,10 @@ impl StateMachine for StateMachineImpl {
         self.metrics
             .timed_out_messages_total
             .inc_by(timed_out_messages as u64);
+        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
+        let since = Instant::now();
         let (timed_out_callbacks, errors) = state.time_out_callbacks();
         self.metrics
             .timed_out_callbacks_total
@@ -140,8 +144,7 @@ impl StateMachine for StateMachineImpl {
             );
             self.metrics.critical_error_induct_response_failed.inc();
         }
-
-        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
+        self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();

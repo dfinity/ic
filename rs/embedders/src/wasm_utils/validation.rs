@@ -1474,7 +1474,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
         // of `wasmtime::MemoryCreator`.
         .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
-        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
+        .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(MAX_WASM_STACK_SIZE);
     config
 }
