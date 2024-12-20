@@ -140,6 +140,7 @@ system_test_nns(
         "//rs/nns/constants",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",
@@ -152,6 +153,7 @@ system_test_nns(
         "@crate_index//:regex",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+        "@crate_index//:wat",
     ],
 )
 
