@@ -23,6 +23,8 @@ use pocket_ic::PocketIcBuilder;
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
+    use ic_sns_governance::pb::v1::upgrade_journal_entry;
+
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -222,39 +224,31 @@ async fn test_get_upgrade_journal() {
 
     // Check that the upgrade journal contains the correct entries.
     {
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
-                    initial_sns_version.clone(),
-                    new_sns_version_1.clone(),
-                ),
+        expected_upgrade_journal_entries.push(upgrade_journal_entry::Event::UpgradeStarted(
+            upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                initial_sns_version.clone(),
+                new_sns_version_1.clone(),
             ),
-        );
+        ));
 
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
-                    "this message will be redacted to keep the test spec more abstract".to_string(),
-                ),
+        expected_upgrade_journal_entries.push(upgrade_journal_entry::Event::UpgradeOutcome(
+            upgrade_journal_entry::UpgradeOutcome::success(
+                "this message will be redacted to keep the test spec more abstract".to_string(),
             ),
-        );
+        ));
 
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
-                    new_sns_version_1.clone(),
-                    new_sns_version_2.clone(),
-                ),
+        expected_upgrade_journal_entries.push(upgrade_journal_entry::Event::UpgradeStarted(
+            upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                new_sns_version_1.clone(),
+                new_sns_version_2.clone(),
             ),
-        );
+        ));
 
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
-                    "this message will be redacted to keep the test spec more abstract".to_string(),
-                ),
+        expected_upgrade_journal_entries.push(upgrade_journal_entry::Event::UpgradeOutcome(
+            upgrade_journal_entry::UpgradeOutcome::success(
+                "this message will be redacted to keep the test spec more abstract".to_string(),
             ),
-        );
+        ));
 
         sns::governance::assert_upgrade_journal(
             &pocket_ic,

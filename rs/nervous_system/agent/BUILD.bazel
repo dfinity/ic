@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/types/base_types",
