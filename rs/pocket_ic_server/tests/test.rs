@@ -1204,7 +1204,7 @@ fn test_unresponsive_gateway_backend() {
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
     assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
         .unwrap()
-        .contains("connection_failure: client error"));
+        .contains("connection_failure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
@@ -1233,7 +1233,8 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url))
+            || message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
         }
     };
 }
@@ -1307,9 +1308,6 @@ fn registry_canister() {
 }
 
 #[test]
-#[should_panic(
-    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
-)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()

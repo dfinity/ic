@@ -1,0 +1,45 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:defs.bzl", "symlink_dir")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/clients",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/types/base_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:colored",
+    "@crate_index//:futures",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-wasm__ic-wasm",
+    "@crate_index//:rgb",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+rust_binary(
+    name = "sync-with-released-nervous-system-wasms",
+    srcs = [
+        "src/main.rs",
+    ],
+    args = ["$(location //:mainnet-canister-revisions.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
+    data = [
+        ":tools",
+        "//:mainnet-canister-revisions.json",
+    ],
+    deps = DEPENDENCIES,
+)
+
+symlink_dir(
+    name = "tools",
+    targets = {
+        "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
+    },
+)
