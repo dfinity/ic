@@ -310,6 +310,9 @@ mod test {
         - canister_id: pawub-syaaa-aaaam-qb7zq-cai
           limit: pass
 
+        - canister_id: pawub-syaaa-aaaam-qb7zq-cai
+          limit: block
+
         - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
           canister_id: aaaaa-aa
           methods_regex: ^.*$
