@@ -47,6 +47,7 @@ fn initialize_execution_test(
     }
 
     let mut test = ExecutionTestBuilder::new()
+        .with_query_caching_disabled()
         .with_install_code_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)

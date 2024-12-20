@@ -1,7 +1,7 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use candid::Nat;
 use ic_btc_checker::{
-    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    blocklist::is_blocked, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
     CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
@@ -78,7 +78,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
         CheckMode::Normal => {
-            if blocklist_contains(&address) {
+            if is_blocked(&address) {
                 return CheckAddressResponse::Failed;
             }
             CheckAddressResponse::Passed
@@ -158,7 +158,7 @@ fn init(arg: CheckArg) {
             Config::new_and_validate(
                 init_arg.btc_network,
                 init_arg.check_mode,
-                state::default_num_subnet_nodes(),
+                init_arg.num_subnet_nodes,
             )
             .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),

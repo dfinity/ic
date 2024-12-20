@@ -6748,16 +6748,20 @@ impl Governance {
         };
 
         let now_seconds = self.env.now();
-        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
-        if maturity_modulation.is_err() {
-            println!(
-                "{}Couldn't update maturity modulation. Error: {}",
-                LOG_PREFIX,
-                maturity_modulation.err().unwrap()
-            );
-            return;
-        }
-        let maturity_modulation = maturity_modulation.unwrap();
+        let maturity_modulation = match self.cmc.neuron_maturity_modulation().await {
+            Ok(maturity_modulation) => maturity_modulation,
+            Err(err) => {
+                let silence_message =
+                    err.contains("Canister rkp4c-7iaaa-aaaaa-aaaca-cai not found");
+                if !silence_message {
+                    println!(
+                        "{}Couldn't update maturity modulation. Error: {}",
+                        LOG_PREFIX, err
+                    );
+                }
+                return;
+            }
+        };
         println!(
             "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
             LOG_PREFIX, maturity_modulation, now_seconds, self.heap_data.maturity_modulation_last_updated_at_timestamp_seconds,

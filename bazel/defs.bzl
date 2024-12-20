@@ -204,7 +204,7 @@ def rust_ic_test(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
+def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **kwargs):
     """A rule for defining a rust benchmark.
 
     Args:
@@ -212,6 +212,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
       env: additional environment variables to pass to the benchmark binary.
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
+      with_test: generates name + '_test' target to test that the benchmark work.
       **kwargs: see docs for `rust_binary`.
     """
 
@@ -245,6 +246,17 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
         data = data + [":" + binary_name_publish],
         tags = kwargs.get("tags", []) + ["rust_bench"],
     )
+
+    # To test that the benchmarks work.
+    if with_test:
+        native.sh_test(
+            name = name + "_test",
+            testonly = True,
+            env = env,
+            srcs = [":" + binary_name_publish],
+            data = data,
+            tags = kwargs.get("tags", None),
+        )
 
 def rust_ic_bench(env = {}, data = [], **kwargs):
     """A rule for defining a rust benchmark.
