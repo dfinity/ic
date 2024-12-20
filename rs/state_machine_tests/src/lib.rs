@@ -903,6 +903,7 @@ impl StateMachineStateDir for PathBuf {
 }
 
 pub struct StateMachineBuilder {
+    state_dir: Box<dyn StateMachineStateDir>,
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
@@ -927,7 +928,6 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
-    state_dir: Box<dyn StateMachineStateDir>,
 }
 
 impl StateMachineBuilder {

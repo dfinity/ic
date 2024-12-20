@@ -6065,6 +6065,7 @@ fn can_merge_unexpected_number_of_files() {
                 .vmemory_0();
             let existing_overlays = pm_layout.existing_overlays().unwrap();
             assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
+            state_manager.flush_tip_channel();
 
             // Copy each shard for heights 1..HEIGHT; now each file is beyond the hard limit,
             // triggering forced merge for all shards back to one overlay.
