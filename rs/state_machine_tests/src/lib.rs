@@ -1817,6 +1817,9 @@ impl StateMachine {
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
         let mut i = 0i32;
+        // StateManager is owned by an Arc, that is cloned into multiple components and different
+        // threads. If we return before all the asynchronous components release the Arc, we may
+        // end up with to StateManagers writing to the same directory, resulting in a crash.
         while state_manager.upgrade().is_some() {
             std::thread::sleep(std::time::Duration::from_millis(50));
             i += 1;
