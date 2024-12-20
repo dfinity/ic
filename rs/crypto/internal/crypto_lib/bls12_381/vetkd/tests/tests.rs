@@ -81,14 +81,11 @@ fn encrypted_key_share_creation_is_stable() {
         "d59283b0a48181d93c6e1a22e5ff9130df68a01bcadf96a25d37a2a092cb1a1a",
     ];
 
-    for node in 0..NODES {
-        let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
+    for (node_idx, expected_eks_hash) in EXPECTED_EKS_HASH.iter().enumerate() {
+        let node_sk = poly.evaluate_at(&Scalar::from_node_index(node_idx as u32));
         let eks =
             EncryptedKeyShare::create(&mut rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
-        assert_eq!(
-            hex::encode(shake256(&eks.serialize())),
-            EXPECTED_EKS_HASH[node]
-        );
+        assert_eq!(hex::encode(shake256(&eks.serialize())), *expected_eks_hash,);
     }
 }
 
@@ -169,7 +166,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
             let eks = EncryptedKeyShare::create(
                 rng,
                 &self.setup.master_pk,
-                &node_sk,
+                node_sk,
                 &self.setup.transport_pk,
                 &self.derivation_path,
                 did,
@@ -177,7 +174,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
 
             assert!(eks.is_valid(
                 &self.setup.master_pk,
-                &node_pk,
+                node_pk,
                 &self.derivation_path,
                 did,
                 &self.setup.transport_pk
@@ -213,7 +210,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         node_info: &[(u32, G2Affine, EncryptedKeyShare)],
     ) -> Result<EncryptedKey, EncryptedKeyCombinationError> {
         EncryptedKey::combine_valid_shares(
-            &node_info,
+            node_info,
             self.setup.threshold,
             &self.setup.master_pk,
             &self.setup.transport_pk,
@@ -223,11 +220,11 @@ impl<'a> VetkdTestProtocolExecution<'a> {
     }
 }
 
-fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &Vec<T>, include: usize) -> Vec<T> {
+fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &[T], include: usize) -> Vec<T> {
     assert!(include <= items.len());
 
     if items.len() == include {
-        return items.clone();
+        return items.to_owned();
     }
 
     let mut result = Vec::with_capacity(include);
@@ -237,7 +234,7 @@ fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &Vec<T>, include: u
     while result.len() != include {
         loop {
             let idx = rng.gen::<usize>() % items.len();
-            if taken[idx] == false {
+            if !taken[idx] {
                 result.push(items[idx].clone());
                 taken[idx] = true;
                 break;
@@ -298,7 +295,7 @@ fn test_protocol_execution() {
     }
 
     // Check that the vetkey output is a valid BLS signature
-    let msg = G1Affine::augmented_hash(&proto.derived_pk.point(), &proto.did);
+    let msg = G1Affine::augmented_hash(proto.derived_pk.point(), &proto.did);
 
     assert!(verify_bls_signature(
         &vetkey,
