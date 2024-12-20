@@ -115,7 +115,7 @@ def pocket_ic_test(name, test_rule, **kwargs):
             "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         },
         tags = tags + [
-            # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple is identified and fixed.
+            # TODO(IDX-3192): remove 'requires-network' tag when the root cause for sporadic error below on Apple is identified and fixed.
             # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
             #
             # Ideally we use a condition here to only require the network on darwin
