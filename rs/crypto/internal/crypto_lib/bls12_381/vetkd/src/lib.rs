@@ -5,9 +5,11 @@
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
+pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine};
 use ic_crypto_internal_bls12_381_type::{
-    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, LagrangeCoefficients, Scalar,
+    G1Projective, G2Prepared, Gt, LagrangeCoefficients, Scalar,
 };
+
 use rand::{CryptoRng, RngCore};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
