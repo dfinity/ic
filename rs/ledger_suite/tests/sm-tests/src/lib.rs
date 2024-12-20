@@ -3008,7 +3008,7 @@ pub fn test_incomplete_migration_to_current<T>(
 
     for i in 2..2 + NUM_TRANSFERS {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT)
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
             .expect("failed to transfer funds");
     }
 
@@ -3030,7 +3030,7 @@ pub fn test_incomplete_migration_to_current<T>(
                 canister_id,
                 Account::from(PrincipalId::new_user_test_id(i).0),
             );
-            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT));
+            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT + i));
         }
     };
 
