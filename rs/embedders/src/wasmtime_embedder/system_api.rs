@@ -400,8 +400,24 @@ pub fn syscalls<
     linker
         .func_wrap(
             "ic0",
+            "unsafe_stable_read_v128",
+            move |_caller: Caller<'_, StoreData>, _src: i64| -> wasmtime::V128 { unimplemented!() },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "ic0",
             "stable_write_i32",
             move |_caller: Caller<'_, StoreData>, _dst: i64, _val: i32| unimplemented!(),
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "ic0",
+            "stable_prefetch",
+            move |_caller: Caller<'_, StoreData>, _offset: i64, _len: i64| unimplemented!(),
         )
         .unwrap();
 

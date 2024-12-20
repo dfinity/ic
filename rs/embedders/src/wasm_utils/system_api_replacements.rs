@@ -117,6 +117,27 @@ pub(super) fn replacement_functions(
             ),
         ),
         (
+            SystemApiFunc::UnsafeStableLoadV128,
+            (
+                FuncType::new([ValType::I64], [ValType::V128]),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        LocalGet { local_index: 0 },
+                        V128Load {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                memory: special_indices.stable_memory_index,
+                            },
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
             SystemApiFunc::StableStoreI32,
             (
                 FuncType::new([ValType::I64, ValType::I32], []),
@@ -155,6 +176,16 @@ pub(super) fn replacement_functions(
                     ],
                 },
             ),
+        ),
+        (
+            // Assume the function does the data prefetching, noop for now...
+            SystemApiFunc::StablePrefetch,
+            (FuncType::new([ValType::I64, ValType::I64], []), {
+                Body {
+                    locals: vec![],
+                    instructions: vec![End],
+                }
+            }),
         ),
         (
             SystemApiFunc::StableSize,

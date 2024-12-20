@@ -351,13 +351,26 @@ fn multiply_heap(c: &mut Criterion) {
     )
 }
 
-fn multiply_stable(c: &mut Criterion) {
+fn multiply_stable_simd(c: &mut Criterion) {
     embedders_bench::update_bench(
         c,
-        "multiply_stable",
+        "multiply_stable_simd",
         include_bytes!("matrix-multiply.wasm"),
         &Encode!(&N, &D).unwrap(),
-        "multiply_stable",
+        "multiply_stable_simd",
+        &Encode!(&()).unwrap(),
+        None,
+        PostSetupAction::PerformCheckpoint,
+    )
+}
+
+fn multiply_unsafe_stable(c: &mut Criterion) {
+    embedders_bench::update_bench(
+        c,
+        "multiply_unsafe_stable",
+        include_bytes!("matrix-multiply.wasm"),
+        &Encode!(&N, &D).unwrap(),
+        "multiply_unsafe_stable",
         &Encode!(&()).unwrap(),
         None,
         PostSetupAction::PerformCheckpoint,
@@ -394,7 +407,7 @@ criterion_group!(
 criterion_group!(
     name = matrix;
     config = Criterion::default();
-    targets = multiply_heap, multiply_stable, multiply_stable_old,
+    targets = multiply_heap, multiply_stable_simd, multiply_unsafe_stable, multiply_stable_old,
 );
 
 criterion_main!(benches10, benches100, matrix);
