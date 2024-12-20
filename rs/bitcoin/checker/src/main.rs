@@ -1,4 +1,5 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
+use candid::Nat;
 use ic_btc_checker::{
     blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
@@ -13,6 +14,7 @@ use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::str::FromStr;
 
 mod dashboard;
@@ -25,9 +27,26 @@ use fetch::{FetchEnv, FetchResult, TryFetchResult};
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
+enum HttpsOutcallStatus {
+    ResponseTooLarge,
+    IcError(RejectionCode),
+    HttpStatusCode(Nat),
+}
+
+impl fmt::Display for HttpsOutcallStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ResponseTooLarge => write!(f, "ResponseTooLarge"),
+            Self::IcError(rejection_code) => write!(f, "IcError({})", *rejection_code as i32),
+            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({})", status_code),
+        }
+    }
+}
+
 #[derive(Default)]
 struct Stats {
-    https_outcall_status: BTreeMap<(String, String), u64>,
+    https_outcall_status: BTreeMap<(String, HttpsOutcallStatus), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
 }
@@ -227,7 +246,10 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             for ((provider, status), count) in stats.https_outcall_status.iter() {
                 counter = counter
                     .value(
-                        &[("provider", provider.as_str()), ("status", status)],
+                        &[
+                            ("provider", provider.as_str()),
+                            ("status", status.to_string().as_ref()),
+                        ],
                         *count as f64,
                     )
                     .unwrap();
@@ -362,7 +384,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((provider.name(), response.status.0.to_string()))
+                        .entry((
+                            provider.name(),
+                            HttpsOutcallStatus::HttpStatusCode(response.status.clone()),
+                        ))
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
@@ -416,7 +441,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                         let mut stat = s.borrow_mut();
                         *stat
                             .https_outcall_status
-                            .entry((provider.name(), "ResponseTooLarge".to_string()))
+                            .entry((provider.name(), HttpsOutcallStatus::ResponseTooLarge))
                             .or_default() += 1;
                     });
                 }
@@ -427,7 +452,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((provider.name(), format!("{:?}", r)))
+                        .entry((provider.name(), HttpsOutcallStatus::IcError(r)))
                         .or_default() += 1;
                 });
                 log!(
