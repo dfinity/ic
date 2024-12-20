@@ -335,6 +335,61 @@ fn vec_u64_sparse_write(c: &mut Criterion) {
     );
 }
 
+const N: u64 = 1024;
+const D: u64 = 1024;
+
+fn multiply_heap(c: &mut Criterion) {
+    embedders_bench::update_bench(
+        c,
+        "multiply_heap",
+        include_bytes!("matrix-multiply.wasm"),
+        &Encode!(&N, &D).unwrap(),
+        "multiply_heap",
+        &Encode!(&()).unwrap(),
+        None,
+        PostSetupAction::PerformCheckpoint,
+    )
+}
+
+fn multiply_stable_simd(c: &mut Criterion) {
+    embedders_bench::update_bench(
+        c,
+        "multiply_stable_simd",
+        include_bytes!("matrix-multiply.wasm"),
+        &Encode!(&N, &D).unwrap(),
+        "multiply_stable_simd",
+        &Encode!(&()).unwrap(),
+        None,
+        PostSetupAction::PerformCheckpoint,
+    )
+}
+
+fn multiply_unsafe_stable(c: &mut Criterion) {
+    embedders_bench::update_bench(
+        c,
+        "multiply_unsafe_stable",
+        include_bytes!("matrix-multiply.wasm"),
+        &Encode!(&N, &D).unwrap(),
+        "multiply_unsafe_stable",
+        &Encode!(&()).unwrap(),
+        None,
+        PostSetupAction::PerformCheckpoint,
+    )
+}
+
+fn multiply_stable_old(c: &mut Criterion) {
+    embedders_bench::update_bench(
+        c,
+        "multiply_stable_old",
+        include_bytes!("matrix-multiply.wasm"),
+        &Encode!(&N, &D).unwrap(),
+        "multiply_stable_old",
+        &Encode!(&()).unwrap(),
+        None,
+        PostSetupAction::PerformCheckpoint,
+    )
+}
+
 criterion_group!(
     name = benches10;
     config = Criterion::default().sample_size(10);
@@ -349,4 +404,10 @@ criterion_group!(
       vec_u64_single_read, vec_u64_sparse_read, vec_u64_single_write,
 );
 
-criterion_main!(benches10, benches100);
+criterion_group!(
+    name = matrix;
+    config = Criterion::default();
+    targets = multiply_heap, multiply_stable_simd, multiply_unsafe_stable, multiply_stable_old,
+);
+
+criterion_main!(benches10, benches100, matrix);
