@@ -143,9 +143,22 @@ pub mod mock {
     }
 }
 
+// Some event types are deprecated, however we still want to use them in prop tests as we want
+// to make sure they can still be deserialized.
+#[allow(deprecated)]
 pub mod arbitrary {
     use crate::{
-        address::BitcoinAddress, signature::EncodedSignature, state::RetrieveBtcRequest, tx,
+        address::BitcoinAddress,
+        lifecycle::{
+            init::{BtcNetwork, InitArgs},
+            upgrade::UpgradeArgs,
+        },
+        signature::EncodedSignature,
+        state::{
+            eventlog::{Event, EventType},
+            ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+        },
+        tx,
     };
     use candid::Principal;
     use ic_base_types::{CanisterId, PrincipalId};
@@ -156,31 +169,30 @@ pub mod arbitrary {
         array::uniform32,
         collection::{vec as pvec, SizeRange},
         option,
-        prelude::{any, Strategy},
+        prelude::{any, Just, Strategy},
         prop_oneof,
     };
     use serde_bytes::ByteBuf;
 
-    pub fn amount() -> impl Strategy<Value = Satoshi> {
+    fn amount() -> impl Strategy<Value = Satoshi> {
         1..10_000_000_000u64
     }
 
-    pub fn vec_to_txid(vec: Vec<u8>) -> Txid {
-        let bytes: [u8; 32] = vec.try_into().expect("Can't convert to [u8; 32]");
-        bytes.into()
+    fn txid() -> impl Strategy<Value = Txid> {
+        pvec(any::<u8>(), 32).prop_map(|bytes| {
+            let bytes: [u8; 32] = bytes.try_into().expect("Can't convert to [u8; 32]");
+            bytes.into()
+        })
     }
 
-    pub fn out_point() -> impl Strategy<Value = OutPoint> {
-        (pvec(any::<u8>(), 32), any::<u32>()).prop_map(|(txid, vout)| OutPoint {
-            txid: vec_to_txid(txid),
-            vout,
-        })
+    fn outpoint() -> impl Strategy<Value = OutPoint> {
+        (txid(), any::<u32>()).prop_map(|(txid, vout)| OutPoint { txid, vout })
     }
 
     pub fn unsigned_input(
         value: impl Strategy<Value = Satoshi>,
     ) -> impl Strategy<Value = tx::UnsignedInput> {
-        (out_point(), value, any::<u32>()).prop_map(|(previous_output, value, sequence)| {
+        (outpoint(), value, any::<u32>()).prop_map(|(previous_output, value, sequence)| {
             tx::UnsignedInput {
                 previous_output,
                 value,
@@ -191,7 +203,7 @@ pub mod arbitrary {
 
     pub fn signed_input() -> impl Strategy<Value = tx::SignedInput> {
         (
-            out_point(),
+            outpoint(),
             any::<u32>(),
             pvec(1u8..0xff, 64),
             pvec(any::<u8>(), 32),
@@ -221,13 +233,10 @@ pub mod arbitrary {
     }
 
     pub fn utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
-        (amount, pvec(any::<u8>(), 32), 0..5u32).prop_map(|(value, txid, vout)| Utxo {
-            outpoint: OutPoint {
-                txid: vec_to_txid(txid),
-                vout,
-            },
+        (amount, outpoint(), any::<u32>()).prop_map(|(value, outpoint, height)| Utxo {
+            outpoint,
             value,
-            height: 0,
+            height,
         })
     }
 
@@ -240,39 +249,309 @@ pub mod arbitrary {
         })
     }
 
-    pub fn retrieve_btc_requests(
+    pub fn canister_id() -> impl Strategy<Value = CanisterId> {
+        any::<u64>().prop_map(CanisterId::from_u64)
+    }
+
+    pub fn retrieve_btc_request(
         amount: impl Strategy<Value = Satoshi>,
-        num: impl Into<SizeRange>,
-    ) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
-        let request_strategy = (
+    ) -> impl Strategy<Value = RetrieveBtcRequest> {
+        (
             amount,
             address(),
             any::<u64>(),
             1569975147000..2069975147000u64,
-            option::of(any::<u64>()),
+            option::of(principal()),
             option::of(account()),
         )
             .prop_map(
-                |(amount, address, block_index, received_at, provider, reimbursement_account)| {
+                |(
+                    amount,
+                    address,
+                    block_index,
+                    received_at,
+                    kyt_provider,
+                    reimbursement_account,
+                )| {
                     RetrieveBtcRequest {
                         amount,
                         address,
                         block_index,
                         received_at,
-                        kyt_provider: provider
-                            .map(|id| Principal::from(CanisterId::from_u64(id).get())),
+                        kyt_provider,
                         reimbursement_account,
                     }
                 },
-            );
-        pvec(request_strategy, num).prop_map(|mut reqs| {
-            reqs.sort_by_key(|req| req.received_at);
+            )
+    }
 
+    pub fn retrieve_btc_requests(
+        amount: impl Strategy<Value = Satoshi>,
+        num: impl Into<SizeRange>,
+    ) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
+        pvec(retrieve_btc_request(amount), num).prop_map(|mut reqs| {
+            reqs.sort_by_key(|req| req.received_at);
             for (i, req) in reqs.iter_mut().enumerate() {
                 req.block_index = i as u64;
             }
-
             reqs
         })
+    }
+
+    fn principal() -> impl Strategy<Value = Principal> {
+        pvec(any::<u8>(), 1..=Principal::MAX_LENGTH_IN_BYTES)
+            .prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
+    }
+
+    fn reimbursement_reason() -> impl Strategy<Value = ReimbursementReason> {
+        prop_oneof![
+            (principal(), any::<u64>()).prop_map(|(kyt_provider, kyt_fee)| {
+                ReimbursementReason::TaintedDestination {
+                    kyt_provider,
+                    kyt_fee,
+                }
+            }),
+            Just(ReimbursementReason::CallFailed),
+        ]
+    }
+
+    fn suspended_reason() -> impl Strategy<Value = SuspendedReason> {
+        prop_oneof![
+            Just(SuspendedReason::ValueTooSmall),
+            Just(SuspendedReason::Quarantined),
+        ]
+    }
+
+    fn change_output() -> impl Strategy<Value = ChangeOutput> {
+        (any::<u32>(), any::<u64>()).prop_map(|(vout, value)| ChangeOutput { vout, value })
+    }
+
+    fn mode() -> impl Strategy<Value = Mode> {
+        prop_oneof![
+            Just(Mode::ReadOnly),
+            pvec(principal(), 0..1_000).prop_map(Mode::RestrictedTo),
+            pvec(principal(), 0..1_000).prop_map(Mode::DepositsRestrictedTo),
+            Just(Mode::GeneralAvailability),
+        ]
+    }
+
+    fn btc_network() -> impl Strategy<Value = BtcNetwork> {
+        prop_oneof![
+            Just(BtcNetwork::Mainnet),
+            Just(BtcNetwork::Testnet),
+            Just(BtcNetwork::Regtest),
+        ]
+    }
+
+    fn init_args() -> impl Strategy<Value = InitArgs> {
+        (
+            btc_network(),
+            ".*",
+            any::<u64>(),
+            canister_id(),
+            any::<u64>(),
+            option::of(any::<u32>()),
+            mode(),
+            option::of(any::<u64>()),
+            option::of(any::<u64>()),
+            option::of(canister_id()),
+            option::of(canister_id()),
+        )
+            .prop_map(
+                |(
+                    btc_network,
+                    ecdsa_key_name,
+                    retrieve_btc_min_amount,
+                    ledger_id,
+                    max_time_in_queue_nanos,
+                    min_confirmations,
+                    mode,
+                    check_fee,
+                    kyt_fee,
+                    btc_checker_principal,
+                    kyt_principal,
+                )| InitArgs {
+                    btc_network,
+                    ecdsa_key_name,
+                    retrieve_btc_min_amount,
+                    ledger_id,
+                    max_time_in_queue_nanos,
+                    min_confirmations,
+                    mode,
+                    check_fee,
+                    kyt_fee,
+                    btc_checker_principal,
+                    kyt_principal,
+                },
+            )
+    }
+
+    fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
+        (
+            option::of(any::<u64>()),
+            option::of(any::<u32>()),
+            option::of(any::<u64>()),
+            option::of(mode()),
+            option::of(any::<u64>()),
+            option::of(any::<u64>()),
+            option::of(canister_id()),
+            option::of(canister_id()),
+        )
+            .prop_map(
+                |(
+                    retrieve_btc_min_amount,
+                    min_confirmations,
+                    max_time_in_queue_nanos,
+                    mode,
+                    check_fee,
+                    kyt_fee,
+                    btc_checker_principal,
+                    kyt_principal,
+                )| UpgradeArgs {
+                    retrieve_btc_min_amount,
+                    min_confirmations,
+                    max_time_in_queue_nanos,
+                    mode,
+                    check_fee,
+                    kyt_fee,
+                    btc_checker_principal,
+                    kyt_principal,
+                },
+            )
+    }
+
+    pub fn event() -> impl Strategy<Value = Event> {
+        (any::<Option<u64>>(), event_type())
+            .prop_map(|(timestamp, payload)| Event { timestamp, payload })
+    }
+
+    pub fn event_type() -> impl Strategy<Value = EventType> {
+        prop_oneof![
+            init_args().prop_map(EventType::Init),
+            upgrade_args().prop_map(EventType::Upgrade),
+            (
+                option::of(any::<u64>()),
+                account(),
+                pvec(utxo(amount()), 0..1_000)
+            )
+                .prop_map(|(mint_txid, to_account, utxos)| EventType::ReceivedUtxos {
+                    mint_txid,
+                    to_account,
+                    utxos,
+                }),
+            retrieve_btc_request(amount()).prop_map(EventType::AcceptedRetrieveBtcRequest),
+            any::<u64>()
+                .prop_map(|block_index| EventType::RemovedRetrieveBtcRequest { block_index }),
+            (
+                pvec(any::<u64>(), 0..1_000),
+                txid(),
+                pvec(utxo(amount()), 0..1_000),
+                option::of(change_output()),
+                any::<u64>(),
+                option::of(any::<u64>())
+            )
+                .prop_map(
+                    |(
+                        request_block_indices,
+                        txid,
+                        utxos,
+                        change_output,
+                        submitted_at,
+                        fee_per_vbyte,
+                    )| EventType::SentBtcTransaction {
+                        request_block_indices,
+                        txid,
+                        utxos,
+                        change_output,
+                        submitted_at,
+                        fee_per_vbyte,
+                    }
+                ),
+            (txid(), txid(), change_output(), any::<u64>(), any::<u64>()).prop_map(
+                |(old_txid, new_txid, change_output, submitted_at, fee_per_vbyte)| {
+                    EventType::ReplacedBtcTransaction {
+                        old_txid,
+                        new_txid,
+                        change_output,
+                        submitted_at,
+                        fee_per_vbyte,
+                    }
+                }
+            ),
+            txid().prop_map(|txid| EventType::ConfirmedBtcTransaction { txid }),
+            (
+                utxo(amount()),
+                any::<String>(),
+                any::<bool>(),
+                option::of(principal())
+            )
+                .prop_map(|(utxo, uuid, clean, kyt_provider)| {
+                    EventType::CheckedUtxo {
+                        utxo,
+                        uuid,
+                        clean,
+                        kyt_provider,
+                    }
+                }),
+            (utxo(amount()), account())
+                .prop_map(|(utxo, account)| { EventType::CheckedUtxoV2 { utxo, account } }),
+            utxo(amount()).prop_map(|utxo| EventType::IgnoredUtxo { utxo }),
+            (utxo(amount()), account(), suspended_reason()).prop_map(|(utxo, account, reason)| {
+                EventType::SuspendedUtxo {
+                    utxo,
+                    account,
+                    reason,
+                }
+            }),
+            (principal(), any::<u64>(), any::<u64>()).prop_map(
+                |(kyt_provider, amount, block_index)| {
+                    EventType::DistributedKytFee {
+                        kyt_provider,
+                        amount,
+                        block_index,
+                    }
+                }
+            ),
+            (
+                principal(),
+                ".*",
+                any::<u64>(),
+                ".*",
+                principal(),
+                any::<u64>()
+            )
+                .prop_map(
+                    |(owner, address, amount, uuid, kyt_provider, block_index)| {
+                        EventType::RetrieveBtcKytFailed {
+                            owner,
+                            address,
+                            amount,
+                            uuid,
+                            kyt_provider,
+                            block_index,
+                        }
+                    }
+                ),
+            (
+                account(),
+                any::<u64>(),
+                reimbursement_reason(),
+                any::<u64>()
+            )
+                .prop_map(|(account, amount, reason, burn_block_index)| {
+                    EventType::ScheduleDepositReimbursement {
+                        account,
+                        amount,
+                        reason,
+                        burn_block_index,
+                    }
+                }),
+            (any::<u64>(), any::<u64>()).prop_map(|(burn_block_index, mint_block_index)| {
+                EventType::ReimbursedFailedDeposit {
+                    burn_block_index,
+                    mint_block_index,
+                }
+            }),
+        ]
     }
 }
