@@ -48,10 +48,10 @@ fn test_http_request_decoding_quota_for_canister(
         .execute_ingress(canister_id, "http_request", large_http_request_bytes)
         .unwrap_err();
     let ic_cdk_expected_err = "Decoding cost exceeds the limit";
-    let dfn_core_expecte_err = "Deserialization Failed";
+    let dfn_core_expected_err = "Deserialization Failed";
     assert!(
         err.description().contains(ic_cdk_expected_err)
-            || err.description().contains(dfn_core_expecte_err)
+            || err.description().contains(dfn_core_expected_err)
     );
 }
 
