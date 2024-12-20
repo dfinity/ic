@@ -78,7 +78,7 @@ fn get_next_target(
     store: &impl HeaderStore,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
-    timestamp: u32,
+    current_header_timestamp: u32,
 ) -> Uint256 {
     match network {
         Network::Testnet | Network::Regtest => {
@@ -88,7 +88,7 @@ fn get_next_target(
                 // "If no block has been found in 20 minutes, the difficulty automatically
                 // resets back to the minimum for a single block, after which it
                 // returns to its previous value."
-                if timestamp > prev_header.time + TEN_MINUTES * 2 {
+                if current_header_timestamp > prev_header.time + TEN_MINUTES * 2 {
                     //If no block has been found in 20 minutes, then use the maximum difficulty
                     // target
                     max_target(network)
@@ -142,17 +142,12 @@ fn find_next_difficulty_in_chain(
 
             // Keep traversing the blockchain backwards from the recent block to initial
             // header hash.
-            loop {
+            while current_hash != initial_header_hash {
                 // Check if non-limit PoW found or it's time to adjust difficulty.
                 if current_header.bits != pow_limit_bits
                     || current_height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0
                 {
                     return current_header.bits;
-                }
-
-                // Stop if we reach the initial header.
-                if current_hash == initial_header_hash {
-                    break;
                 }
 
                 // Traverse to the previous header.
@@ -183,8 +178,7 @@ fn compute_next_difficulty(
     // returned Regtest network doesn't adjust PoW difficult levels. For
     // regtest, simply return the previous difficulty target
 
-    let height = prev_height + 1;
-    if height % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network) {
+    if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network) {
         return prev_header.bits;
     }
 
@@ -209,7 +203,7 @@ fn compute_next_difficulty(
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
     let target_adjustment_interval_time: i64 =
-        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64; //Number of seconds in 2 weeks
+        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64;
 
     // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
     // actual_interval deviates too much from the expected 2 weeks.
@@ -256,14 +250,12 @@ mod test {
     struct SimpleHeaderStore {
         headers: HashMap<BlockHash, StoredHeader>,
         height: BlockHeight,
-        tip_hash: BlockHash,
         initial_hash: BlockHash,
     }
 
     impl SimpleHeaderStore {
         fn new(initial_header: BlockHeader, height: BlockHeight) -> Self {
             let initial_hash = initial_header.block_hash();
-            let tip_hash = initial_header.block_hash();
             let mut headers = HashMap::new();
             headers.insert(
                 initial_hash,
@@ -276,7 +268,6 @@ mod test {
             Self {
                 headers,
                 height,
-                tip_hash,
                 initial_hash,
             }
         }
@@ -293,7 +284,6 @@ mod test {
 
             self.height = stored_header.height;
             self.headers.insert(header.block_hash(), stored_header);
-            self.tip_hash = header.block_hash();
         }
     }
 
