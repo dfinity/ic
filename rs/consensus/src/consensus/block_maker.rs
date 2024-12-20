@@ -331,10 +331,7 @@ impl BlockMaker {
                     .ok()
                     .flatten();
 
-                    BlockPayload::Summary(SummaryPayload {
-                        dkg: summary,
-                        idkg: idkg_summary,
-                    })
+                    BlockPayload::Summary(SummaryPayload::new(summary, idkg_summary))
                 }
                 dkg::Payload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
@@ -395,6 +392,7 @@ impl BlockMaker {
                         batch: batch_payload,
                         dkg,
                         idkg: idkg_data,
+                        vetkd: None,
                     })
                 }
             },
@@ -701,8 +699,7 @@ mod tests {
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
-            let returned_payload =
-                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
+            let returned_payload = dkg::DkgDataPayload::new_empty(Height::from(0));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
@@ -724,7 +721,15 @@ mod tests {
                 move |payloads: &[(Height, Time, Payload)]| payloads == &*expected_payloads;
             let expected_block = Block::new(
                 start_hash.clone(),
-                Payload::new(ic_types::crypto::crypto_hash, returned_payload.into()),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dkg: returned_payload,
+                        idkg: None,
+                        vetkd: None,
+                    }),
+                ),
                 next_height,
                 Rank(4),
                 expected_context.clone(),

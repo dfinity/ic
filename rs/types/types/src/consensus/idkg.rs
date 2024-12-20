@@ -52,7 +52,7 @@ use strum_macros::EnumIter;
 
 use self::common::{PreSignatureInCreation, PreSignatureRef};
 
-use super::vetkd::VetKdEncryptedKeyShare;
+use crate::crypto::vetkd::VetKdEncryptedKeyShare;
 
 pub mod common;
 pub mod ecdsa;

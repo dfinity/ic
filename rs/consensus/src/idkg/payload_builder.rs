@@ -752,8 +752,8 @@ mod tests {
                     .insert(transcript_ref.transcript_id, transcript);
             }
         }
-        BlockPayload::Summary(SummaryPayload {
-            dkg: Summary::new(
+        BlockPayload::Summary(SummaryPayload::new(
+            Summary::new(
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -764,8 +764,8 @@ mod tests {
                 height,
                 BTreeMap::new(),
             ),
-            idkg: Some(idkg_summary),
-        })
+            Some(idkg_summary),
+        ))
     }
 
     fn create_payload_block_with_transcripts(
@@ -786,6 +786,7 @@ mod tests {
             batch: BatchPayload::default(),
             dkg: DkgDataPayload::new_empty(dkg_interval_start_height),
             idkg: Some(idkg_payload),
+            vetkd: None,
         })
     }
 
@@ -1308,6 +1309,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
+                vetkd: None,
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1573,6 +1575,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
+                vetkd: None,
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1644,10 +1647,8 @@ mod tests {
             assert!(reported > 0);
             assert!(unreported > 0);
 
-            let pl = BlockPayload::Summary(SummaryPayload {
-                dkg: Summary::fake(),
-                idkg: Some(summary.clone()),
-            });
+            let pl =
+                BlockPayload::Summary(SummaryPayload::new(Summary::fake(), Some(summary.clone())));
             let b = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(ic_types::crypto::crypto_hash, pl),

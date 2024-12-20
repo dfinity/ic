@@ -28,10 +28,7 @@ pub trait Fake {
 
 impl Fake for SummaryPayload {
     fn fake() -> Self {
-        Self {
-            dkg: dkg::Summary::fake(),
-            idkg: None,
-        }
+        Self::new(dkg::Summary::fake(), None)
     }
 }
 
@@ -41,6 +38,7 @@ impl Fake for DataPayload {
             batch: BatchPayload::default(),
             dkg: DkgDataPayload::new_empty(Height::from(0)),
             idkg: None,
+            vetkd: None,
         }
     }
 }
@@ -269,6 +267,7 @@ impl FromParent for Block {
                     batch: BatchPayload::default(),
                     dkg: DkgDataPayload::new_empty(dkg_start),
                     idkg: parent.payload.as_ref().as_idkg().cloned(),
+                    vetkd: parent.payload.as_ref().as_vetkd().cloned(),
                 }),
             ),
             parent.height.increment(),
@@ -321,6 +320,7 @@ fn test_fake_block_is_binary_compatible() {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::from(1)),
                 idkg: None,
+                vetkd: None,
             }),
         ),
         Height::from(123),
@@ -348,6 +348,7 @@ fn test_fake_block() {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::from(1)),
                 idkg: None,
+                vetkd: None,
             }),
         ),
         Height::from(123),

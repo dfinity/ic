@@ -494,6 +494,7 @@ pub struct ValidatorMetrics {
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
     pub(crate) idkg_validation_duration: HistogramVec,
+    pub(crate) vetkd_validation_duration: HistogramVec,
     pub(crate) validation_random_tape_shares_count: IntGauge,
     pub(crate) validation_random_beacon_shares_count: IntGauge,
     pub(crate) validation_share_batch_size: HistogramVec,
@@ -535,7 +536,15 @@ impl ValidatorMetrics {
             dkg_time_per_validator_run: RwLock::new(0.0),
             idkg_validation_duration: metrics_registry.histogram_vec(
                 "consensus_idkg_validation_duration_seconds",
-                "Time to validate IDKG component, in seconds",
+                "Time to validate IDKG payload, in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["type"],
+            ),
+            vetkd_validation_duration: metrics_registry.histogram_vec(
+                "consensus_vetkd_validation_duration_seconds",
+                "Time to validate VetKD payload, in seconds",
                 // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),

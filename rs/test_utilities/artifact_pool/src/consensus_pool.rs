@@ -259,11 +259,12 @@ impl TestConsensusPool {
         let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         let payload = match dkg_payload {
-            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload::new(dkg, idkg)),
             dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dkg,
                 idkg,
+                vetkd: None,
             }),
         };
         block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);

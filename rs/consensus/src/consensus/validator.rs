@@ -8,7 +8,7 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, idkg,
+    dkg, idkg, vetkd,
 };
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
@@ -76,6 +76,7 @@ enum ValidationFailure {
     PayloadValidationFailed(PayloadValidationFailure),
     DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
     IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
+    VetKdPayloadValidationFailed(vetkd::VetKdPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -102,6 +103,7 @@ enum InvalidArtifactReason {
     InvalidPayload(InvalidPayloadReason),
     InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
     InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
+    InvalidVetKdPayload(vetkd::InvalidVetKdPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -1296,6 +1298,17 @@ impl Validator {
             )
         })?;
 
+        vetkd::validate_payload(
+            proposal.payload.as_ref(),
+            &self.metrics.vetkd_validation_duration,
+        )
+        .map_err(|err| {
+            err.map(
+                InvalidArtifactReason::InvalidVetKdPayload,
+                ValidationFailure::VetKdPayloadValidationFailed,
+            )
+        })?;
+
         let timer = self
             .metrics
             .validation_duration
@@ -2215,10 +2228,7 @@ pub mod test {
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
+                BlockPayload::Summary(SummaryPayload::new(dkg, Some(idkg))),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
@@ -3475,6 +3485,7 @@ pub mod test {
                 },
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         block.signature.signer = correct_signer;
@@ -3489,6 +3500,7 @@ pub mod test {
                 },
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         block.update_content();
