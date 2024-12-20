@@ -2451,12 +2451,18 @@ impl Governance {
     }
 
     pub fn upgrade_proposals_in_progress(&self) -> BTreeSet</* Proposal Id*/ u64> {
+        const PROPOSAL_TO_OLD_TO_CONSIDER: u64 = 60 * 60 * 24 * 5; // 5 days
         self.proto
             .proposals
             .iter()
             .filter_map(|(id, proposal_data)| {
                 if proposal_data.status() == ProposalDecisionStatus::Adopted
                     && proposal_data.is_upgrade_proposal()
+                    && proposal_data
+                        .decided_timestamp_seconds
+                        .unwrap_or_default()
+                        .checked_add(PROPOSAL_TO_OLD_TO_CONSIDER)
+                        > self.env.now()
                 {
                     Some(*id)
                 } else {
