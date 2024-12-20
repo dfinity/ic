@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self},
+    fmt::{self, Display},
     time::Duration,
 };
 
@@ -14,8 +14,6 @@ use serde::{
 };
 
 pub const SCHEMA_VERSION: u64 = 1;
-
-const DOUBLE_INDENT: &str = "      ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -137,6 +135,12 @@ pub struct IpPrefixes {
     pub v6: u8,
 }
 
+impl std::fmt::Display for IpPrefixes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v4: {}, v6: {}", self.v4, self.v6)
+    }
+}
+
 /// Defines the rate-limit rule to be stored in the canister
 #[derive(Clone, Deserialize, Serialize, Debug, Default)]
 #[serde(remote = "Self")]
@@ -205,35 +209,22 @@ impl Serialize for RateLimitRule {
 
 impl std::fmt::Display for RateLimitRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
+        write!(
             f,
-            "{DOUBLE_INDENT}Canister ID: {}",
-            format_principal_option(&self.canister_id)
-        )?;
-
-        writeln!(
-            f,
-            "{DOUBLE_INDENT}Subnet ID: {}",
-            format_principal_option(&self.subnet_id)
-        )?;
-
-        writeln!(
-            f,
-            "{DOUBLE_INDENT}Methods: {}",
-            &self
-                .methods_regex
-                .as_ref()
-                .map(|x| x.to_string())
-                .unwrap_or("None".to_string())
-        )?;
-
-        write!(f, "{DOUBLE_INDENT}Limit: {}", &self.limit)?;
-        Ok(())
+            "CanisterID: {}, SubnetID: {}, Request Types: {:?}, Methods: {}, IP: {}, IP Prefix: {}, Limit: {}",
+            format_option(&self.canister_id),
+            format_option(&self.subnet_id),
+            self.request_types,
+            format_option(&self.methods_regex),
+            format_option(&self.ip),
+            format_option(&self.ip_prefix_group),
+            self.limit,
+        )
     }
 }
 
-fn format_principal_option(principal: &Option<Principal>) -> String {
-    match principal {
+fn format_option<T: Display>(v: &Option<T>) -> String {
+    match v {
         Some(p) => p.to_string(),
         None => "None".to_string(),
     }
