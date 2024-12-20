@@ -538,7 +538,7 @@ Now we create a PocketIC instance configured with the Bitcoin subnet and the `bi
         .with_ii_subnet()          // to have tECDSA keys available
         .with_application_subnet() // to deploy the test dapp
         .with_bitcoind_addr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
             18444,
         ))
         .build();
@@ -589,7 +589,7 @@ To mine blocks with rewards credited to a given `bitcoin_address: String`, you c
 ```rust
     use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
     let btc_rpc = Client::new(
-        "http://127.0.0.1:18443",
+        "http://[::1]:18443",
         Auth::UserPass(
             "ic-btc-integration".to_string(),
             "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
