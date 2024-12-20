@@ -757,16 +757,16 @@ fn test_check_transaction_error() {
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"500\"\} 1 \d+"#,
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(500\)\"\} 1 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"200\"\} 1 \d+"#,
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(200\)\"\} 1 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"404\"\} 1 \d+"#,
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(404\)\"\} 1 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"SysTransient\"\} 1 \d+"#,
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"IcError\(2\)\"\} 1 \d+"#,
         );
 }
 
