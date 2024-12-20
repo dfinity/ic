@@ -124,7 +124,7 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV,
     flaky = False,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    test_rule = rust_test,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

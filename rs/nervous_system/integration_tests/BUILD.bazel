@@ -184,11 +184,11 @@ pocket_ic_test(
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
     flaky = True,
-    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
+    test_rule = rust_test_suite_with_extra_srcs,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -204,11 +204,11 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -222,11 +222,11 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -240,11 +240,11 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -258,11 +258,11 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -277,10 +277,10 @@ pocket_ic_test(
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
-    macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
     ],
+    test_rule = rust_test,
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )

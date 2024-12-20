@@ -149,8 +149,8 @@ pocket_ic_test(
         "tests/integration_test_components/storage/*.rs",
     ]),
     flaky = True,
-    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    test_rule = rust_test_suite_with_extra_srcs,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
@@ -173,8 +173,8 @@ pocket_ic_test(
         "tests/common/*.rs",
     ]),
     flaky = True,
-    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    test_rule = rust_test_suite_with_extra_srcs,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 

@@ -285,8 +285,8 @@ pocket_ic_test(
     env = DEV_ENV,
     extra_srcs = ["src/lib.rs"],
     flaky = True,
-    macro = rust_ic_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    test_rule = rust_ic_test_suite_with_extra_srcs,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
@@ -303,9 +303,9 @@ pocket_ic_test(
     crate_root = "src/governance_mem_test.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
+    test_rule = rust_ic_test,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -321,9 +321,9 @@ pocket_ic_test(
     crate_root = "src/canister_playground.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
+    test_rule = rust_ic_test,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -359,12 +359,12 @@ pocket_ic_test(
     crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "manual",  # CI should not be downloading nns_state.tar.zst.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
+    test_rule = rust_ic_test,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -421,12 +421,12 @@ pocket_ic_test(
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    macro = rust_ic_test,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
+    test_rule = rust_ic_test,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

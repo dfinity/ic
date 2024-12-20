@@ -60,11 +60,11 @@ pocket_ic_test(
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
     flaky = True,
-    macro = rust_test_suite,
     proc_macro_deps = [
     ],
     # The test runs replica binary that constantly uses more than 100% cpu core + rosetta server.
     tags = ["cpu:3"],
+    test_rule = rust_test_suite,
     deps = DEPENDENCIES + [
         ":rosetta-integration-tests-lib",
         "//rs/rosetta-api/icp/test_utils/sender_canister:ic_sender_canister_lib",

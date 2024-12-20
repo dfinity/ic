@@ -123,7 +123,7 @@ pocket_ic_test(
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
-    macro = rust_ic_test_suite,
+    test_rule = rust_ic_test_suite,
     deps = [
         # Keep sorted.
         ":icp_ledger",

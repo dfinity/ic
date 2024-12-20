@@ -83,12 +83,12 @@ pocket_ic_test(
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
     },
     flaky = False,
-    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
         "test_macos",
     ],
+    test_rule = rust_test_suite,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -103,11 +103,11 @@ pocket_ic_test(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     flaky = False,
-    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "test_macos",
     ],
+    test_rule = rust_test_suite,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -124,11 +124,11 @@ pocket_ic_test(
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
     },
     flaky = False,
-    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
         "test_macos",
     ],
+    test_rule = rust_test_suite,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

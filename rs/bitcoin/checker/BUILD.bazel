@@ -94,7 +94,7 @@ pocket_ic_test(
         "IC_BTC_CHECKER_CANISTER_WASM_PATH": "$(rootpath :btc_checker_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    macro = rust_ic_test,
+    test_rule = rust_ic_test,
     deps = [
         # Keep sorted.
         ":btc_checker_lib",

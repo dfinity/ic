@@ -67,8 +67,8 @@ pocket_ic_test(
     env = DEV_ENV,
     extra_srcs = [],
     flaky = False,
-    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [],
+    test_rule = rust_test_suite_with_extra_srcs,
     deps = [":rate_limit_canister_integration_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

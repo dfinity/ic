@@ -54,7 +54,7 @@ pocket_ic_test(
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1:ic-icrc-rosetta-bin)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     },
-    macro = rust_test,
+    test_rule = rust_test,
     deps = DEV_DEPENDENCIES,
 )
 

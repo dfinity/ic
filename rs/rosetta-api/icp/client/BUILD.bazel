@@ -60,6 +60,6 @@ pocket_ic_test(
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     },
-    macro = rust_test,
+    test_rule = rust_test,
     deps = DEV_DEPENDENCIES,
 )

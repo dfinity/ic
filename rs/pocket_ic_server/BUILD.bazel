@@ -186,11 +186,11 @@ pocket_ic_test(
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    macro = rust_test,
     tags = [
         "cpu:8",
         "test_macos",
     ],
+    test_rule = rust_test,
     deps = TEST_DEPENDENCIES,
 )
 
@@ -211,10 +211,10 @@ pocket_ic_test(
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    macro = rust_test,
     tags = [
         "cpu:8",
     ],
+    test_rule = rust_test,
     deps = SPEC_TEST_DEPENDENCIES,
 )
 
@@ -237,9 +237,9 @@ pocket_ic_test(
         "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    macro = rust_test,
     tags = [
         "test_macos",
     ],
+    test_rule = rust_test,
     deps = TEST_DEPENDENCIES,
 )
