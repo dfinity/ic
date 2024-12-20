@@ -162,7 +162,7 @@ async fn test_async(env: TestEnv) {
             .with_identity(full_access_identity)
             .build()
             .unwrap();
-        let _ = agent.fetch_root_key().await;
+        agent.fetch_root_key().await.unwrap();
         agent
     };
 
