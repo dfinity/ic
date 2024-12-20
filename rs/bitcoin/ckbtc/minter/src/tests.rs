@@ -426,6 +426,128 @@ fn test_no_dust_in_change_output() {
     }
 }
 
+fn arb_amount() -> impl Strategy<Value = Satoshi> {
+    1..10_000_000_000u64
+}
+
+fn vec_to_txid(vec: Vec<u8>) -> Txid {
+    let bytes: [u8; 32] = vec.try_into().expect("Can't convert to [u8; 32]");
+    bytes.into()
+}
+
+fn arb_out_point() -> impl Strategy<Value = tx::OutPoint> {
+    (pvec(any::<u8>(), 32), any::<u32>()).prop_map(|(txid, vout)| tx::OutPoint {
+        txid: vec_to_txid(txid),
+        vout,
+    })
+}
+
+fn arb_unsigned_input(
+    value: impl Strategy<Value = Satoshi>,
+) -> impl Strategy<Value = tx::UnsignedInput> {
+    (arb_out_point(), value, any::<u32>()).prop_map(|(previous_output, value, sequence)| {
+        tx::UnsignedInput {
+            previous_output,
+            value,
+            sequence,
+        }
+    })
+}
+
+fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    (
+        arb_out_point(),
+        any::<u32>(),
+        pvec(1u8..0xff, 64),
+        pvec(any::<u8>(), 32),
+    )
+        .prop_map(
+            |(previous_output, sequence, sec1, seckey)| tx::SignedInput {
+                previous_output,
+                sequence,
+                signature: EncodedSignature::from_sec1(&sec1),
+                pubkey: ByteBuf::from(
+                    PublicKey::from_secret_key(
+                        &Secp256k1::new(),
+                        &SecretKey::from_slice(&seckey).unwrap(),
+                    )
+                    .serialize(),
+                ),
+            },
+        )
+}
+
+fn arb_address() -> impl Strategy<Value = BitcoinAddress> {
+    prop_oneof![
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
+        uniform32(any::<u8>()).prop_map(BitcoinAddress::P2wshV0),
+        uniform32(any::<u8>()).prop_map(BitcoinAddress::P2trV1),
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2pkh),
+        uniform20(any::<u8>()).prop_map(BitcoinAddress::P2sh),
+    ]
+}
+
+fn arb_tx_out() -> impl Strategy<Value = tx::TxOut> {
+    (arb_amount(), arb_address()).prop_map(|(value, address)| tx::TxOut { value, address })
+}
+
+fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
+    (amount, pvec(any::<u8>(), 32), 0..5u32).prop_map(|(value, txid, vout)| Utxo {
+        outpoint: OutPoint {
+            txid: vec_to_txid(txid),
+            vout,
+        },
+        value,
+        height: 0,
+    })
+}
+
+fn arb_account() -> impl Strategy<Value = Account> {
+    (pvec(any::<u8>(), 32), option::of(uniform32(any::<u8>()))).prop_map(|(pk, subaccount)| {
+        Account {
+            owner: PrincipalId::new_self_authenticating(&pk).0,
+            subaccount,
+        }
+    })
+}
+
+fn arb_retrieve_btc_requests(
+    amount: impl Strategy<Value = Satoshi>,
+    num: impl Into<SizeRange>,
+) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
+    let request_strategy = (
+        amount,
+        arb_address(),
+        any::<u64>(),
+        1569975147000..2069975147000u64,
+        option::of(any::<u64>()),
+        option::of(arb_account()),
+    )
+        .prop_map(
+            |(amount, address, block_index, received_at, provider, reimbursement_account)| {
+                RetrieveBtcRequest {
+                    amount,
+                    address,
+                    block_index,
+                    received_at,
+                    kyt_provider: provider
+                        .map(|id| Principal::from(CanisterId::from_u64(id).get())),
+                    reimbursement_account,
+                }
+            },
+        );
+    pvec(request_strategy, num).prop_map(|mut reqs| {
+        reqs.sort_by_key(|req| req.received_at);
+
+        for (i, req) in reqs.iter_mut().enumerate() {
+            req.block_index = i as u64;
+        }
+
+        reqs
+    })
+}
+
 proptest! {
     #[test]
     fn greedy_solution_properties(
@@ -551,7 +673,7 @@ proptest! {
             prop_assert_eq!(hex::encode(&buf), hex::encode(&btc_buf));
 
             let sighash = sighasher.sighash(&arb_tx.inputs[i], &pkhash);
-            let btc_sighash = btc_sighasher.p2wpkh_signature_hash(i, &script_code, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All).unwrap();
+            let btc_sighash = btc_sighasher.p2wsh_signature_hash(i, &script_code, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All).unwrap();
             prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash));
         }
     }
