@@ -1,5 +1,5 @@
 [package]
-name = "stable_data_provider"
+name = "ic-registry-canister-data-provider"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -17,3 +17,4 @@ ic-nns-common = { path = "../../nns/common" }
 anyhow = { workspace = true }
 ic-cdk = { workspace = true }
 candid = { workspace = true }
+ic-registry-canister-client = { path = "../canister-client" }

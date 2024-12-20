@@ -11071,6 +11071,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-data-provider"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "futures",
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-registry-canister-client",
+ "ic-registry-transport",
+ "ic-stable-structures",
+ "ic-types",
+ "itertools 0.12.1",
+]
+
+[[package]]
 name = "ic-registry-client"
 version = "0.9.0"
 dependencies = [
@@ -20164,22 +20182,6 @@ dependencies = [
  "libc",
  "libssh2-sys",
  "parking_lot 0.11.2",
-]
-
-[[package]]
-name = "stable_data_provider"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "ic-cdk 0.16.0",
- "ic-interfaces-registry",
- "ic-nns-common",
- "ic-nns-constants",
- "ic-registry-transport",
- "ic-stable-structures",
- "ic-types",
- "itertools 0.12.1",
 ]
 
 [[package]]

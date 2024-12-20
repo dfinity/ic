@@ -25,7 +25,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "canister_data_provider",
+    name = "ic_registry_canister_data_provider",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_registry_canister_data_provider",
@@ -35,9 +35,9 @@ rust_library(
 )
 
 rust_test(
-    name = "canister_data_provider_test",
+    name = "ic_registry_canister_data_provider_test",
     aliases = ALIASES,
-    crate = ":canister_data_provider",
+    crate = ":ic_registry_canister_data_provider",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
