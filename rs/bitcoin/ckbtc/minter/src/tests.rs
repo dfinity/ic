@@ -459,6 +459,7 @@ fn arb_unsigned_input(
 }
 
 fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     (
         arb_out_point(),
         any::<u32>(),
@@ -466,11 +467,17 @@ fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
         pvec(any::<u8>(), 32),
     )
         .prop_map(
-            |(previous_output, sequence, sec1, pubkey)| tx::SignedInput {
+            |(previous_output, sequence, sec1, seckey)| tx::SignedInput {
                 previous_output,
                 sequence,
                 signature: EncodedSignature::from_sec1(&sec1),
-                pubkey: ByteBuf::from(pubkey),
+                pubkey: ByteBuf::from(
+                    PublicKey::from_secret_key(
+                        &Secp256k1::new(),
+                        &SecretKey::from_slice(&seckey).unwrap(),
+                    )
+                    .serialize(),
+                ),
             },
         )
 }
@@ -670,7 +677,7 @@ proptest! {
             prop_assert_eq!(hex::encode(&buf), hex::encode(&btc_buf));
 
             let sighash = sighasher.sighash(&arb_tx.inputs[i], &pkhash);
-            let btc_sighash = btc_sighasher.p2wpkh_signature_hash(i, &script_code, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All).unwrap();
+            let btc_sighash = btc_sighasher.p2wsh_signature_hash(i, &script_code, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All).unwrap();
             prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash));
         }
     }
