@@ -10,7 +10,7 @@ use ic_cdk::{
 use std::cell::RefCell;
 
 thread_local! {
-    static ARG_LEN: RefCell<usize>  = RefCell::new(0);
+    static ARG_LEN: RefCell<usize>  = const {RefCell::new(0) };
 }
 
 fn main() {}
