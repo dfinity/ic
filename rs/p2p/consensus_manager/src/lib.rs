@@ -52,6 +52,7 @@ impl AbortableBroadcastChannelBuilder {
         }
     }
 
+    /// Creates a channel for the corresponding artifact. Tha channel is used to broadcast artifacts within the subnet.
     pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
