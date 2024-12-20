@@ -93,7 +93,7 @@ pocket_ic_mainnet_test = rule(
     test = True,
 )
 
-def pocket_ic_test(name, macro, **kwargs):
+def pocket_ic_test(name, test_rule, **kwargs):
     """
     Runs a test using the pocket-ic-server.
 
@@ -102,13 +102,13 @@ def pocket_ic_test(name, macro, **kwargs):
 
     Args:
       name: the name of the test target.
-      macro: which test macro to use like rust_test, rust_test_suite_with_extra_srcs, etc.
-      **kwargs: keyword arguments passed to the test macro.
+      test_rule: which test test rule to use like rust_test, rust_test_suite_with_extra_srcs, etc.
+      **kwargs: keyword arguments passed to the test_rule.
     """
     data = kwargs.pop("data", [])
     env = kwargs.pop("env", {})
     tags = kwargs.pop("tags", [])
-    macro(
+    test_rule(
         name = name,
         data = data + ["//rs/pocket_ic_server:pocket-ic-server"],
         env = env | {
