@@ -226,10 +226,7 @@ impl GenericLimiter {
             warn!("GenericLimiter: ruleset updated: {} rules", new.len());
 
             for b in new.as_ref() {
-                warn!(
-                    "GenericLimiter: subnet: {:?}, canister: {:?}, methods: {:?}, action: {:?}",
-                    b.rule.subnet_id, b.rule.canister_id, b.rule.methods_regex, b.rule.limit,
-                );
+                warn!("GenericLimiter: {}", b.rule);
             }
 
             self.buckets.store(new);
