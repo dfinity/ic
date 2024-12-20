@@ -1185,14 +1185,14 @@ impl CkBtcSetup {
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
         let txid = tx.compute_txid();
-        let txid_bytes: &[u8; 32] = txid.as_ref();
+        let txid_bytes: [u8; 32] = *txid.as_ref();
         self.push_utxo(
             change_address.to_string(),
             Utxo {
                 value: change_utxo.value.to_sat(),
                 height: 0,
                 outpoint: OutPoint {
-                    txid: txid_bytes.clone().into(),
+                    txid: txid_bytes.into(),
                     vout: 1,
                 },
             },
