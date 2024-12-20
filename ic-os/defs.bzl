@@ -68,7 +68,7 @@ def icos_build(
         out = "version.txt",
         allow_symlink = True,
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     if upgrades:
@@ -77,12 +77,12 @@ def icos_build(
             srcs = [":copy_version_txt"],
             outs = ["version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
     # -------------------- Build grub partition --------------------
 
-    build_grub_partition("partition-grub.tzst", grub_config = image_deps.get("grub_config", default = None), tags = ["manual", "no-cache"])
+    build_grub_partition("partition-grub.tzst", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
 
     # -------------------- Build the container image --------------------
 
@@ -99,7 +99,7 @@ def icos_build(
             dockerfile = image_deps["base_dockerfile"],
             build_args = [package_files_arg],
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         build_container_filesystem(
@@ -112,7 +112,7 @@ def icos_build(
             base_image_tar_file = ":base_image.tar",
             base_image_tar_file_tag = base_image_tag,
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
     else:
         build_container_filesystem(
@@ -134,7 +134,7 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- Extract root partition --------------------
@@ -163,7 +163,7 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- Extract boot partition --------------------
@@ -177,7 +177,7 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # Defer injection to this point to allow caching most of the built images
@@ -219,13 +219,13 @@ def icos_build(
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
         native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
-        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual", "no-cache"])
+        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
             native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
-            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual", "no-cache"])
+            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual", "no-cache"])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",
@@ -246,7 +246,7 @@ def icos_build(
             ],
             outs = ["extra_boot_args"],
             cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args_template) > $@",
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         if upgrades:
@@ -268,7 +268,7 @@ def icos_build(
                 ],
                 outs = ["extra_boot_test_args"],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location :extra_boot_args_template) > $@",
-                tags = ["manual", "no-cache"],
+                tags = ["manual"],
             )
 
     inject_files(
@@ -343,7 +343,7 @@ def icos_build(
             ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-remote-cache"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -353,7 +353,7 @@ def icos_build(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- Assemble upgrade image --------------------
@@ -374,7 +374,7 @@ def icos_build(
             name = "update-img.tar.zst",
             srcs = [":update-img.tar"],
             visibility = visibility,
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         upgrade_image(
@@ -392,7 +392,7 @@ def icos_build(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
             visibility = visibility,
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
     # -------------------- Upload artifacts --------------------
@@ -418,7 +418,7 @@ def icos_build(
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
             visibility = visibility,
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         if upgrades:
@@ -437,7 +437,7 @@ def icos_build(
                 target = ":upload_update-img",
                 basenames = ["upload_update-img_update-img.tar.zst.url"],
                 visibility = visibility,
-                tags = ["manual", "no-cache"],
+                tags = ["manual"],
             )
 
     # end if upload_prefix != None
@@ -458,7 +458,7 @@ def icos_build(
                 "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
     # -------------------- Tree Hash Tool -------------------------
@@ -467,7 +467,7 @@ def icos_build(
     tree_hash(
         name = "component-files-hash",
         src = image_deps["component_files"],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -485,7 +485,7 @@ cat $$HASH
 EOF
         """,
         executable = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- VM Developer Tools --------------------
@@ -508,7 +508,7 @@ EOF
             "DISK_IMG": "$(location :disk-img.tar.zst)",
         },
         testonly = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -550,7 +550,7 @@ fi
 EOF
         """,
         executable = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     for accel, variant in (("kvm", ""), ("qemu", " no kvm")):
@@ -579,7 +579,7 @@ exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" yes """ +
 EOF
                     """,
                     executable = True,
-                    tags = ["manual", "no-cache"],
+                    tags = ["manual"],
                 )
         else:
             # Variants provide KVM / non-KVM support to run inside VMs and containers.
@@ -601,7 +601,7 @@ exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" no """ + 
 EOF
                 """,
                 executable = True,
-                tags = ["manual", "no-cache"],
+                tags = ["manual"],
             )
 
     # -------------------- final "return" target --------------------
@@ -658,10 +658,10 @@ def boundary_node_icos_build(
             "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
-    build_grub_partition("partition-grub.tzst", tags = ["manual", "no-cache"])
+    build_grub_partition("partition-grub.tzst", tags = ["manual"])
 
     build_container_filesystem(
         name = "rootfs-tree.tar",
@@ -678,7 +678,7 @@ def boundary_node_icos_build(
     tree_hash(
         name = "component-files-hash",
         src = boundary_component_files,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -696,7 +696,7 @@ cat $$HASH
 EOF
         """,
         executable = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -705,7 +705,7 @@ EOF
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     copy_file(
@@ -713,7 +713,7 @@ EOF
         src = ic_version,
         out = "version.txt",
         allow_symlink = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -724,7 +724,7 @@ EOF
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     inject_files(
@@ -751,7 +751,7 @@ EOF
             "/run",
             "/boot",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -785,7 +785,7 @@ EOF
         ],
         outs = ["extra_boot_args"],
         cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location //ic-os/boundary-guestos:bootloader/extra_boot_args.template) > $@",
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     disk_image(
@@ -809,21 +809,21 @@ EOF
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.gz.sha256",
         srcs = [":disk-img.tar.gz"],
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     upload_suffix = ""
@@ -845,7 +845,7 @@ EOF
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
         visibility = visibility,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     native.filegroup(
