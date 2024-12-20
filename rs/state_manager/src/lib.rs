@@ -45,7 +45,7 @@ use ic_replicated_state::{
     canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory,
+    canister_state::execution_state::{SandboxMemory, WasmBinary},
     page_map::{PersistenceError, StorageMetrics},
     PageIndex, PageMap, ReplicatedState,
 };
@@ -63,7 +63,6 @@ use ic_types::{
     SubnetId,
 };
 use ic_utils_thread::JoinOnDrop;
-use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
@@ -1265,97 +1264,112 @@ fn strip_page_map_deltas(
 /// 1) `tip` and `src` mut have exactly the same set of canisters.
 /// 2) The page deltas must be empty in both states.
 /// 3) The memory sizes must match.
-fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
-    for ((tip_id, tip_canister), (src_id, src_canister)) in tip
-        .canister_states
-        .iter_mut()
-        .zip(src.canister_states.iter())
-    {
-        assert_eq!(tip_id, src_id);
-
+fn switch_to_checkpoint(
+    tip: &mut ReplicatedState,
+    layout: &CheckpointLayout<ReadOnly>,
+    fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+) {
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        let canister_layout = layout.canister(tip_id).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
             .page_map_mut()
-            .switch_to_checkpoint(src_canister.system_state.wasm_chunk_store.page_map());
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.wasm_chunk_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
 
-        assert_eq!(
-            src_canister.execution_state.is_some(),
-            tip_canister.execution_state.is_some()
-        );
-
-        if let (Some(src_execution), Some(tip_execution)) = (
-            src_canister.execution_state.as_ref(),
-            tip_canister.execution_state.as_mut(),
-        ) {
-            tip_execution
-                .wasm_memory
-                .page_map
-                .switch_to_checkpoint(&src_execution.wasm_memory.page_map);
-            tip_execution
-                .stable_memory
-                .page_map
-                .switch_to_checkpoint(&src_execution.stable_memory.page_map);
+        if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
+            tip_execution.wasm_memory.page_map.switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
+            tip_execution.stable_memory.page_map.switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
         }
     }
 
-    for ((tip_id, tip_snapshot), (src_id, src_snapshot)) in tip
-        .canister_snapshots
-        .iter_mut()
-        .zip(src.canister_snapshots.iter())
-    {
+    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(tip_snapshot);
-
-        assert_eq!(tip_id, src_id);
+        let snapshot_layout = layout.snapshot(tip_id).unwrap();
 
         new_snapshot
             .chunk_store_mut()
             .page_map_mut()
-            .switch_to_checkpoint(src_snapshot.chunk_store().page_map());
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.wasm_chunk_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
 
         new_snapshot
             .execution_snapshot_mut()
             .wasm_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().wasm_memory.page_map);
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
         new_snapshot
             .execution_snapshot_mut()
             .stable_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().stable_memory.page_map);
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(snapshot_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .unwrap(),
+            );
     }
 
-    for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
-        assert_eq!(
-            tip_canister.system_state.canister_id,
-            src_canister.system_state.canister_id
-        );
-        assert_eq!(
-            tip_canister.execution_state.is_some(),
-            src_canister.execution_state.is_some(),
-            "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
-            tip_canister.system_state.canister_id
-        );
-        if let (Some(tip_state), Some(src_state)) = (
-            &mut tip_canister.execution_state,
-            &src_canister.execution_state,
-        ) {
-            debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
-                src_state.wasm_binary.binary.as_slice()
-            );
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        if let Some(tip_state) = &mut tip_canister.execution_state {
+            let canister_layout = layout.canister(tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            let wasm_binary = WasmBinary::new(
+                canister_layout
+                    .wasm()
+                    .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))
+                    .unwrap(),
+            );
+            debug_assert_eq!(
+                tip_state.wasm_binary.binary.as_slice(),
+                wasm_binary.binary.as_slice()
+            );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
-                    binary: src_state.wasm_binary.binary.clone(),
+                    binary: Arc::into_inner(wasm_binary).unwrap().binary,
                     embedder_cache,
                 },
             );
 
-            assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
             tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
@@ -2611,12 +2625,10 @@ impl StateManagerImpl {
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
-                &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
-                self.get_fd_factory(),
                 self.lsmt_status,
             )
         };
-        let (cp_layout, checkpointed_state, has_downgrade) = match result {
+        let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
@@ -2626,7 +2638,7 @@ impl StateManagerImpl {
                     height
                 );
 
-                let (cp_verified, checkpointed_state) = self
+                let (cp_verified, _checkpointed_state) = self
                     .state_layout
                     .checkpoint_in_verification(height)
                     .map_err(CheckpointError::from)
@@ -2654,7 +2666,6 @@ impl StateManagerImpl {
                     });
                 (
                     cp_verified,
-                    checkpointed_state,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
                 )
@@ -2683,35 +2694,20 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["validate_eq"])
-                .start_timer();
-            if let Err(err) = checkpointed_state.validate_eq(&state) {
-                error!(
-                    self.log,
-                    "{}: Replicated state altered: {}",
-                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
-                    err
-                );
-                self.metrics
-                    .checkpoint_metrics
-                    .replicated_state_altered_after_checkpoint
-                    .inc();
-            }
-        }
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(&mut state, &checkpointed_state);
-            self.tip_channel
-                .send(TipRequest::ValidateReplicatedState {
-                    checkpoint_layout: cp_layout.clone(),
-                })
-                .expect("Failed to send Validate request");
+            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory());
         }
+        let state = Arc::new(state);
+        self.tip_channel
+            .send(TipRequest::ValidateReplicatedState {
+                checkpoint_layout: cp_layout.clone(),
+                replicated_state: state.clone(),
+                own_subnet_type: self.own_subnet_type,
+                fd_factory: self.fd_factory.clone(),
+                metrics: self.metrics.clone(),
+            })
+            .expect("Failed to send Validate request");
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
@@ -2767,7 +2763,7 @@ impl StateManagerImpl {
 
             CreateCheckpointResult {
                 tip_requests,
-                state: Arc::new(state),
+                state,
                 state_metadata: StateMetadata {
                     checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,
