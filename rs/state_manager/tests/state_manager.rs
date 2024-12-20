@@ -6201,6 +6201,7 @@ fn can_merge_unexpected_number_of_files() {
                 .vmemory_0();
             let existing_overlays = pm_layout.existing_overlays().unwrap();
             assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
+            state_manager.flush_tip_channel();
 
             // Copy each shard for heights 1..HEIGHT; now each file is beyond the hard limit,
             // triggering forced merge for all shards back to one overlay.
@@ -7519,8 +7520,12 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 }
 
 proptest! {
-// We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(5))]
+#![proptest_config(ProptestConfig {
+    // Fork to prevent flaky timeouts due to closed sandbox fds
+    fork: true,
+    // We go for fewer, but longer runs
+    ..ProptestConfig::with_cases(5)
+})]
 
 #[test]
 fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
