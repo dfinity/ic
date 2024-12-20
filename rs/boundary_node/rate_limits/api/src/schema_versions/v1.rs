@@ -46,6 +46,8 @@ impl<'de> de::Visitor<'de> for ActionVisitor {
     {
         if s == "block" {
             return Ok(Action::Block);
+        } else if s == "pass" {
+            return Ok(Action::Pass);
         }
 
         let (count, interval) = s
@@ -63,8 +65,10 @@ impl<'de> de::Visitor<'de> for ActionVisitor {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub enum Action {
+    #[default]
+    Pass,
     Block,
     Limit(u32, Duration),
 }
@@ -90,6 +94,7 @@ impl Serialize for Action {
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Pass => write!(f, "pass"),
             Self::Block => write!(f, "block"),
             Self::Limit(l, d) => write!(f, "{l}/{}", format_duration(*d)),
         }
@@ -133,7 +138,7 @@ pub struct IpPrefixes {
 }
 
 /// Defines the rate-limit rule to be stored in the canister
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, Default)]
 #[serde(remote = "Self")]
 pub struct RateLimitRule {
     pub canister_id: Option<Principal>,
@@ -386,7 +391,13 @@ mod test {
             - call
             - sync_call
           limit: block
-        "};
+
+        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+          request_types:
+            - call
+            - sync_call
+          limit: pass
+          "};
 
         let rules: Vec<RateLimitRule> = serde_yaml::from_str(rules).unwrap();
 
@@ -454,6 +465,15 @@ mod test {
                     ip: None,
                     ip_prefix_group: None,
                     limit: Action::Block,
+                },
+                RateLimitRule {
+                    subnet_id: None,
+                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
+                    request_types: Some(vec![RequestType::Call, RequestType::SyncCall]),
+                    methods_regex: None,
+                    ip: None,
+                    ip_prefix_group: None,
+                    limit: Action::Pass,
                 },
             ],
         );

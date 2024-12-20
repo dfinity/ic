@@ -69,7 +69,6 @@ pub struct Context<'a> {
 
 #[derive(Clone)]
 enum Limiter {
-    None,
     Single(Arc<Ratelimiter>),
     Sharded(Arc<ShardedRatelimiter<IpNet>>, IpPrefixes),
 }
@@ -77,7 +76,7 @@ enum Limiter {
 #[derive(Clone)]
 struct Bucket {
     rule: RateLimitRule,
-    limiter: Limiter,
+    limiter: Option<Limiter>,
 }
 
 impl PartialEq for Bucket {
@@ -88,7 +87,7 @@ impl PartialEq for Bucket {
 impl Eq for Bucket {}
 
 impl Bucket {
-    fn acquire_token(&self, ctx: &Context) -> Option<bool> {
+    fn is_allowed(&self, ctx: &Context) -> Option<bool> {
         if let Some(v) = self.rule.subnet_id {
             if ctx.subnet_id != v {
                 return None;
@@ -125,20 +124,30 @@ impl Bucket {
             }
         }
 
-        match &self.limiter {
-            Limiter::None => Some(false),
-            Limiter::Single(v) => Some(v.try_wait().is_ok()),
-            Limiter::Sharded(v, prefix) => {
-                let prefix = match ctx.ip {
-                    IpAddr::V4(_) => prefix.v4,
-                    IpAddr::V6(_) => prefix.v6,
-                };
-
-                // We assume that the prefix is correct, assert is safe
-                let net = IpNet::new_assert(ctx.ip, prefix);
-                Some(v.acquire(net, Instant::now()))
-            }
+        if self.rule.limit == Action::Pass {
+            return Some(true);
+        } else if self.rule.limit == Action::Block {
+            return Some(false);
         }
+
+        if let Some(v) = &self.limiter {
+            return Some(match v {
+                Limiter::Single(v) => v.try_wait().is_ok(),
+                Limiter::Sharded(v, prefix) => {
+                    let prefix = match ctx.ip {
+                        IpAddr::V4(_) => prefix.v4,
+                        IpAddr::V6(_) => prefix.v6,
+                    };
+
+                    // We assume that the prefix is correct, assert is safe
+                    let net = IpNet::new_assert(ctx.ip, prefix);
+                    v.acquire(net, Instant::now())
+                }
+            });
+        }
+
+        // Should never get here
+        unreachable!();
     }
 }
 
@@ -155,16 +164,19 @@ impl GenericLimiter {
 
     pub fn new_from_canister_query(canister_id: CanisterId, agent: Agent) -> Self {
         let config_fetcher = CanisterConfigFetcherQuery(agent, canister_id);
-        Self::new_with_config_fetcher(Arc::new(config_fetcher))
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id)
     }
 
     pub fn new_from_canister_update(canister_id: CanisterId, agent: Agent) -> Self {
         let config_fetcher = CanisterConfigFetcherUpdate(agent, canister_id);
-        Self::new_with_config_fetcher(Arc::new(config_fetcher))
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id)
     }
 
-    fn new_with_config_fetcher(config_fetcher: Arc<dyn FetchesConfig>) -> Self {
-        let fetcher = Arc::new(CanisterFetcher(config_fetcher));
+    fn new_with_config_fetcher(
+        config_fetcher: Arc<dyn FetchesConfig>,
+        canister_id: CanisterId,
+    ) -> Self {
+        let fetcher = Arc::new(CanisterFetcher(config_fetcher, canister_id));
         Self::new_with_fetcher(fetcher)
     }
 
@@ -180,6 +192,8 @@ impl GenericLimiter {
             .into_iter()
             .enumerate()
             .map(|(idx, rule)| {
+                // Check if the same rules exists in the same position.
+                // If yes, then copy over the old limiter to avoid resetting it.
                 if let Some(v) = old.get(idx) {
                     if v.rule == rule {
                         return v.clone();
@@ -187,16 +201,16 @@ impl GenericLimiter {
                 }
 
                 let limiter = if let Action::Limit(limit, duration) = &rule.limit {
-                    if let Some(v) = &rule.ip_prefix_group {
+                    Some(if let Some(v) = &rule.ip_prefix_group {
                         Limiter::Sharded(
                             Arc::new(ShardedRatelimiter::new(*limit, *duration, HOUR)),
                             *v,
                         )
                     } else {
                         Limiter::Single(Arc::new(create_ratelimiter(*limit, *duration)))
-                    }
+                    })
                 } else {
-                    Limiter::None
+                    None
                 };
 
                 Bucket { rule, limiter }
@@ -238,7 +252,7 @@ impl GenericLimiter {
 
     fn acquire_token(&self, ctx: Context) -> bool {
         for b in self.buckets.load_full().as_ref() {
-            if let Some(v) = b.acquire_token(&ctx) {
+            if let Some(v) = b.is_allowed(&ctx) {
                 return v;
             }
         }
@@ -284,6 +298,8 @@ pub async fn middleware(
 
 #[cfg(test)]
 mod test {
+    use crate::principal;
+
     use super::*;
     use indoc::indoc;
     use std::str::FromStr;
@@ -291,6 +307,9 @@ mod test {
     #[test]
     fn test_ratelimit() {
         let rules = indoc! {"
+        - canister_id: pawub-syaaa-aaaam-qb7zq-cai
+          limit: pass
+
         - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
           canister_id: aaaaa-aa
           methods_regex: ^.*$
@@ -328,15 +347,26 @@ mod test {
         let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
         let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
 
-        let id1 = Principal::from_text("aaaaa-aa").unwrap();
-        let id2 = Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap();
-        let id3 = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+        let id1 = principal!("aaaaa-aa");
+        let id2 = principal!("5s2ji-faaaa-aaaaa-qaaaq-cai");
+        let id3 = principal!("qoctq-giaaa-aaaaa-aaaea-cai");
+        let id4 = principal!("pawub-syaaa-aaaam-qb7zq-cai");
+
         let subnet_id =
-            Principal::from_text("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe")
-                .unwrap();
+            principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe");
         let subnet_id2 =
-            Principal::from_text("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
-                .unwrap();
+            principal!("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae");
+
+        // Check that pass action for this canister always allows
+        for _ in 0..100 {
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id4),
+                method: None,
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
+        }
 
         // Check id1 blocking with any method
         // 10 pass
