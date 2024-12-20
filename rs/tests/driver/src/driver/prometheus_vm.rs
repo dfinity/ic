@@ -254,13 +254,13 @@ for name in replica orchestrator node_exporter; do
 done
 
 mkdir -p /config/grafana/dashboards
-cp -R /config/grafana/dashboards /var/lib/grafana/
-chown -R grafana:grafana /var/lib/grafana/dashboards
 
 if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
+  cp -R /config/grafana/dashboards /var/lib/grafana/
+  chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
   systemctl reload prometheus
 else
@@ -273,9 +273,7 @@ fi
             .unwrap();
 
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
-        if !grafana_dashboards_dst.exists() {
-            std::fs::create_dir_all(&grafana_dashboards_dst).unwrap()
-        }
+        std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
         let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
         if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
             warn!(
