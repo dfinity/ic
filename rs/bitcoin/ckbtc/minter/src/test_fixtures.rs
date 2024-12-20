@@ -186,10 +186,7 @@ pub mod arbitrary {
     }
 
     fn txid() -> impl Strategy<Value = Txid> {
-        pvec(any::<u8>(), 32).prop_map(|bytes| {
-            let bytes: [u8; 32] = bytes.try_into().expect("Can't convert to [u8; 32]");
-            bytes.into()
-        })
+        uniform32(any::<u8>()).prop_map(Txid::from)
     }
 
     fn outpoint() -> impl Strategy<Value = OutPoint> {
