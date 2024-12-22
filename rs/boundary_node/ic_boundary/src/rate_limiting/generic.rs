@@ -1,9 +1,4 @@
-use std::{
-    net::IpAddr,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{net::IpAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Error};
 use arc_swap::ArcSwap;
@@ -33,7 +28,7 @@ use super::{
 };
 
 use crate::{
-    core::{Run, HOUR},
+    core::Run,
     persist::RouteSubnet,
     routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
@@ -141,7 +136,7 @@ impl Bucket {
 
                     // We assume that the prefix is correct, assert is safe
                     let net = IpNet::new_assert(ctx.ip, prefix);
-                    v.acquire(net, Instant::now())
+                    v.acquire(net)
                 }
             });
         }
@@ -151,48 +146,56 @@ impl Bucket {
     }
 }
 
+pub struct Options {
+    pub tti: Duration,
+    pub max_shards: u64,
+}
+
 pub struct GenericLimiter {
     fetcher: Arc<dyn FetchesRules>,
     buckets: ArcSwap<Vec<Bucket>>,
+    opts: Options,
 }
 
 impl GenericLimiter {
-    pub fn new_from_file(path: PathBuf) -> Self {
+    pub fn new_from_file(path: PathBuf, opts: Options) -> Self {
         let fetcher = Arc::new(FileFetcher(path));
-        Self::new_with_fetcher(fetcher)
+        Self::new_with_fetcher(fetcher, opts)
     }
 
-    pub fn new_from_canister_query(canister_id: CanisterId, agent: Agent) -> Self {
+    pub fn new_from_canister_query(canister_id: CanisterId, agent: Agent, opts: Options) -> Self {
         let config_fetcher = CanisterConfigFetcherQuery(agent, canister_id);
-        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id)
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id, opts)
     }
 
-    pub fn new_from_canister_update(canister_id: CanisterId, agent: Agent) -> Self {
+    pub fn new_from_canister_update(canister_id: CanisterId, agent: Agent, opts: Options) -> Self {
         let config_fetcher = CanisterConfigFetcherUpdate(agent, canister_id);
-        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id)
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id, opts)
     }
 
     fn new_with_config_fetcher(
         config_fetcher: Arc<dyn FetchesConfig>,
         canister_id: CanisterId,
+        opts: Options,
     ) -> Self {
         let fetcher = Arc::new(CanisterFetcher(config_fetcher, canister_id));
-        Self::new_with_fetcher(fetcher)
+        Self::new_with_fetcher(fetcher, opts)
     }
 
-    fn new_with_fetcher(fetcher: Arc<dyn FetchesRules>) -> Self {
+    fn new_with_fetcher(fetcher: Arc<dyn FetchesRules>, opts: Options) -> Self {
         Self {
             fetcher,
             buckets: ArcSwap::new(Arc::new(vec![])),
+            opts,
         }
     }
 
-    fn process_rules(rules: Vec<RateLimitRule>, old: &Arc<Vec<Bucket>>) -> Vec<Bucket> {
+    fn process_rules(&self, rules: Vec<RateLimitRule>, old: &Arc<Vec<Bucket>>) -> Vec<Bucket> {
         rules
             .into_iter()
             .enumerate()
             .map(|(idx, rule)| {
-                // Check if the same rules exists in the same position.
+                // Check if the same rule exists in the same position.
                 // If yes, then copy over the old limiter to avoid resetting it.
                 if let Some(v) = old.get(idx) {
                     if v.rule == rule {
@@ -203,7 +206,12 @@ impl GenericLimiter {
                 let limiter = if let Action::Limit(limit, duration) = &rule.limit {
                     Some(if let Some(v) = &rule.ip_prefix_group {
                         Limiter::Sharded(
-                            Arc::new(ShardedRatelimiter::new(*limit, *duration, HOUR)),
+                            Arc::new(ShardedRatelimiter::new(
+                                *limit,
+                                *duration,
+                                self.opts.tti,
+                                self.opts.max_shards,
+                            )),
                             *v,
                         )
                     } else {
@@ -220,7 +228,7 @@ impl GenericLimiter {
 
     fn apply_rules(&self, rules: Vec<RateLimitRule>) -> bool {
         let old = self.buckets.load_full();
-        let new = Arc::new(Self::process_rules(rules, &old));
+        let new = Arc::new(self.process_rules(rules, &old));
 
         if old != new {
             warn!("GenericLimiter: ruleset updated: {} rules", new.len());
@@ -340,8 +348,11 @@ mod test {
           limit: 20/1h
         "};
         let rules: Vec<RateLimitRule> = serde_yaml::from_str(rules).unwrap();
-
-        let limiter = GenericLimiter::new_from_file("/tmp/foo".into());
+        let opts = Options {
+            tti: Duration::from_secs(10),
+            max_shards: 10000,
+        };
+        let limiter = GenericLimiter::new_from_file("/tmp/foo".into(), opts);
         limiter.apply_rules(rules);
 
         let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
