@@ -5959,9 +5959,9 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
- "num-traits",
  "pocket-ic",
  "proptest",
+ "regex",
  "scraper",
  "serde",
  "serde_json",
@@ -11072,6 +11072,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-data-provider"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-registry-canister-client",
+ "ic-registry-transport",
+ "ic-stable-structures",
+ "ic-types",
+ "itertools 0.12.1",
+]
+
+[[package]]
 name = "ic-registry-client"
 version = "0.9.0"
 dependencies = [
@@ -13171,6 +13188,43 @@ dependencies = [
  "serde_bytes",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic-tests-cross-chain"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "futures",
+ "hex-literal",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-cketh-minter",
+ "ic-ethereum-types",
+ "ic-icrc1-index-ng",
+ "ic-icrc1-ledger",
+ "ic-ledger-suite-orchestrator",
+ "ic-management-canister-types",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-root",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-wasm-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "icrc-ledger-types",
+ "reqwest 0.12.9",
+ "serde_json",
+ "slog",
 ]
 
 [[package]]
