@@ -25,7 +25,7 @@ use ic_https_outcalls_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use rand::{seq::SliceRandom, thread_rng, Rng};
+use rand::{seq::SliceRandom, thread_rng};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -48,10 +48,6 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_RETRIES: usize = 3;
-
-//TODO(SOCKS_PROXY_DL): Make this > 0.
-/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
-const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 0;
 
 type OutboundRequestBody = Full<Bytes>;
 
@@ -173,7 +169,7 @@ impl CanisterHttp {
         }
     }
 
-    // Attemts to load socks the client from the cache. If not present, creates a new socks client and adds it to the cache.
+    // Attempts to load the socks client from the cache. If not present, creates a new socks client and adds it to the cache.
     fn get_socks_client(
         &self,
         address: &str,
@@ -221,31 +217,28 @@ impl CanisterHttp {
 
             let socks_client = self.get_socks_client(&next_socks_proxy_addr);
 
-            if socks_client.is_none() {
-                continue;
-            }
-            let socks_client = socks_client.unwrap();
-
-            match socks_client.request(request.clone()).await {
-                Ok(resp) => {
-                    self.metrics
-                        .socks_connections_attempts
-                        .with_label_values(&[&tries.to_string(), "success"])
-                        .inc();
-                    return Ok(resp);
-                }
-                Err(socks_err) => {
-                    self.metrics
-                        .socks_connections_attempts
-                        .with_label_values(&[&tries.to_string(), "failure"])
-                        .inc();
-                    debug!(
-                        self.logger,
-                        "Failed to connect through SOCKS with address {}: {}",
-                        next_socks_proxy_addr,
-                        socks_err
-                    );
-                    last_error = Some(socks_err);
+            if let Some(socks_client) = socks_client {
+                match socks_client.request(request.clone()).await {
+                    Ok(resp) => {
+                        self.metrics
+                            .socks_connection_attempts
+                            .with_label_values(&[&tries.to_string(), "success", socks_proxy_addr])
+                            .inc();
+                        return Ok(resp);
+                    }
+                    Err(socks_err) => {
+                        self.metrics
+                            .socks_connection_attempts
+                            .with_label_values(&[&tries.to_string(), "failure", socks_proxy_addr])
+                            .inc();
+                        debug!(
+                            self.logger,
+                            "Failed to connect through SOCKS with address {}: {}",
+                            next_socks_proxy_addr,
+                            socks_err
+                        );
+                        last_error = Some(socks_err);
+                    }
                 }
             }
         }
@@ -357,7 +350,8 @@ impl HttpsOutcallsService for CanisterHttp {
                         format!("Request failed direct connect {direct_err} and connect through socks {e}")
                     });
 
-                    if should_dl_socks_proxy() {
+                    //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
+                    if !req.socks_proxy_addrs.is_empty() {
                         let dl_result = self.https_outcall_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
 
                         self.compare_results(&result, &dl_result);
@@ -469,15 +463,6 @@ impl HttpsOutcallsService for CanisterHttp {
             content: body_bytes.to_vec(),
         }))
     }
-}
-
-#[allow(clippy::absurd_extreme_comparisons)]
-fn should_dl_socks_proxy() -> bool {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
-    // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
-    // Currently this is set to 0%, hence always false.
-    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {

@@ -20,8 +20,8 @@ pub struct AdapterMetrics {
     pub requests: IntCounter,
     /// The number of requests served via a SOCKS proxy.
     pub requests_socks: IntCounter,
-    /// The number of socks connections attempts
-    pub socks_connections_attempts: IntCounterVec,
+    /// The number of socks connection attempts
+    pub socks_connection_attempts: IntCounterVec,
     /// The number of socks clients in the cache
     pub socks_cache_size: IntGauge,
     /// The number of cache misses for socks clients
@@ -44,17 +44,17 @@ impl AdapterMetrics {
                 "requests_socks_total",
                 "Total number of requests served via a SOCKS proxy",
             ),
-            socks_connections_attempts: metrics_registry.int_counter_vec(
-                "socks_connections_attempts_total",
+            socks_connection_attempts: metrics_registry.int_counter_vec(
+                "socks_connection_attempts_total",
                 "Total number of time the adapter tries to proxy a request via a SOCKS proxy",
-                &["attempt_number", "status"],
+                &["attempt_number", "status", "socks_proxy_address"],
             ),
             socks_cache_size: metrics_registry.int_gauge(
                 "socks_cache_size",
                 "The size of the cache for SOCKS clients",
             ),
             socks_cache_miss: metrics_registry.int_counter(
-                "socks_cache_miss",
+                "socks_cache_miss_total",
                 "Total number of times the adapter failed to find a SOCKS client in the cache",
             ),
             network_traffic: metrics_registry.int_counter_vec(

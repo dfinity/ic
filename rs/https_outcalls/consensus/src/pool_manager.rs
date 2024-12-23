@@ -22,6 +22,7 @@ use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig, Height,
 };
+use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -33,8 +34,9 @@ use std::{
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
-//TODO(SOCKS_PROXY_DL): Make this true.
-const SOCKS_PROXY_DL_ACTIVE: bool = false;
+//TODO(SOCKS_PROXY_DL): Make this > 0.
+/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
+const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 0;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -54,6 +56,16 @@ pub struct CanisterHttpPoolManagerImpl {
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
+}
+
+//TODO(SOCKS_PROXY_DL): Remove this function.
+#[allow(clippy::absurd_extreme_comparisons)]
+fn should_dl_socks_proxy() -> bool {
+    let mut rng = rand::thread_rng();
+    let random_number: u32 = rng.gen_range(0..100);
+    // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
+    // Currently this is set to 0%, hence always false.
+    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 impl CanisterHttpPoolManagerImpl {
@@ -149,11 +161,7 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
-    fn generate_api_boundary_node_addrs(&self) -> Vec<String> {
-        if !SOCKS_PROXY_DL_ACTIVE {
-            return Vec::new();
-        }
-
+    fn get_socks_proxy_addrs(&self) -> Vec<String> {
         let latest_registry_version = self.registry_client.get_latest_version();
 
         self.registry_client
@@ -227,9 +235,11 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        //TODO: this happens farely rarely. However ideally we should only try to get the
-        // boundary node addresses if the subnet is a system subnet.
-        let socks_proxy_addrs = self.generate_api_boundary_node_addrs();
+        let socks_proxy_addrs = if should_dl_socks_proxy() {
+            self.get_socks_proxy_addrs()
+        } else {
+            Vec::new()
+        };
 
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
