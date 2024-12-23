@@ -13,21 +13,25 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_node_operator_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{
     ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
+use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
@@ -199,6 +203,16 @@ pub fn prepare_registry_with_nodes_from_template(
                 ))),
                 ..node_template.clone()
             };
+            let node_provider_principal = PrincipalId::new_user_test_id(990);
+            let node_operator_record = NodeOperatorRecord {
+                node_allowance: 28,
+                node_provider_principal_id: node_provider_principal.into_vec(),
+                ..Default::default()
+            };
+            mutations.push(insert(
+                make_node_operator_record_key(node_provider_principal).into_bytes(),
+                node_operator_record.encode_to_vec(),
+            ));
             mutations.append(&mut make_add_node_registry_mutations(
                 node_id,
                 node_record,

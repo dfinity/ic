@@ -10,14 +10,16 @@ use ic_nns_test_utils::registry::{
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_registry_transport::upsert;
+use ic_registry_transport::{insert, upsert};
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::collections::BTreeMap;
@@ -120,6 +122,16 @@ pub fn prepare_registry_with_nodes(
                 domain: Some(format!("node{effective_id}.example.com")),
                 ..Default::default()
             };
+            let node_operator_principal_id = PrincipalId::new_user_test_id(999);
+            let node_operator_record = NodeOperatorRecord {
+                node_allowance: 28,
+                node_provider_principal_id: node_operator_principal_id.into_vec(),
+                ..Default::default()
+            };
+            mutations.push(insert(
+                make_node_operator_record_key(node_operator_principal_id).into_bytes(),
+                node_operator_record.encode_to_vec(),
+            ));
             mutations.append(&mut make_add_node_registry_mutations(
                 node_id,
                 node_record,

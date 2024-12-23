@@ -43,7 +43,7 @@ use ic_registry_transport::{
     },
     serialize_get_value_request, Error,
 };
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
@@ -249,7 +249,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     subnet_pid: SubnetId,
     chain_key_config: Option<ChainKeyConfig>,
 ) -> Vec<RegistryMutation> {
-    let node_operator_pid = user_test_id(TEST_ID);
+    let node_operator_pid = PrincipalId::new_user_test_id(990);
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
@@ -270,12 +270,13 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             port: 4321,
         };
         NodeRecord {
-            node_operator_id: node_operator_pid.get().to_vec(),
+            node_operator_id: node_operator_pid.to_vec(),
             xnet: Some(xnet_connection_endpoint),
             http: Some(http_connection_endpoint),
             ..Default::default()
         }
     };
+    let node_operator_record = make_node_operator_record(node_operator_pid);
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
@@ -319,6 +320,10 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             blessed_replica_version.encode_to_vec(),
         ),
     ];
+    mutations.push(insert(
+        make_node_operator_record_key(node_operator_pid).as_bytes(),
+        node_operator_record.encode_to_vec(),
+    ));
     mutations.append(&mut make_add_node_registry_mutations(
         node_id,
         node_record,
