@@ -479,4 +479,32 @@ mod test {
             assert_eq!(compact_target, expected_pow);
         }
     }
+
+    #[test]
+    fn test_compute_next_difficulty_for_backdated_blocks() {
+        // Arrange: Set up the test network and parameters
+        let network = Network::Testnet;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = CompactTarget::from_consensus(486604799);
+
+        // Create the genesis header and initialize the header store
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..chain_length {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time - 1, // Each new block is 1 second earlier
+                ..last_header
+            };
+            store.add(new_header);
+            last_header = new_header;
+        }
+
+        // Act.
+        let difficulty = compute_next_difficulty(&network, &store, &last_header, chain_length);
+
+        // Assert.
+        assert_eq!(difficulty, CompactTarget::from_consensus(473956288));
+    }
 }
