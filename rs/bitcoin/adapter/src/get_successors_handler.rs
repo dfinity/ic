@@ -237,7 +237,7 @@ fn get_next_headers(
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet | Network::Signet | Network::Regtest => true,
+        Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
         other => unreachable!("Unsupported network: {:?}", other),
     }
 }
