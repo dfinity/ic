@@ -1047,6 +1047,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         new_canister_wasm,
         canister_upgrade_arg,
         mode,
+        chunked_canister_wasm,
     } = upgrade;
     // Make sure `mode` is not None, and not an invalid/unknown value.
     if let Some(mode) = mode {
@@ -1073,25 +1074,38 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     // see https://ic-interface-spec.netlify.app/#canister-module-format
     const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 
-    if new_canister_wasm.len() < 4
-        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
-    {
-        defects.push("new_canister_wasm lacks the magic value in its header.".into());
+    match (new_canister_wasm.is_empty(), chunked_canister_wasm) {
+        (true, Some(_)) => {
+            defects.push("Cannot specify both new_canister_wasm and chunked_canister_wasm.".into());
+        }
+        (false, None) => {
+            defects.push("Either new_canister_wasm or chunked_canister_wasm must be specified.".into());
+        }
+        _ => (),
     }
 
-    if new_canister_wasm.len().saturating_add(
-        canister_upgrade_arg
-            .as_ref()
-            .map(|arg| arg.len())
-            .unwrap_or_default(),
-    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-    {
-        defects.push(format!(
-            "the maximum canister WASM and argument size \
-             for UpgradeSnsControlledCanister is {} bytes.",
-            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-        ));
+    // TODO: Add validation for `chunked_canister_wasm`.
+    if chunked_canister_wasm.is_none() {
+        if new_canister_wasm.len() < 4
+            || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+                && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+        {
+            defects.push("new_canister_wasm lacks the magic value in its header.".into());
+        }
+
+        if new_canister_wasm.len().saturating_add(
+            canister_upgrade_arg
+                .as_ref()
+                .map(|arg| arg.len())
+                .unwrap_or_default(),
+        ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        {
+            defects.push(format!(
+                "the maximum canister WASM and argument size \
+                for UpgradeSnsControlledCanister is {} bytes.",
+                MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+            ));
+        }
     }
 
     // Generate final report.
@@ -2777,6 +2791,7 @@ mod tests {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
         };
         let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
 
@@ -2802,6 +2817,7 @@ mod tests {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
         };
         let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
 
@@ -2827,6 +2843,7 @@ mod tests {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(100), // 100 is not a valid mode
+            chunked_canister_wasm: None,
         };
         let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
         assert!(text.contains("Invalid mode"));
@@ -2838,6 +2855,7 @@ mod tests {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
         };
         assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
@@ -4835,6 +4853,7 @@ Payload rendering here"#
                         new_canister_wasm: vec![0, 1, 2, 3],
                         canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                         mode: Some(1),
+                        chunked_canister_wasm: None,
                     },
                 )),
                 ..Default::default()
@@ -4855,6 +4874,7 @@ Payload rendering here"#
                             new_canister_wasm: vec![],
                             canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                             mode: Some(1),
+                            chunked_canister_wasm: None,
                         },
                     )),
                     ..Default::default()

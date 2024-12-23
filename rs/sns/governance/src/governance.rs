@@ -2517,9 +2517,15 @@ impl Governance {
 
         let mode = upgrade.mode_or_upgrade() as i32;
 
+        let new_canister_wasm = if let Some(chunked_canister_wasm) = upgrade.chunked_canister_wasm {
+            todo!()
+        } else {
+            upgrade.new_canister_wasm
+        };
+
         self.upgrade_non_root_canister(
             target_canister_id,
-            upgrade.new_canister_wasm,
+            new_canister_wasm,
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
