@@ -8,7 +8,7 @@ This process is controlled by the (link:../../rs/ic_os/config/README.md[ic-os co
 == User-facing configuration files
 
 SetupOS constructs its config struct from the following user-facing configuration files:
-  config.ini                      # Node Provider network settings and node settings
+  config.ini                      # Data center and node-specific network settings
   ssh_authorized_keys             # SSH private keys
   node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
   deployment.json                 # Deployment-specific configurations

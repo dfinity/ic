@@ -17,20 +17,6 @@ Usage:
 EOF
 }
 
-function read_config_variables() {
-    NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
-    BACKUP_RETENTION_TIME_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
-    BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
-    QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
-    JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
-    DOMAIN_NAME=$(get_config_value '.network_settings.domain_name')
-
-    # Compact the JSON and escape special characters
-    MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior' | jq -c '.' | sed 's/[&\/]/\\&/g')
-
-    GENERATE_IC_BOUNDARY_TLS_CERT=$(get_config_value '.guestos_settings.guestos_dev_settings.generate_ic_boundary_tls_cert')
-}
-
 function configure_ipv6() {
     ipv6_config_type=$(get_config_value '.network_settings.ipv6_config | if type=="object" then keys[] else . end')
     case "$ipv6_config_type" in
@@ -113,6 +99,22 @@ function get_if_address_retries() {
     done
 }
 
+
+function read_config_variables() {
+    NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
+    BACKUP_RETENTION_TIME_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
+    BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
+    QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
+    JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
+    DOMAIN_NAME=$(get_config_value '.network_settings.domain_name')
+    NODE_REWARD_TYPE=$(get_config_value '.icos_settings.node_reward_type')
+
+    # Compact the JSON and escape special characters
+    MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior' | jq -c '.' | sed 's/[&\/]/\\&/g')
+
+    GENERATE_IC_BOUNDARY_TLS_CERT=$(get_config_value '.guestos_settings.guestos_dev_settings.generate_ic_boundary_tls_cert')
+}
+
 function set_default_config_values() {
     [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
     [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default is 24h
@@ -120,6 +122,7 @@ function set_default_config_values() {
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
     [ "${DOMAIN_NAME}" = "null" ] && DOMAIN_NAME=""
+    [ "${NODE_REWARD_TYPE}" = "null" ] && NODE_REWARD_TYPE=""
 }
 
 while getopts "i:o:" OPT; do
@@ -158,6 +161,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
+    -e "s@{{ node_reward_type }}@${NODE_REWARD_TYPE}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 

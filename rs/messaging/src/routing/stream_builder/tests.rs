@@ -1038,14 +1038,14 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 /// Pushes the message into the given canister's corresponding input queue.
 fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
-    canister_state
+    assert!(canister_state
         .push_input(
             msg,
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap()
+        .unwrap());
 }
 
 /// Asserts that the values of the `METRIC_ROUTED_MESSAGES` metric
