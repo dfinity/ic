@@ -24,7 +24,7 @@ use super::{
         CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
         FetchesRules, FileFetcher,
     },
-    sharded::ShardedRatelimiter,
+    sharded::{create_ratelimiter, ShardedRatelimiter},
 };
 
 use crate::{
@@ -32,14 +32,6 @@ use crate::{
     persist::RouteSubnet,
     routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
-
-pub fn create_ratelimiter(limit: u32, duration: Duration) -> Ratelimiter {
-    Ratelimiter::builder(1, duration.checked_div(limit).unwrap_or(Duration::ZERO))
-        .max_tokens(limit as u64)
-        .initial_available(limit as u64)
-        .build()
-        .unwrap()
-}
 
 // Converts between different request types
 // We can't use a single one because Ratelimit API crate needs to build on WASM and ic-bn-lib does not
@@ -208,6 +200,7 @@ impl GenericLimiter {
                         Limiter::Sharded(
                             Arc::new(ShardedRatelimiter::new(
                                 *limit,
+                                *limit,
                                 *duration,
                                 self.opts.tti,
                                 self.opts.max_shards,
@@ -215,7 +208,7 @@ impl GenericLimiter {
                             *v,
                         )
                     } else {
-                        Limiter::Single(Arc::new(create_ratelimiter(*limit, *duration)))
+                        Limiter::Single(Arc::new(create_ratelimiter(*limit, *limit, *duration)))
                     })
                 } else {
                     None

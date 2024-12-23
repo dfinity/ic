@@ -349,8 +349,8 @@ pub struct Bouncer {
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
-    pub bouncer_burst_size: u64,
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_burst_size: u32,
 
     /// For how long to ban the IPs
     #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
