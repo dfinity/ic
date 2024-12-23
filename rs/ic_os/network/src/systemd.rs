@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -83,8 +84,7 @@ pub fn generate_systemd_config_files_new_config(
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by_key(|v| v.speed_mbps);
-    interfaces.reverse();
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = ipv6_config.gateway.to_string();
@@ -170,8 +170,7 @@ pub fn generate_systemd_config_files(
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by_key(|v| v.speed_mbps);
-    interfaces.reverse();
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
