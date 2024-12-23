@@ -709,8 +709,6 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
                 .build(),
         );
 
-        env.tick();
-
         // Assert that the request payment is zero.
         let contexts = match method {
             Method::SignWithECDSA => env.sign_with_ecdsa_contexts(),
