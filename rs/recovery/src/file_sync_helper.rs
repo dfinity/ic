@@ -92,19 +92,15 @@ pub fn rsync_with_retries(
                     // In non-interactive cases, we wait a short while
                     // before re-trying rsync.
                     info!(logger, "Retrying in 10 seconds...");
-                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    std::thread::sleep(Duration::from_secs(10));
                 } else if !consent_given("Do you want to retry the  download for this node?") {
-                    return Err(RecoveryError::UnexpectedError(
-                        "Rsync failed, skipped manually".into(),
-                    ));
+                    return Err(RecoveryError::RsyncFailed);
                 }
             }
             success => return success,
         }
     }
-    Err(RecoveryError::UnexpectedError(
-        "Rsync failed, too many retries".into(),
-    ))
+    Err(RecoveryError::RsyncFailed)
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
