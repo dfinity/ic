@@ -90,11 +90,9 @@ pub fn main() -> Result<()> {
             );
             eprintln!("Using generated mac address {}", generated_mac);
 
-            let ipv6_config = if let Ipv6Config::Deterministic(ipv6_config) =
+            let Ipv6Config::Deterministic(ipv6_config) =
                 &setupos_config.network_settings.ipv6_config
-            {
-                ipv6_config
-            } else {
+            else {
                 return Err(anyhow!(
                     "Ipv6Config is not of type Deterministic. Cannot generate IPv6 address."
                 ));
