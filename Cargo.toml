@@ -591,6 +591,7 @@ ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 inferno = "0.12.0"
+ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
