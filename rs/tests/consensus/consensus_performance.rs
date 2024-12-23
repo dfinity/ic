@@ -45,7 +45,7 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::performance::persist_metrics;
+use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_vm};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -79,12 +79,25 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
+const SHOULD_SPAWN_JAEGER_VM: bool = false;
+
 fn setup(env: TestEnv) {
     PrometheusVm::default()
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
+
+    let mut ic_builder = InternetComputer::new();
+
+    if SHOULD_SPAWN_JAEGER_VM {
+        let jaeger_ipv6 = setup_jaeger_vm(&env);
+        ic_builder = ic_builder.with_jaeger_addr(std::net::SocketAddr::new(
+            std::net::IpAddr::V6(jaeger_ipv6),
+            4317,
+        ));
+    }
+
+    ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::System)

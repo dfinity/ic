@@ -2,7 +2,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path, IcNodeSnapshot};
+use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
@@ -424,4 +427,31 @@ fn average_f64(nums: &[f64]) -> f64 {
     assert!(!nums.is_empty());
 
     nums.iter().sum::<f64>() / (nums.len() as f64)
+}
+
+pub fn setup_jaeger_vm(env: &TestEnv) -> std::net::Ipv6Addr {
+    const JAEGER_VM_NAME: &str = "jaeger-vm";
+
+    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    UniversalVm::new(JAEGER_VM_NAME.to_string())
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1024)),
+        })
+        .with_config_img(path)
+        .start(env)
+        .expect("failed to setup Jaeger Universal VM");
+
+    let deployed_jaeger_vm = env.get_deployed_universal_vm(JAEGER_VM_NAME).unwrap();
+    let jaeger_vm = deployed_jaeger_vm.get_vm().unwrap();
+    let jaeger_ipv6 = jaeger_vm.ipv6;
+
+    info!(
+        env.logger(),
+        "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
+    );
+
+    jaeger_ipv6
 }
