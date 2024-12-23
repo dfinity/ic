@@ -251,7 +251,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     subnet_pid: SubnetId,
     chain_key_config: Option<ChainKeyConfig>,
 ) -> Vec<RegistryMutation> {
-    let node_operator_pid = PrincipalId::new_user_test_id(990);
+    let node_operator_pid = PrincipalId::new_user_test_id(1990);
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
