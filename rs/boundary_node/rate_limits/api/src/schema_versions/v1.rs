@@ -179,7 +179,7 @@ impl<'de> Deserialize<'de> for RateLimitRule {
 
         if this.ip_prefix_group.is_some() && !matches!(this.limit, Action::Limit(_, _)) {
             return Err(D::Error::custom(
-                "ip_prefix_group doesn't make sense with 'limit: block'",
+                "ip_prefix_group only makes sense with 'limit' set to an actual ratelimit",
             ));
         }
 
@@ -316,7 +316,10 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
+        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+            .unwrap_err()
+            .to_string()
+            .contains("v4 prefix must be"));
 
         let rule_raw = indoc! {"
         canister_id: aaaaa-aa
@@ -328,7 +331,10 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
+        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+            .unwrap_err()
+            .to_string()
+            .contains("v6 prefix must be"));
 
         // limit: block with ip prefixes
         let rule_raw = indoc! {"
@@ -341,17 +347,23 @@ mod test {
         limit: block
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
+        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+            .unwrap_err()
+            .to_string()
+            .contains("ip_prefix_group only makes sense with"));
 
         // No conditions
         let rule_raw = indoc! {"
         ip_prefix_group:
-            v4: 33
+            v4: 24
             v6: 64
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes()).is_err());
+        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+            .unwrap_err()
+            .to_string()
+            .contains("at least one filtering condition must be"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
@@ -475,7 +487,7 @@ mod test {
           limit: 100/1s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("canister_id"));
 
         // Bad regex
         let rules = indoc! {"
@@ -484,7 +496,7 @@ mod test {
           limit: 100/1s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("regex"));
 
         // Bad limits
         let rules = indoc! {"
@@ -492,42 +504,42 @@ mod test {
           limit: 100/
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
           limit: /100s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
           limit: /
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
           limit: 0/1s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
           limit: 1/0s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa
           limit: 1/1
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("limit"));
 
         // Bad request type
         let rules = indoc! {"
@@ -536,6 +548,6 @@ mod test {
           limit: 10/1s
         "};
         let rules = serde_yaml::from_str::<Vec<RateLimitRule>>(rules);
-        assert!(rules.is_err());
+        assert!(rules.unwrap_err().to_string().contains("request_type"));
     }
 }

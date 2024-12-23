@@ -187,10 +187,8 @@ async fn test_async(env: TestEnv) {
         rate_limit_id,
         RateLimitRule {
             canister_id: Some(counter_canister_id),
-            subnet_id: None,
-            methods_regex: None,
-            request_types: None,
             limit: Action::Block,
+            ..Default::default()
         },
     )
     .await;
@@ -230,10 +228,8 @@ async fn test_async(env: TestEnv) {
         rate_limit_id,
         RateLimitRule {
             canister_id: Some(counter_canister_id),
-            subnet_id: None,
-            methods_regex: None,
-            request_types: None,
             limit: Action::Limit(300, Duration::from_secs(60)),
+            ..Default::default()
         },
     )
     .await;
