@@ -8,8 +8,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key,
-    make_subnet_list_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
 use ic_registry_transport::{
     delete, insert,
