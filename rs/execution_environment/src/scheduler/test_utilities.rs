@@ -592,52 +592,6 @@ impl SchedulerTest {
         )
     }
 
-    pub fn push_output_request(&mut self, canister_id: &CanisterId, mut request: Request) {
-        let time = self.state.as_ref().unwrap().metadata.batch_time;
-        let canister = self
-            .state
-            .as_mut()
-            .unwrap()
-            .canister_states
-            .get_mut(canister_id)
-            .unwrap();
-
-        assert_eq!(canister.status(), CanisterStatusType::Running);
-        let call_context_manager = canister.system_state.call_context_manager().unwrap();
-        let callback_id = call_context_manager.next_callback_id() + 1;
-        request.sender_reply_callback = CallbackId::new(callback_id);
-
-        let call_context_id = canister
-            .system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(
-                    request.sender,
-                    request.sender_reply_callback,
-                    NO_DEADLINE,
-                ),
-                request.payment,
-                Time::from_nanos_since_unix_epoch(0),
-                RequestMetadata::new(0, UNIX_EPOCH),
-            )
-            .unwrap();
-        let _ = canister.system_state.register_callback(Callback::new(
-            call_context_id,
-            request.sender,
-            request.receiver,
-            Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
-            WasmClosure::new(0, 1),
-            WasmClosure::new(2, 3),
-            None,
-            NO_DEADLINE,
-        ));
-
-        let _ = canister
-            .system_state
-            .push_output_request(request.into(), time);
-    }
-
     pub fn charge_for_resource_allocations(&mut self) {
         let subnet_size = self.subnet_size();
         self.scheduler
