@@ -5729,6 +5729,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
+ "ipnet",
  "lazy_static",
  "maxminddb",
  "mockall",
@@ -5958,9 +5959,9 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
- "num-traits",
  "pocket-ic",
  "proptest",
+ "regex",
  "scraper",
  "serde",
  "serde_json",
@@ -8948,59 +8949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-icrc1-benchmark-generator"
-version = "0.9.0"
-dependencies = [
- "async-trait",
- "candid",
- "dfn_http_metrics",
- "futures",
- "getrandom",
- "ic-base-types",
- "ic-cdk 0.16.0",
- "ic-cdk-macros 0.9.0",
- "ic-icrc1-benchmark-worker",
- "ic-icrc1-index",
- "ic-ledger-core",
- "ic-metrics-encoder",
- "icrc-ledger-client-cdk",
- "icrc-ledger-types",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
-name = "ic-icrc1-benchmark-worker"
-version = "0.9.0"
-dependencies = [
- "async-trait",
- "candid",
- "ciborium",
- "dfn_http_metrics",
- "futures",
- "getrandom",
- "hex",
- "ic-base-types",
- "ic-cdk 0.16.0",
- "ic-cdk-macros 0.9.0",
- "ic-crypto-tree-hash",
- "ic-icrc1",
- "ic-ledger-canister-core",
- "ic-ledger-core",
- "ic-metrics-encoder",
- "icrc-ledger-client",
- "icrc-ledger-client-cdk",
- "icrc-ledger-types",
- "num-traits",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
 name = "ic-icrc1-index"
 version = "0.9.0"
 dependencies = [
@@ -10455,11 +10403,11 @@ dependencies = [
  "candid_parser",
  "canister-test",
  "dfn_candid",
- "dfn_core",
- "dfn_macro",
  "hex",
  "ic-base-types",
  "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "ic-crypto-sha2",
  "ic-management-canister-types",
  "ic-metrics-encoder",
@@ -10503,6 +10451,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
+ "ic-cdk 0.16.0",
  "ic-nervous-system-clients",
  "ic-nns-constants",
  "serde",
@@ -11068,6 +11017,23 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-registry-keys",
  "ic-types",
+]
+
+[[package]]
+name = "ic-registry-canister-data-provider"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-registry-canister-client",
+ "ic-registry-transport",
+ "ic-stable-structures",
+ "ic-types",
+ "itertools 0.12.1",
 ]
 
 [[package]]
@@ -13173,6 +13139,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tests-cross-chain"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "futures",
+ "hex-literal",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-cketh-minter",
+ "ic-ethereum-types",
+ "ic-icrc1-index-ng",
+ "ic-icrc1-ledger",
+ "ic-ledger-suite-orchestrator",
+ "ic-management-canister-types",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-root",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-wasm-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "icrc-ledger-types",
+ "reqwest 0.12.9",
+ "serde_json",
+ "slog",
+]
+
+[[package]]
 name = "ic-tracing"
 version = "0.9.0"
 dependencies = [
@@ -14518,6 +14521,9 @@ name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ipnetwork"
@@ -18157,6 +18163,7 @@ dependencies = [
  "humantime",
  "ic-bn-lib",
  "indoc",
+ "ipnet",
  "regex",
  "serde",
  "serde_bytes",
