@@ -196,7 +196,9 @@ pub async fn install_canister_on_subnet(
         controllers: Some(controllers),
         ..Default::default()
     });
-    let canister_id = pocket_ic.create_canister_on_subnet(None, settings, subnet_id).await;
+    let canister_id = pocket_ic
+        .create_canister_on_subnet(None, settings, subnet_id)
+        .await;
     pocket_ic
         .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
         .await;

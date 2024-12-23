@@ -1,14 +1,19 @@
-
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
-use ic_nervous_system_integration_tests::{create_service_nervous_system_builder::CreateServiceNervousSystemBuilder, pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters}};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nns_test_utils::common::modify_wasm_bytes;
-use pocket_ic::{management_canister::{CanisterInstallMode, CanisterInstallModeUpgradeInner}, PocketIcBuilder};
-use pocket_ic::management_canister::CanisterSettings;
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_on_subnet;
 use canister_test::Wasm;
 use ic_base_types::SubnetId;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_on_subnet;
+use ic_nervous_system_integration_tests::{
+    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters},
+};
+use ic_nns_test_utils::common::modify_wasm_bytes;
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use pocket_ic::management_canister::CanisterSettings;
+use pocket_ic::{
+    management_canister::{CanisterInstallMode, CanisterInstallModeUpgradeInner},
+    PocketIcBuilder,
+};
 
 #[tokio::test]
 async fn test() {
@@ -35,7 +40,8 @@ async fn test() {
         vec![],
         Some(original_wasm.clone()),
         vec![developer],
-    ).await;
+    )
+    .await;
 
     // Install the (mainnet) NNS canisters.
     {
@@ -74,38 +80,40 @@ async fn test() {
     // .await;
 
     // TODO: Use SNS proposal to perform the upgrade using chunked Wasm.
-    let store_canister_id = install_canister_on_subnet(
-        &pocket_ic,
-        app_subnet,
-        vec![],
-        None,
-        vec![developer],
-    ).await;
+    let store_canister_id =
+        install_canister_on_subnet(&pocket_ic, app_subnet, vec![], None, vec![developer]).await;
 
     // TODO: Make the new WASM bigger than 2 MiB so that it does not fit into an ingress message.
     let new_wasm = modify_wasm_bytes(&original_wasm.bytes(), 123);
     let new_wasm_hash = new_wasm.sha256_hash();
 
     let chunk_hashes_list = {
-        pocket_ic.upload_chunk(store_canister_id.into(), Some(developer.into()), new_wasm).await;
-        let chunk_hashes_list = pocket_ic.stored_chunks(store_canister_id.into(), Some(developer.into())).await.unwrap();
+        pocket_ic
+            .upload_chunk(store_canister_id.into(), Some(developer.into()), new_wasm)
+            .await;
+        let chunk_hashes_list = pocket_ic
+            .stored_chunks(store_canister_id.into(), Some(developer.into()))
+            .await
+            .unwrap();
         assert_eq!(chunk_hashes_list[0], new_wasm_hash);
         chunk_hashes_list
     };
 
     // Finally, trigger the chunked upgrade
-    pocket_ic.install_chunked_canister(
-        target_canister_id.into(),
-        Some(developer.into()),
-        CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-            wasm_memory_persistence: None,
-            skip_pre_upgrade: Some(false),
-        })),
-        store_canister_id.into(),
-        chunk_hashes_list,
-        new_wasm_hash.to_vec(),
-        vec![],
-    ).await;
+    pocket_ic
+        .install_chunked_canister(
+            target_canister_id.into(),
+            Some(developer.into()),
+            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
+                wasm_memory_persistence: None,
+                skip_pre_upgrade: Some(false),
+            })),
+            store_canister_id.into(),
+            chunk_hashes_list,
+            new_wasm_hash.to_vec(),
+            vec![],
+        )
+        .await;
 
     panic!("hello");
 }

@@ -14,6 +14,18 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
+pub struct ChunkedCanisterWasm {
+    // Check sum of the overall WASM to be reassembled from chunks.
+  wasm_module_hash: Vec<u8>,
+
+  // Indicates which canister stores the WASM chunks.
+  store_canister_id: CanisterId,
+
+  // Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+  // one chink.
+  chunk_hashes_list: Vec<Vec<u8>>,
+}
+
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
 #[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct ChangeCanisterRequest {
@@ -52,6 +64,10 @@ pub struct ChangeCanisterRequest {
     pub compute_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
+
+    /// If the entire WASM does not into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
 }
 
 impl ChangeCanisterRequest {
@@ -71,6 +87,7 @@ impl ChangeCanisterRequest {
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
+            .field("chunked_canister_wasm", &self.chunked_canister_wasm)
             .finish()
     }
 }

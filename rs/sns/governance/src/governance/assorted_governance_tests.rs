@@ -2914,6 +2914,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
         });
 
         // Upgrade Proposal
