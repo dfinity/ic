@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
+    find_subnet_for_node, get_node_operator_id_for_node_id, get_node_operator_record,
     get_subnet_list_record, make_remove_node_registry_mutations,
     make_update_node_operator_mutation,
 };
@@ -36,11 +36,11 @@ impl Registry {
 
                 // 4. Find the node operator id for this record
                 // and abort if the node record is not found
-                let node_operator_id = get_node_operator_id_for_node(self, node_to_remove)
+                let node_operator_id = get_node_operator_id_for_node_id(self, node_to_remove)
                     .map_err(|e| format!("{}do_remove_nodes: Aborting node removal: {}", LOG_PREFIX, e))
                     .unwrap();
 
-                // 5. Ensure node is not in a subnet 
+                // 5. Ensure node is not in a subnet
                 let is_node_in_subnet = find_subnet_for_node(self, node_to_remove, &subnet_list_record);
                 if let Some(subnet_id) = is_node_in_subnet {
                     panic!("{}do_remove_nodes: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",

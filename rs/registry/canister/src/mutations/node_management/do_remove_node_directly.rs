@@ -1,7 +1,7 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record, make_remove_node_registry_mutations,
-    make_update_node_operator_mutation,
+    find_subnet_for_node, get_node_operator_id_for_node_id, get_node_operator_record,
+    get_node_provider_id_for_operator_id, get_subnet_list_record,
+    make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
@@ -26,7 +26,7 @@ impl Registry {
     pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
-        let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
+        let node_operator_id = get_node_operator_id_for_node_id(self, payload.node_id)
             .map_err(|e| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -35,11 +35,28 @@ impl Registry {
             })
             .unwrap();
 
-        // 2. Get the caller ID and check that it matches the node's NO
+        // 2. Compare the node provider ID of the caller (Node Operator) and the node's NP
+        let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
+            .map_err(|e| {
+                format!(
+                    "{}do_remove_node_directly: Aborting node removal: {}",
+                    LOG_PREFIX, e
+                )
+            })
+            .unwrap();
+        let node_provider_of_the_node =
+            get_node_provider_id_for_operator_id(self, node_operator_id)
+                .map_err(|e| {
+                    format!(
+                        "{}do_remove_node_directly: Aborting node removal: {}",
+                        LOG_PREFIX, e
+                    )
+                })
+                .unwrap();
         assert_eq!(
-            node_operator_id, caller_id,
-            "The caller {}, does not match this Node's Operator id.",
-            caller_id
+            node_provider_caller, node_provider_of_the_node,
+            "The node provider {} of the caller {}, does not match the provider {} of the node {}.",
+            node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
         );
 
         // 3. Ensure node is not in a subnet
