@@ -17,6 +17,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
+    dc::v1::DataCenterRecord,
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -30,8 +31,9 @@ use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -276,7 +278,8 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             ..Default::default()
         }
     };
-    let node_operator_record = make_node_operator_record(node_operator_pid);
+    let dc_record = make_data_center_record("dc1");
+    let node_operator_record = make_node_operator_record(node_operator_pid, "dc1");
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
@@ -320,6 +323,10 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             blessed_replica_version.encode_to_vec(),
         ),
     ];
+    mutations.push(insert(
+        make_data_center_record_key("dc1").as_bytes(),
+        dc_record.encode_to_vec(),
+    ));
     mutations.push(insert(
         make_node_operator_record_key(node_operator_pid).as_bytes(),
         node_operator_record.encode_to_vec(),
@@ -400,11 +407,22 @@ pub fn new_node_crypto_keys_mutations(
     new_current_node_crypto_keys_mutations(node_id, current_npks)
 }
 
+/// Make a `DataCenterRecord` with the provided `dc_id`.
+fn make_data_center_record(dc_id: &str) -> DataCenterRecord {
+    DataCenterRecord {
+        id: dc_id.to_string(),
+        region: "Europe,ES,Barcelona".to_string(),
+        owner: "Jorge Gomez".to_string(),
+        ..Default::default()
+    }
+}
+
 /// Make a `NodeOperatorRecord` from the provided `PrincipalId`.
-fn make_node_operator_record(principal_id: PrincipalId) -> NodeOperatorRecord {
+fn make_node_operator_record(principal_id: PrincipalId, dc_id: &str) -> NodeOperatorRecord {
     NodeOperatorRecord {
         node_allowance: 1,
         node_operator_principal_id: principal_id.into(),
+        dc_id: dc_id.to_string(),
         ..Default::default()
     }
 }
@@ -516,11 +534,15 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         *TEST_USER6_PRINCIPAL,
         *TEST_USER7_PRINCIPAL,
     ] {
-        node_operator.push(make_node_operator_record(*principal_id));
+        node_operator.push(make_node_operator_record(*principal_id, "dc1"));
     }
 
     let mut add_node_mutations = vec![];
     let mut node_id = vec![];
+    add_node_mutations.push(insert(
+        make_data_center_record_key("dc1").as_bytes(),
+        make_data_center_record("dc1").encode_to_vec(),
+    ));
     for nor in &node_operator {
         let (id, mut mutations) = get_new_node_id_and_mutations(nor, nns_subnet_id);
         node_id.push(id);
