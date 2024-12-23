@@ -496,10 +496,76 @@ mod test {
             // Assert.
             assert_eq!(compact_target, expected_pow);
         }
+    } 
+
+    #[test]
+    fn test_compute_next_difficulty_for_temporary_difficulty_drops_testnet4() {
+        // Arrange
+        let network = Network::Testnet4;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = CompactTarget::from_consensus(473956288);
+
+        // Create the genesis header and initialize the header store with 2014 blocks
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..(chain_length - 1) {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time + 1,
+                ..last_header
+            };
+            store.add(new_header);
+            last_header = new_header;
+        }
+        // Add the last header in the epoch, which has the lowest difficulty, or highest possible target.
+        // This can happen if the block is created more than 20 minutes after the previous block.
+        let last_header_in_epoch = BlockHeader {
+            prev_blockhash: last_header.block_hash(),
+            time: last_header.time + 1,
+            bits: max_target(&network).to_compact_lossy(),
+            ..last_header
+        };
+        store.add(last_header_in_epoch);
+
+        // Act.
+        let difficulty = compute_next_difficulty(&network, &store, &last_header_in_epoch, chain_length);
+
+        // Assert.
+        // Note: testnet3 would produce 473956288, as it depends on the previous header's difficulty.
+        assert_eq!(difficulty, CompactTarget::from_consensus(470810608));
     }
 
     #[test]
-    fn test_compute_next_difficulty_for_backdated_blocks() {
+    fn test_compute_next_difficulty_for_backdated_blocks_testnet4() {
+        // Arrange: Set up the test network and parameters
+        let network = Network::Testnet4;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = CompactTarget::from_consensus(486604799);
+
+        // Create the genesis header and initialize the header store
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..chain_length {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time - 1, // Each new block is 1 second earlier
+                ..last_header
+            };
+            store.add(new_header);
+            last_header = new_header;
+        }
+
+        // Act.
+        let difficulty = compute_next_difficulty(&network, &store, &last_header, chain_length);
+
+        // Assert.
+        assert_eq!(difficulty, CompactTarget::from_consensus(473956288));
+    }
+
+    #[test]
+    fn test_compute_next_difficulty_for_backdated_blocks_testnet() {
         // Arrange: Set up the test network and parameters
         let network = Network::Testnet;
         let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
