@@ -934,6 +934,7 @@ fn icrc1_ledger_init_arg(
         feature_flags: Some(ICRC2_FEATURE),
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        index_principal: None,
     }
 }
 
