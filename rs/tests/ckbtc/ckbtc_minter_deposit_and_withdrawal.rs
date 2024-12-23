@@ -8,7 +8,7 @@ use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
-    state::{eventlog::Event, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{eventlog::EventType, RetrieveBtcRequest, RetrieveBtcStatus},
     updates::{get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs},
 };
 use ic_system_test_driver::{
@@ -227,15 +227,18 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         assert_eq!(txid, finalized_txid);
 
         // Check minter's event log
-        let events = minter_agent
+        let events: Vec<_> = minter_agent
             .get_events(0, 1000)
             .await
-            .expect("failed to fetch minter's event log");
+            .expect("failed to fetch minter's event log")
+            .iter()
+            .map(|event| event.payload.clone())
+            .collect();
 
         assert!(
             events.iter().any(|e| matches!(
                 e,
-                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
                     block_index,
                     ..
                 }) if *block_index == retrieve_response.block_index
@@ -246,7 +249,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         assert!(
             events.iter().any(
-                |e| matches!(e, Event::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
+                |e| matches!(e, EventType::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
             ),
             "missing the tx submission in the event log: {:?}",
             events
@@ -254,7 +257,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         assert!(
             events.iter().any(
-                |e| matches!(e, Event::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
+                |e| matches!(e, EventType::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
             ),
             "missing the tx confirmation in the event log: {:?}",
             events

@@ -29,6 +29,7 @@ CANISTERS = {
     "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
+    "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
@@ -79,6 +80,10 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # therefore strictly controlled.
     # Size when constraint addded: 1_655_752 bytes
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "17",
+
+    # -- BN team --
+    # Size when constraint addded: 540_349 bytes
+    "rate-limit-canister.wasm.gz": "7",
 }
 
 # How these limits were chosen:
