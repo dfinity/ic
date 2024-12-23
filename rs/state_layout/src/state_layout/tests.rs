@@ -27,7 +27,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         call_context_manager: None,
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
         accumulated_priority: AccumulatedPriority::default(),
-        priority_credit: AccumulatedPriority::default(),
         long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
