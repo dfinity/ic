@@ -79,6 +79,9 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
+/// When set to `true` a [Jaeger](https://www.jaegertracing.io/) instance will be spawned.
+/// Look for "Jaeger frontend available at: $URL" in the logs and follow the link to visualize &
+/// analyze traces.
 const SHOULD_SPAWN_JAEGER_VM: bool = false;
 
 fn setup(env: TestEnv) {
