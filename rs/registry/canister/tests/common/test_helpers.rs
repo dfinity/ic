@@ -11,7 +11,9 @@ use ic_management_canister_types::{
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
-use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
+use ic_nns_test_utils::registry::{
+    get_value_or_panic, make_data_center_record, new_node_keys_and_node_id,
+};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
@@ -20,8 +22,8 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_node_operator_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_catch_up_package_contents_key, make_data_center_record_key, make_node_operator_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
@@ -203,12 +205,20 @@ pub fn prepare_registry_with_nodes_from_template(
                 ))),
                 ..node_template.clone()
             };
-            let node_provider_principal = PrincipalId::new_user_test_id(990);
+            let node_operator_principal = PrincipalId::new_user_test_id(1990);
+            let node_provider_principal = PrincipalId::new_user_test_id(1999);
             let node_operator_record = NodeOperatorRecord {
                 node_allowance: 28,
+                node_operator_principal_id: node_operator_principal.into_vec(),
                 node_provider_principal_id: node_provider_principal.into_vec(),
+                dc_id: "dc1".to_string(),
                 ..Default::default()
             };
+            let dc_record = make_data_center_record("dc1");
+            mutations.push(insert(
+                make_data_center_record_key("dc1").as_bytes(),
+                dc_record.encode_to_vec(),
+            ));
             mutations.push(insert(
                 make_node_operator_record_key(node_provider_principal).into_bytes(),
                 node_operator_record.encode_to_vec(),

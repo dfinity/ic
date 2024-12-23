@@ -408,7 +408,7 @@ pub fn new_node_crypto_keys_mutations(
 }
 
 /// Make a `DataCenterRecord` with the provided `dc_id`.
-fn make_data_center_record(dc_id: &str) -> DataCenterRecord {
+pub fn make_data_center_record(dc_id: &str) -> DataCenterRecord {
     DataCenterRecord {
         id: dc_id.to_string(),
         region: "Europe,ES,Barcelona".to_string(),
