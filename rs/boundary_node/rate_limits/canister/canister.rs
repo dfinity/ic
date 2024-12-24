@@ -150,14 +150,14 @@ fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResp
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let current_time = ic_cdk::api::time();
-    let result = with_canister_state(|state| {
+    with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let adder = ConfigAdder::new(state);
         let adder = WithAuthorization::new(adder, access_resolver);
         let adder = WithMetrics::new(adder);
         adder.add_config(config, current_time)
     })?;
-    Ok(result)
+    Ok(())
 }
 
 /// Makes specified rules publicly accessible for viewing
@@ -168,14 +168,14 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
     let disclose_time = ic_cdk::api::time();
-    let result = with_canister_state(|state| {
+    with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state);
         let discloser = WithAuthorization::new(discloser, access_resolver);
         let discloser = WithMetrics::new(discloser);
         discloser.disclose_rules(args, disclose_time)
     })?;
-    Ok(result)
+    Ok(())
 }
 
 #[query(decoding_quota = 10000)]
