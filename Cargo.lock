@@ -18225,6 +18225,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "candid_parser",
  "getrandom",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
