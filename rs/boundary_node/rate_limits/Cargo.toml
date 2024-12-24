@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 getrandom = { version = "0.2", features = ["custom"] }
-hex = { workspace = true }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
