@@ -46,6 +46,7 @@ rust_test(
     srcs = glob(["canister/**/*.rs"]),
     crate_name = "rate_limit_canister",
     crate_root = "canister/lib.rs",
+    data = ["canister/interface.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + ["@crate_index//:candid_parser"],
 )
