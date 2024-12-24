@@ -6,8 +6,7 @@ use crate::confidentiality_formatting::{
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::getter::{ConfigGetter, EntityGetter, IncidentGetter, RuleGetter};
 use crate::metrics::{
-    export_metrics_as_http_response, with_metrics_registry, WithMetrics, LAST_CANISTER_CHANGE_TIME,
-    LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
+    export_metrics_as_http_response, with_metrics_registry, WithMetrics, METRICS,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
@@ -20,7 +19,7 @@ use rate_limits_api::{
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse,
     GetRulesByIncidentIdResponse, IncidentId, InitArg, InputConfig, RuleId, Version,
 };
-use std::{sync::Arc, time::Duration};
+use std::{borrow::BorrowMut, sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
@@ -84,8 +83,11 @@ fn init(init_arg: InitArg) {
         );
     });
     // Update metric.
-    LAST_CANISTER_CHANGE_TIME.with(|cell| {
-        cell.borrow_mut().set(current_time as i64);
+    METRICS.with(|cell| {
+        let mut cell = cell.borrow_mut();
+        cell.last_canister_change_time
+            .borrow_mut()
+            .set(current_time as i64);
     });
 }
 
@@ -205,10 +207,13 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                         canister_api.set_api_boundary_nodes_principals(
                             api_bn_records.into_iter().filter_map(|n| n.id).collect(),
                         );
-                        // Update metrics.
+                        // Update metric.
                         let current_time = ic_cdk::api::time() as i64;
-                        LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
-                            cell.borrow_mut().set(current_time);
+                        METRICS.with(|cell| {
+                            let mut cell = cell.borrow_mut();
+                            cell.last_successful_registry_poll_time
+                                .borrow_mut()
+                                .set(current_time);
                         });
                         ("success", "")
                     }
@@ -217,9 +222,12 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                 };
 
             // Update metric.
-            REGISTRY_POLL_CALLS_COUNTER.with(|cell| {
-                let metric = cell.borrow_mut();
-                metric.with_label_values(&[call_status, message]).inc();
+            METRICS.with(|cell| {
+                let mut cell = cell.borrow_mut();
+                cell.registry_poll_calls
+                    .borrow_mut()
+                    .with_label_values(&[call_status, message])
+                    .inc();
             });
         });
     });
