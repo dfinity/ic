@@ -1,16 +1,16 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
+    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk, vetkd},
     crypto::CryptoHashOf,
     *,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
-use std::cmp::PartialOrd;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::{cmp::PartialOrd, hash::Hasher};
 
 /// A payload, that contains information needed during a regular round.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -19,14 +19,34 @@ pub struct DataPayload {
     pub batch: BatchPayload,
     pub dkg: dkg::DkgDataPayload,
     pub idkg: idkg::Payload,
+    pub vetkd: vetkd::Payload,
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
     pub idkg: idkg::Summary,
+    pub vetkd: vetkd::Summary,
+    pub supports_vetkd_payload: bool,
+}
+
+impl Hash for SummaryPayload {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let SummaryPayload {
+            dkg,
+            idkg,
+            vetkd,
+            supports_vetkd_payload,
+        } = self;
+
+        dkg.hash(state);
+        idkg.hash(state);
+        // supports_vetkd_payload purposefully ignored
+        if *supports_vetkd_payload {
+            vetkd.hash(state);
+        }
+    }
 }
 
 impl SummaryPayload {
@@ -50,6 +70,15 @@ impl SummaryPayload {
             dkg_version
         }
     }
+
+    pub fn new(dkg: dkg::Summary, idkg: idkg::Summary) -> Self {
+        Self {
+            dkg,
+            idkg,
+            vetkd: None,
+            supports_vetkd_payload: false,
+        }
+    }
 }
 
 /// Block payload is either summary or a data payload).
@@ -68,7 +97,10 @@ impl BlockPayload {
     pub fn is_empty(&self) -> bool {
         match self {
             BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dkg.messages.is_empty() && data.idkg.is_none()
+                data.batch.is_empty()
+                    && data.dkg.messages.is_empty()
+                    && data.idkg.is_none()
+                    && data.vetkd.is_none()
             }
             _ => false,
         }
@@ -118,6 +150,14 @@ impl BlockPayload {
         match self {
             BlockPayload::Data(data) => data.idkg.as_ref(),
             BlockPayload::Summary(data) => data.idkg.as_ref(),
+        }
+    }
+
+    /// Returns a reference to VetKdPayload if it exists.
+    pub fn as_vetkd(&self) -> Option<&vetkd::VetKdPayload> {
+        match self {
+            BlockPayload::Data(data) => data.vetkd.as_ref(),
+            BlockPayload::Summary(data) => data.vetkd.as_ref(),
         }
     }
 
@@ -234,21 +274,5 @@ impl Payload {
 impl AsRef<BlockPayload> for Payload {
     fn as_ref(&self) -> &BlockPayload {
         self.payload.get_value().as_ref()
-    }
-}
-
-impl From<dkg::Payload> for BlockPayload {
-    fn from(payload: dkg::Payload) -> BlockPayload {
-        match payload {
-            dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
-                dkg: summary,
-                idkg: None,
-            }),
-            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg,
-                idkg: idkg::Payload::default(),
-            }),
-        }
     }
 }

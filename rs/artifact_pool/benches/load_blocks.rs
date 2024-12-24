@@ -68,6 +68,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                 },
                 dkg: DkgDataPayload::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
                 idkg: None,
+                vetkd: None,
             }),
         );
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));

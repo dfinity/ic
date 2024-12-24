@@ -8,6 +8,7 @@ use crate::{
         NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
+    signature::BasicSigned,
     ReplicaVersion,
 };
 use ic_protobuf::types::v1 as pb;
