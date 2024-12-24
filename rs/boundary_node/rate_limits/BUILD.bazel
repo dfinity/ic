@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/nns/constants",
+    "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",

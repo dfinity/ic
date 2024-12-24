@@ -5,11 +5,13 @@ use crate::confidentiality_formatting::{
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::getter::{ConfigGetter, EntityGetter, IncidentGetter, RuleGetter};
+use crate::logs::{self, Log, LogEntry, Priority, P0};
 use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics, METRICS,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
+use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
@@ -19,7 +21,7 @@ use rate_limits_api::{
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse,
     GetRulesByIncidentIdResponse, IncidentId, InitArg, InputConfig, RuleId, Version,
 };
-use std::{borrow::BorrowMut, sync::Arc, time::Duration};
+use std::{borrow::BorrowMut, str::FromStr, sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
@@ -182,6 +184,50 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         "/metrics" => with_canister_state(|state| {
             with_metrics_registry(|registry| export_metrics_as_http_response(registry, state))
         }),
+        "/logs" => {
+            use serde_json;
+
+            let max_skip_timestamp = match request.raw_query_param("time") {
+                Some(arg) => match u64::from_str(arg) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return HttpResponseBuilder::bad_request()
+                            .with_body_and_content_length("failed to parse the 'time' parameter")
+                            .build()
+                    }
+                },
+                None => 0,
+            };
+
+            let mut entries: Log = Default::default();
+            for entry in export_logs(&logs::P0) {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::P0,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+            for entry in export_logs(&logs::P1) {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::P1,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+            entries
+                .entries
+                .retain(|entry| entry.timestamp >= max_skip_timestamp);
+            HttpResponseBuilder::ok()
+                .header("Content-Type", "application/json; charset=utf-8")
+                .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+                .build()
+        }
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
@@ -217,8 +263,20 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                         });
                         ("success", "")
                     }
-                    Ok((Err(_),)) => ("failure", "calling_canister_method_failed"),
-                    Err(_) => ("failure", "canister_call_rejected"),
+                    Ok((Err(err),)) => {
+                        log!(
+                        P0,
+                        "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
+                    );
+                        ("failure", "calling_canister_method_failed")
+                    }
+                    Err(err) => {
+                        log!(
+                        P0,
+                        "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
+                    );
+                        ("failure", "canister_call_rejected")
+                    }
                 };
 
             // Update metric.
