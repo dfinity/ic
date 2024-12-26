@@ -8,9 +8,9 @@ network:
       interfaces: [{INTERFACES}]
       parameters:
         mode: active-backup
-        mii-monitor-interval: 5
-        up-delay: 10000
-        down-delay: 10000
+        mii-monitor-interval: 5s
+        up-delay: 500ms
+        down-delay: 500ms
       macaddress: {MAC_ADDRESS}
       mtu: 1500
       optional: true
