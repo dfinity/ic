@@ -8949,40 +8949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-icrc1-index"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "async-trait",
- "candid",
- "candid_parser",
- "ciborium",
- "ic-base-types",
- "ic-canister-profiler",
- "ic-canisters-http-types",
- "ic-cdk 0.16.0",
- "ic-cdk-macros 0.9.0",
- "ic-cdk-timers",
- "ic-icrc1",
- "ic-icrc1-ledger",
- "ic-icrc1-tokens-u64",
- "ic-ledger-canister-core",
- "ic-ledger-core",
- "ic-ledger-hash-of",
- "ic-ledger-suite-state-machine-tests",
- "ic-metrics-encoder",
- "ic-rosetta-test-utils",
- "ic-state-machine-tests",
- "ic-test-utilities-load-wasm",
- "icrc-ledger-types",
- "num-traits",
- "proptest",
- "scopeguard",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "ic-icrc1-index-ng"
 version = "0.9.0"
 dependencies = [
@@ -8999,7 +8965,6 @@ dependencies = [
  "ic-cdk-timers",
  "ic-crypto-sha2",
  "ic-icrc1",
- "ic-icrc1-index",
  "ic-icrc1-ledger",
  "ic-icrc1-test-utils",
  "ic-icrc1-tokens-u256",
