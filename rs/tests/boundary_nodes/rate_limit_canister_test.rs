@@ -9,9 +9,10 @@ Runbook:
 3. Install the counter canister, which is used for testing enforced rate-limits.
 4. Create an `ic-agent` instance associated with an API boundary node.
 5. Verify that initially the agent can successfully interact with the counter canister by sending e.g. an update call.
-6. Add a rate-limit rule to the rate-limit canister, which completely blocks requests to the counter canister.
+6. Add two rate-limit rules to the rate-limit canister, which completely block requests to two canisters: counter and rate-limit (self blocking).
 7. Verify that the agent can no longer send requests to the counter canister after API boundary node enforces the new rule.
-8. Add a rate-limit rule, which unblocks requests to the counter canister.
+8. Add a rate-limit rule, which explicitly unblocks requests to the counter canister.
+   Setting this rule should still be possible despite the rate-limit canister being blocked itself (as there is an explicit allow-rule in the ic-boundary).
 9. Verify that the agent can send requests to the counter canister again, ensuring that updated rate-limit rules are enforced correctly by API boundary nodes.
 
 end::catalog[] */
@@ -179,17 +180,36 @@ async fn test_async(env: TestEnv) {
 
     info!(
         &logger,
-        "Step 6. Add a rate-limit rule that blocks requests to counter canister"
+        "Step 6. Add two rate-limit rules that block requests to counter and rate-limit canisters"
     );
 
-    set_rate_limit_rule(
+    set_rate_limit_rules(
         &api_bn_agent,
         rate_limit_id,
-        RateLimitRule {
-            canister_id: Some(counter_canister_id),
-            limit: Action::Block,
-            ..Default::default()
-        },
+        vec![
+            InputRule {
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
+                rule_raw: RateLimitRule {
+                    canister_id: Some(counter_canister_id),
+                    limit: Action::Block,
+                    ..Default::default()
+                }
+                .to_bytes_json()
+                .unwrap(),
+                description: "Block requests to counter canister".to_string(),
+            },
+            InputRule {
+                incident_id: "34bb6dee-9646-4543-ba62-af546ea5565b".to_string(),
+                rule_raw: RateLimitRule {
+                    canister_id: Some(rate_limit_id),
+                    limit: Action::Block,
+                    ..Default::default()
+                }
+                .to_bytes_json()
+                .unwrap(),
+                description: "Block requests to rate-limit canister".to_string(),
+            },
+        ],
     )
     .await;
 
@@ -223,14 +243,20 @@ async fn test_async(env: TestEnv) {
         "Step 8. Add a rate-limit rule, which unblocks requests to the counter canister"
     );
 
-    set_rate_limit_rule(
+    set_rate_limit_rules(
         &api_bn_agent,
         rate_limit_id,
-        RateLimitRule {
-            canister_id: Some(counter_canister_id),
-            limit: Action::Limit(300, Duration::from_secs(60)),
-            ..Default::default()
-        },
+        vec![InputRule {
+            incident_id: "e6a27788-01a5-444a-9035-ab3af3ad84f3".to_string(),
+            rule_raw: RateLimitRule {
+                canister_id: Some(counter_canister_id),
+                limit: Action::Limit(300, Duration::from_secs(60)),
+                ..Default::default()
+            }
+            .to_bytes_json()
+            .unwrap(),
+            description: "Unblock requests to the counter canister".to_string(),
+        }],
     )
     .await;
 
@@ -260,18 +286,14 @@ async fn test_async(env: TestEnv) {
     .expect("failed to check that canister becomes reachable");
 }
 
-async fn set_rate_limit_rule(
+async fn set_rate_limit_rules(
     agent: &Agent,
     rate_limit_canister_id: Principal,
-    rule: RateLimitRule,
+    rules: Vec<InputRule>,
 ) {
     let args = Encode!(&InputConfig {
         schema_version: 1,
-        rules: vec![InputRule {
-            incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
-            rule_raw: rule.to_bytes_json().unwrap(),
-            description: "Setting a rate-limit rule for testing".to_string(),
-        },],
+        rules,
     })
     .unwrap();
 
