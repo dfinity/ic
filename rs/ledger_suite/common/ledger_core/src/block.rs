@@ -2,8 +2,11 @@ use crate::timestamp::TimeStamp;
 
 use candid::CandidType;
 use ic_ledger_hash_of::HashOf;
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use std::borrow::Cow;
 
 /// Position of a block in the chain. The first block has position 0.
 pub type BlockIndex = u64;
@@ -53,6 +56,18 @@ impl<Account> From<Account> for FeeCollector<Account> {
             block_index: None,
         }
     }
+}
+
+impl Storable for EncodedBlock {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(self.clone().into_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        EncodedBlock::from_vec(bytes.to_vec())
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 pub trait BlockType: Sized + Clone {

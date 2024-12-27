@@ -23,7 +23,8 @@ use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
     ledger::{
-        apply_transaction_no_trimming, block_locations, LedgerContext, LedgerData, TransactionInfo,
+        apply_transaction_no_trimming, block_locations, ArchivelessBlockchain, LedgerContext,
+        LedgerData, TransactionInfo,
     },
     range_utils,
 };
@@ -36,6 +37,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::StableLog;
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -496,6 +498,8 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCKS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(4);
+const BLOCKS_DATA_MEMORY_ID: MemoryId = MemoryId::new(5);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -521,6 +525,12 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<Account, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // vector storing ledger blocks.
+    pub static BLOCKS_MEMORY: RefCell<StableLog<EncodedBlock, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCKS_INDEX_MEMORY_ID),
+        memory_manager.borrow().get(BLOCKS_DATA_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
+
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -555,6 +565,8 @@ pub struct Ledger {
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    #[serde(default)]
+    stable_blockchain: StableBlockchain,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -645,6 +657,7 @@ impl Ledger {
             approvals: Default::default(),
             stable_approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
+            stable_blockchain: StableBlockchain::default(),
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
@@ -804,6 +817,14 @@ impl LedgerData for Ledger {
 
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &mut self.blockchain
+    }
+
+    fn archiveless_blockchain(&self) -> &dyn ArchivelessBlockchain {
+        &self.stable_blockchain
+    }
+
+    fn archiveless_blockchain_mut(&mut self) -> &mut dyn ArchivelessBlockchain {
+        &mut self.stable_blockchain
     }
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
@@ -1001,6 +1022,22 @@ impl Ledger {
         (locations.local_blocks.start, local_blocks, archived_blocks)
     }
 
+    fn query_archiveless_blocks<B>(
+        &self,
+        start: BlockIndex,
+        length: usize,
+        decode: impl Fn(&EncodedBlock) -> B,
+    ) -> Vec<B> {
+        let range = range_utils::make_range(start, length);
+        let max_range = range_utils::take(&range, MAX_TRANSACTIONS_PER_REQUEST);
+
+        self.stable_blockchain
+            .get_blocks(max_range)
+            .iter()
+            .map(decode)
+            .collect()
+    }
+
     /// Returns transactions in the specified range.
     pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
         let (first_index, local_transactions, archived_transactions) = self.query_blocks(
@@ -1019,6 +1056,19 @@ impl Ledger {
             log_length: Nat::from(self.blockchain.chain_length()),
             transactions: local_transactions,
             archived_transactions,
+        }
+    }
+
+    /// Returns blocks in the specified range.
+    pub fn get_archiveless_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
+        let blocks = self.query_archiveless_blocks(start, length, encoded_block_to_generic_block);
+
+        GetBlocksResponse {
+            first_index: Nat::from(start),
+            chain_length: self.stable_blockchain.len(),
+            certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
+            blocks,
+            archived_blocks: vec![],
         }
     }
 
@@ -1297,5 +1347,39 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBlockchain {}
+
+impl ArchivelessBlockchain for StableBlockchain {
+    fn add_block(&mut self, block: EncodedBlock) -> Result<u64, String> {
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+            blocks
+                .append(&block)
+                .map_err(|e| format!("failed to add block: {:?}", e))
+        })
+    }
+
+    fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock> {
+        let mut result = vec![];
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            let available_range = range_utils::make_range(0, self.len() as usize);
+            let intersection = range_utils::intersect(&range, &available_range)
+                .unwrap_or_else(|_| range_utils::make_range(0, 0));
+            for i in intersection {
+                result.push(blocks.get(i).unwrap())
+            }
+        });
+        result
+    }
+
+    fn len(&self) -> u64 {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
