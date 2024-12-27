@@ -38,6 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
@@ -52,7 +53,6 @@ use std::{
     convert::TryFrom,
     fmt::Write,
 };
-use time;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -414,15 +414,18 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
-            validate_and_render_upgrade_sns_to_next_version(
-                upgrade_sns,
-                env,
-                root_canister_id,
-                current_version,
-            )
-            .await
+            match governance_proto.deployed_version_or_err() {
+                Ok(current_version) => {
+                    validate_and_render_upgrade_sns_to_next_version(
+                        upgrade_sns,
+                        env,
+                        root_canister_id,
+                        current_version,
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
+            }
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
@@ -1713,21 +1716,6 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
-/// Attempts to format `` as a human-readable string.
-///
-/// For example:
-/// ```
-/// assert_eq!(format_timestamp(1732896850), Some("2024-11-29 16:14:10 UTC".to_string()));
-/// ```
-fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
-    let timestamp_seconds = i64::try_from(timestamp_seconds).ok()?;
-    let dt_offset = time::OffsetDateTime::from_unix_timestamp(timestamp_seconds).ok()?;
-    let format =
-        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
-            .ok()?;
-    dt_offset.format(&format).ok()
-}
-
 /// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
 /// Invalidates the action in the following cases:
 /// - There are no pending upgrades.
@@ -1751,11 +1739,7 @@ fn validate_and_render_advance_sns_target_version_proposal(
 
     let time_of_validity = {
         let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
-        // This fallback should not occur unless `timestamp_seconds` is outside of the range
-        // from +1970-01-01 00:00:00 UTC (0)
-        // till +9999-12-31 23:59:59 UTC (253402300799).
-        format_timestamp(timestamp_seconds)
-            .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
+        format_timestamp_for_humans(timestamp_seconds)
     };
 
     let current_target_versions_render =
@@ -3250,6 +3234,7 @@ mod tests {
             0,
             0,
             0,
+            0,
         )
     }
 
@@ -4560,6 +4545,7 @@ Version {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         })
         .unwrap();
     }
@@ -4686,6 +4672,7 @@ Payload rendering here"#
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
                 wasm_memory_limit: Some(1_000_000_000),
+                wasm_memory_threshold: Some(1_000_000),
             })
             .unwrap();
         assert_eq!(

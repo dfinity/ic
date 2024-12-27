@@ -16,7 +16,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:6a548dd4cfee96260b6938fddaa74abc86fc0df5c407d4eef135694b64c288e3
+    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -163,6 +163,14 @@ jobs:
           BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: eng-crypto-alerts
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   dependency-scan-nightly:
     name: Dependency Scan Nightly

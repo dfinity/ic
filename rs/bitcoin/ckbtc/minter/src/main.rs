@@ -8,6 +8,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
 };
@@ -22,7 +23,7 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
-    state::eventlog::{Event, GetEventsArg},
+    state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
@@ -33,7 +34,7 @@ use std::str::FromStr;
 fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
-            storage::record_event(&Event::Init(args.clone()));
+            storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
             lifecycle::init::init(args);
             setup_tasks();
 
@@ -223,7 +224,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
 #[query]
 fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
-        kyt_fee: s.kyt_fee,
+        check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
@@ -231,7 +232,7 @@ fn get_minter_info() -> MinterInfo {
 
 #[query]
 fn get_deposit_fee() -> u64 {
-    read_state(|s| s.kyt_fee)
+    read_state(|s| s.check_fee)
 }
 
 #[query(hidden = true)]

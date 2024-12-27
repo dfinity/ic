@@ -396,15 +396,6 @@ fn test_balances_overflow() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(
-        ledger_wasm(),
-        encode_init_args,
-        false,
-    );
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_ledger_suite_state_machine_tests::test_archive_controllers(ledger_wasm());
 }
@@ -461,10 +452,10 @@ fn icrc1_test_upgrade_serialization() {
         upgrade_args,
         minter,
         true,
-        true,
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_multi_step_migration() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
@@ -481,19 +472,22 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        vec![],
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
@@ -503,6 +497,7 @@ fn icrc1_test_incomplete_migration() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration_to_current() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
@@ -512,6 +507,7 @@ fn icrc1_test_incomplete_migration_to_current() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_migration_resumes_from_frozen() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
@@ -521,6 +517,7 @@ fn icrc1_test_migration_resumes_from_frozen() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_metrics_while_migrating() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(

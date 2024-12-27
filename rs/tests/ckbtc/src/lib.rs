@@ -2,11 +2,10 @@ use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_interface::{Config, Fees, Flag, Network};
-use ic_btc_kyt::{
-    BtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg, KytMode as NewKytMode,
-    UpgradeArg as NewKytUpgradeArg,
+use ic_btc_checker::{
+    BtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
+use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
 use ic_ckbtc_minter::{
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
@@ -70,14 +69,12 @@ pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
-// const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
-
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 
-pub const KYT_FEE: u64 = 1001;
+pub const CHECK_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
@@ -392,9 +389,10 @@ pub async fn install_minter(
     ledger_id: CanisterId,
     logger: &Logger,
     max_time_in_queue_nanos: u64,
-    kyt_canister_id: CanisterId,
+    btc_checker_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
+    #[allow(deprecated)]
     let args = CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
@@ -403,8 +401,10 @@ pub async fn install_minter(
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
-        kyt_fee: Some(KYT_FEE),
-        kyt_principal: Some(kyt_canister_id),
+        check_fee: Some(CHECK_FEE),
+        btc_checker_principal: Some(btc_checker_canister_id),
+        kyt_principal: None,
+        kyt_fee: None,
     };
 
     let minter_arg = MinterArg::Init(args);
@@ -420,9 +420,12 @@ pub async fn install_minter(
     canister.canister_id()
 }
 
-pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
+pub async fn install_btc_checker(
+    btc_checker_canister: &mut Canister<'_>,
+    env: &TestEnv,
+) -> CanisterId {
     let logger = env.logger();
-    info!(logger, "Installing kyt canister ...");
+    info!(logger, "Installing btc checker canister ...");
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
@@ -430,32 +433,37 @@ pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> Cani
         "https://{}:{}@[{}]:{}",
         BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
     );
-    let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
+    let init_args = CheckArg::InitArg(CheckerInitArg {
         btc_network: BtcNetwork::Regtest { json_rpc_url },
-        kyt_mode: NewKytMode::Normal,
+        check_mode: CheckMode::Normal,
+        num_subnet_nodes: 1,
     });
 
     install_rust_canister_from_path(
-        kyt_canister,
+        btc_checker_canister,
         get_dependency_path(
-            env::var("IC_BTC_KYT_WASM_PATH").expect("IC_BTC_KYT_WASM_PATH not set"),
+            env::var("IC_BTC_CHECKER_WASM_PATH").expect("IC_BTC_CHECKER_WASM_PATH not set"),
         ),
-        Some(Encode!(&kyt_init_args).unwrap()),
+        Some(Encode!(&init_args).unwrap()),
     )
     .await;
-    kyt_canister.canister_id()
+    btc_checker_canister.canister_id()
 }
 
-pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {
-    let kyt_upgrade_arg = NewKytArg::UpgradeArg(Some(NewKytUpgradeArg {
-        kyt_mode: Some(mode),
+pub async fn upgrade_btc_checker(
+    btc_checker_canister: &mut Canister<'_>,
+    mode: CheckMode,
+) -> CanisterId {
+    let upgrade_arg = CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
+        check_mode: Some(mode),
+        ..CheckerUpgradeArg::default()
     }));
 
-    kyt_canister
-        .upgrade_to_self_binary(Encode!(&kyt_upgrade_arg).unwrap())
+    btc_checker_canister
+        .upgrade_to_self_binary(Encode!(&upgrade_arg).unwrap())
         .await
         .expect("failed to upgrade the canister");
-    kyt_canister.canister_id()
+    btc_checker_canister.canister_id()
 }
 
 pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {

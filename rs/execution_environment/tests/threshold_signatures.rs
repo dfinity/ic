@@ -3,7 +3,8 @@ use ic_base_types::PrincipalId;
 use ic_management_canister_types::{
     self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
     EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
-    SchnorrPublicKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
+    SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrAux,
+    SignWithSchnorrReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
@@ -33,9 +34,16 @@ fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
     })
 }
 
-fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
+fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
+        name: name.to_string(),
+    })
+}
+
+fn make_bip340_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
         name: name.to_string(),
     })
 }
@@ -78,11 +86,25 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
-        Method::SignWithSchnorr => ic00::SignWithSchnorrArgs {
-            message: vec![],
-            derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id),
-            taproot_tree_root: None,
+        Method::SignWithSchnorr => {
+            let key_id = into_inner_schnorr(key_id);
+
+            let aux = match key_id.algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => {
+                    let aux = SignWithBip341Aux {
+                        merkle_root_hash: vec![0; 32].into(),
+                    };
+                    Some(SignWithSchnorrAux::Bip341(aux))
+                }
+                _ => None,
+            };
+
+            ic00::SignWithSchnorrArgs {
+                message: vec![],
+                derivation_path: DerivationPath::new(vec![]),
+                key_id,
+                aux,
+            }
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -193,7 +215,11 @@ fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPub
         ),
         (
             Method::ComputeInitialIDkgDealings,
-            make_schnorr_key("some_key"),
+            make_ed25519_key("some_key"),
+        ),
+        (
+            Method::ComputeInitialIDkgDealings,
+            make_bip340_key("some_key"),
         ),
     ]
 }
@@ -214,7 +240,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(nns_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
         let canister_id = create_universal_canister(&env);
 
@@ -270,7 +296,7 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -349,7 +375,13 @@ fn test_sign_with_threshold_key_fee_charged() {
         ),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("some_key"),
+            make_ed25519_key("some_key"),
+            1_000_000,
+            2_000_000,
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("some_key"),
             1_000_000,
             2_000_000,
         ),
@@ -363,7 +395,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -416,7 +448,12 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
         (Method::SignWithECDSA, make_ecdsa_key("some_key"), 2_000_000),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("some_key"),
+            make_ed25519_key("some_key"),
+            2_000_000,
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("some_key"),
             2_000_000,
         ),
     ];
@@ -429,7 +466,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -467,8 +504,13 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         ),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("correct_key"),
-            make_schnorr_key("wrong_key"),
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("wrong_key"),
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("correct_key"),
+            make_bip340_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -478,7 +520,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(correct_key.clone())
+            .with_chain_key(correct_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -487,7 +529,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or disabled threshold key: {}, existing enabled keys: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),
@@ -510,8 +552,14 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
         (
             Method::SchnorrPublicKey,
             Method::SignWithSchnorr,
-            make_schnorr_key("signing_disabled_key"),
-            make_schnorr_key("unknown_key"),
+            make_ed25519_key("signing_disabled_key"),
+            make_ed25519_key("unknown_key"),
+        ),
+        (
+            Method::SchnorrPublicKey,
+            Method::SignWithSchnorr,
+            make_bip340_key("signing_disabled_key"),
+            make_bip340_key("unknown_key"),
         ),
     ];
     for (public_key_method, sign_with_method, signing_disabled_key, unknown_key) in test_cases {
@@ -522,7 +570,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
             .with_subnet_type(SubnetType::System)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_signing_disabled_idkg_key(signing_disabled_key.clone())
+            .with_disabled_chain_key(signing_disabled_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -554,7 +602,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 signing_disabled_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
 
         // Requesting non-existent public key (should fail).
@@ -576,7 +624,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 unknown_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
     }
 }
@@ -591,8 +639,13 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         ),
         (
             Method::SchnorrPublicKey,
-            make_schnorr_key("correct_key"),
-            make_schnorr_key("wrong_key"),
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("wrong_key"),
+        ),
+        (
+            Method::SchnorrPublicKey,
+            make_bip340_key("correct_key"),
+            make_bip340_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -602,7 +655,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(correct_key.clone())
+            .with_chain_key(correct_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -624,7 +677,8 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
 fn test_sign_with_threshold_key_fee_ignored_for_nns() {
     let test_cases = vec![
         (Method::SignWithECDSA, make_ecdsa_key("some_key")),
-        (Method::SignWithSchnorr, make_schnorr_key("some_key")),
+        (Method::SignWithSchnorr, make_ed25519_key("some_key")),
+        (Method::SignWithSchnorr, make_bip340_key("some_key")),
     ];
     for (method, key_id) in test_cases {
         let fee = 1_000_000;
@@ -636,7 +690,7 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -672,7 +726,8 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
 fn test_sign_with_threshold_key_queue_fills_up() {
     let test_cases = vec![
         (Method::SignWithECDSA, make_ecdsa_key("some_key"), 20),
-        (Method::SignWithSchnorr, make_schnorr_key("some_key"), 20),
+        (Method::SignWithSchnorr, make_ed25519_key("some_key"), 20),
+        (Method::SignWithSchnorr, make_bip340_key("some_key"), 20),
     ];
     for (method, key_id, max_queue_size) in test_cases {
         let fee = 1_000_000;
@@ -686,7 +741,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             // Turn off automatic ECDSA signatures to fill up the queue.
             .with_ecdsa_signing_enabled(false)
             // Turn off automatic Schnorr signatures to fill up the queue.

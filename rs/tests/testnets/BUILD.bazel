@@ -1,0 +1,339 @@
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+# the "_test" postfixes in names are dropped on purpose since this target is meant for interactive use.
+
+system_test(
+    name = "single_large_node",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "single_app_large_node",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "single_app_large_node_with_nns",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "small",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "small_high_perf",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "from_config",
+    env = NNS_CANISTER_ENV,
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/dre/utils:os_qualification_utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde_json",
+    ],
+)
+
+system_test_nns(
+    name = "small_nns",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "small_with_api_bn",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "small_with_query_stats",
+    env = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sns_testing",
+    env = SNS_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@sns_aggregator//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "medium",
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "large",
+    env = SNS_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@sns_aggregator//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "src_testing",
+    env = SNS_CANISTER_ENV | {
+        "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    flaky = False,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@sns_aggregator//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rosetta-api/tvl/xrc_mock",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "//rs/types/base_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-xrc-types",
+    ],
+)
+
+# recovered_mainnet_nns is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
+system_test(
+    name = "recovered_mainnet_nns",
+    colocated_test_driver_vm_forward_ssh_agent = True,
+    colocated_test_driver_vm_required_host_features = ["dc=zh1"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+        "boot_image_minimal_size_gibibytes": 100,
+    },
+    env = NNS_CANISTER_ENV,
+    env_inherit = ["SSH_AUTH_SOCK"],
+    flaky = True,
+    tags = [
+        "dynamic_testnet",
+        "local",
+        "manual",
+        "no-cache",
+        "no-sandbox",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/ic_mainnet_nns_recovery",
+        "@crate_index//:anyhow",
+    ],
+)

@@ -100,17 +100,7 @@ fn test_upper_bound() {
         PrincipalId::new_anonymous(),
     )
     .unwrap_err();
-    assert!(
-        err.contains(
-            format!(
-                "Canister call exceeded the limit of {} instructions in the call context.",
-                700_000
-            )
-            .as_str()
-        ),
-        "Error was: {:?}",
-        err
-    );
+    assert!(err.contains("OverCallContextError"), "Error was: {:?}", err);
 
     update_with_sender::<BreakMessageParams, ()>(
         &state_machine,

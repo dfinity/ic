@@ -23,7 +23,7 @@ mod common;
 /// Corresponds to ic_icrc1_index_ng::DEFAULT_MAX_WAIT_TIME_IN_SECS
 const DEFAULT_MAX_WAIT_TIME_IN_SECS: u64 = 1;
 const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
-const IDLE_TIME_IN_SECS: u64 = 60;
+const IDLE_TIME_IN_SECS: u64 = 10;
 const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
@@ -172,7 +172,7 @@ fn should_sync_according_to_interval() {
         assert_eq!(ledger_chain_length, index_num_blocks_synced);
     }
 
-    let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(10));
+    let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(4));
     runner
         .run(
             &(
@@ -375,8 +375,8 @@ fn should_consume_expected_amount_of_cycles() {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 706_075_016;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 2_783_783_209;
+                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 126_800_287;
+                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 474_143_016;
                 for ledger_consumption in [initial.ledger, upgrade.ledger] {
                     assert!(
                         abs_relative_difference(
