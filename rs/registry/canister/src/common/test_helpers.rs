@@ -8,21 +8,24 @@ use ic_nns_test_utils::registry::{
     new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_keys::make_data_center_record_key;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_registry_transport::{insert, upsert};
+use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::collections::BTreeMap;
+use std::f32::consts::E;
 
 pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mut registry = Registry::new();
@@ -101,6 +104,7 @@ pub fn prepare_registry_with_nodes(
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
+    let node_operator_principal_id = PrincipalId::new_user_test_id(1999);
     let node_ids_and_dkg_pks: BTreeMap<NodeId, PublicKey> = (0..nodes)
         .map(|id| {
             let (valid_pks, node_id) = new_node_keys_and_node_id();
@@ -117,21 +121,11 @@ pub fn prepare_registry_with_nodes(
                     ip_addr: format!("128.0.{effective_id}.1"),
                     ..Default::default()
                 }),
-                node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
+                node_operator_id: node_operator_principal_id.into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
                 ..Default::default()
             };
-            let node_operator_principal_id = PrincipalId::new_user_test_id(999);
-            let node_operator_record = NodeOperatorRecord {
-                node_allowance: 28,
-                node_provider_principal_id: node_operator_principal_id.into_vec(),
-                ..Default::default()
-            };
-            mutations.push(insert(
-                make_node_operator_record_key(node_operator_principal_id).into_bytes(),
-                node_operator_record.encode_to_vec(),
-            ));
             mutations.append(&mut make_add_node_registry_mutations(
                 node_id,
                 node_record,
