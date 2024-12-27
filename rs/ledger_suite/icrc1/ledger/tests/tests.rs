@@ -1431,7 +1431,9 @@ fn test_get_archiveless_blocks() {
             .query(ledger_id, "get_archiveless_blocks", block_args)
             .expect("Unable to call get_blocks")
             .bytes();
-        let new_blocks = Decode!(&res, GetBlocksResponse).unwrap();        
+        let new_blocks = Decode!(&res, GetBlocksResponse).unwrap();
+        assert_eq!(old_blocks.blocks, new_blocks.blocks);
+        assert_eq!(old_blocks.blocks.len(), num_blocks as usize);
         num_blocks += 100;
     }
 }
