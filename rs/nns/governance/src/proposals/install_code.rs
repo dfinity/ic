@@ -110,6 +110,7 @@ impl InstallCode {
             arg,
             compute_allocation,
             memory_allocation,
+            chunked_canister_wasm: None,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
     }
