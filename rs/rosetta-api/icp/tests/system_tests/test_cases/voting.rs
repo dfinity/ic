@@ -3,14 +3,17 @@ use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
     utils::{get_pending_proposals, test_identity},
 };
+use candid::Principal;
 use futures::future::join_all;
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaRegisterVoteArgs, RosettaSetNeuronDissolveDelayArgs,
 };
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::Motion;
 use ic_nns_governance_api::pb::v1::ProposalInfo;
+use ic_nns_governance_api::pb::v1::Vote;
 use ic_nns_governance_api::pb::v1::{proposal::Action, Proposal};
 use ic_rosetta_api::models::ConstructionSubmitResponse;
 use icp_ledger::AccountIdentifier;
@@ -20,22 +23,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
-
-use candid::Principal;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-
 use tracing_subscriber;
-
-use ic_nns_governance_api::pb::v1::Vote;
 
 // Seems trivial but helps with readability when using indexes.
 const NEURON_INDEX: [u64; 4] = [0, 1, 2, 3];
-
 const VOTE_YES: i32 = Vote::Yes as i32;
 const VOTE_NO: i32 = Vote::No as i32;
 const VOTE_UNSPECIFIED: i32 = Vote::Unspecified as i32;
 
-const DISSOLVE_DELAY_6_MONTHS: u64 = 60 * 60 * 24 * 31 * 6 + 1;
+const DISSOLVE_DELAY_6_MONTHS: u64 = 60 * 60 * 24 * 31 * 6 + 100;
 const INITIAL_BALANCE: u64 = 100_000_000_000;
 
 lazy_static! {
@@ -78,6 +74,7 @@ fn test_neuron_voting() {
         let all_proposals_from_governance = governance_client.get_pending_proposals().await;
 
         assert_eq!(all_proposals.len(), 3);
+        assert_eq!(all_proposals_from_governance.len(), 3);
 
         let expected_proposals = vec![
             Proposal {
@@ -122,12 +119,12 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[0], NEURON_INDEX[1], Vote::Yes)
             .await
             .unwrap();
-        let pending_proposals = governance_client.get_pending_proposals().await;
-        let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
-        assert_eq!(pending_proposals.len(), 3);
-        assert_eq!(pending_proposals_from_governance.len(), 3);
+        let voted_proposal_info = governance_client
+            .get_proposal_info(all_proposals_from_governance[0].id.unwrap())
+            .await
+            .unwrap();
         assert_eq!(
-            extract_votes(&pending_proposals_from_governance[0], &neuron_ids),
+            extract_votes(&voted_proposal_info, &neuron_ids),
             vec![VOTE_YES, VOTE_YES, VOTE_UNSPECIFIED, VOTE_UNSPECIFIED]
         );
 
@@ -138,6 +135,14 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[0], NEURON_INDEX[3], Vote::No)
             .await
             .unwrap();
+        let voted_proposal_info = governance_client
+            .get_proposal_info(all_proposals_from_governance[0].id.unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            extract_votes(&voted_proposal_info, &neuron_ids),
+            vec![VOTE_YES, VOTE_YES, VOTE_NO, VOTE_NO]
+        );
 
         // Verify the first proposal is no longer pending
         let pending_proposals = get_pending_proposals(&env).await.unwrap();
@@ -158,22 +163,30 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[1], NEURON_INDEX[2], Vote::No)
             .await
             .unwrap();
-        let pending_proposals = get_pending_proposals(&env).await.unwrap();
-        let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
-        assert_eq!(pending_proposals.len(), 2);
-        assert_eq!(pending_proposals_from_governance.len(), 2);
+        let voted_proposal_info = governance_client
+            .get_proposal_info(all_proposals_from_governance[1].id.unwrap())
+            .await
+            .unwrap();
         assert_eq!(
-            extract_votes(&pending_proposals_from_governance[0], &neuron_ids),
+            extract_votes(&voted_proposal_info, &neuron_ids),
             vec![VOTE_YES, VOTE_UNSPECIFIED, VOTE_NO, VOTE_UNSPECIFIED]
         );
+
         // Register remaining votes for the second proposal
         register_vote(&env, proposal_ids[1], NEURON_INDEX[1], Vote::Yes)
             .await
             .unwrap();
-
         register_vote(&env, proposal_ids[1], NEURON_INDEX[3], Vote::No)
             .await
             .unwrap();
+        let voted_proposal_info = governance_client
+            .get_proposal_info(all_proposals_from_governance[1].id.unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            extract_votes(&voted_proposal_info, &neuron_ids),
+            vec![VOTE_YES, VOTE_YES, VOTE_NO, VOTE_NO]
+        );
 
         // Verify the second proposal is no longer pending
         let pending_proposals = get_pending_proposals(&env).await.unwrap();
@@ -188,13 +201,12 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[2], NEURON_INDEX[3], Vote::No)
             .await
             .unwrap();
-
-        let pending_proposals = governance_client.get_pending_proposals().await;
-        let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
-        assert_eq!(pending_proposals_from_governance.len(), 1);
-        assert_eq!(pending_proposals.len(), 1);
+        let voted_proposal_info = governance_client
+            .get_proposal_info(all_proposals_from_governance[2].id.unwrap())
+            .await
+            .unwrap();
         assert_eq!(
-            extract_votes(&pending_proposals_from_governance[0], &neuron_ids),
+            extract_votes(&voted_proposal_info, &neuron_ids),
             vec![VOTE_YES, VOTE_UNSPECIFIED, VOTE_UNSPECIFIED, VOTE_NO]
         );
 
@@ -213,7 +225,7 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[2], NEURON_INDEX[2], Vote::No)
             .await
             .unwrap();
-        let pending_proposals = governance_client.get_pending_proposals().await;
+        let pending_proposals = get_pending_proposals(&env).await.unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(pending_proposals_from_governance.len(), 0);
         assert_eq!(pending_proposals.len(), 0);

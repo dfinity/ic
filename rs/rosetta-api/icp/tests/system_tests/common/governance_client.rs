@@ -104,4 +104,16 @@ impl GovernanceClient {
             .expect("Error while calling endpoint.");
         Decode!(res.as_slice(), Vec<ProposalInfo>).expect("Error while decoding response.")
     }
+
+    pub async fn get_proposal_info(&self, proposal_id: ProposalId) -> Option<ProposalInfo> {
+        let arg = Encode!(&proposal_id.id).expect("Error while encoding arg.");
+        let res = self
+            .agent
+            .query(&self.governance_principal, "get_proposal_info")
+            .with_arg(arg)
+            .call()
+            .await
+            .expect("Error while calling endpoint.");
+        Decode!(res.as_slice(), Option<ProposalInfo>).expect("Error while decoding response.")
+    }
 }
