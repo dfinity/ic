@@ -44,7 +44,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
     },
-    path = "//:mainnet-canisters.json",
+    path = "//:mainnet-canister-revisions.json",
     reponames = {
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",

@@ -1,8 +1,8 @@
 //! Replica -- Internet Computer
 
-use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
+use ic_http_endpoints_async_utils::{abort_on_panic, shutdown_signal};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;

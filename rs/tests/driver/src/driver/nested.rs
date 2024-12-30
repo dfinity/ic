@@ -140,13 +140,13 @@ impl NestedVms for TestEnv {
 
         let host_mac = calculate_deterministic_mac(
             &seed_mac,
-            DeploymentEnvironment::Mainnet,
+            DeploymentEnvironment::Testnet,
             IpVariant::V6,
             NodeType::HostOS,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
-            DeploymentEnvironment::Mainnet,
+            DeploymentEnvironment::Testnet,
             IpVariant::V6,
             NodeType::GuestOS,
         );

@@ -9,6 +9,8 @@ use serde::{
     Deserialize, Serialize,
 };
 
+pub const SCHEMA_VERSION: u64 = 1;
+
 const DOUBLE_INDENT: &str = "      ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

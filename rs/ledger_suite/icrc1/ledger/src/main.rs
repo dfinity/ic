@@ -38,6 +38,7 @@ use icrc_ledger_types::icrc21::{
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -239,7 +240,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-        log_message(format!("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.").as_str());
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
         clear_stable_balances_data();
         Access::with_ledger_mut(|ledger| {
             ledger.copy_token_pool();
@@ -911,12 +912,12 @@ fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
 
 #[query]
 #[candid_method(query)]
-fn icrc3_get_tip_certificate() -> Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate> {
+fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
-    Some(icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate {
+    Some(ICRC3DataCertificate {
         certificate,
         hash_tree: ByteBuf::from(tree_buf),
     })

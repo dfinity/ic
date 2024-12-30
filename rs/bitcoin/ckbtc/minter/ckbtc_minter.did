@@ -350,7 +350,12 @@ type SuspendedReason = variant {
     Quarantined;
 };
 
-type Event = variant {
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };

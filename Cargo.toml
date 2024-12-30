@@ -14,7 +14,7 @@ members = [
     "packages/pocket-ic/test_canister",
     "packages/ic-vetkd-utils",
     "rs/artifact_pool",
-    "rs/async_utils",
+    "rs/http_endpoints/async_utils",
     "rs/backup",
     "rs/bitcoin/adapter",
     "rs/bitcoin/client",
@@ -197,7 +197,7 @@ members = [
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
-    "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
+    "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
@@ -247,6 +247,7 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
+    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -302,7 +303,6 @@ members = [
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
     "rs/rust_canisters/canister_creator",
@@ -365,7 +365,6 @@ members = [
     "rs/test_utilities/time",
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
-    "rs/tests",
     "rs/tests/boundary_nodes",
     "rs/tests/boundary_nodes/custom_domains",
     "rs/tests/boundary_nodes/integration_test_common",
@@ -379,10 +378,13 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/cross_chain",
     "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/financial_integrations",
+    "rs/tests/financial_integrations/rosetta/",
+    "rs/tests/financial_integrations/rosetta/rosetta_test_lib",
     "rs/tests/message_routing",
     "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
@@ -407,9 +409,9 @@ members = [
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
-    "rs/tests/testing_verification",
-    "rs/tests/testing_verification/wabt-tests",
-    "rs/tests/testing_verification/testnets",
+    "rs/tests/idx",
+    "rs/tests/idx/wabt-tests",
+    "rs/tests/testnets",
     "rs/tla_instrumentation/local_key",
     "rs/tla_instrumentation/tla_instrumentation",
     "rs/tla_instrumentation/tla_instrumentation_proc_macros",
@@ -565,9 +567,8 @@ ic-agent = { version = "0.37.1", features = [
     "reqwest",
     "pem",
 ] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
 ic-btc-interface = "0.2.2"
-ic-btc-test-utils = "0.1.0"
 ic-cbor = "2.6.0"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
@@ -698,6 +699,7 @@ slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+ssh2 = "0.9.4"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"

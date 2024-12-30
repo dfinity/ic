@@ -3060,6 +3060,7 @@ impl From<pb::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -3075,6 +3076,7 @@ impl From<pb_api::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
