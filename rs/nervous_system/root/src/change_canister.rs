@@ -30,7 +30,7 @@ pub struct ChunkedCanisterWasm {
     store_canister_id: CanisterId,
 
     /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain
-    /// at least one chink.
+    /// at least one chunk.
     chunk_hashes_list: Vec<Vec<u8>>,
 }
 
