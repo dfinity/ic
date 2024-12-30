@@ -35,29 +35,29 @@ impl Registry {
             })
             .unwrap();
 
-        // 2. Compare the node provider ID of the caller (Node Operator) and the node's NP
-        let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
-            .map_err(|e| {
-                format!(
-                    "{}do_remove_node_directly: Aborting node removal: {}",
-                    LOG_PREFIX, e
-                )
-            })
-            .unwrap();
-        let node_provider_of_the_node =
-            get_node_provider_id_for_operator_id(self, node_operator_id)
+        // 2. Compare the caller_id (node operator) with the node's node operator and, if that fails,
+        // fall back to comparing the node provider ID of the caller and the node's node provider ID.
+        if caller_id != node_operator_id {
+            let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
                 .map_err(|e| {
                     format!(
                         "{}do_remove_node_directly: Aborting node removal: {}",
                         LOG_PREFIX, e
                     )
-                })
-                .unwrap();
-        assert_eq!(
-            node_provider_caller, node_provider_of_the_node,
-            "The node provider {} of the caller {}, does not match the provider {} of the node {}.",
-            node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
-        );
+                });
+            let node_provider_of_the_node =
+                get_node_provider_id_for_operator_id(self, node_operator_id).map_err(|e| {
+                    format!(
+                        "{}do_remove_node_directly: Aborting node removal: {}",
+                        LOG_PREFIX, e
+                    )
+                });
+            assert_eq!(
+                node_provider_caller, node_provider_of_the_node,
+                "The node provider {:?} of the caller {}, does not match the provider {:?} of the node {}.",
+                node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
+            );
+        }
 
         // 3. Ensure node is not in a subnet
         let subnet_list_record = get_subnet_list_record(self);
