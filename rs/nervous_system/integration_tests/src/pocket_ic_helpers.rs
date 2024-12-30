@@ -185,6 +185,33 @@ pub async fn install_canister_with_controllers(
     );
 }
 
+pub async fn install_canister_on_subnet(
+    pocket_ic: &PocketIc,
+    subnet_id: Principal,
+    arg: Vec<u8>,
+    wasm: Option<Wasm>,
+    controllers: Vec<PrincipalId>,
+) -> CanisterId {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
+    let settings = Some(CanisterSettings {
+        controllers: Some(controllers),
+        ..Default::default()
+    });
+    let canister_id = pocket_ic
+        .create_canister_on_subnet(None, settings, subnet_id)
+        .await;
+    pocket_ic
+        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
+        .await;
+    if let Some(wasm) = wasm {
+        pocket_ic
+            .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
+            .await;
+    }
+    CanisterId::unchecked_from_principal(canister_id.into())
+}
+
 // TODO migrate this to nns::governance
 pub async fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
