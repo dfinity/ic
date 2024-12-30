@@ -278,8 +278,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             ..Default::default()
         }
     };
-    let dc_record = make_data_center_record("dc1");
-    let node_operator_record = make_node_operator_record(node_operator_pid, "dc1");
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
@@ -323,14 +321,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
             blessed_replica_version.encode_to_vec(),
         ),
     ];
-    mutations.push(insert(
-        make_data_center_record_key("dc1").as_bytes(),
-        dc_record.encode_to_vec(),
-    ));
-    mutations.push(insert(
-        make_node_operator_record_key(node_operator_pid).as_bytes(),
-        node_operator_record.encode_to_vec(),
-    ));
     mutations.append(&mut make_add_node_registry_mutations(
         node_id,
         node_record,

@@ -54,7 +54,7 @@ impl Registry {
                 });
             assert_eq!(
                 node_provider_caller, node_provider_of_the_node,
-                "The node provider {:?} of the caller {}, does not match the provider {:?} of the node {}.",
+                "The node provider {:?} of the caller {}, does not match the node provider {:?} of the node {}.",
                 node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
             );
         }
@@ -209,37 +209,39 @@ mod tests {
     }
 
     #[test]
-    fn should_succeed_no_operator_record() {
-        // This test is only added for backward compatibility.
-        // It should be removed once all tests are updated to include operator record.
-        let mut registry = invariant_compliant_registry(0);
-        let operator1_id = PrincipalId::new_user_test_id(2000);
-        // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1, /* mutation id */
-            1, /* node count */
-            Some(operator1_id),
-        );
-        registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_id = node_ids_and_dkg_pks
-            .keys()
-            .next()
-            .expect("should contain at least one node ID")
-            .to_owned();
-
-        let payload = RemoveNodeDirectlyPayload { node_id };
-
-        registry.do_remove_node(payload, operator1_id);
-    }
-
-    #[test]
-    #[should_panic(expected = "Cannot remove a node, as it has ApiBoundaryNodeRecord")]
+    #[should_panic(
+        expected = "assertion `left == right` failed: The node provider Ok(5yckv-7nzbm-aaaaa-aaaap-4ai) of the caller ziab2-3ora4-aaaaa-aaaap-4ai, does not match the node provider Ok(ahdmd-q5ybm-aaaaa-aaaap-4ai) of the node"
+    )]
     fn should_panic_different_caller() {
         // This test is only added for backward compatibility.
         // It should be removed once all tests are updated to include operator record.
         let mut registry = invariant_compliant_registry(0);
         let operator1_id = PrincipalId::new_user_test_id(2000);
         let operator2_id = PrincipalId::new_user_test_id(2001);
+        let operator_record_1 = NodeOperatorRecord {
+            node_operator_principal_id: operator1_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        let operator_record_2 = NodeOperatorRecord {
+            node_operator_principal_id: operator2_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3001).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![
+            insert(
+                make_node_operator_record_key(operator1_id),
+                operator_record_1.encode_to_vec(),
+            ),
+            insert(
+                make_node_operator_record_key(operator2_id),
+                operator_record_2.encode_to_vec(),
+            ),
+        ]);
         // Add node owned by operator1 to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, /* mutation id */
