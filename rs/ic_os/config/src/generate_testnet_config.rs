@@ -1,11 +1,11 @@
 use anyhow::Result;
-use mac_address::mac_address::FormattedMacAddress;
+use macaddr::MacAddr6;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
 use crate::serialize_and_write_config;
-use crate::types::*;
+use config_types::*;
 
 #[derive(Default)]
 pub struct GenerateTestnetConfigArgs {
@@ -23,8 +23,8 @@ pub struct GenerateTestnetConfigArgs {
 
     // ICOSSettings arguments
     pub node_reward_type: Option<String>,
-    pub mgmt_mac: Option<String>,
-    pub deployment_environment: Option<String>,
+    pub mgmt_mac: Option<MacAddr6>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
     pub use_nns_public_key: Option<bool>,
@@ -164,17 +164,15 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     let node_reward_type = node_reward_type.unwrap_or_else(|| "type3.1".to_string());
 
     let mgmt_mac = match mgmt_mac {
-        Some(mac_str) => FormattedMacAddress::try_from(mac_str.as_str())?,
-        None => {
-            // Use a dummy MAC address
-            FormattedMacAddress::try_from("00:00:00:00:00:00")?
-        }
+        Some(mac) => mac,
+        // Use a dummy MAC address
+        None => "00:00:00:00:00:00".parse()?,
     };
 
-    let deployment_environment = deployment_environment.unwrap_or_else(|| "testnet".to_string());
+    let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
     let logging = Logging {
-        elasticsearch_hosts: elasticsearch_hosts.unwrap_or_else(|| "".to_string()),
+        elasticsearch_hosts,
         elasticsearch_tags,
     };
 
@@ -279,7 +277,7 @@ mod tests {
     fn test_valid_configuration() {
         let args = GenerateTestnetConfigArgs {
             ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
-            mgmt_mac: Some("00:11:22:33:44:55".to_string()),
+            mgmt_mac: Some("00:11:22:33:44:55".parse().unwrap()),
             nns_urls: Some(vec!["https://example.com".to_string()]),
             ..Default::default()
         };

@@ -1,8 +1,9 @@
-use crate::governance::Governance;
+use crate::governance::{Governance, MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST};
 use crate::pb::v1::{
     governance::{Version, Versions},
     upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
-    Empty, ProposalId, UpgradeJournal, UpgradeJournalEntry,
+    Empty, GetUpgradeJournalRequest, GetUpgradeJournalResponse, ProposalId, UpgradeJournal,
+    UpgradeJournalEntry,
 };
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
@@ -126,6 +127,55 @@ impl Governance {
             Some(ref mut journal) => {
                 journal.entries.push(upgrade_journal_entry);
             }
+        }
+    }
+
+    pub fn get_upgrade_journal(
+        &self,
+        request: GetUpgradeJournalRequest,
+    ) -> GetUpgradeJournalResponse {
+        let upgrade_journal = self.proto.upgrade_journal.as_ref().map(|journal| {
+            let limit = request
+                .limit
+                .unwrap_or(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST)
+                .min(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST) as usize;
+            let offset = request
+                .offset
+                .map(|offset| offset as usize)
+                .unwrap_or_else(|| journal.entries.len().saturating_sub(limit));
+            let entries = journal
+                .entries
+                .iter()
+                .skip(offset)
+                .take(limit)
+                .cloned()
+                .collect();
+            UpgradeJournal { entries }
+        });
+        let upgrade_journal_entry_count = self
+            .proto
+            .upgrade_journal
+            .as_ref()
+            .map(|journal| journal.entries.len() as u64);
+
+        let upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match upgrade_steps {
+            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+                upgrade_steps: cached_upgrade_steps.upgrade_steps,
+                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
+                deployed_version: self.proto.deployed_version.clone(),
+                upgrade_journal,
+                upgrade_journal_entry_count,
+            },
+            None => GetUpgradeJournalResponse {
+                upgrade_steps: None,
+                response_timestamp_seconds: None,
+                target_version: None,
+                deployed_version: self.proto.deployed_version.clone(),
+                upgrade_journal,
+                upgrade_journal_entry_count,
+            },
         }
     }
 }

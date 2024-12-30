@@ -18,8 +18,8 @@ use icp_ledger::{
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
     GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -30,7 +30,7 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -62,6 +62,14 @@ fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-allowance-getter",
+        &[],
+    )
+}
+
+fn ledger_wasm_low_instruction_limits() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-low-limits",
         &[],
     )
 }
@@ -1250,81 +1258,12 @@ fn test_upgrade_serialization() {
 }
 
 #[test]
-fn test_upgrade_serialization_fixed_tx() {
-    let ledger_wasm_mainnet = ledger_wasm_mainnet();
-    let ledger_wasm_current = ledger_wasm();
-
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let p3 = PrincipalId::new_user_test_id(3);
-    let accounts = vec![
-        Account::from(p1.0),
-        Account::from(p2.0),
-        Account::from(p3.0),
-    ];
-
-    let env = StateMachine::new();
-    let mut initial_balances = HashMap::new();
-    for account in &accounts {
-        initial_balances.insert((*account).into(), Tokens::from_e8s(10_000_000));
-    }
-
-    let payload = LedgerCanisterInitPayload::builder()
-        .minting_account(MINTER.into())
-        .icrc1_minting_account(MINTER)
-        .initial_values(initial_balances)
-        .transfer_fee(Tokens::from_e8s(10_000))
-        .token_symbol_and_name("ICP", "Internet Computer")
-        .build()
-        .unwrap();
-    let canister_id = env
-        .install_canister(
-            ledger_wasm_mainnet.clone(),
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
-        .expect("Unable to install the Ledger canister with the new init");
-
-    let approve_args = default_approve_args(p2.0, 120_000);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-    let mut approve_args = default_approve_args(p3.0, 130_000);
-    let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
-    approve_args.expires_at = Some(expiration);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-
-    let mut balances = BTreeMap::new();
-    for account in &accounts {
-        balances.insert(account, balance_of(&env, canister_id, *account));
-    }
-
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
-        env.upgrade_canister(
-            canister_id,
-            ledger_wasm,
-            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
-
-        let allowance = Account::get_allowance(&env, canister_id, p1.0, p2.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
-        assert_eq!(allowance.expires_at, None);
-
-        let allowance = Account::get_allowance(&env, canister_id, p1.0, p3.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
-        assert_eq!(allowance.expires_at, Some(expiration));
-
-        for account in &accounts {
-            assert_eq!(balances[account], balance_of(&env, canister_id, *account));
-        }
-    };
-
-    // Test if the old serialized approvals and balances are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone());
-    // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current);
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
+fn test_multi_step_migration() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1333,6 +1272,71 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_mainnet(),
         ledger_wasm_next_version(),
         ledger_wasm(),
+        encode_init_args,
+        false,
+    );
+}
+
+#[test]
+fn test_stable_migration_endpoints_disabled() {
+    let send_args = SendArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: PrincipalId::new_user_test_id(2).into(),
+        created_at_time: None,
+    };
+
+    let send_dfx_args = Encode!(&send_args).unwrap();
+    let send_pb_args = ProtoBuf(send_args).into_bytes().unwrap();
+
+    let ai = AccountIdentifier { hash: [1u8; 28] };
+    let transfer_args = Encode!(&icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: ai.to_address(),
+        created_at_time: None,
+    })
+    .unwrap();
+
+    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+        vec![
+            ("send_pb", send_pb_args),
+            ("send_dfx", send_dfx_args),
+            ("transfer", transfer_args),
+        ],
+    );
+}
+
+#[test]
+fn test_incomplete_migration() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_incomplete_migration_to_current() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_metrics_while_migrating() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
 }
@@ -1503,11 +1507,6 @@ fn test_transfer_from_burn() {
 #[test]
 fn test_balances_overflow() {
     ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
-}
-
-#[test]
-fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
 #[test]

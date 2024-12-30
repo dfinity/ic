@@ -356,7 +356,7 @@ impl SystemStateChanges {
             metadata: self
                 .requests
                 .first()
-                .and_then(|request| request.metadata.clone()),
+                .map_or_else(Default::default, |request| request.metadata.clone()),
             count: self.requests.len() as u64,
         };
 
@@ -881,7 +881,7 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
+    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
         let mut new_balance = self.cycles_balance();
         let result = self
             .cycles_account_manager
@@ -1368,7 +1368,7 @@ impl SandboxSafeSystemState {
 ///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     pub count: u64,
 }
 

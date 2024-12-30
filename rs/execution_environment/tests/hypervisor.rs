@@ -2280,6 +2280,72 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     );
 }
 
+// helper for mint_cycles128 tests
+fn verify_error_and_no_effect(mut test: ExecutionTest) {
+    let canister_id = test.universal_canister().unwrap();
+    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let payload = wasm()
+        .mint_cycles128(Cycles::from(10_000_000_000_u128))
+        .reply_data_append()
+        .reply()
+        .build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(err
+        .description()
+        .contains("ic0.mint_cycles cannot be executed"));
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(0, canister_state.system_state.queues().output_queues_len());
+    assert_balance_equals(
+        initial_cycles,
+        canister_state.system_state.balance(),
+        BALANCE_EPSILON,
+    );
+}
+
+#[test]
+fn ic0_mint_cycles128_fails_on_application_subnet() {
+    let test = ExecutionTestBuilder::new().build();
+    verify_error_and_no_effect(test);
+}
+
+#[test]
+fn ic0_mint_cycles128_fails_on_system_subnet_non_cmc() {
+    let test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    verify_error_and_no_effect(test);
+}
+
+#[test]
+fn ic0_mint_cycles128_succeeds_on_cmc() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let mut canister_id = test.universal_canister().unwrap();
+    for _ in 0..4 {
+        canister_id = test.universal_canister().unwrap();
+    }
+    assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
+    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let amount: u128 = (1u128 << 64) + 2u128;
+    let payload = wasm()
+        .mint_cycles128(Cycles::from(amount))
+        .reply_data_append()
+        .reply()
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+    assert_eq!(WasmResult::Reply(amount.to_le_bytes().to_vec()), result);
+    let canister_state = test.canister_state(canister_id);
+
+    assert_eq!(0, canister_state.system_state.queues().output_queues_len());
+    assert_balance_equals(
+        initial_cycles + Cycles::new(amount),
+        canister_state.system_state.balance(),
+        BALANCE_EPSILON,
+    );
+}
+
 #[test]
 fn ic0_call_enqueues_request() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -5041,6 +5107,7 @@ fn cannot_stop_canister_with_open_call_context() {
 #[test]
 fn can_use_more_instructions_during_install_code() {
     let mut test = ExecutionTestBuilder::new()
+        .with_precompiled_universal_canister(false)
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(

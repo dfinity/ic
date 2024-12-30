@@ -692,7 +692,7 @@ mod tests {
                 // into the block.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = &block.payload.as_ref().as_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dkg;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",
@@ -711,7 +711,7 @@ mod tests {
                 // block anymore.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = &block.payload.as_ref().as_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dkg;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Now we empty the dkg pool, add new dealings from this dealer and make sure
@@ -732,7 +732,7 @@ mod tests {
                 // Advance the pool and make sure the dealing are not included.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = &block.payload.as_ref().as_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dkg;
                 assert_eq!(dealings.messages.len(), 0);
 
                 // Create another dealer and add his dealings into the unvalidated pool of
@@ -780,7 +780,7 @@ mod tests {
                 // Now we create a new block and make sure, the dealings made into the payload.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
-                let dealings = &block.payload.as_ref().as_data().dealings;
+                let dealings = &block.payload.as_ref().as_data().dkg;
                 if dealings.start_height != Height::from(0) {
                     panic!(
                         "Expected start height in dealings {:?}, but found {:?}",

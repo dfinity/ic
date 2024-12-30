@@ -98,7 +98,6 @@ impl ConnectionHandle {
             })?;
 
         send_stream.finish().inspect_err(|_| {
-            // This should be infallible
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&["finish", INFALIBBLE])
@@ -119,7 +118,12 @@ impl ConnectionHandle {
                 )
             })?;
 
-        let response = to_response(response_bytes)?;
+        let response = to_response(response_bytes).inspect_err(|_| {
+            self.metrics
+                .connection_handle_errors_total
+                .with_label_values(&["decode", INFALIBBLE])
+                .inc();
+        })?;
 
         bytes_received_counter.inc_by(response.body().len() as u64);
         Ok(response)

@@ -131,7 +131,7 @@ prop_compose! {
         method_name in "[a-zA-Z]{1,6}",
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
-        metadata in proptest::option::of(request_metadata()),
+        metadata in request_metadata(),
         deadline in deadline(),
     ) -> Request {
         Request {

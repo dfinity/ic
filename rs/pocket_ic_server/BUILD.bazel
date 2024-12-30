@@ -176,13 +176,19 @@ rust_test(
         ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -205,7 +211,9 @@ rust_test(
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+    ],
     deps = SPEC_TEST_DEPENDENCIES,
 )
 
