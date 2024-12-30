@@ -118,6 +118,7 @@ fn test_insert(#[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec
 }
 
 /// Creates 3 maps with idebtical contents, from the given keys.
+#[allow(clippy::type_complexity)]
 fn make_maps(
     keys: Vec<u64>,
 ) -> (

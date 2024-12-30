@@ -277,7 +277,8 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
             b.iter_batched(
                 || (mpatricia_lmap.clone(), mpatricia_rmap.clone()),
                 |(mut l, r)| {
-                    black_box(l.union(r));
+                    l.union(r);
+                    black_box(l);
                 },
                 BatchSize::SmallInput,
             );
