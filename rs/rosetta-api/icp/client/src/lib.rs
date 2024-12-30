@@ -3,6 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
 use ic_rosetta_api::models::BlockIdentifier;
@@ -36,12 +37,13 @@ use rosetta_core::objects::Amount;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use url::ParseError;
-
+use ic_nns_governance_api::pb::v1::Proposal;
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -1136,6 +1138,7 @@ impl RosettaClient {
         .await
     }
 
+    // Register a vote on a proposal using a specific neuron.
     pub async fn register_vote<T>(
         &self,
         network_identifier: NetworkIdentifier,
@@ -1161,6 +1164,31 @@ impl RosettaClient {
             None,
         )
         .await
+    }
+
+    // Retrieves the list of proposals that are currently pending.
+    pub async fn get_pending_proposals(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<Vec<Proposal>, String> {
+        let response = self
+            .call(CallRequest::new(
+                network_identifier.clone(),
+                "get_pending_proposals".to_owned(),
+                ObjectMap::new(),
+            ))
+            .await
+            .unwrap();
+    
+        let pending_proposals: Vec<Proposal> =
+            PendingProposalsResponse::try_from(Some(response.result))
+                .unwrap()
+                .pending_proposals
+                .into_iter()
+                .map(|p| p.proposal.unwrap())
+                .collect();
+    
+        Ok(pending_proposals)
     }
 
     /// A neuron can be set to automatically restake its maturity.

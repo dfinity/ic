@@ -8749,6 +8749,7 @@ dependencies = [
  "ic-crypto-secp256k1",
  "ic-icp-rosetta-runner",
  "ic-ledger-test-utils",
+ "ic-nns-governance-api",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
  "icp-ledger",

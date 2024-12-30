@@ -1,7 +1,6 @@
 use crate::common::{
-    governance_client::GovernanceClient,
-    system_test_environment::RosettaTestingEnvironment,
-    utils::{get_pending_proposals, test_identity},
+    governance_client::GovernanceClient, system_test_environment::RosettaTestingEnvironment,
+    utils::test_identity,
 };
 use candid::Principal;
 use futures::future::join_all;
@@ -54,7 +53,12 @@ fn test_neuron_voting() {
         let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, DISSOLVE_DELAY_6_MONTHS).await;
 
         // Ensure no proposals exist initially
-        assert!(get_pending_proposals(&env).await.unwrap().is_empty());
+        assert!(env
+            .rosetta_client
+            .get_pending_proposals(env.network_identifier.clone())
+            .await
+            .unwrap()
+            .is_empty());
 
         // Submit multiple proposals
         for i in 0..3 {
@@ -63,14 +67,18 @@ fn test_neuron_voting() {
                     TEST_IDENTITY.sender().unwrap(),
                     neuron_ids[0].into(),
                     &format!("dummy title {}", i),
-                    &format!("test {}", i),
+                    &format!("test summary {}", i),
                     &format!("dummy text {}", i),
                 )
                 .await;
         }
 
         // Ensure all proposals are pending and have the expected details
-        let all_proposals = get_pending_proposals(&env).await.unwrap();
+        let all_proposals = env
+            .rosetta_client
+            .get_pending_proposals(env.network_identifier.clone())
+            .await
+            .unwrap();
         let all_proposals_from_governance = governance_client.get_pending_proposals().await;
 
         assert_eq!(all_proposals.len(), 3);
@@ -79,7 +87,7 @@ fn test_neuron_voting() {
         let expected_proposals = vec![
             Proposal {
                 title: Some("dummy title 0".to_string()),
-                summary: "test 0".to_string(),
+                summary: "test summary 0".to_string(),
                 action: Some(Action::Motion(Motion {
                     motion_text: "dummy text 0".to_string(),
                 })),
@@ -87,7 +95,7 @@ fn test_neuron_voting() {
             },
             Proposal {
                 title: Some("dummy title 1".to_string()),
-                summary: "test 1".to_string(),
+                summary: "test summary 1".to_string(),
                 action: Some(Action::Motion(Motion {
                     motion_text: "dummy text 1".to_string(),
                 })),
@@ -95,7 +103,7 @@ fn test_neuron_voting() {
             },
             Proposal {
                 title: Some("dummy title 2".to_string()),
-                summary: "test 2".to_string(),
+                summary: "test summary 2".to_string(),
                 action: Some(Action::Motion(Motion {
                     motion_text: "dummy text 2".to_string(),
                 })),
@@ -145,7 +153,11 @@ fn test_neuron_voting() {
         );
 
         // Verify the first proposal is no longer pending
-        let pending_proposals = get_pending_proposals(&env).await.unwrap();
+        let pending_proposals = env
+            .rosetta_client
+            .get_pending_proposals(env.network_identifier.clone())
+            .await
+            .unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(
             pending_proposals_from_governance,
@@ -189,7 +201,11 @@ fn test_neuron_voting() {
         );
 
         // Verify the second proposal is no longer pending
-        let pending_proposals = get_pending_proposals(&env).await.unwrap();
+        let pending_proposals = env
+            .rosetta_client
+            .get_pending_proposals(env.network_identifier.clone())
+            .await
+            .unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(
             pending_proposals_from_governance,
@@ -225,7 +241,11 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[2], NEURON_INDEX[2], Vote::No)
             .await
             .unwrap();
-        let pending_proposals = get_pending_proposals(&env).await.unwrap();
+        let pending_proposals = env
+            .rosetta_client
+            .get_pending_proposals(env.network_identifier.clone())
+            .await
+            .unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(pending_proposals_from_governance.len(), 0);
         assert_eq!(pending_proposals.len(), 0);

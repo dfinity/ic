@@ -1,6 +1,4 @@
-use crate::common::{
-    constants::MAX_ROSETTA_SYNC_ATTEMPTS, system_test_environment::RosettaTestingEnvironment,
-};
+use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
 use candid::{Decode, Encode};
 use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
@@ -12,14 +10,11 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::ListNeurons;
 use ic_nns_governance::pb::v1::ListNeuronsResponse;
-use ic_nns_governance_api::pb::v1::{GovernanceError, Proposal};
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use ic_rosetta_api::convert::to_hash;
-use ic_rosetta_api::{
-    ledger_client::pending_proposals_response::PendingProposalsResponse, models::CallRequest,
-};
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
-use rosetta_core::{identifiers::NetworkIdentifier, objects::ObjectMap};
+use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
 use url::Url;
 
@@ -209,28 +204,4 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1:
     )
     .unwrap();
     assert!(result.is_none(), "Failed to update neuron: {:?}", result);
-}
-
-pub async fn get_pending_proposals(
-    env: &RosettaTestingEnvironment,
-) -> Result<Vec<Proposal>, String> {
-    let response = env
-        .rosetta_client
-        .call(CallRequest::new(
-            env.network_identifier.clone(),
-            "get_pending_proposals".to_owned(),
-            ObjectMap::new(),
-        ))
-        .await
-        .unwrap();
-
-    let pending_proposals: Vec<Proposal> =
-        PendingProposalsResponse::try_from(Some(response.result))
-            .unwrap()
-            .pending_proposals
-            .into_iter()
-            .map(|p| p.proposal.unwrap())
-            .collect();
-
-    Ok(pending_proposals)
 }

@@ -25,12 +25,25 @@ impl GovernanceClient {
         }
     }
 
-    pub async fn make_proposal(
+    pub async fn submit_proposal(
         &self,
+        principal: Principal,
         neuron_id: NeuronId,
-        neuron_controller: PrincipalId,
-        proposal: &MakeProposalRequest,
+        title: &str,
+        summary: &str,
+        motion_text: &str,
     ) -> ProposalId {
+        let proposal = MakeProposalRequest {
+            title: Some(title.to_string()),
+            summary: summary.to_string(),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: motion_text.to_string(),
+            })),
+            ..Default::default()
+        };
+
+        let neuron_controller = PrincipalId::from(principal);
+
         let manage_neuron = create_make_proposal_payload(proposal.clone(), &neuron_id);
         let arg = Encode!(&manage_neuron).expect("Error while encoding arg.");
         let res = self
@@ -70,27 +83,6 @@ impl GovernanceClient {
                 manage_neuron_res
             )
         }
-    }
-
-    pub async fn submit_proposal(
-        &self,
-        principal: Principal,
-        neuron_id: NeuronId,
-        title: &str,
-        summary: &str,
-        motion_text: &str,
-    ) -> ProposalId {
-        let proposal = MakeProposalRequest {
-            title: Some(title.to_string()),
-            summary: summary.to_string(),
-            action: Some(ProposalActionRequest::Motion(Motion {
-                motion_text: motion_text.to_string(),
-            })),
-            ..Default::default()
-        };
-
-        self.make_proposal(neuron_id, PrincipalId::from(principal), &proposal)
-            .await
     }
 
     pub async fn get_pending_proposals(&self) -> Vec<ProposalInfo> {
