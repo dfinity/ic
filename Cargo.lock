@@ -13697,6 +13697,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "canister-test",
  "certificate_orchestrator_interface",
  "ic-agent 0.37.1",
  "ic-base-types",
