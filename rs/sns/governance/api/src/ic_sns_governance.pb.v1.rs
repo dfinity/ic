@@ -366,6 +366,30 @@ pub struct Motion {
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }
+
+/// Represents a WASM chunked into potentially multiple smaller chunks, each of which can safely
+/// be sent around the ICP.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ChunkedCanisterWasm {
+    /// Obligatory check sum of the overall WASM to be reassembled from chunks.
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Obligatory; indicates which canister stores the WASM chunks.
+    #[prost(message, optional, tag = "2")]
+    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+    /// one chink.
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+
 /// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(
@@ -395,6 +419,10 @@ pub struct UpgradeSnsControlledCanister {
         tag = "4"
     )]
     pub mode: ::core::option::Option<i32>,
+    /// If the entire WASM does not into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    #[prost(message, optional, tag = "5")]
+    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
