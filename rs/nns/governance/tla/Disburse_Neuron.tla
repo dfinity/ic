@@ -86,7 +86,9 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
             \* We omit the other checks: who the caller is, whether the neuron is KYC verified, as well
             \* as a few well-formedness checks (of the neuron and recipient account) as everything in
             \* our model is well-formed.
-            with(nid \in DOMAIN(neuron) \ locks; amt \in 0..(neuron[nid].cached_stake - neuron[nid].fees); account \in Account_Ids) {
+            \* Note that the user can request to disburse an arbitrary amount. This will only fail once
+            \* we send a message to the ledger.
+            with(nid \in DOMAIN(neuron) \ locks; amt \in Nat; account \in Account_Ids) {
                 neuron_id := nid;
                 disburse_amount := amt;
                 fees_amount := neuron[neuron_id].fees;
@@ -134,7 +136,7 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "6a67a01e" /\ chksum(tla) = "313cf395")
+\* BEGIN TRANSLATION (chksum(pcal) = "49bb5804" /\ chksum(tla) = "fa8fb71a")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
           to_account, fees_amount
@@ -163,7 +165,7 @@ DisburseNeuron1(self) == /\ pc[self] = "DisburseNeuron1"
                          /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
                                /\ UNCHANGED <<neuron, locks, governance_to_ledger, neuron_id, disburse_amount, to_account, fees_amount>>
                             \/ /\ \E nid \in DOMAIN(neuron) \ locks:
-                                    \E amt \in 0..(neuron[nid].cached_stake - neuron[nid].fees):
+                                    \E amt \in Nat:
                                       \E account \in Account_Ids:
                                         /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
                                         /\ disburse_amount' = [disburse_amount EXCEPT ![self] = amt]

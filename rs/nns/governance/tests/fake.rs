@@ -289,7 +289,7 @@ impl FakeDriver {
                 tla_log_response!(
                     Destination::new("ledger"),
                     tla::TlaValue::Variant {
-                        tag: "TransferFail".to_string(),
+                        tag: "Fail".to_string(),
                         value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
                     }
                 );
