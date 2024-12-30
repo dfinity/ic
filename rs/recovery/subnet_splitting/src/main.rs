@@ -47,6 +47,10 @@ struct SplitArgs {
     #[clap(long)]
     pub skip_prompts: bool,
 
+    /// Flag to indicate we're performing a local recovery, directly on a node.
+    #[clap(long)]
+    pub local_recovery: bool,
+
     #[clap(flatten)]
     subnet_splitting_args: SubnetSplittingArgs,
 }
@@ -145,6 +149,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
         key_file: args.key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
+        local_recovery: args.local_recovery,
     };
 
     let subnet_splitting_state =

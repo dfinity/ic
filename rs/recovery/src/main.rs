@@ -34,6 +34,7 @@ fn main() {
         key_file: args.key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
+        local_recovery: args.local_recovery,
     };
 
     let recovery_state = cli::read_and_maybe_update_state(&logger, recovery_args, args.subcmd);

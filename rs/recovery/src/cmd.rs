@@ -54,6 +54,10 @@ pub struct RecoveryToolArgs {
     #[clap(long)]
     pub skip_prompts: bool,
 
+    /// Flag to indicate we're performing a local recovery, directly on a node.
+    #[clap(long)]
+    pub local_recovery: bool,
+
     #[clap(subcommand)]
     pub subcmd: Option<SubCommand>,
 }
