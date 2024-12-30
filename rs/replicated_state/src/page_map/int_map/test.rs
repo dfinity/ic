@@ -1,4 +1,4 @@
-use super::{IntMap, MutableIntMap};
+use super::{AsInt, IntMap, MutableIntMap};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -101,58 +101,324 @@ fn test_max_key_range() {
 fn test_insert(#[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec<u64>) {
     let mut btree_map = BTreeMap::new();
     let mut int_map = IntMap::new();
+    let mut mutable_int_map = MutableIntMap::new();
     for (value, key) in keys.into_iter().enumerate() {
         let expected = btree_map.insert(key, value);
+
         let previous;
         (int_map, previous) = int_map.insert(key, value);
         prop_assert_eq!(expected, previous);
-
         prop_assert_eq!(btree_map.len(), int_map.len());
         prop_assert!(btree_map.iter().eq(int_map.iter()));
+
+        prop_assert_eq!(expected, mutable_int_map.insert(key, value));
+        prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+        prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
     }
+}
+
+/// Creates 3 maps with idebtical contents, from the given keys.
+fn make_maps(
+    keys: Vec<u64>,
+) -> (
+    BTreeMap<u64, usize>,
+    IntMap<u64, usize, u64>,
+    MutableIntMap<u64, usize, u64>,
+) {
+    let mut btree_map = BTreeMap::new();
+    let mut int_map = IntMap::new();
+    let mut mutable_int_map = MutableIntMap::new();
+    for (value, key) in keys.into_iter().enumerate() {
+        btree_map.insert(key, value);
+        int_map = int_map.insert(key, value).0;
+        mutable_int_map.insert(key, value);
+    }
+    (btree_map, int_map, mutable_int_map)
+}
+
+#[test_strategy::proptest]
+fn test_lookup(
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
+    #[strategy(proptest::collection::vec(0u64..20u64, 10))] lookups: Vec<u64>,
+) {
+    let (btree_map, int_map, mutable_int_map) = make_maps(keys);
+
+    for key in lookups {
+        prop_assert_eq!(btree_map.get(&key), int_map.get(&key));
+        prop_assert_eq!(btree_map.get(&key), mutable_int_map.get(&key));
+
+        prop_assert_eq!(btree_map.contains_key(&key), int_map.contains_key(&key));
+        prop_assert_eq!(
+            btree_map.contains_key(&key),
+            mutable_int_map.contains_key(&key)
+        );
+    }
+}
+
+#[test_strategy::proptest]
+fn test_bounds(
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
+    #[strategy(proptest::collection::vec(0u64..20u64, 10))] lookups: Vec<u64>,
+) {
+    let (btree_map, int_map, mutable_int_map) = make_maps(keys);
+
+    for key in lookups {
+        let (lower, upper) = int_map.bounds(&key);
+        prop_assert_eq!((lower, upper), mutable_int_map.bounds(&key));
+
+        if lower == upper {
+            if let Some((k, v)) = lower {
+                // Exact match.
+                prop_assert_eq!(k, &key);
+                prop_assert_eq!(btree_map.get(&key), Some(v));
+            } else {
+                // Empty map.
+                prop_assert!(int_map.is_empty());
+            }
+            continue;
+        }
+
+        prop_assert_eq!(btree_map.range(..key).next_back(), lower);
+        prop_assert_eq!(btree_map.range(key..).next(), upper);
+    }
+
+    prop_assert_eq!(
+        btree_map.last_key_value().map(|(k, _)| k),
+        int_map.max_key()
+    );
+    prop_assert_eq!(
+        btree_map.first_key_value().map(|(k, _)| k),
+        mutable_int_map.min_key()
+    );
+    prop_assert_eq!(
+        btree_map.last_key_value().map(|(k, _)| k),
+        mutable_int_map.max_key()
+    );
 }
 
 #[test_strategy::proptest]
 fn test_remove(
-    #[strategy(proptest::collection::vec(0u64..20u64, 10))] inserts: Vec<u64>,
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] inserts: Vec<u64>,
     #[strategy(proptest::collection::vec(0u64..20u64, 10))] removes: Vec<u64>,
 ) {
-    let mut btree_map = BTreeMap::new();
-    let mut int_map = IntMap::new();
-    for (value, key) in inserts.into_iter().enumerate() {
-        btree_map.insert(key, value);
-        int_map = int_map.insert(key, value).0;
-    }
+    let (mut btree_map, mut int_map, mut mutable_int_map) = make_maps(inserts);
 
     for key in removes {
         let expected = btree_map.remove(&key);
+
         let removed;
         (int_map, removed) = int_map.remove(&key);
         prop_assert_eq!(expected, removed);
-
         prop_assert_eq!(btree_map.len(), int_map.len());
         prop_assert!(btree_map.iter().eq(int_map.iter()));
+
+        prop_assert_eq!(expected, mutable_int_map.remove(&key));
+        prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+        prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
     }
 }
 
 #[test_strategy::proptest]
-fn test_split_off(
-    #[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec<u64>,
-    #[strategy(0u64..20u64)] split_key: u64,
+fn test_union(
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] first: Vec<u64>,
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] second: Vec<u64>,
 ) {
-    let mut btree_map = BTreeMap::new();
-    let mut int_map = MutableIntMap::new();
-    for (value, key) in keys.into_iter().enumerate() {
-        btree_map.insert(key, value);
-        int_map.insert(key, value);
-    }
+    let (mut first_btree_map, first_int_map, mut mutable_int_map) = make_maps(first);
+    let (mut btree_map, second_int_map, second_mutable_int_map) = make_maps(second);
 
-    let btree_right = btree_map.split_off(&split_key);
-    let int_right = int_map.split_off(&split_key);
-
-    prop_assert_eq!(btree_right.len(), int_right.len());
-    prop_assert!(btree_right.iter().eq(int_right.iter()));
+    btree_map.append(&mut first_btree_map);
+    let int_map = first_int_map.union(second_int_map);
+    mutable_int_map.union(second_mutable_int_map);
 
     prop_assert_eq!(btree_map.len(), int_map.len());
     prop_assert!(btree_map.iter().eq(int_map.iter()));
+
+    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
+}
+
+#[test_strategy::proptest]
+fn test_split_off(
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
+    #[strategy(0u64..20u64)] split_key: u64,
+) {
+    let (mut btree_map, _, mut mutable_int_map) = make_maps(keys);
+
+    let btree_right = btree_map.split_off(&split_key);
+    let mutable_int_right = mutable_int_map.split_off(&split_key);
+
+    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
+
+    prop_assert_eq!(btree_right.len(), mutable_int_right.len());
+    prop_assert!(btree_right.iter().eq(mutable_int_right.iter()));
+}
+
+#[test_strategy::proptest]
+fn test_len(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+    let (btree_map, int_map, mutable_int_map) = make_maps(keys);
+
+    prop_assert_eq!(btree_map.len(), int_map.len());
+    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+
+    prop_assert_eq!(btree_map.is_empty(), int_map.is_empty());
+    prop_assert_eq!(btree_map.is_empty(), mutable_int_map.is_empty());
+}
+
+#[test_strategy::proptest]
+fn test_iterators(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+    let (btree_map, int_map, mutable_int_map) = make_maps(keys);
+
+    prop_assert!(btree_map.iter().eq(int_map.iter()));
+    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
+
+    prop_assert!(btree_map.keys().eq(int_map.keys()));
+    prop_assert!(btree_map.keys().eq(mutable_int_map.keys()));
+
+    prop_assert!(btree_map.values().eq(mutable_int_map.values()));
+
+    prop_assert!(btree_map.into_iter().eq(mutable_int_map.into_iter()));
+}
+
+#[test_strategy::proptest]
+fn test_from_iter(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+    let (btree_map, _, mutable_int_map) = make_maps(keys);
+
+    let int_map = btree_map.clone().into_iter().collect::<IntMap<_, _, _>>();
+    prop_assert_eq!(btree_map.len(), int_map.len());
+    prop_assert!(btree_map.iter().eq(int_map.iter()));
+
+    let mutable_int_map = mutable_int_map
+        .into_iter()
+        .collect::<MutableIntMap<_, _, _>>();
+    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
+}
+
+#[test_strategy::proptest]
+fn test_eq(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+    use ic_validate_eq::ValidateEq;
+    use std::fmt::Debug;
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct Foo(usize);
+    impl ValidateEq for Foo {
+        fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+            if self.0 != rhs.0 {
+                return Err(format!("lhs = {:#?}, rhs = {:#?}", self, rhs));
+            }
+            Ok(())
+        }
+    }
+
+    fn assert_eq<M>(lhs: &M, rhs: &M) -> Result<(), TestCaseError>
+    where
+        M: Debug + PartialEq + ValidateEq,
+    {
+        prop_assert_eq!(lhs, rhs);
+        prop_assert_eq!(Ok(()), lhs.validate_eq(rhs));
+        Ok(())
+    }
+    fn assert_ne<M>(lhs: &M, rhs: &M) -> Result<(), TestCaseError>
+    where
+        M: Debug + PartialEq + ValidateEq,
+    {
+        prop_assert_ne!(lhs, rhs);
+        prop_assert_ne!(Ok(()), lhs.validate_eq(rhs));
+        Ok(())
+    }
+
+    let mut int_map = IntMap::new();
+    let mut mutable_int_map = MutableIntMap::new();
+    for (value, key) in keys.into_iter().enumerate() {
+        int_map = int_map.insert(key, Foo(value)).0;
+        mutable_int_map.insert(key, Foo(value));
+    }
+
+    let initial_int_map = int_map.clone();
+    let initial_mutable_int_map = mutable_int_map.clone();
+    assert_eq(&initial_int_map, &int_map)?;
+    assert_eq(&initial_mutable_int_map, &mutable_int_map)?;
+
+    // No longer equal after an insert.
+    let int_map = int_map.insert(99, Foo(13)).0;
+    prop_assert!(mutable_int_map.insert(99, Foo(13)).is_none());
+    assert_ne(&initial_int_map, &int_map)?;
+    assert_ne(&initial_mutable_int_map, &mutable_int_map)?;
+
+    // Need a non-empty map to test equality after remove.
+    if !initial_int_map.is_empty() {
+        let key = initial_int_map.max_key().unwrap();
+
+        // No longer equal after a remove.
+        let int_map = initial_int_map.clone().remove(key).0;
+        let mut mutable_int_map = initial_mutable_int_map.clone();
+        prop_assert!(mutable_int_map.remove(key).is_some());
+        assert_ne(&initial_int_map, &int_map)?;
+        assert_ne(&initial_mutable_int_map, &mutable_int_map)?;
+    }
+}
+
+#[test_strategy::proptest]
+fn test_extend(
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] first: Vec<u64>,
+    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] second: Vec<u64>,
+) {
+    let (mut btree_map, _, mut mutable_int_map) = make_maps(first);
+    let (second_btree_map, _, second_mutable_int_map) = make_maps(second);
+
+    btree_map.extend(second_btree_map);
+    mutable_int_map.extend(second_mutable_int_map);
+
+    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
+    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
+}
+
+#[test_strategy::proptest]
+fn test_u64_values(
+    #[strategy(proptest::collection::vec(any::<u64>(), 0..10))] keys: Vec<u64>,
+    #[strategy(proptest::collection::vec(any::<u64>(), 10))] lookups: Vec<u64>,
+) {
+    let (btree_map, int_map, mutable_int_map) = make_maps(keys);
+
+    for key in lookups {
+        prop_assert_eq!(btree_map.get(&key), int_map.get(&key));
+        prop_assert_eq!(btree_map.get(&key), mutable_int_map.get(&key));
+    }
+}
+
+#[test_strategy::proptest]
+fn test_u128_values(
+    #[strategy(proptest::collection::vec(any::<u128>(), 0..10))] keys: Vec<u128>,
+    #[strategy(proptest::collection::vec(any::<u128>(), 10))] lookups: Vec<u128>,
+) {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    struct Key128(u64, u64);
+    impl Key128 {
+        fn new(value: u128) -> Self {
+            Key128((value >> 64) as u64, value as u64)
+        }
+    }
+    impl AsInt<u128> for Key128 {
+        #[inline]
+        fn as_int(&self) -> u128 {
+            (self.0 as u128) << 64 | self.1 as u128
+        }
+    }
+
+    let mut btree_map = BTreeMap::new();
+    let mut int_map = IntMap::new();
+    let mut mutable_int_map = MutableIntMap::new();
+    for (value, key) in keys.into_iter().enumerate() {
+        let key = Key128::new(key);
+        btree_map.insert(key, value);
+        int_map = int_map.insert(key, value).0;
+        mutable_int_map.insert(key, value);
+    }
+
+    for key in lookups {
+        let key = Key128::new(key);
+        prop_assert_eq!(btree_map.get(&key), int_map.get(&key));
+        prop_assert_eq!(btree_map.get(&key), mutable_int_map.get(&key));
+    }
 }

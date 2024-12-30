@@ -133,18 +133,21 @@ impl Id {
 }
 
 impl AsInt<u64> for Id {
+    #[inline]
     fn as_int(&self) -> u64 {
         self.0
     }
 }
 
 impl AsInt<u128> for (CoarseTime, Id) {
+    #[inline]
     fn as_int(&self) -> u128 {
         (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1 .0 as u128
     }
 }
 
 impl AsInt<u128> for (usize, Id) {
+    #[inline]
     fn as_int(&self) -> u128 {
         (self.0 as u128) << 64 | self.1 .0 as u128
     }
@@ -234,6 +237,7 @@ impl<T> From<Reference<T>> for Id {
 }
 
 impl<T> AsInt<u64> for Reference<T> {
+    #[inline]
     fn as_int(&self) -> u64 {
         self.0
     }

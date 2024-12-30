@@ -1,5 +1,6 @@
 mod checkpoint;
 pub mod int_map;
+pub mod int_map2;
 mod page_allocator;
 pub mod storage;
 pub mod test_utils;
