@@ -42,7 +42,7 @@ pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
@@ -243,9 +243,9 @@ impl FakeDriver {
     }
 }
 
-#[async_trait]
-impl IcpLedger for FakeDriver {
-    async fn transfer_funds(
+impl FakeDriver {
+    #[cfg_attr(feature = "tla", tla_function)]
+    async fn transfer_funds_impl(
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
@@ -286,6 +286,13 @@ impl IcpLedger for FakeDriver {
 
         if !is_minting_operation {
             if *from_e8s < requested_e8s {
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    tla::TlaValue::Variant {
+                        tag: "TransferFail".to_string(),
+                        value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                    }
+                );
                 return Err(NervousSystemError::new_with_message(format!(
                     "Insufficient funds. Available {} requested {}",
                     *from_e8s, requested_e8s
@@ -304,6 +311,21 @@ impl IcpLedger for FakeDriver {
         );
 
         Ok(0)
+    }
+}
+
+#[async_trait]
+impl IcpLedger for FakeDriver {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<Subaccount>,
+        to_account: AccountIdentifier,
+        _: u64,
+    ) -> Result<u64, NervousSystemError> {
+        self.transfer_funds_impl(amount_e8s, fee_e8s, from_subaccount, to_account, 0)
+            .await
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {

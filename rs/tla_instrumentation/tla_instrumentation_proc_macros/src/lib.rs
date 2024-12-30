@@ -211,39 +211,32 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         attrs,
         vis,
         sig,
-        block: _,
+        block: body,
     } = input_fn;
 
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
     modified_fn.sig.ident = mangled_name.clone();
 
-    let has_receiver = sig.inputs.iter().any(|arg| match arg {
-        syn::FnArg::Receiver(_) => true,
-        syn::FnArg::Typed(_) => false,
-    });
-    // Creating the modified original function which calls f_impl
-    let args: Vec<_> = sig
-        .inputs
-        .iter()
-        .filter_map(|arg| match arg {
-            syn::FnArg::Receiver(_) => None,
-            syn::FnArg::Typed(pat_type) => Some(&*pat_type.pat),
-        })
-        .collect();
-
     let asyncness = sig.asyncness;
 
-    let call = match (asyncness.is_some(), has_receiver) {
-        (true, true) => quote! { self.#mangled_name(#(#args),*).await },
-        (true, false) => quote! { #mangled_name(#(#args),*).await },
-        (false, true) => quote! { self.#mangled_name(#(#args),*) },
-        (false, false) => quote! { #mangled_name(#(#args),*) },
+    let call = if asyncness.is_some() {
+        quote! {
+            (|| async move {
+                #body
+            })().await
+        }
+    } else {
+        quote! {
+            (|| move {
+                #body
+            })()
+        }
     };
 
     let output = quote! {
-        #modified_fn
 
         #(#attrs)* #vis #sig {
+
            TLA_INSTRUMENTATION_STATE.try_with(|state| {
                 {
                     let mut handler_state = state.handler_state.borrow_mut();
@@ -253,7 +246,6 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
                ()
            );
-
 
            let res = #call;
            TLA_INSTRUMENTATION_STATE.try_with(|state| {
@@ -308,3 +300,25 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
     };
     output.into()
 }
+
+/*
+#[proc_macro_attribute]
+/// Apply the tla_function macro to all functions in the given impl
+pub fn tla_function_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut input = parse_macro_input!(input as syn::ItemImpl);
+    let args = parse_macro_input!(args as syn::AttributeArgs);
+
+    match input {
+        Item::Impl(imp) {
+            for mut item in imp.items {
+                if let syn::ImplItem::Method(method) = item {
+                    let mut attrs = method.attrs;
+                    attrs.push(syn::parse_quote!(#[tla_function]));
+                    method.attrs = attrs;
+                }
+            }
+        }
+    }
+}
+
+ */

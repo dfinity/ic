@@ -4700,6 +4700,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -6588,6 +6589,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
