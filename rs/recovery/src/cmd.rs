@@ -54,9 +54,11 @@ pub struct RecoveryToolArgs {
     #[clap(long)]
     pub skip_prompts: bool,
 
-    /// Flag to indicate we're performing a local recovery, directly on a node.
+    /// Flag to indicate we're running recovery directly on a node, and should use
+    /// the locally available binaries. If this option is not set, missing binaries
+    /// will be downloaded.
     #[clap(long)]
-    pub local_recovery: bool,
+    pub use_local_binaries: bool,
 
     #[clap(subcommand)]
     pub subcmd: Option<SubCommand>,
