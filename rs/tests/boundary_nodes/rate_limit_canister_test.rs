@@ -266,7 +266,7 @@ async fn test_async(env: TestEnv) {
         "Step 9. Assert adding two rate-limit rules to the rate-limit canister now succeeds"
     );
 
-    let result = set_rate_limit_rules(
+    set_rate_limit_rules(
         &api_bn_agent,
         rate_limit_id,
         vec![
@@ -294,9 +294,8 @@ async fn test_async(env: TestEnv) {
             },
         ],
     )
-    .await;
-
-    assert_eq!(result.unwrap(), ());
+    .await
+    .unwrap();
 
     info!(
         &logger,
@@ -328,7 +327,7 @@ async fn test_async(env: TestEnv) {
         "Step 11. Add a rate-limit rule, which unblocks requests to the counter canister"
     );
 
-    let result = set_rate_limit_rules(
+    set_rate_limit_rules(
         &api_bn_agent,
         rate_limit_id,
         vec![InputRule {
@@ -343,9 +342,8 @@ async fn test_async(env: TestEnv) {
             description: "Unblock requests to the counter canister".to_string(),
         }],
     )
-    .await;
-
-    assert_eq!(result.unwrap(), ());
+    .await
+    .unwrap();
 
     info!(
         &logger,
@@ -391,9 +389,9 @@ async fn set_rate_limit_rules(
         .await
         .map_err(|err| err.to_string())?;
 
-    Ok(Decode!(&result, AddConfigResponse)
+    Decode!(&result, AddConfigResponse)
         .expect("failed to deserialize response")
-        .map_err(|err| format!("{err:?}"))?)
+        .map_err(|err| format!("{err:?}"))
 }
 
 fn test(env: TestEnv) {
