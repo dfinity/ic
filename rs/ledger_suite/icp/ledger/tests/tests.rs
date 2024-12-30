@@ -1262,7 +1262,7 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
         upgrade_args,
         minter,
         false,
-        false,
+        true,
     );
 }
 
@@ -1292,7 +1292,7 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
