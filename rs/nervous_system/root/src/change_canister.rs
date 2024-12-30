@@ -22,16 +22,16 @@ use serde::Serialize;
 #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct ChunkedCanisterWasm {
     /// Check sum of the overall WASM to be reassembled from chunks.
-    wasm_module_hash: Vec<u8>,
+    pub wasm_module_hash: Vec<u8>,
 
     /// Indicates which canister stores the WASM chunks. The store canister must be on the same
     /// subnet as the target canister (Root must be one of the controllers of both of them).
     /// May be the same as the target canister ID.
-    store_canister_id: CanisterId,
+    pub store_canister_id: CanisterId,
 
     /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain
     /// at least one chunk.
-    chunk_hashes_list: Vec<Vec<u8>>,
+    pub chunk_hashes_list: Vec<Vec<u8>>,
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
