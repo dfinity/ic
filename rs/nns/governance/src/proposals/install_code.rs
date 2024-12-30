@@ -308,6 +308,7 @@ mod tests {
                 arg: vec![4, 5, 6],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -376,6 +377,7 @@ mod tests {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
