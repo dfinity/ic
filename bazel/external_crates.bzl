@@ -695,7 +695,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "ipnet": crate.spec(
-                version = "^2.5.0",
+                version = "^2.10.1",
+                features = ["serde"],
             ),
             "isocountry": crate.spec(
                 version = "^0.3.2",
@@ -1434,17 +1435,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "^26.0.0",
+                version = "^27.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
                     "gc",
+                    "gc-null",
                     "parallel-compilation",
                     "runtime",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^26.0.0",
+                version = "^27.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",

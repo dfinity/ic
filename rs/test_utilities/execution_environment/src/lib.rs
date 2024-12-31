@@ -1991,6 +1991,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_query_caching_disabled(mut self) -> Self {
+        self.execution_config.query_caching = FlagStatus::Disabled;
+        self
+    }
+
     pub fn with_query_cache_capacity(mut self, capacity_bytes: u64) -> Self {
         self.execution_config.query_cache_capacity = capacity_bytes.into();
         self
