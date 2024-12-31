@@ -64,6 +64,7 @@ type CanisterSettings = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
 };
 
 type CanisterStatusResultV2 = record {
