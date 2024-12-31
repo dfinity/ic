@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::JoinOnDrop;
 use crossbeam_channel::{bounded, unbounded, Sender};
 
@@ -29,7 +31,7 @@ pub struct DeallocatorThread {
 }
 
 impl DeallocatorThread {
-    pub fn new(name: &str, sleep_between_drops: u32) -> Self {
+    pub fn new(name: &str, sleep_between_drops: Duration) -> Self {
         #[allow(clippy::disallowed_methods)]
         let (sender, receiver) = unbounded();
         let deallocation_sender = DeallocationSender { sender };
