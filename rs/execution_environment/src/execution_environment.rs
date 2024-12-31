@@ -421,7 +421,13 @@ impl ExecutionEnvironment {
             Arc::clone(&ingress_history_writer),
             fd_factory,
         );
-        let deallocator_thread = DeallocatorThread::new("ExecutionDeallocator", 10000);
+        // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
+        // 0.1 ms between deallocations, to spread out the load on the memory allocator
+        // (the 0.1 ms was determined by running a benchmark with thousands of messages
+        // executed per round and checking CPU profiles to ensure that the vast majority
+        // of deallocations happened on the background thread).
+        let deallocator_thread =
+            DeallocatorThread::new("ExecutionDeallocator", Duration::from_micros(100));
         Self {
             log,
             hypervisor,
@@ -3632,6 +3638,16 @@ impl ExecutionEnvironment {
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
         (*self.hypervisor).clear_compilation_cache_for_testing()
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Drop for ExecutionEnvironment {
+    fn drop(&mut self) {
+        // In tests, wait for all states to be dropped before continuing, to avoid any
+        // race conditions. This is not an issue in the replica, as it never drops the
+        // `ExecutionEnvironment`.
+        self.deallocator_thread.flush_deallocation_channel();
     }
 }
 

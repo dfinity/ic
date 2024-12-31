@@ -29,7 +29,7 @@ pub struct DeallocatorThread {
 }
 
 impl DeallocatorThread {
-    pub fn new(name: &str, max_deallocations_per_second: u32) -> Self {
+    pub fn new(name: &str, sleep_between_drops: u32) -> Self {
         #[allow(clippy::disallowed_methods)]
         let (sender, receiver) = unbounded();
         let deallocation_sender = DeallocationSender { sender };
@@ -41,9 +41,7 @@ impl DeallocatorThread {
                         while let Ok(object) = receiver.recv() {
                             std::mem::drop(object);
                             // Sleep, to spread out the load on the memory allocator.
-                            std::thread::sleep(
-                                std::time::Duration::from_secs(1) / max_deallocations_per_second,
-                            );
+                            std::thread::sleep(sleep_between_drops);
                         }
                     }
                 })

@@ -1699,7 +1699,8 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
-        let deallocator_thread = DeallocatorThread::new("StateDeallocation", 1000);
+        let deallocator_thread =
+            DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             tip_channel
