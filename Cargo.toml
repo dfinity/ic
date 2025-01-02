@@ -488,6 +488,7 @@ opt-level = 3
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
+ulid = { git = "https://github.com/ninegua/ulid-rs", rev = "1adf07e5fc0027ffce4caa567dc0e416ce59487d" }
 
 [workspace.dependencies]
 actix-web = "4.9.0"
