@@ -6987,11 +6987,6 @@ impl Governance {
                             );
                         }
                         Err(error) => {
-                            // Retain the neuron lock, the neuron won't be able to undergo stake changing
-                            // operations until this is fixed.
-                            // This is different from what we do in most places because we usually rely
-                            // on trapping to retain the lock, but we can't do that here since we're not
-                            // working on a single neuron.
                             println!(
                                 "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
                                 Reverting state, so another attempt can be made.",
@@ -7013,6 +7008,11 @@ impl Governance {
                                         neuron_id,
                                         e
                                     );
+                                    // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                                    // operations until this is fixed.
+                                    // This is different from what we do in most places because we usually rely
+                                    // on trapping to retain the lock, but we can't do that here since we're not
+                                    // working on a single neuron.
                                     lock.retain();
                                 }
                             };
