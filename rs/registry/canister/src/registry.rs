@@ -310,7 +310,6 @@ impl Registry {
         match repr_version {
             ReprVersion::Version1 => RegistryStableStorage {
                 version: repr_version as i32,
-                deltas: vec![],
                 changelog: self
                     .changelog
                     .iter()
@@ -320,18 +319,7 @@ impl Registry {
                     })
                     .collect(),
             },
-            ReprVersion::Unspecified => RegistryStableStorage {
-                version: repr_version as i32,
-                deltas: self
-                    .store
-                    .iter()
-                    .map(|(key, values)| RegistryDelta {
-                        key: key.clone(),
-                        values: values.iter().cloned().collect(),
-                    })
-                    .collect(),
-                changelog: vec![],
-            },
+            ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
     }
 
@@ -414,47 +402,7 @@ impl Registry {
                     current_version = self.version;
                 }
             }
-            ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<Version, Vec<RegistryMutation>>::new();
-                for delta in stable_repr.deltas.into_iter() {
-                    self.version = max(
-                        self.version,
-                        delta
-                            .values
-                            .last()
-                            .map(|registry_value| registry_value.version)
-                            .unwrap_or(0),
-                    );
-
-                    for v in delta.values.iter() {
-                        mutations_by_version
-                            .entry(v.version)
-                            .or_default()
-                            .push(RegistryMutation {
-                                mutation_type: if v.deletion_marker {
-                                    Type::Delete
-                                } else {
-                                    Type::Upsert
-                                } as i32,
-                                key: delta.key.clone(),
-                                value: v.value.clone(),
-                            })
-                    }
-
-                    self.store.insert(delta.key, VecDeque::from(delta.values));
-                }
-                // We iterated over keys in ascending order, so the mutations
-                // must also be sorted by key, resulting in canonical encoding.
-                for (v, mutations) in mutations_by_version.into_iter() {
-                    self.changelog_insert(
-                        v,
-                        &RegistryAtomicMutateRequest {
-                            mutations,
-                            preconditions: vec![],
-                        },
-                    );
-                }
-            }
+            ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
     }
 }
@@ -478,22 +426,11 @@ mod tests {
     /// This should bring back the registry in a state indistinguishable
     /// from the one before calling this method.
     fn serialize_then_deserialize(registry: Registry) {
-        let mut serialized_v0 = Vec::new();
-        registry
-            .serializable_form_at(ReprVersion::Unspecified)
-            .encode(&mut serialized_v0)
-            .expect("Error encoding registry");
         let mut serialized_v1 = Vec::new();
         registry
             .serializable_form_at(ReprVersion::Version1)
             .encode(&mut serialized_v1)
             .expect("Error encoding registry");
-
-        let restore_from_v0 = RegistryStableStorage::decode(serialized_v0.as_slice())
-            .expect("Error decoding registry");
-        let mut restored = Registry::new();
-        restored.from_serializable_form(restore_from_v0);
-        assert_eq!(restored, registry);
 
         let restore_from_v1 = RegistryStableStorage::decode(serialized_v1.as_slice())
             .expect("Error decoding registry");

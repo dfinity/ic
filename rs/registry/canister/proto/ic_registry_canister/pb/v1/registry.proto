@@ -17,6 +17,10 @@ message ChangelogEntry {
     // type, this might not be the case. E.g., if some field that was
     // present in old entries is removed from the proto schema.
     bytes encoded_mutation = 2;
+
+    // The timestamp when the mutation was applied.  This is not always populated
+    // as older entries may not have this field.
+    optional uint64 timestamp = 3;
 }
 
 // Just a container for a set of RegistryDelta that can be used to
@@ -68,11 +72,10 @@ message RegistryStableStorage {
     // details.
     Version version = 2;
 
-    // Only present if version == VERSION_UNSPECIFIED.
-    repeated ic_registry_transport.pb.v1.RegistryDelta deltas = 1;
-
     // Only present if version == VERSION_1.
     repeated ChangelogEntry changelog = 3;
+
+    reserved 1;
 }
 
 // A container for the what gets written to stable storage,

@@ -26,9 +26,6 @@ pub struct RegistryStableStorage {
     /// details.
     #[prost(enumeration = "registry_stable_storage::Version", tag = "2")]
     pub version: i32,
-    /// Only present if version == VERSION_UNSPECIFIED.
-    #[prost(message, repeated, tag = "1")]
-    pub deltas: ::prost::alloc::vec::Vec<::ic_registry_transport::pb::v1::RegistryDelta>,
     /// Only present if version == VERSION_1.
     #[prost(message, repeated, tag = "3")]
     pub changelog: ::prost::alloc::vec::Vec<ChangelogEntry>,
