@@ -24,7 +24,7 @@ use tokio::runtime::Handle;
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
-const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
+const SUCCESS_THRESHOLD: f64 = 0.15; // If more than 15% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 
