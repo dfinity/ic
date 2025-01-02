@@ -7018,6 +7018,50 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
+    // TODO remove this immediately after first deployment.
+    async fn fix_locked_spawn_neuron(&mut self) {
+        // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
+        // Neuron's state was updated, but the ledger transaction did not finish.
+        let id = 17912780790050115461;
+        let neuron_id = NeuronId { id };
+
+        let now_seconds = self.env.now();
+
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::Spawn(neuron_id)),
+        };
+        if self.lock_neuron_for_command(id, in_flight_command).is_ok() {
+            return;
+        }
+
+        let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
+            let neuron_stake = neuron.cached_neuron_stake_e8s;
+            let subaccount = neuron.subaccount();
+            (neuron_stake, subaccount)
+        });
+
+        // Mint the ICP
+        match self
+            .ledger
+            .transfer_funds(
+                neuron_stake,
+                0, // Minting transfer don't pay a fee.
+                None,
+                neuron_subaccount(subaccount),
+                now_seconds,
+            )
+            .await
+        {
+            Ok(_) => {
+                self.heap_data.in_flight_commands.remove(&id);
+            }
+            Err(error) => {
+                // Don't clear the lock.
+            }
+        };
+    }
+
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
         let latest_distribution_nominal_end_timestamp_seconds =
