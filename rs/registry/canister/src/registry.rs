@@ -339,7 +339,10 @@ impl Registry {
                 version_timestamps: self
                     .version_timestamps
                     .iter()
-                    .map(|(k, v)| (*k, *v))
+                    .map(|(k, v)| VersionTimestamp {
+                        version: *v,
+                        timestamp_nanoseconds: *k,
+                    })
                     .collect(),
             },
             ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
@@ -1075,11 +1078,6 @@ mod tests {
     }
 
     #[test]
-    fn test_from_serializable_form_version_unspecified_max_size_delta() {
-        test_from_serializable_form_impl(0, ReprVersion::Unspecified)
-    }
-
-    #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
         test_from_serializable_form_impl(0, ReprVersion::Version1)
     }
@@ -1087,7 +1085,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version_unspecified_delta_too_large() {
-        test_from_serializable_form_impl(1, ReprVersion::Unspecified)
+        test_from_serializable_form_impl(1, ReprVersion::Version1)
     }
 
     #[test]
