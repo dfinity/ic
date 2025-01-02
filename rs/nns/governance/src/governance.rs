@@ -142,6 +142,7 @@ pub mod tla_macros;
 pub mod tla;
 
 use crate::storage::with_voting_state_machines_mut;
+use ic_cdk::api::time;
 #[cfg(feature = "tla")]
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
@@ -7018,22 +7019,34 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
-    // TODO remove this immediately after first deployment.
-    async fn fix_locked_spawn_neuron(&mut self) {
+    // TODO(NNS1-3526): Remove this method once it is released.
+    pub async fn fix_locked_spawn_neuron(&mut self) {
         // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
         // Neuron's state was updated, but the ledger transaction did not finish.
+        const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
+
         let id = 17912780790050115461;
         let neuron_id = NeuronId { id };
 
         let now_seconds = self.env.now();
 
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: now_seconds,
-            command: Some(InFlightCommand::Spawn(neuron_id)),
+        match self.heap_data.in_flight_commands.get(&id) {
+            None => {
+                return;
+            }
+            Some(existing_lock) => {
+                let NeuronInFlightCommand {
+                    timestamp,
+                    command: _,
+                } = existing_lock;
+
+                // We check the exact timestamp so that new locks couldn't trigger this condition
+                // which would allow that neuron to repeatedly mint under the right conditions.
+                if timestamp != TARGETED_LOCK_TIMESTAMP {
+                    return;
+                }
+            }
         };
-        if self.lock_neuron_for_command(id, in_flight_command).is_ok() {
-            return;
-        }
 
         let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
             let neuron_stake = neuron.cached_neuron_stake_e8s;
