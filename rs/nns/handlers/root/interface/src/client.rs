@@ -48,7 +48,7 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
             (change_canister_controllers_request,),
         )
         .await
-        .map(|response| response.0)
+        .map(|(response,): (ChangeCanisterControllersResponse,)| response)
         .map_err(|err| (Some(err.0 as i32), err.1))
     }
 
@@ -62,7 +62,7 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
             (canister_id_record,),
         )
         .await
-        .map(|response| response.0)
+        .map(|(response,): (CanisterStatusResult,)| response)
         .map_err(|err| (Some(err.0 as i32), err.1))
     }
 }
