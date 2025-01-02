@@ -15,7 +15,6 @@ use ic_registry_transport::{
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
 use std::{
-    cmp::max,
     collections::{BTreeMap, VecDeque},
     fmt,
 };
