@@ -20,6 +20,7 @@ use std::{
     fmt,
 };
 
+use crate::pb::v1::VersionTimestamp;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -94,6 +95,10 @@ pub struct Registry {
     /// RegistryAtomicMutateRequest.  We keep the serialized version around to
     /// make sure that hash trees stay the same even if protobuf schema evolves.
     pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
+
+    /// A map of times to registry versions, useful for determining the version the registry was
+    /// at at a particular time.
+    pub(crate) version_timestamps: BTreeMap<u64, Version>,
 }
 
 impl Registry {
@@ -180,7 +185,20 @@ impl Registry {
     /// Increments the latest version of the registry.
     fn increment_version(&mut self) -> Version {
         self.version += 1;
+        self.record_version_at_timestamp();
         self.version
+    }
+
+    /// Records the current version at the current timestamp.
+    /// If a version is already present at this timestamp, increments
+    /// the timestamp until it is unique.
+    fn record_version_at_timestamp(&mut self) {
+        let mut timestamp = dfn_core::api::time_nanos();
+        let version = self.version;
+        while self.version_timestamps.contains_key(&timestamp) {
+            timestamp += 1;
+        }
+        self.version_timestamps.insert(timestamp, version);
     }
 
     pub fn latest_version(&self) -> Version {
@@ -318,6 +336,11 @@ impl Registry {
                         encoded_mutation: bytes.clone(),
                     })
                     .collect(),
+                version_timestamps: self
+                    .version_timestamps
+                    .iter()
+                    .map(|(k, v)| (*k, *v))
+                    .collect(),
             },
             ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
@@ -401,6 +424,16 @@ impl Registry {
                     self.version = entry.version;
                     current_version = self.version;
                 }
+                self.version_timestamps = stable_repr
+                    .version_timestamps
+                    .into_iter()
+                    .map(
+                        |VersionTimestamp {
+                             version,
+                             timestamp_nanoseconds,
+                         }| { (timestamp_nanoseconds, version) },
+                    )
+                    .collect();
             }
             ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
