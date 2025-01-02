@@ -17,10 +17,15 @@ message ChangelogEntry {
     // type, this might not be the case. E.g., if some field that was
     // present in old entries is removed from the proto schema.
     bytes encoded_mutation = 2;
+}
 
-    // The timestamp when the mutation was applied.  This is not always populated
-    // as older entries may not have this field.
-    optional uint64 timestamp = 3;
+// A version of the registry and the time when it was created.
+message VersionTimestamp {
+    // The version of the registry.
+    uint64 version = 1;
+    // The nanoseconds since unix epoch; time when the version was
+    // created.
+    uint64 timestamp_nanoseconds = 2;
 }
 
 // Just a container for a set of RegistryDelta that can be used to
@@ -75,7 +80,14 @@ message RegistryStableStorage {
     // Only present if version == VERSION_1.
     repeated ChangelogEntry changelog = 3;
 
+    // This allows us to correlate registry versions with when they happened.
+    // It is not present for all registry versions.  It is kept purposefully detached
+    // from the rest of the registry data, until a need is shown that deeper integration is needed
+    // in which case a migration can be performed.
+    repeated VersionTimestamp version_timestamps = 4;
+
     reserved 1;
+
 }
 
 // A container for the what gets written to stable storage,

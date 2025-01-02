@@ -15,6 +15,17 @@ pub struct ChangelogEntry {
     #[prost(bytes = "vec", tag = "2")]
     pub encoded_mutation: ::prost::alloc::vec::Vec<u8>,
 }
+/// A version of the registry and the time when it was created.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct VersionTimestamp {
+    /// The version of the registry.
+    #[prost(uint64, tag = "1")]
+    pub version: u64,
+    /// The nanoseconds since unix epoch; time when the version was
+    /// created.
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanoseconds: u64,
+}
 /// Just a container for a set of RegistryDelta that can be used to
 /// serialize/deserialize the content of the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -29,6 +40,12 @@ pub struct RegistryStableStorage {
     /// Only present if version == VERSION_1.
     #[prost(message, repeated, tag = "3")]
     pub changelog: ::prost::alloc::vec::Vec<ChangelogEntry>,
+    /// This allows us to correlate registry versions with when they happened.
+    /// It is not present for all registry versions.  It is kept purposefully detached
+    /// from the rest of the registry data, until a need is shown that deeper integration is needed
+    /// in which case a migration can be performed.
+    #[prost(message, repeated, tag = "4")]
+    pub version_timestamps: ::prost::alloc::vec::Vec<VersionTimestamp>,
 }
 /// Nested message and enum types in `RegistryStableStorage`.
 pub mod registry_stable_storage {
