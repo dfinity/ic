@@ -339,6 +339,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();

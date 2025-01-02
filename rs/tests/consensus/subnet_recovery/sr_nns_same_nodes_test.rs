@@ -116,6 +116,7 @@ pub fn test(env: TestEnv) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
 
     // unlike during a production recovery using the CLI, here we already know all of parameters
