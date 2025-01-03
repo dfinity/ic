@@ -12,32 +12,27 @@ jobs:
   template:
     runs-on: ubuntu-latest
     steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
-
-      - name: Is the author a member of nns-team?
-        uses: tspascoal/get-user-teams-membership@v2
+      - uses: actions/github-script@v7
         id: isAuthorInNnsTeam
         with:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          username: ${{ github.actor }}
-          team: nns-team
-
-      - name: Pre-populate pull request description.
-        if: ${{ steps.isAuthorInNnsTeam.isTeamMember == 'true' }}
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          result-encoding: string
+          retries: 3
           script: |
-            const pullRequestId = context.pullRequest.id;
-            const template = 'Your custom template here';
-            await github.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pullRequestId,
-              body: template,
+            const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
+              "dfinity",
+              "nns-team",
             });
+            console.log("nnsTeamMemebrs = " + nnsTeamMembers);
+
+            const isInNnsTeam = nnsTeamMembers.includes(context.actor);
+            if (isInNnsTeam) {
+              const pullRequestId = context.pullRequest.id;
+              const template = 'Your custom template here';
+              await github.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullRequestId,
+                body: template,
+              });
+            }
