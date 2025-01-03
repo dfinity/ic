@@ -22,6 +22,7 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod bouncer_metrics;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
