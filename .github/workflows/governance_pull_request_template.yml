@@ -25,6 +25,8 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
+            console.log("context:\n" + context + "\n\n");
+
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
               org: "dfinity",
               team_slug: "nns-team",
