@@ -1,0 +1,72 @@
+name: Remind Governance Team to Update unreleased_changelog.md.
+
+on:
+  pull_request:
+    types:
+      - assigned
+      - labeled
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+      - review_requested
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: mainStep
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            // nns-team is automatically added as a reviewer if an approval from
+            // nns-team is required. Therefore, this only skips posting a
+            // reminder when nns-team approval is not required.
+            const nnsTeamReviewRequested = context
+              .payload
+              .pull_request
+              .requested_teams
+              .some(team => team.name == 'nns-team')
+            console.log("nnsTeamReviewRequested = " + nnsTeamReviewRequested);
+            if (!nnsTeamReviewRequested) {
+              return;
+            }
+
+            const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if we already reminded (to avoid spam).
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const alreadyRemindedAboutUnreleasedChangelog = reviews
+              .data
+              .some(review => review.body.startsWith("Did you remember to update unreleased_changes.md?"));
+            console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
+            if (alreadyRemindedAboutUnreleasedChangelog) {
+              return;
+            }
+
+            // Post a review to remind the author to update unreleased_changelog.md.
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            console.log("Adding reminder to update unreleased_changelog.md...");
+            const reminderText = `
+              Did you remember to update unreleased_changes.md? If so (or if this is not
+              necessary), please, explicitly acknowledge this reminder by giving it a
+              thumbs up reaction. To unblock the PR, dismiss the code review by going
+              to the bottom of the pull request page, and use \"Done.\" as the reason.
+            `
+            .replace(/[\s\n]{2,}/gm, '')
+            .trim();
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: reminderText,
+              event: "REQUEST_CHANGES",
+            });
+            console.log("Reminder was added successfully.");
