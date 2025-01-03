@@ -5123,6 +5123,7 @@ fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
 
 /// Tests that a neuron can be refreshed by memo by it's controller.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_refresh_neuron_by_memo_by_controller() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     refresh_neuron_by_memo(owner, owner);
@@ -5130,6 +5131,7 @@ fn test_refresh_neuron_by_memo_by_controller() {
 
 /// Tests that a neuron can be refreshed by memo by proxy.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_refresh_neuron_by_memo_by_proxy() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let caller = *TEST_NEURON_2_OWNER_PRINCIPAL;

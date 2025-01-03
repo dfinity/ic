@@ -26,12 +26,14 @@ pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
 mod claim_neuron;
 mod merge_neurons;
+mod refresh_neuron;
 mod spawn_neuron;
 mod spawn_neurons;
 mod split_neuron;
 
 pub use claim_neuron::CLAIM_NEURON_DESC;
 pub use merge_neurons::MERGE_NEURONS_DESC;
+pub use refresh_neuron::REFRESH_NEURON_DESC;
 pub use spawn_neuron::SPAWN_NEURON_DESC;
 pub use spawn_neurons::SPAWN_NEURONS_DESC;
 pub use split_neuron::SPLIT_NEURON_DESC;
