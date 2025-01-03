@@ -12,11 +12,18 @@ jobs:
   template:
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Is the author a member of nns-team?
         uses: tspascoal/get-user-teams-membership@v2
         id: isAuthorInNnsTeam
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.putputs.token }}
           username: ${{ github.actor }}
           team: nns-team
 
