@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    checkpoint::make_checkpoint,
+    checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
     state_sync::types::{FileInfo, Manifest},
     tip::spawn_tip_thread,
@@ -204,8 +204,8 @@ fn read_write_roundtrip() {
             layout.clone(),
             &cp,
             &mut thread_pool,
-            fd_factory,
             &Config::new(root),
+            fd_factory.clone(),
             &metrics,
             log.clone(),
         )
@@ -454,17 +454,29 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     );
 
     let mut thread_pool = thread_pool();
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         &state,
         HEIGHT,
         &tip_channel,
         &state_manager_metrics.checkpoint_metrics,
-        &mut thread_pool,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         lsmt_config_default().lsmt_status,
     )
-    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
-    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(&mut thread_pool)).unwrap();
+    .unwrap_or_else(|err| {
+        panic!(
+            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
+            err
+        )
+    });
+    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+    validate_checkpoint_and_remove_unverified_marker(
+        &cp_layout,
+        None,
+        SubnetType::Application,
+        fd_factory.clone(),
+        &state_manager_metrics.checkpoint_metrics,
+        Some(&mut thread_pool),
+    )
+    .unwrap();
 
     // Sanity checks.
     assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);

@@ -1,11 +1,12 @@
 use crate::{
-    checkpoint::validate_checkpoint_and_remove_unverified_marker,
+    checkpoint::{validate_checkpoint_and_remove_unverified_marker, validate_eq_checkpoint},
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -16,6 +17,8 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -38,6 +41,7 @@ use rand::prelude::SliceRandom;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -125,6 +129,9 @@ pub(crate) enum TipRequest {
     /// Crash if diverges.
     ValidateReplicatedState {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
+        replicated_state: Arc<ReplicatedState>,
+        own_subnet_type: SubnetType,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -448,9 +455,18 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                        TipRequest::ValidateReplicatedState {
+                            checkpoint_layout,
+                            replicated_state,
+                            own_subnet_type,
+                            fd_factory,
+                        } => {
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
+                                Some(replicated_state.deref()),
+                                own_subnet_type,
+                                Arc::clone(&fd_factory),
+                                &metrics.checkpoint_metrics,
                                 Some(&mut thread_pool),
                             ) {
                                 fatal!(
@@ -459,6 +475,25 @@ pub(crate) fn spawn_tip_thread(
                                     checkpoint_layout.raw_path().display(),
                                     err
                                 )
+                            }
+                            if let Err(err) = validate_eq_checkpoint(
+                                &checkpoint_layout,
+                                &replicated_state,
+                                own_subnet_type,
+                                Some(&mut thread_pool),
+                                fd_factory,
+                                &metrics.checkpoint_metrics,
+                            ) {
+                                error!(
+                                    log,
+                                    "{}: Replicated state altered: {}",
+                                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+                                    err
+                                );
+                                metrics
+                                    .checkpoint_metrics
+                                    .replicated_state_altered_after_checkpoint
+                                    .inc();
                             }
                         }
 
