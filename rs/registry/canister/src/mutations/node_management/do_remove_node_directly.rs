@@ -134,7 +134,7 @@ mod tests {
     use crate::{
         common::test_helpers::{
             invariant_compliant_registry, prepare_registry_with_nodes,
-            prepare_registry_with_nodes_and_node_operator,
+            prepare_registry_with_nodes_and_node_operator_id,
         },
         mutations::common::test::TEST_NODE_ID,
     };
@@ -240,7 +240,7 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator_id(
             1, /* mutation id */
             1, /* node count */
             Some(operator1_id),
@@ -288,7 +288,7 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator_id(
             1, /* mutation id */
             1, /* node count */
             Some(operator1_id),

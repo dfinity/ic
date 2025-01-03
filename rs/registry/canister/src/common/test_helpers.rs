@@ -97,11 +97,11 @@ pub fn prepare_registry_with_nodes(
     start_mutation_id: u8,
     nodes: u64,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
-    prepare_registry_with_nodes_and_node_operator(start_mutation_id, nodes, None)
+    prepare_registry_with_nodes_and_node_operator_id(start_mutation_id, nodes, None)
 }
 
 /// Same as above, just with the possibility to provide a node operator principal.
-pub fn prepare_registry_with_nodes_and_node_operator(
+pub fn prepare_registry_with_nodes_and_node_operator_id(
     start_mutation_id: u8,
     nodes: u64,
     node_operator_id: Option<PrincipalId>,
