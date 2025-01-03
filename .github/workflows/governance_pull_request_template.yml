@@ -32,6 +32,9 @@ jobs:
           script: |
             console.log("context:\n" + JSON.stringify(context, null, 2) + "\n\n");
 
+            const newBody = context.payload.body + "\n\n# Additional Stuff";
+            console.log("newBody = " + newBody);
+
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
               org: "dfinity",
               team_slug: "nns-team",
@@ -44,11 +47,10 @@ jobs:
               return;
             }
 
-            const pullRequestId = context.pullRequest.id;
-            const template = '# Checklist';
+            const pullRequestNumber = context.payload.number;
             await github.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: pullRequestId,
-              body: template,
+              pull_number: pullRequestNumber,
+              body: newBody,
             });
