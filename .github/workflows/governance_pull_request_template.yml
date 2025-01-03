@@ -33,7 +33,7 @@ jobs:
             } else {
               newBody = oldBody + "\n\n# Additional Stuff";
             }
-            console.log("newBody = " + newBody);
+            console.log("newBody = " + JSON.stringify(newBody));
 
             console.log("\n\n");
             console.log("Calling listMembersInOrg...")
