@@ -240,11 +240,12 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator_id(
-            1, /* mutation id */
-            1, /* node count */
-            Some(operator1_id),
-        );
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_node_operator_id(
+                1, /* mutation id */
+                1, /* node count */
+                Some(operator1_id),
+            );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
             .keys()
@@ -288,11 +289,12 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator_id(
-            1, /* mutation id */
-            1, /* node count */
-            Some(operator1_id),
-        );
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_node_operator_id(
+                1, /* mutation id */
+                1, /* node count */
+                Some(operator1_id),
+            );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
             .keys()
