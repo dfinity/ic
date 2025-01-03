@@ -5,7 +5,7 @@ on:
     types:
       - opened
       # DO NOT MERGE
-      - synchronized
+      - synchronize
 
 permissions:
   id-token: write
