@@ -279,6 +279,15 @@ pub struct RateLimiting {
     /// How frequently to poll for rules (from file or canister)
     #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
     pub rate_limit_generic_poll_interval: Duration,
+
+    /// Time-to-idle for rules that have the `ip_group_prefix`.
+    /// If no requests are coming for the given shard - it will be removed.
+    #[clap(env, long, default_value = "1h", value_parser = parse_duration)]
+    pub rate_limit_generic_tti: Duration,
+
+    /// Maximum number of shards that we store (per rule)
+    #[clap(env, long, default_value = "30000")]
+    pub rate_limit_generic_max_shards: u64,
 }
 
 #[derive(Args)]
@@ -340,8 +349,8 @@ pub struct Bouncer {
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
-    pub bouncer_burst_size: u64,
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_burst_size: u32,
 
     /// For how long to ban the IPs
     #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
