@@ -40,7 +40,7 @@ jobs:
               team_slug: "nns-team",
             });
             console.log("\n");
-            console.log("nnsTeamMemebrs = " + nnsTeamMembers);
+            console.log("nnsTeamMemebrs = " + JSON.stringify(nnsTeamMembers));
             console.log("\n");
 
             const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
