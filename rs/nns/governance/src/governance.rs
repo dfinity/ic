@@ -142,7 +142,6 @@ pub mod tla_macros;
 pub mod tla;
 
 use crate::storage::with_voting_state_machines_mut;
-use ic_cdk::api::time;
 #[cfg(feature = "tla")]
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
@@ -7020,7 +7019,7 @@ impl Governance {
     }
 
     // TODO(NNS1-3526): Remove this method once it is released.
-    pub async fn fix_locked_spawn_neuron(&mut self) {
+    pub async fn fix_locked_spawn_neuron(&mut self) -> Result<(), GovernanceError> {
         // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
         // Neuron's state was updated, but the ledger transaction did not finish.
         const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
@@ -7032,7 +7031,7 @@ impl Governance {
 
         match self.heap_data.in_flight_commands.get(&id) {
             None => {
-                return;
+                return Ok(());
             }
             Some(existing_lock) => {
                 let NeuronInFlightCommand {
@@ -7042,8 +7041,8 @@ impl Governance {
 
                 // We check the exact timestamp so that new locks couldn't trigger this condition
                 // which would allow that neuron to repeatedly mint under the right conditions.
-                if timestamp != TARGETED_LOCK_TIMESTAMP {
-                    return;
+                if *timestamp != TARGETED_LOCK_TIMESTAMP {
+                    return Ok(());
                 }
             }
         };
@@ -7052,7 +7051,7 @@ impl Governance {
             let neuron_stake = neuron.cached_neuron_stake_e8s;
             let subaccount = neuron.subaccount();
             (neuron_stake, subaccount)
-        });
+        })?;
 
         // Mint the ICP
         match self
@@ -7068,11 +7067,16 @@ impl Governance {
         {
             Ok(_) => {
                 self.heap_data.in_flight_commands.remove(&id);
+                Ok(())
             }
-            Err(error) => {
-                // Don't clear the lock.
-            }
-        };
+            Err(error) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                format!(
+                    "Error fixing locked neuron: {:?}. Ledger update failed with err: {:?}.",
+                    neuron_id, error
+                ),
+            )),
+        }
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise

@@ -338,7 +338,10 @@ fn schedule_vote_processing() {
 fn schedule_locked_spawning_neuron_fix() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), || {
         spawn(async {
-            governance_mut().fix_locked_spawn_neuron().await;
+            governance_mut()
+                .fix_locked_spawn_neuron()
+                .await
+                .expect("Failed to fix locked neuron");
         });
     });
 }
