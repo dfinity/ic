@@ -32,28 +32,11 @@ jobs:
             newBody = newBody.join("\n\n");
             console.log("newBody = " + JSON.stringify(newBody));
 
-            console.log("\n");
-            console.log("Calling listMembersInOrg...")
-            console.log("\n");
-            const nnsTeamMembers = await await github.rest.teams.listMembersInOrg({
-              org: "dfinity",
-              team_slug: "nns-team",
-            });
-            console.log("\n");
-            console.log("nnsTeamMemebrs = " + JSON.stringify(nnsTeamMembers));
-            console.log("\n");
-
-            const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
-            console.log("Is actor in nns-team? " + isInNNsTeam);
-            if (!isInNnsTeam) {
-              return;
-            }
-
             const pullRequestNumber = context.payload.number;
             console.log("Setting the body of pull request number " + pullRequestNumber + "...");
-            await github.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+            await github.rest.pulls.update({
+              owner: "dfinity",
+              repo: "ic",
               pull_number: pullRequestNumber,
               body: newBody,
             });
