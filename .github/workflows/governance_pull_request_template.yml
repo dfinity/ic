@@ -30,8 +30,6 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
-            console.log("context:\n" + JSON.stringify(context, null, 2) + "\n\n");
-
             const newBody = context.payload.body + "\n\n# Additional Stuff";
             console.log("newBody = " + newBody);
 
@@ -48,6 +46,7 @@ jobs:
             }
 
             const pullRequestNumber = context.payload.number;
+            console.log("Setting the body of pull request number " + pullRequestNumber + "...");
             await github.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
