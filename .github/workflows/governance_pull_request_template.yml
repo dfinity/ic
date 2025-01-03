@@ -24,6 +24,11 @@ jobs:
             const oldBody = context.payload.pull_request.body;
             var newBody = oldBody ? [oldBody] : [];
 
+            if (oldBody.match(/Added by GitHub Actions/)) {
+              console.log("No need to modify the body, because it already has the check list.");
+              return;
+            }
+
             newBody = newBody.concat([
               "# Added by GitHub Actions",
               "(Or workflows, or whatever TF they are called...)",
