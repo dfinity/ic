@@ -30,6 +30,8 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
+            console.log("BEGIN CONTEXT\n" + JSON.stringify(context, null, 2) + "\nEND CONTEXT\n\n");
+
             const newBody = context.payload.body + "\n\n# Additional Stuff";
             console.log("newBody = " + newBody);
 
