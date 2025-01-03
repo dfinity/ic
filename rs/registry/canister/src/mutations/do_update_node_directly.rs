@@ -248,7 +248,7 @@ mod test {
     fn test_node_not_on_a_signing_subnet() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -289,7 +289,7 @@ mod test {
     fn test_idkg_key_update_disabled() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -344,7 +344,7 @@ mod test {
     fn test_idkg_key_update_fail() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -410,7 +410,7 @@ mod test {
     fn test_idkg_key_update_success() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

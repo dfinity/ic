@@ -132,7 +132,10 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry, prepare_registry_with_nodes,
+            prepare_registry_with_nodes_and_node_operator,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
 
@@ -154,11 +157,8 @@ mod tests {
     fn should_panic_if_node_is_api_boundary_node() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    /* mutation id */
-            1,    /* node count */
-            None, /* operator_id */
-        );
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
             .keys()
@@ -184,11 +184,8 @@ mod tests {
     fn should_succeed() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    /* mutation id */
-            1,    /* node count */
-            None, /* operator_id */
-        );
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
             .keys()
@@ -243,7 +240,7 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator(
             1, /* mutation id */
             1, /* node count */
             Some(operator1_id),
@@ -291,7 +288,7 @@ mod tests {
             ),
         ]);
         // Add node owned by operator1 to registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_node_operator(
             1, /* mutation id */
             1, /* node count */
             Some(operator1_id),

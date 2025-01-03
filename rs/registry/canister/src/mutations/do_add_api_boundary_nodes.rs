@@ -150,9 +150,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -186,9 +185,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -225,9 +223,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -253,9 +250,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -319,9 +315,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -376,9 +371,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            3,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            3, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -430,9 +424,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            3,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            3, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
@@ -494,9 +487,8 @@ mod tests {
 
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            3,    // node count
-            None, // Node operator ID
+            1, // mutation id
+            3, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 

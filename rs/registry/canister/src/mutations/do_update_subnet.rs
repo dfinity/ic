@@ -882,7 +882,7 @@ mod tests {
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -930,7 +930,7 @@ mod tests {
     fn test_disallow_duplicate_ecdsa_keys() {
         // Step 1: prepare registry with a subnet record.
         let mut registry = invariant_compliant_registry(0);
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let mut subnet_list_record = registry.get_subnet_list_record();
         let mut node_ids_and_dkg_pks_iter = node_ids_and_dkg_pks.iter();
@@ -980,7 +980,7 @@ mod tests {
 
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1052,7 +1052,7 @@ mod tests {
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1153,7 +1153,7 @@ mod tests {
     fn can_disable_signing_without_removing_keys() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1254,7 +1254,7 @@ mod tests {
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1315,7 +1315,7 @@ mod tests {
     fn test_deleting_ecdsa_keys_fails_legacy() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1389,7 +1389,7 @@ mod tests {
     fn test_deleting_chain_keys_fails() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1617,7 +1617,7 @@ mod tests {
 
         // Make sure the registry has the expected subnet record.
         {
-            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
             registry.maybe_apply_mutation_internal(mutate_request.mutations);
             let mut subnet_list_record = registry.get_subnet_list_record();
             let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
@@ -1670,7 +1670,7 @@ mod tests {
 
         // Make sure the registry has the expected subnet record.
         {
-            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2, None);
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
             registry.maybe_apply_mutation_internal(mutate_request.mutations);
             let mut subnet_list_record = registry.get_subnet_list_record();
             let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks

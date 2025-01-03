@@ -91,9 +91,17 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
     .into()
 }
 
-/// Prepare a mutate request to add the desired of nodes, and returned the IDs
+/// Prepare a mutate request to add the desired of number of nodes, and returned the IDs
 /// of the nodes to be added, together with their NI-DKG dealing encryption public keys.
 pub fn prepare_registry_with_nodes(
+    start_mutation_id: u8,
+    nodes: u64,
+) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
+    prepare_registry_with_nodes_and_node_operator(start_mutation_id, nodes, None)
+}
+
+/// Same as above, just with the possibility to provide a node operator principal.
+pub fn prepare_registry_with_nodes_and_node_operator(
     start_mutation_id: u8,
     nodes: u64,
     node_operator_id: Option<PrincipalId>,
@@ -116,7 +124,9 @@ pub fn prepare_registry_with_nodes(
                     ip_addr: format!("128.0.{effective_id}.1"),
                     ..Default::default()
                 }),
-                node_operator_id: node_operator_id.unwrap_or_default().into_vec(),
+                node_operator_id: node_operator_id
+                    .unwrap_or(PrincipalId::new_user_test_id(999))
+                    .into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
                 ..Default::default()

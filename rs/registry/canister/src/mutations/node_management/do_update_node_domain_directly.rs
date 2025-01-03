@@ -115,9 +115,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // operator id
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_operator_id = PrincipalId::new_user_test_id(101);
@@ -140,9 +139,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // operator id
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
@@ -170,9 +168,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // operator id
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
@@ -213,9 +210,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
-            1,    // mutation id
-            1,    // node count
-            None, // operator id
+            1, // mutation id
+            1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 

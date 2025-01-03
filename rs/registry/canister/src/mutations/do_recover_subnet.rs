@@ -550,7 +550,7 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1, None);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
