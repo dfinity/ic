@@ -117,7 +117,7 @@ use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
     future::Future,
@@ -1935,6 +1935,30 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
 }
 
 impl Governance {
+    /// Creates a new Governance instance with uninitialized fields. The canister should only have
+    /// such state before the state is recovered from the stable memory in post_upgrade or
+    /// initialized in init. In any other case, the `Governance` object should be initialized with
+    /// either `new` or `new_restored`.
+    pub fn new_uninitialized(
+        env: Box<dyn Environment>,
+        ledger: Box<dyn IcpLedger>,
+        cmc: Box<dyn CMC>,
+    ) -> Self {
+        Self {
+            heap_data: HeapGovernanceData::default(),
+            neuron_store: NeuronStore::new(BTreeMap::new()),
+            env,
+            ledger,
+            cmc,
+            closest_proposal_deadline_timestamp_seconds: 0,
+            latest_gc_timestamp_seconds: 0,
+            latest_gc_num_proposals: 0,
+            neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
+            neuron_rate_limits: NeuronRateLimits::default(),
+        }
+    }
+
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
@@ -6947,16 +6971,17 @@ impl Governance {
                         LOG_PREFIX, neuron
                     );
 
-                    let staked_neuron_clone = self
+                    let (staked_neuron_clone, original_spawn_at_timestamp_seconds) = self
                         .with_neuron_mut(&neuron_id, |neuron| {
                             // Reset the neuron's maturity and set that it's spawning before we actually mint
                             // the stake. This is conservative to prevent a neuron having _both_ the stake and
                             // the maturity at any point in time.
+                            let original_spawn_ts = neuron.spawn_at_timestamp_seconds;
                             neuron.maturity_e8s_equivalent = 0;
                             neuron.spawn_at_timestamp_seconds = None;
                             neuron.cached_neuron_stake_e8s = neuron_stake;
 
-                            neuron.clone()
+                            (neuron.clone(), original_spawn_ts)
                         })
                         .unwrap();
 
@@ -6986,18 +7011,35 @@ impl Governance {
                             );
                         }
                         Err(error) => {
-                            // Retain the neuron lock, the neuron won't be able to undergo stake changing
-                            // operations until this is fixed.
-                            // This is different from what we do in most places because we usually rely
-                            // on trapping to retain the lock, but we can't do that here since we're not
-                            // working on a single neuron.
-                            lock.retain();
                             println!(
-                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
+                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
+                                Reverting state, so another attempt can be made.",
                                 LOG_PREFIX,
                                 neuron_id,
                                 error,
-                                );
+                            );
+                            match self.with_neuron_mut(&neuron_id, |neuron| {
+                                neuron.maturity_e8s_equivalent = neuron_stake;
+                                neuron.cached_neuron_stake_e8s = 0;
+                                neuron.spawn_at_timestamp_seconds =
+                                    original_spawn_at_timestamp_seconds;
+                            }) {
+                                Ok(_) => (),
+                                Err(e) => {
+                                    println!(
+                                        "{} Error reverting state for neuron: {:?}. Retaining lock: {}",
+                                        LOG_PREFIX,
+                                        neuron_id,
+                                        e
+                                    );
+                                    // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                                    // operations until this is fixed.
+                                    // This is different from what we do in most places because we usually rely
+                                    // on trapping to retain the lock, but we can't do that here since we're not
+                                    // working on a single neuron.
+                                    lock.retain();
+                                }
+                            };
                         }
                     };
                 }
