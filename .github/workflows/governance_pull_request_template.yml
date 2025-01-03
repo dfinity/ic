@@ -21,12 +21,8 @@ jobs:
           script: |
             console.log("BEGIN SCRIPT");
 
-            var newBody = [];
-
             const oldBody = context.payload.pull_request.body;
-            if (oldBody) {
-              newBody = newBody.concat([oldBody]);
-            }
+            var newBody = oldBody ? [oldBody] : [];
 
             newBody = newBody.concat([
               "# Added by GitHub Actions",
