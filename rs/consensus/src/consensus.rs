@@ -30,7 +30,7 @@ use crate::{
         random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator,
         validator::Validator,
     },
-    dkg::dkg_key_manager::DkgKeyManager,
+    dkg::DkgKeyManager,
 };
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,

@@ -7,7 +7,6 @@ use crate::idkg::{
     payload_builder::make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
-use dkg_key_manager::DkgKeyManager;
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -55,7 +54,10 @@ pub(crate) mod payload_validator;
 mod test_utils;
 mod utils;
 
-pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
+pub use {
+    dkg_key_manager::DkgKeyManager,
+    payload_builder::{create_payload, make_genesis_summary, PayloadCreationError},
+};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
