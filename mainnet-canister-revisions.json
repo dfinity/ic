@@ -15,6 +15,14 @@
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
   },
+  "ck_btc_ledger_v1": {
+    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
+    "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
+  },
+  "ck_btc_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
+  },
   "ck_eth_archive": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "2d25f7831894100d48aa9043c65e87c293487523f0958c15760027d004fbbda9"
@@ -26,6 +34,14 @@
   "ck_eth_ledger": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
+  },
+  "ck_eth_ledger_v1": {
+    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
+    "sha256": "e6072806ae22868ee09c07923d093b1b0b687dba540d22cfc1e1a5392bfcca46"
+  },
+  "ck_eth_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "98a7b7391608dc4a554d6964bad24157b6aaf890a05bbaad3fcc92033d9c7b02"
   },
   "cycles-minting": {
     "rev": "ee52ab3056cf5f39b09b08de70bdd20485c8b2dc",
