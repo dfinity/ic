@@ -6,6 +6,11 @@ on:
       - opened
       - reopened
 
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
 jobs:
   main:
     runs-on: ubuntu-latest
