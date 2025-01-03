@@ -31,7 +31,7 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
-            console.log("BEGIN CONTEXT\n" + JSON.stringify(context, null, 2) + "\nEND CONTEXT\n\n");
+            console.log("BEGIN SCRIPT");
 
             const oldBody = context.payload.pull_request.body;
             var newBody = "GARBAGE";
