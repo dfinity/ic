@@ -188,7 +188,7 @@ fn should_update_metrics() {
     }
 }
 
-/// Simple local "update" for the test reference
+// Simple local "update" for the test reference
 fn update_metrics_locally(metrics: &mut FsTrimMetrics, success: bool, duration: Duration) {
     metrics.total_runs += 1f64;
     metrics.last_run_success = success;
@@ -258,7 +258,7 @@ fn should_maintain_invariants() {
 }
 
 #[test]
-fn should_update_datadir_metrics_in_isolation() {
+fn should_update_datadir_metrics() {
     let mut metrics = FsTrimMetrics::default();
     assert_eq!(metrics.total_runs_datadir, 0.0);
     assert_eq!(metrics.last_duration_milliseconds_datadir, 0.0);
@@ -272,7 +272,7 @@ fn should_update_datadir_metrics_in_isolation() {
     assert_eq!(metrics.last_duration_milliseconds_datadir, 123.0);
     assert!(!metrics.last_run_success_datadir);
 
-    // Also check that normal fields remain untouched
+    // Check that normal fields remain untouched
     assert_eq!(metrics.total_runs, 0.0);
     assert_eq!(metrics.last_duration_milliseconds, 0.0);
     assert!(metrics.last_run_success);
