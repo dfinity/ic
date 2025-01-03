@@ -13,6 +13,7 @@
 //! towards the controller are found in this module.
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fs::File;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -25,8 +26,8 @@ use crate::protocol::structs::{
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges, wasm_utils::Segments, SerializedModule, SerializedModuleBytes,
-    WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModule,
+    SerializedModuleBytes, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
@@ -318,6 +319,30 @@ impl SandboxManager {
         }
     }
 
+    pub fn open_wasm_via_file(
+        &self,
+        wasm_id: WasmId,
+        serialized_module_file: File,
+    ) -> HypervisorResult<(Arc<EmbedderCache>, Duration)> {
+        let mut guard = self.repr.lock().unwrap();
+        assert!(
+            !guard.caches.contains_key(&wasm_id),
+            "Failed to open wasm session {}: id is already in use",
+            wasm_id,
+        );
+        let deserialization_timer = Instant::now();
+        let instance_pre = self
+            .embedder
+            .read_file_and_pre_instantiate(serialized_module_file);
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
+        let deserialization_time = deserialization_timer.elapsed();
+        guard.caches.insert(wasm_id, Arc::clone(&cache));
+        match instance_pre {
+            Ok(_) => Ok((cache, deserialization_time)),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Closes previously opened wasm instance, by id.
     pub fn close_wasm(&self, wasm_id: WasmId) {
         let mut guard = self.repr.lock().unwrap();
@@ -453,6 +478,71 @@ impl SandboxManager {
             .create_initial_memory_and_globals(
                 &embedder_cache,
                 &serialized_module.data_segments,
+                wasm_page_map,
+                next_wasm_memory_id,
+                canister_id,
+                stable_memory_page_map,
+            )?;
+        Ok(CreateExecutionStateSerializedSuccessReply {
+            wasm_memory_modifications,
+            exported_globals,
+            deserialization_time,
+            total_sandbox_time: timer.elapsed(),
+        })
+    }
+
+    /// Takes ownership of the passed in file descriptors.
+    pub fn create_execution_state_via_file(
+        &self,
+        wasm_id: WasmId,
+        bytes: File,
+        initial_state_data: File,
+        wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
+        canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
+    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
+        let timer = Instant::now();
+        let (embedder_cache, deserialization_time) = self.open_wasm_via_file(wasm_id, bytes)?;
+
+        // Reading from the initial state file would mutate the file descriptor
+        // and later or concurrent uses of the same cache entry would fail. But
+        // we can mmap the data without mutating the fd.
+        let initial_state_data: InitialStateData = {
+            use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+
+            let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
+            let data = if mmap_size == 0 {
+                &[]
+            } else {
+                // SAFETY: The address is valid because it is null, we have checked
+                // the size is positive and the fd is valid since it comes from a
+                // `File`. We're mapping privately so the data won't be mutated.
+                let mmap_ptr = unsafe {
+                    mmap(
+                        std::ptr::null_mut(),
+                        mmap_size,
+                        ProtFlags::PROT_READ,
+                        MapFlags::MAP_PRIVATE,
+                        initial_state_data.as_raw_fd(),
+                        0,
+                    )
+                }
+                .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {:?}", err))
+                    as *mut u8;
+                // SAFETY: We've mmapped `mmap_size` and gotten a succesful
+                // reply at address `mmap_ptr` and the mapping is readonly
+                // private.
+                unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }
+            };
+            bincode::deserialize(data).unwrap()
+        };
+
+        let (wasm_memory_modifications, exported_globals) = self
+            .create_initial_memory_and_globals(
+                &embedder_cache,
+                &initial_state_data.data_segments,
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,

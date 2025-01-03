@@ -479,6 +479,7 @@ impl From<pb::ManageDappCanisterSettings> for pb_api::ManageDappCanisterSettings
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -492,6 +493,7 @@ impl From<pb_api::ManageDappCanisterSettings> for pb::ManageDappCanisterSettings
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -3707,5 +3709,17 @@ impl From<pb_api::ClaimSwapNeuronsError> for pb::ClaimSwapNeuronsError {
             pb_api::ClaimSwapNeuronsError::Unauthorized => pb::ClaimSwapNeuronsError::Unauthorized,
             pb_api::ClaimSwapNeuronsError::Internal => pb::ClaimSwapNeuronsError::Internal,
         }
+    }
+}
+
+impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgradeStepsRequest {
+    fn from(_: pb_api::RefreshCachedUpgradeStepsRequest) -> Self {
+        Self {}
+    }
+}
+
+impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
+    fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
+        Self {}
     }
 }

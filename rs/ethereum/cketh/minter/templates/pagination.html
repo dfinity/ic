@@ -1,0 +1,12 @@
+<tr>
+    <td colspan='{{ table_width }}' style='text-align: right;'>
+        <b>Pages: </b>
+        {% for page in pages %}
+        {% if page.index == current_page_index %}
+        {{ page.index }}&nbsp;
+        {% else %}
+        <a href='?{{ page_offset_query_param }}={{ page.offset }}#{{ table_id }}'>{{ page.index }}</a>&nbsp;
+        {% endif %}
+        {% endfor %}
+    </td>
+</tr>

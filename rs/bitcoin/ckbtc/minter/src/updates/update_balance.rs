@@ -22,6 +22,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 use crate::{
     guard::{balance_update_guard, GuardError},
     management::{get_utxos, CallError, CallSource},
+    metrics::observe_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -148,9 +149,12 @@ pub async fn update_balance<R: CanisterRuntime>(
         ic_cdk::trap("cannot update minter's balance");
     }
 
+    // Record start time of method execution for metrics
+    let start_time = runtime.time();
+
     // When the minter is in the mode using a whitelist we only want a certain
     // set of principal to be able to mint. But we also want those principals
-    // to mint at any desired address. Therefore the check below is on "caller".
+    // to mint at any desired address. Therefore, the check below is on "caller".
     state::read_state(|s| s.mode.is_deposit_available_for(&caller))
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
@@ -228,6 +232,8 @@ pub async fn update_balance<R: CanisterRuntime>(
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
+        observe_latency(0, start_time, runtime.time());
+
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
             required_confirmations: min_confirmations,
@@ -245,7 +251,9 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= check_fee {
-            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account, now));
+            mutate_state(|s| {
+                state::audit::ignore_utxo(s, utxo.clone(), caller_account, now, runtime)
+            });
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
@@ -259,10 +267,10 @@ pub async fn update_balance<R: CanisterRuntime>(
         let status = check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| match status {
             UtxoCheckStatus::Clean => {
-                state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
+                state::audit::mark_utxo_checked(s, utxo.clone(), caller_account, runtime);
             }
             UtxoCheckStatus::Tainted => {
-                state::audit::quarantine_utxo(s, utxo.clone(), caller_account, now);
+                state::audit::quarantine_utxo(s, utxo.clone(), caller_account, now, runtime);
             }
         });
         match status {
@@ -296,6 +304,7 @@ pub async fn update_balance<R: CanisterRuntime>(
                         Some(block_index),
                         caller_account,
                         vec![utxo.clone()],
+                        runtime,
                     )
                 });
                 utxo_statuses.push(UtxoStatus::Minted {
@@ -317,6 +326,9 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     schedule_now(TaskType::ProcessLogic, runtime);
+
+    observe_latency(utxo_statuses.len(), start_time, runtime.time());
+
     Ok(utxo_statuses)
 }
 
