@@ -22,12 +22,15 @@ jobs:
             console.log("BEGIN SCRIPT");
 
             const oldBody = context.payload.pull_request.body;
-            var newBody = "GARBAGE";
-            if (!oldBody) {
-              newBody = "WAS BLANK";
-            } else {
-              newBody = oldBody + "\n\n# Additional Stuff";
-            }
+            var newBody = [
+              oldBody,
+              "",
+              "# Added by GitHub Actions",
+              ""
+              "(Or workflows, or whatever TF they are called)",
+            ]
+            .filter(element => element)
+            .join("\n");
             console.log("newBody = " + JSON.stringify(newBody));
 
             console.log("\n");
