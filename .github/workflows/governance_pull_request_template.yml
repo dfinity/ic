@@ -19,7 +19,7 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
-            console.log("BEGIN SCRIPT");
+            console.log("BEGIN SCRIPT"); // DO NOT MERGE
 
             const oldBody = context.payload.pull_request.body;
             var newBody = oldBody ? [oldBody] : [];
