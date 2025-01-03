@@ -25,7 +25,7 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
-            console.log("context:\n" + context + "\n\n");
+            console.log("context:\n" + JSON.stringify(context) + "\n\n");
 
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
               org: "dfinity",
@@ -40,7 +40,7 @@ jobs:
             }
 
             const pullRequestId = context.pullRequest.id;
-            const template = 'Your custom template here';
+            const template = '# Checklist';
             await github.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
