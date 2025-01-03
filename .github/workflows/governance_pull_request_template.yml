@@ -21,6 +21,6 @@ jobs:
           retries: 3
           script: |
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
-              "dfinity",
-              "nns-team",
+              org: "dfinity",
+              team_slug: "nns-team",
             });
