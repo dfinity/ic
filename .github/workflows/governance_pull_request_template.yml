@@ -15,7 +15,7 @@ jobs:
         uses: actions/github-script@v6
         id: main
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           result-encoding: string
           retries: 3
           script: |
