@@ -11,11 +11,20 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
+
+      # Copied from another workflow/GitHub Actions file...
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Main Step
         uses: actions/github-script@v6
         id: main
         with:
-          github-token: ${{ github.completeanduttergarbageyetnoalarmsareraised }}
+          github-token: ${{ steps.app-token.outputs.token }}
           result-encoding: string
           retries: 3
           script: |
