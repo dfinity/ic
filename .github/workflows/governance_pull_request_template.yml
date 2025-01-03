@@ -24,19 +24,3 @@ jobs:
               "dfinity",
               "nns-team",
             });
-            console.log("nnsTeamMemebrs = " + nnsTeamMembers);
-
-            const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
-            console.log("Is actor in nns-team? " + isInNNsTeam);
-            if (!isInNnsTeam) {
-              return;
-            }
-
-            const pullRequestId = context.pullRequest.id;
-            const template = 'Your custom template here';
-            await github.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pullRequestId,
-              body: template,
-            });
