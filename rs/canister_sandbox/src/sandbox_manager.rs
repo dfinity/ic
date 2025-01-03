@@ -171,14 +171,11 @@ impl Execution {
                             // to delay the drop until after the execution
                             // completed message is sent back to the main
                             // process.
-                            Ok(mut instance) => {
-                                let system_api_impl = instance
-                                    .store_data_mut()
-                                    .system_api_mut()
-                                    .expect("System api not present in the wasmtime instance");
-                                system_api_impl.update_on_low_wasm_memory_hook_status();
-                                system_api_impl.take_system_state_changes()
-                            }
+                            Ok(mut instance) => instance
+                                .store_data_mut()
+                                .system_api_mut()
+                                .expect("System api not present in the wasmtime instance")
+                                .take_system_state_changes(),
                             Err(system_api) => system_api.into_system_state_changes(),
                         };
                         StateModifications::new(
