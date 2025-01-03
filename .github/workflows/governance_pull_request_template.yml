@@ -35,7 +35,7 @@ jobs:
 
             const oldBody = context.payload.pull_request.body;
             var newBody = "GARBAGE";
-            if !oldBody {
+            if (!oldBody) {
               newBody = "WAS BLANK";
             } else {
               newBody = oldBody + "\n\n# Additional Stuff";
