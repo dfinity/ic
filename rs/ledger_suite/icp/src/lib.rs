@@ -474,6 +474,8 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
+    pub maximum_number_of_accounts: Option<usize>,
+    pub accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -506,6 +508,8 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
+    maximum_number_of_accounts: Option<usize>,
+    accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -522,6 +526,8 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
+            maximum_number_of_accounts: None,
+            accounts_overflow_trim_quantity: None,
         }
     }
 
@@ -576,6 +582,23 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: Option<u64>) -> Self {
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = Some(maximum_number_of_accounts as usize);
+        }
+        self
+    }
+
+    pub fn accounts_overflow_trim_quantity(
+        mut self,
+        accounts_overflow_trim_quantity: Option<u64>,
+    ) -> Self {
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = Some(accounts_overflow_trim_quantity as usize);
+        }
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -609,6 +632,8 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
+                maximum_number_of_accounts: self.maximum_number_of_accounts,
+                accounts_overflow_trim_quantity: self.accounts_overflow_trim_quantity,
             },
         )))
     }
