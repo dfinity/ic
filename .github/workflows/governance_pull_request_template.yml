@@ -35,11 +35,16 @@ jobs:
             }
             console.log("newBody = " + newBody);
 
+            console.log("\n\n");
+            console.log("Calling listMembersInOrg...")
+            console.log("\n\n");
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
               org: "dfinity",
               team_slug: "nns-team",
             });
+            console.log("\n\n");
             console.log("nnsTeamMemebrs = " + nnsTeamMembers);
+            console.log("\n\n");
 
             const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
             console.log("Is actor in nns-team? " + isInNNsTeam);
