@@ -2,10 +2,9 @@
 
 use clap::Parser;
 use ic_base_types::CanisterId;
-use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, Neuron};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
@@ -14,7 +13,7 @@ use prost::Message;
 use std::{
     convert::TryInto,
     fs::File,
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
     string::ToString,
 };
@@ -69,13 +68,6 @@ fn main() {
     match extract_stable_memory(&args, GOVERNANCE_CANISTER_ID, "governance_stable_memory.pb") {
         Ok(pb) => decode_governance_stable_memory(pb, &args.output, &args.rs),
         Err(e) => eprintln!("Could not extract the governance stable memory: {}", e),
-    }
-
-    // Ledger.
-    // Stable memory = binary CBOR, type Ledger (rust struct).
-    match extract_stable_memory(&args, LEDGER_CANISTER_ID, "ledger_stable_memory.cbor") {
-        Ok(cbor) => decode_ledger_stable_memory(cbor, &args.output),
-        Err(e) => eprintln!("Could not extract the ledger stable memory: {}", e),
     }
 
     // Gtc.
@@ -278,70 +270,4 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
         csv_writer.serialize(r).unwrap();
     }
     eprintln!("Wrote gtc_accounts_EXTRACT.csv");
-}
-
-/// The type of record expected to be found in the ledger canister's stable
-/// memory.
-#[derive(serde::Serialize)]
-struct LedgerBalanceRecord {
-    account_identitifier: String,
-    balance_e8s: u64,
-}
-
-/// Decode stable memory for the ledger canister.
-fn decode_ledger_stable_memory(cbor: PathBuf, output: &Path) {
-    // For the same argument as above, do NOT deserialize to a specific struct.
-    // This is an audit tool, we don't want any risk of dropping data.
-    // So go the schema-less way.
-    use serde_cbor::value::Value;
-    let value_res: serde_cbor::Result<Value> =
-        serde_cbor::from_reader(File::open(cbor.clone()).unwrap());
-    let val = match value_res {
-        Err(e) => {
-            eprintln!(
-                "Could not parse the cbor for the ledger stable memory: {}",
-                e
-            );
-            return;
-        }
-        Ok(v) => v,
-    };
-    // The following is very slow and the output is very verbose. Serialization to
-    // json is not a viable alternative as some keys are not strings, which is
-    // allowed in cbor but not in json.
-    match write!(
-        File::create(output.join("ledger_stable_memory.txt")).unwrap(),
-        "{:#?}",
-        val
-    ) {
-        Ok(()) => eprintln!("Wrote ledger_stable_memory.txt"),
-        Err(e) => eprintln!("Could not write ledger_stable_memory.txt: {}", e),
-    };
-
-    let ledger: ledger_canister::Ledger = match serde_cbor::from_reader(File::open(cbor).unwrap()) {
-        Err(e) => {
-            eprintln!(
-                "Could parse the ledger stable memory as a Ledger struct: {}",
-                e
-            );
-            return;
-        }
-        Ok(l) => l,
-    };
-    let mut records: Vec<LedgerBalanceRecord> = ledger
-        .balances()
-        .store
-        .iter()
-        .map(|(key, icpts)| LedgerBalanceRecord {
-            account_identitifier: key.to_string(),
-            balance_e8s: icpts.get_e8s(),
-        })
-        .collect();
-    records.sort_by_key(|record| record.account_identitifier.clone());
-    let mut csv_writer =
-        csv::Writer::from_path(output.join("ledger_balances_EXTRACT.csv")).unwrap();
-    for r in records.into_iter() {
-        csv_writer.serialize(r).unwrap();
-    }
-    eprintln!("Wrote ledger_balances_EXTRACT.csv");
 }
