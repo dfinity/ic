@@ -7,11 +7,6 @@ on:
       # DO NOT MERGE
       - synchronize
 
-permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
-
 jobs:
   main:
     runs-on: ubuntu-latest
@@ -38,9 +33,12 @@ jobs:
             console.log("\n\n");
             console.log("Calling listMembersInOrg...")
             console.log("\n\n");
-            const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
+            const nnsTeamMembers = await github.request('GET /orgs/{org}/teams/{team_slug}/members', {
               org: "dfinity",
               team_slug: "nns-team",
+              headers: {
+                'X-GitHub-Api-Version': '2022-11-28'
+              }
             });
             console.log("\n\n");
             console.log("nnsTeamMemebrs = " + nnsTeamMembers);
