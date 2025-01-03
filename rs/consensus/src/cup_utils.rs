@@ -1,4 +1,4 @@
-//! This module contains functions for constructing CUPs from summaries
+//! This module contains functions for constructing CUPs from registry
 
 use crate::{
     dkg::payload_builder::get_dkg_summary_from_cup_contents,
