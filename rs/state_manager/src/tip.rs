@@ -132,7 +132,6 @@ pub(crate) enum TipRequest {
         replicated_state: Arc<ReplicatedState>,
         own_subnet_type: SubnetType,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        metrics: StateManagerMetrics,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -461,11 +460,13 @@ pub(crate) fn spawn_tip_thread(
                             replicated_state,
                             own_subnet_type,
                             fd_factory,
-                            metrics,
                         } => {
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
                                 Some(replicated_state.deref()),
+                                own_subnet_type,
+                                Arc::clone(&fd_factory),
+                                &metrics.checkpoint_metrics,
                                 Some(&mut thread_pool),
                             ) {
                                 fatal!(

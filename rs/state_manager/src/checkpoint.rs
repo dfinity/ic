@@ -57,7 +57,7 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 /// If the result is `Ok`, the returned state is "rebased" to use
 /// files from the newly created checkpoint. If the result is `Err`,
 /// the returned state is exactly the one that was passed as argument.
-pub(crate) fn make_checkpoint(
+pub(crate) fn make_unvalidated_checkpoint(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
@@ -128,8 +128,10 @@ pub(crate) fn make_checkpoint(
 
 pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    _reference_state: Option<&ReplicatedState>,
-    //own_subnet_type: SubnetType,
+    reference_state: Option<&ReplicatedState>,
+    own_subnet_type: SubnetType,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &CheckpointMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
     maybe_parallel_map(
@@ -142,6 +144,20 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     checkpoint_layout
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
+    if let Some(reference_state) = reference_state {
+        validate_eq_checkpoint(
+            checkpoint_layout,
+            reference_state,
+            own_subnet_type,
+            thread_pool,
+            fd_factory,
+            metrics,
+        )
+        .map_err(|err| CheckpointError::CorruptedLayout {
+            path: checkpoint_layout.raw_path().to_path_buf(),
+            message: format!("ValidateEq failed: {}", err),
+        })?;
+    }
     Ok(())
 }
 
@@ -166,6 +182,9 @@ pub fn load_checkpoint_and_validate_parallel(
     validate_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,
+        own_subnet_type,
+        fd_factory,
+        metrics,
         Some(&mut thread_pool),
     )?;
     Ok(state)
@@ -345,8 +364,9 @@ pub fn validate_eq_checkpoint(
     own_subnet_type: SubnetType,       //
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
-    metrics: &CheckpointMetrics,
+    metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
+    // TODO report a critical error
     let checkpoint_loader = CheckpointLoader {
         checkpoint_layout: checkpoint_layout.clone(),
         own_subnet_type,

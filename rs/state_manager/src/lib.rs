@@ -2620,7 +2620,7 @@ impl StateManagerImpl {
             strip_page_map_deltas(&mut state, self.get_fd_factory());
         }
         let result = {
-            checkpoint::make_checkpoint(
+            checkpoint::make_unvalidated_checkpoint(
                 &state,
                 height,
                 &self.tip_channel,
@@ -2705,7 +2705,6 @@ impl StateManagerImpl {
                 replicated_state: state.clone(),
                 own_subnet_type: self.own_subnet_type,
                 fd_factory: self.fd_factory.clone(),
-                metrics: self.metrics.clone(),
             })
             .expect("Failed to send Validate request");
 
@@ -2747,7 +2746,7 @@ impl StateManagerImpl {
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
             // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
+            // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
