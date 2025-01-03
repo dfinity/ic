@@ -1,0 +1,36 @@
+name: Governance Team Pull Request Template
+
+on:
+  pull_request:
+    types:
+      - opened
+    branches:
+      - master
+
+jobs:
+  # TODO: Change this name to "main".
+  template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Is the author a member of nns-team?
+        uses: tspascoal/get-user-teams-membership@v2
+        id: isAuthorInNnsTeam
+        with:
+          GITHUB_TOKEN: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          username: ${{ github.actor }}
+          team: nns-team
+
+      - name: Pre-populate pull request description.
+        if: ${{ steps.isAuthorInNnsTeam.isTeamMember == 'true' }}
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pullRequestId = context.pullRequest.id;
+            const template = 'Your custom template here';
+            await github.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullRequestId,
+              body: template,
+            });
