@@ -17,7 +17,8 @@ jobs:
           app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
           private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
 
-      - uses: actions/github-script@v6
+      - name: Main Step
+        uses: actions/github-script@v6
         id: main
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -27,4 +28,20 @@ jobs:
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
               org: "dfinity",
               team_slug: "nns-team",
+            });
+            console.log("nnsTeamMemebrs = " + nnsTeamMembers);
+
+            const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
+            console.log("Is actor in nns-team? " + isInNNsTeam);
+            if (!isInNnsTeam) {
+              return;
+            }
+
+            const pullRequestId = context.pullRequest.id;
+            const template = 'Your custom template here';
+            await github.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullRequestId,
+              body: template,
             });
