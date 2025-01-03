@@ -1096,6 +1096,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1123,6 +1124,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }

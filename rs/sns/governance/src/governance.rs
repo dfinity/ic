@@ -3104,6 +3104,16 @@ impl Governance {
         self.proto.parameters.as_ref()
     }
 
+    pub fn should_automatically_advance_target_version(&self) -> bool {
+        self.nervous_system_parameters()
+            .map(|nervous_system_parameters| {
+                nervous_system_parameters
+                    .automatically_advance_target_version
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    }
+
     /// Returns the NervousSystemParameters or panics
     fn nervous_system_parameters_or_panic(&self) -> &NervousSystemParameters {
         self.nervous_system_parameters()
