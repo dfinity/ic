@@ -15,7 +15,7 @@ jobs:
         uses: actions/github-script@v6
         id: main
         with:
-          github-token: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
           retries: 3
           script: |
