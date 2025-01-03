@@ -24,7 +24,7 @@ jobs:
         if: ${{ steps.isAuthorInNnsTeam.isTeamMember == 'true' }}
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           script: |
             const pullRequestId = context.pullRequest.id;
             const template = 'Your custom template here';
