@@ -23,7 +23,7 @@ jobs:
         uses: tspascoal/get-user-teams-membership@v2
         id: isAuthorInNnsTeam
         with:
-          GITHUB_TOKEN: ${{ steps.app-token.putputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           username: ${{ github.actor }}
           team: nns-team
 
