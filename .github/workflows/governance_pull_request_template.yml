@@ -1,0 +1,44 @@
+name: Governance Team Pull Request Template
+
+on:
+  pull_request:
+    types:
+      - opened
+      # DO NOT MERGE
+      - synchronize
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: mainStep
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string
+          retries: 3
+          script: |
+            const oldBody = context.payload.pull_request.body;
+
+            if (oldBody.match(/Added by GitHub Actions/)) {
+              console.log("No need to modify the body, because it already has the check list.");
+              return;
+            }
+
+            var newBody = oldBody ? [oldBody] : [];
+            newBody = newBody.concat([
+              "# Added by GitHub Actions",
+              "(Or workflows, or whatever TF they are called...)",
+            ]);
+
+            newBody = newBody.join("\n\n");
+            console.log("newBody = " + JSON.stringify(newBody));
+
+            const pullRequestNumber = context.payload.number;
+            console.log("Setting the body of pull request number " + pullRequestNumber + "...");
+            await github.rest.pulls.update({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: newBody,
+            });
