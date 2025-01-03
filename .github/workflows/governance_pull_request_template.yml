@@ -16,7 +16,7 @@ jobs:
         uses: tspascoal/get-user-teams-membership@v2
         id: isAuthorInNnsTeam
         with:
-          GITHUB_TOKEN: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           username: ${{ github.actor }}
           team: nns-team
 
