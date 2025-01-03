@@ -21,6 +21,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
+rand = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
