@@ -11,9 +11,8 @@ jobs:
   mainJob:
     runs-on: ubuntu-latest
     steps:
-      - name: Main Step
-        uses: actions/github-script@v6
-        id: main
+      - uses: actions/github-script@v6
+        id: mainStep
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
@@ -22,13 +21,13 @@ jobs:
             console.log("BEGIN SCRIPT"); // DO NOT MERGE
 
             const oldBody = context.payload.pull_request.body;
-            var newBody = oldBody ? [oldBody] : [];
 
             if (oldBody.match(/Added by GitHub Actions/)) {
               console.log("No need to modify the body, because it already has the check list.");
               return;
             }
 
+            var newBody = oldBody ? [oldBody] : [];
             newBody = newBody.concat([
               "# Added by GitHub Actions",
               "(Or workflows, or whatever TF they are called...)",
@@ -36,6 +35,23 @@ jobs:
 
             newBody = newBody.join("\n\n");
             console.log("newBody = " + JSON.stringify(newBody));
+
+            console.log("\n");
+            console.log("Calling listMembersInOrg...")
+            console.log("\n");
+            const nnsTeamMembers = await await github.rest.teams.listMembersInOrg({
+              org: "dfinity",
+              team_slug: "nns-team",
+            });
+            console.log("\n");
+            console.log("nnsTeamMemebrs = " + JSON.stringify(nnsTeamMembers));
+            console.log("\n");
+
+            const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
+            console.log("Is actor in nns-team? " + isInNNsTeam);
+            if (!isInNnsTeam) {
+              return;
+            }
 
             const pullRequestNumber = context.payload.number;
             console.log("Setting the body of pull request number " + pullRequestNumber + "...");
