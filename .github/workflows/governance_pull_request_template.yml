@@ -4,7 +4,8 @@ on:
   pull_request:
     types:
       - opened
-      - reopened
+      # DO NOT MERGE
+      - synchronized
 
 permissions:
   id-token: write
@@ -32,7 +33,13 @@ jobs:
           script: |
             console.log("BEGIN CONTEXT\n" + JSON.stringify(context, null, 2) + "\nEND CONTEXT\n\n");
 
-            const newBody = context.payload.body + "\n\n# Additional Stuff";
+            const oldBody = context.payload.pull_request.body;
+            var newBody = "GARBAGE";
+            if !oldBody {
+              newBody = "WAS BLANK";
+            } else {
+              newBody = oldBody + "\n\n# Additional Stuff";
+            }
             console.log("newBody = " + newBody);
 
             const nnsTeamMembers = await github.rest.teams.listMembersInOrg({
