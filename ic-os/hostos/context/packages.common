@@ -44,6 +44,9 @@ usbutils
 zstd
 logrotate
 
+# Network configuration tools
+netplan.io
+
 # SELinux support
 selinux-policy-default
 selinux-utils
@@ -57,7 +60,6 @@ checkpolicy
 
 # HostOS additions
 dosfstools
-ethtool
 ipmitool
 libarchive-zip-perl
 libusb-1.0-0
