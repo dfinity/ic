@@ -21,13 +21,19 @@ jobs:
           script: |
             console.log("BEGIN SCRIPT");
 
+            var newBody = [];
+
             const oldBody = context.payload.pull_request.body;
-            var newBody = [
-              oldBody,
-              "# Added by GitHub Actions\n(Or workflows, or whatever TF they are called...)",
-            ]
-            .filter(element => element)
-            .join("\n\n");
+            if (oldBody) {
+              newBody = newBody.concat([oldBody]);
+            }
+
+            newBody = newBody.concat([
+              "# Added by GitHub Actions",
+              "(Or workflows, or whatever TF they are called...)",
+            ]);
+
+            newBody = newBody.join("\n\n");
             console.log("newBody = " + JSON.stringify(newBody));
 
             console.log("\n");
