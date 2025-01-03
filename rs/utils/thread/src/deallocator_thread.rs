@@ -252,9 +252,9 @@ mod tests {
     /// dropped before flushing. Then flush and check the elapsed time and that all
     /// objects were dropped by the `DeallocatorThread`.
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_flush_deallocation_channel() {
         const N: usize = 100;
-        #[allow(clippy::assertions_on_constants)]
         assert!(N <= DEALLOCATION_BACKLOG_THRESHOLD);
 
         let sleep_between_drops = Duration::from_millis(100) / N as u32;
