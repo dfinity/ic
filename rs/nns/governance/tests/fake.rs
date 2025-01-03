@@ -105,6 +105,7 @@ impl Default for FakeState {
 /// advanced, and ledger accounts manipulated.
 pub struct FakeDriver {
     pub state: Arc<Mutex<FakeState>>,
+    pub error_on_next_ledger_call: Arc<Mutex<Option<NervousSystemError>>>,
 }
 
 /// Create a default mock driver.
@@ -112,6 +113,7 @@ impl Default for FakeDriver {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(Default::default())),
+            error_on_next_ledger_call: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -181,6 +183,7 @@ impl FakeDriver {
     pub fn get_fake_env(&self) -> Box<dyn Environment> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -188,12 +191,14 @@ impl FakeDriver {
     pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -241,6 +246,13 @@ impl FakeDriver {
             num_accounts
         );
     }
+
+    pub fn fail_next_ledger_call(&self) {
+        self.error_on_next_ledger_call
+            .lock()
+            .unwrap()
+            .replace(NervousSystemError::new());
+    }
 }
 
 #[async_trait]
@@ -253,6 +265,10 @@ impl IcpLedger for FakeDriver {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         // Minting operations (sending ICP from Gov main account) should just create ICP.
         let is_minting_operation = from_subaccount.is_none();
 
@@ -307,6 +323,10 @@ impl IcpLedger for FakeDriver {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         Ok(self.get_supply())
     }
 
@@ -314,6 +334,10 @@ impl IcpLedger for FakeDriver {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         tla_log_request!(
