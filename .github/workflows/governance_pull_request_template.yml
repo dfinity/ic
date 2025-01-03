@@ -15,7 +15,7 @@ jobs:
         uses: actions/github-script@v6
         id: main
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ github.completeanduttergarbageyetnoalarmsareraised }}
           result-encoding: string
           retries: 3
           script: |
