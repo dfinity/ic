@@ -85,15 +85,18 @@ mod test {
                         upsert(b"rapper's delight", "1980"),
                         upsert(b"the message", "1982")
                     ],
-                    preconditions: vec![]
+                    preconditions: vec![],
+                    timestamp: None,
                 },
                 RegistryAtomicMutateRequest {
                     mutations: vec![upsert(b"212", "2011"),],
-                    preconditions: vec![]
+                    preconditions: vec![],
+                    timestamp: None,
                 },
                 RegistryAtomicMutateRequest {
                     mutations: vec![delete(b"some key to delete"),],
-                    preconditions: vec![]
+                    preconditions: vec![],
+                    timestamp: None,
                 },
             ]
         );

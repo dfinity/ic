@@ -137,6 +137,7 @@ fn make_change(mutations: Vec<RegistryMutation>) -> RegistryAtomicMutateRequest 
     RegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp: None,
     }
 }
 

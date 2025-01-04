@@ -111,6 +111,7 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations,
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -240,6 +241,7 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
                     ],
 
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -365,6 +367,7 @@ fn remove_nodes_removes_all_keys() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations,
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )

@@ -430,7 +430,8 @@ mod tests {
             )),
             Ok(pb::v1::RegistryAtomicMutateRequest {
                 mutations,
-                preconditions
+                preconditions,
+                timestamp: None,
             })
         );
     }
@@ -445,6 +446,7 @@ mod tests {
                 delete("someone is going to get offended if i put a real country here"),
             ],
             preconditions: vec![precondition("africa", 23), precondition("asia", 51)],
+            timestamp: None,
         };
         // Not everything is displayed: in particular, the values are dropped.
         assert_eq!(

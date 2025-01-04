@@ -284,7 +284,6 @@ pub fn current_time() -> Time {
     Time::from_nanos_since_unix_epoch(now_ns)
 }
 
-
 /// A utility function that returns an expiry time when creating an
 /// SignedIngress message from scratch.
 /// The expiry time is set from the current system time + the maximum

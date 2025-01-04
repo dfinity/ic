@@ -47,6 +47,7 @@ fn test_roll_back_canister_migration() {
                 RegistryAtomicMutateRequest {
                     mutations: vec![routing_table_mutation(&rt)],
                     preconditions: vec![],
+                    timestamp: None,
                 }
             };
 

@@ -388,6 +388,7 @@ fn test_the_anonymous_user_cannot_remove_a_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -483,6 +484,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_a_version() 
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -556,6 +558,7 @@ fn test_the_governance_canister_can_remove_a_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -681,6 +684,7 @@ fn test_cannot_remove_used_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .push_init_mutate_request(add_node_mutation)
                 .build(),
@@ -763,6 +767,7 @@ fn test_the_anonymous_user_cannot_update_hostos_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .push_init_mutate_request(add_node_mutation)
                 .build(),
@@ -841,6 +846,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_hostos_versi
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .push_init_mutate_request(add_node_mutation)
                 .build(),
@@ -898,6 +904,7 @@ fn test_the_governance_canister_can_update_hostos_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .push_init_mutate_request(add_node_mutation)
                 .build(),
@@ -964,6 +971,7 @@ fn test_can_unset_nodes_hostos_version() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .push_init_mutate_request(add_node_mutation)
                 .build(),

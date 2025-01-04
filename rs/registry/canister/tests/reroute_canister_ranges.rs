@@ -47,6 +47,7 @@ fn test_reroute_canister_ranges() {
                 RegistryAtomicMutateRequest {
                     mutations: vec![routing_table_mutation(&rt)],
                     preconditions: vec![],
+                    timestamp: None,
                 }
             };
 

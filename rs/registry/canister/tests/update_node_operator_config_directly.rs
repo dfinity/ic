@@ -40,6 +40,7 @@ fn node_provider_is_updated_on_receiving_the_request() {
                         value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )

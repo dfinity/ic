@@ -57,6 +57,7 @@ fn test_modify_canister_migrations() {
                 RegistryAtomicMutateRequest {
                     mutations: vec![routing_table_mutation(&rt)],
                     preconditions: vec![],
+                    timestamp: None,
                 }
             };
 

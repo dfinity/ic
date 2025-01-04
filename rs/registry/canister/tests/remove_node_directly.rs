@@ -198,6 +198,7 @@ fn node_cannot_be_removed_if_in_subnet() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations,
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -254,6 +255,7 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, PublicKey, RegistryAtomic
         RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp: None,
         },
     )
 }

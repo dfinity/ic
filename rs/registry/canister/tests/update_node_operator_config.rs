@@ -56,6 +56,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
                         value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -123,6 +124,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                         value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -223,6 +225,7 @@ fn test_set_ipv6_none() {
                         value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )

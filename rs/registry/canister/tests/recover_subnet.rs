@@ -307,6 +307,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let mut subnet_threshold_signing_pk_and_cup_mutations =
@@ -338,6 +339,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -522,6 +524,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let mut subnet_threshold_signing_pk_and_cup_mutations =
@@ -553,6 +556,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -750,6 +754,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let mut subnet_threshold_signing_pk_and_cup_mutations =
@@ -781,6 +786,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         // Enable signing with the recovering subnet - we will later check that
@@ -794,6 +800,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
                 }
                 .encode_to_vec(),
             )],
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -955,6 +962,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let mut subnet_threshold_signing_pk_and_cup_mutations =
@@ -986,6 +994,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         // Enable signing with the recovering subnet - we will later check that
@@ -999,6 +1008,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 }
                 .encode_to_vec(),
             )],
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -1178,6 +1188,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -1401,6 +1412,7 @@ fn test_recover_subnet_resets_cup_contents() {
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         // Patch the CUP-related mutation, ensuring it has the legacy field specified.
@@ -1466,6 +1478,7 @@ fn test_recover_subnet_resets_cup_contents() {
         let add_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
             mutations,
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(

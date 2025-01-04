@@ -106,6 +106,7 @@ pub fn test(env: TestEnv) {
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![upsert("IC", "Good")],
                 preconditions: vec![],
+                timestamp: None,
             })
             .build();
         install_registry_canister(&mut canister, registry_init_payload).await;
@@ -140,7 +141,8 @@ pub fn test(env: TestEnv) {
                 "atomic_mutate",
                 RegistryAtomicMutateRequest {
                     mutations: vec![upsert("Proprietary Clouds", "Less Good")],
-                    preconditions: vec![]
+                    preconditions: vec![],
+                    timestamp: None,
                 }
                 .encode_to_vec()
             )

@@ -5,6 +5,7 @@ use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_sys::fs::write_atomically;
+use ic_types::time::current_time;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
 use std::collections::HashMap;
 use std::{
@@ -13,7 +14,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
-use ic_types::time::current_time;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 

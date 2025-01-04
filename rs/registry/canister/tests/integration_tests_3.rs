@@ -75,6 +75,7 @@ fn test_mutations_are_rejected_from_non_authorized_sources() {
         let mutation_request = RegistryAtomicMutateRequest {
             mutations: vec![insert("key1", "value1")],
             preconditions: vec![],
+            timestamp: None,
         };
         let response: Result<RegistryAtomicMutateResponse, String> = canister
             .update_("atomic_mutate", protobuf, mutation_request.clone())
@@ -107,10 +108,12 @@ fn test_initial_mutations_ok() {
                     upsert(b"dom", b"4545 m"),
                 ],
                 preconditions: vec![],
+                timestamp: None,
             })
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![upsert(b"matterhorn", b"4478 m")],
                 preconditions: vec![precondition(b"dom", 1)],
+                timestamp: None,
             })
             .build();
         let canister = install_registry_canister(&runtime, init_payload).await;
@@ -171,10 +174,12 @@ fn test_that_init_traps_if_any_init_mutation_fails() {
                     upsert(b"dub", b"uk"),
                 ],
                 preconditions: vec![],
+                timestamp: None,
             })
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![insert(b"dub", b"uk")],
                 preconditions: vec![],
+                timestamp: None,
             })
             .build();
         assert_matches!(

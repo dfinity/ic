@@ -278,6 +278,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet_legacy() {
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -428,6 +429,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
+            timestamp: None,
         };
 
         let registry = setup_registry_synced_with_fake_client(
