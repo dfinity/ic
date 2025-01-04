@@ -31,9 +31,8 @@ use std::{env, net::SocketAddr, time::Duration};
 use tokio::{runtime::Runtime, time::timeout};
 
 use ic_agent::{
-    agent::http_transport::{reqwest_transport::reqwest::Client, ReqwestTransport},
-    identity::Secp256k1Identity,
-    Agent, Identity,
+    agent::http_transport::reqwest_transport::reqwest::Client, identity::Secp256k1Identity, Agent,
+    Identity,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -154,11 +153,9 @@ async fn test_async(env: TestEnv) {
             .resolve(&api_bn_domain, api_bn_ipv6)
             .build()
             .expect("Could not create HTTP client.");
-        let transport =
-            ReqwestTransport::create_with_client(format!("https://{api_bn_domain}"), client)
-                .unwrap();
         let agent = Agent::builder()
-            .with_transport(transport)
+            .with_url(format!("https://{api_bn_domain}"))
+            .with_http_client(client)
             .with_identity(full_access_identity)
             .build()
             .unwrap();

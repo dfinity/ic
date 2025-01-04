@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
@@ -291,36 +291,35 @@ async fn test_gateway(server_url: Url, https: bool) {
     assert_eq!(http_gateway_details.https_config, https_config);
 
     // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.(raw.)localhost/example.com to 127.0.0.1
-    let mut builder = NonblockingClient::builder();
-    for domain in [
-        localhost,
-        sub_localhost,
-        sub_raw_localhost,
-        alt_domain,
-        sub_alt_domain,
-        sub_raw_alt_domain,
-    ] {
-        builder = builder.resolve(
-            domain,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
-        );
-    }
-    // add a custom root certificate
-    if https {
-        builder = builder.add_root_certificate(
-            reqwest::Certificate::from_pem(root_cert.pem().as_bytes()).unwrap(),
-        );
-    }
-    let client = builder.build().unwrap();
+    let create_client = || {
+        let mut builder = NonblockingClient::builder();
+        for domain in [
+            localhost,
+            sub_localhost,
+            sub_raw_localhost,
+            alt_domain,
+            sub_alt_domain,
+            sub_raw_alt_domain,
+        ] {
+            builder = builder.resolve(
+                domain,
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
+            );
+        }
+        // add a custom root certificate
+        if https {
+            builder = builder.add_root_certificate(
+                reqwest::Certificate::from_pem(root_cert.pem().as_bytes()).unwrap(),
+            );
+        }
+        builder.build().unwrap()
+    };
+    let client = create_client();
 
-    // create agent with custom transport
-    let transport = ReqwestTransport::create_with_client(
-        format!("{}://{}:{}", proto, localhost, port),
-        client.clone(),
-    )
-    .unwrap();
+    // create agent
     let agent = ic_agent::Agent::builder()
-        .with_transport(transport)
+        .with_url(format!("{}://{}:{}", proto, localhost, port))
+        .with_http_client(client)
         .build()
         .unwrap();
     agent.fetch_root_key().await.unwrap();
@@ -380,7 +379,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     test_urls.push(canister_url.clone());
 
     for url in test_urls {
-        let res = client.get(url).send().await.unwrap();
+        let res = create_client().get(url).send().await.unwrap();
         let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
         assert!(page.contains("<title>Internet Identity</title>"));
     }
@@ -390,7 +389,12 @@ async fn test_gateway(server_url: Url, https: bool) {
 
     // HTTP gateway should eventually stop and requests to it fail
     loop {
-        if client.get(canister_url.clone()).send().await.is_err() {
+        if create_client()
+            .get(canister_url.clone())
+            .send()
+            .await
+            .is_err()
+        {
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -897,12 +901,9 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let transport = ReqwestTransport::create(endpoint.clone())
-            .unwrap()
-            .with_use_call_v3_endpoint();
-
         let agent = ic_agent::Agent::builder()
-            .with_transport(transport)
+            .with_url(endpoint)
+            .with_http_client(reqwest::Client::new())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();

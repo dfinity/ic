@@ -608,8 +608,7 @@ async fn handler(
                     |_| ErrorCause::RequestTooLarge,
                 )
             })?
-            .to_bytes()
-            .to_vec();
+            .to_bytes();
 
         let args = HttpGatewayRequestArgs {
             canister_request: CanisterRequest::from_parts(parts, body),
