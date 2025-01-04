@@ -1,7 +1,7 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record, make_remove_node_registry_mutations,
-    make_update_node_operator_mutation,
+    find_subnet_for_node, get_node_operator_id_for_node_id, get_node_operator_record,
+    get_node_provider_id_for_operator_id, get_subnet_list_record,
+    make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
@@ -26,7 +26,7 @@ impl Registry {
     pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
-        let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
+        let node_operator_id = get_node_operator_id_for_node_id(self, payload.node_id)
             .map_err(|e| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -35,12 +35,29 @@ impl Registry {
             })
             .unwrap();
 
-        // 2. Get the caller ID and check that it matches the node's NO
-        assert_eq!(
-            node_operator_id, caller_id,
-            "The caller {}, does not match this Node's Operator id.",
-            caller_id
-        );
+        // 2. Compare the caller_id (node operator) with the node's node operator and, if that fails,
+        // fall back to comparing the node provider ID of the caller and the node's node provider ID.
+        if caller_id != node_operator_id {
+            let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
+                .map_err(|e| {
+                    format!(
+                        "{}do_remove_node_directly: Aborting node removal: {}",
+                        LOG_PREFIX, e
+                    )
+                });
+            let node_provider_of_the_node =
+                get_node_provider_id_for_operator_id(self, node_operator_id).map_err(|e| {
+                    format!(
+                        "{}do_remove_node_directly: Aborting node removal: {}",
+                        LOG_PREFIX, e
+                    )
+                });
+            assert_eq!(
+                node_provider_caller, node_provider_of_the_node,
+                "The node provider {:?} of the caller {}, does not match the node provider {:?} of the node {}.",
+                node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
+            );
+        }
 
         // 3. Ensure node is not in a subnet
         let subnet_list_record = get_subnet_list_record(self);
@@ -115,7 +132,10 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry, prepare_registry_with_nodes,
+            prepare_registry_with_nodes_and_node_operator_id,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
 
@@ -183,5 +203,108 @@ mod tests {
         let payload = RemoveNodeDirectlyPayload { node_id };
 
         registry.do_remove_node(payload, node_operator_id);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "assertion `left == right` failed: The node provider Ok(5yckv-7nzbm-aaaaa-aaaap-4ai) of the caller ziab2-3ora4-aaaaa-aaaap-4ai, does not match the node provider Ok(ahdmd-q5ybm-aaaaa-aaaap-4ai) of the node"
+    )]
+    fn should_panic_different_caller() {
+        // This test is only added for backward compatibility.
+        // It should be removed once all tests are updated to include operator record.
+        let mut registry = invariant_compliant_registry(0);
+        let operator1_id = PrincipalId::new_user_test_id(2000);
+        let operator2_id = PrincipalId::new_user_test_id(2001);
+        let operator_record_1 = NodeOperatorRecord {
+            node_operator_principal_id: operator1_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        let operator_record_2 = NodeOperatorRecord {
+            node_operator_principal_id: operator2_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3001).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![
+            insert(
+                make_node_operator_record_key(operator1_id),
+                operator_record_1.encode_to_vec(),
+            ),
+            insert(
+                make_node_operator_record_key(operator2_id),
+                operator_record_2.encode_to_vec(),
+            ),
+        ]);
+        // Add node owned by operator1 to registry
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_node_operator_id(
+                1, /* mutation id */
+                1, /* node count */
+                Some(operator1_id),
+            );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
+
+        let payload = RemoveNodeDirectlyPayload { node_id };
+
+        registry.do_remove_node(payload, operator2_id);
+    }
+
+    #[test]
+    fn should_succeed_remove_node_compare_node_provider() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator1 and operator2 records, both under the same provider
+        let operator1_id = PrincipalId::new_user_test_id(2000);
+        let operator2_id = PrincipalId::new_user_test_id(2001);
+        let operator_record_1 = NodeOperatorRecord {
+            node_operator_principal_id: operator1_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        let operator_record_2 = NodeOperatorRecord {
+            node_operator_principal_id: operator2_id.to_vec(),
+            node_provider_principal_id: PrincipalId::new_user_test_id(3000).to_vec(),
+            dc_id: "dc1".to_string(),
+            node_allowance: 1,
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![
+            insert(
+                make_node_operator_record_key(operator1_id),
+                operator_record_1.encode_to_vec(),
+            ),
+            insert(
+                make_node_operator_record_key(operator2_id),
+                operator_record_2.encode_to_vec(),
+            ),
+        ]);
+        // Add node owned by operator1 to registry
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_node_operator_id(
+                1, /* mutation id */
+                1, /* node count */
+                Some(operator1_id),
+            );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
+
+        let payload = RemoveNodeDirectlyPayload { node_id };
+
+        // Should succeed because both operator1 and operator2 are under the same provider
+        registry.do_remove_node(payload, operator2_id);
     }
 }

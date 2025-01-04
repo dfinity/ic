@@ -1,4 +1,4 @@
-use crate::mutations::node_management::common::get_node_operator_id_for_node;
+use crate::mutations::node_management::common::get_node_operator_id_for_node_id;
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
@@ -43,7 +43,7 @@ impl Registry {
         let mut node_record = self.get_node_or_panic(node_id);
 
         // Ensure caller is an actual node operator of the node
-        let node_operator_id = get_node_operator_id_for_node(self, node_id)
+        let node_operator_id = get_node_operator_id_for_node_id(self, node_id)
             .map_err(|e| format!("Failed to obtain the node operator ID: {}", e))
             .unwrap();
 

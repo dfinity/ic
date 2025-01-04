@@ -107,11 +107,13 @@ mod tests {
         // Check invariants before applying mutations
         registry.maybe_apply_mutation_internal(mutations);
 
-        assert!(registry
-            .get_node_providers_monthly_xdr_rewards()
-            .unwrap()
-            .rewards
-            .is_empty());
+        assert_eq!(
+            registry
+                .get_node_providers_monthly_xdr_rewards()
+                .unwrap()
+                .rewards,
+            std::collections::HashMap::new()
+        );
     }
 
     fn registry_init_empty() -> Registry {

@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, node_exists_with_ipv4,
+    get_node_operator_id_for_node_id, node_exists_with_ipv4,
 };
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
@@ -84,7 +84,7 @@ impl Registry {
 
     fn check_caller_is_node_operator(&self, caller_id: PrincipalId, node_id: NodeId) {
         // Find the node operator id for this node
-        let node_operator_id = get_node_operator_id_for_node(self, node_id)
+        let node_operator_id = get_node_operator_id_for_node_id(self, node_id)
             .map_err(|e| format!("Failed to obtain the node operator ID: {}", e))
             .unwrap();
 
