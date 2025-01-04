@@ -15,7 +15,6 @@ use ic_registry_transport::{
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
 use std::{
-    cmp::max,
     collections::{BTreeMap, VecDeque},
     fmt,
 };
@@ -227,7 +226,6 @@ impl Registry {
         for mutation in req.mutations {
             (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
                 version,
-                timestamp,
                 value: mutation.value,
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
             });
@@ -247,7 +245,7 @@ impl Registry {
             return;
         }
         let mutations_ts = current_time().as_nanos_since_unix_epoch();
-        
+
         self.increment_version();
         self.apply_mutations_as_version(mutations, self.version, Some(mutations_ts));
     }
@@ -420,48 +418,7 @@ impl Registry {
                     current_version = self.version;
                 }
             }
-            ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<(Version, Option<u64>), Vec<RegistryMutation>>::new();
-                for delta in stable_repr.deltas.into_iter() {
-                    self.version = max(
-                        self.version,
-                        delta
-                            .values
-                            .last()
-                            .map(|registry_value| registry_value.version)
-                            .unwrap_or(0),
-                    );
-
-                    for v in delta.values.iter() {
-                        mutations_by_version
-                            .entry((v.version, v.timestamp))
-                            .or_default()
-                            .push(RegistryMutation {
-                                mutation_type: if v.deletion_marker {
-                                    Type::Delete
-                                } else {
-                                    Type::Upsert
-                                } as i32,
-                                key: delta.key.clone(),
-                                value: v.value.clone(),
-                            })
-                    }
-
-                    self.store.insert(delta.key, VecDeque::from(delta.values));
-                }
-                // We iterated over keys in ascending order, so the mutations
-                // must also be sorted by key, resulting in canonical encoding.
-                for ((version, timestamp), mutations) in mutations_by_version.into_iter() {
-                    self.changelog_insert(
-                        version,
-                        &RegistryAtomicMutateRequest {
-                            mutations,
-                            preconditions: vec![],
-                            timestamp
-                        },
-                    );
-                }
-            }
+            ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
     }
 }
@@ -1061,7 +1018,6 @@ mod tests {
                 value: max_value,
                 version,
                 deletion_marker: false,
-                timestamp: registry_value.timestamp
             }
         );
     }
@@ -1111,7 +1067,6 @@ mod tests {
             version,
             value: mutation.value,
             deletion_marker: mutation.mutation_type == Type::Delete as i32,
-            timestamp,
         });
         registry.version = version;
 
