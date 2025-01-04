@@ -20,6 +20,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
