@@ -7,9 +7,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
-use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, identity::AnonymousIdentity, Agent,
-};
+use ic_agent::{identity::AnonymousIdentity, Agent};
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
@@ -294,10 +292,11 @@ async fn main() -> Result<()> {
 
     let ic_agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestTransport::create(
+        .with_url(
             Url::parse(&network_url)
                 .context(format!("Failed to parse URL {}", network_url.clone()))?,
-        )?)
+        )
+        .with_http_client(reqwest::Client::new())
         .build()?;
 
     // Only fetch root key if the network is not the mainnet

@@ -171,15 +171,10 @@ impl Check for Checker {
             })?;
 
         // Phase 4 - Ensure canister mentions known domain.
-        let request = HttpRequest {
-            method: String::from("GET"),
-            url: String::from("/.well-known/ic-domains"),
-            headers: vec![],
-            body: vec![],
-        };
+        let request = HttpRequest::get("/.well-known/ic-domains").build();
 
         let (response,) = HttpRequestCanister::create(&self.agent, canister_id)
-            .http_request(&request.method, &request.url, vec![], vec![], None)
+            .http_request(&request.method(), &request.url(), vec![], vec![], None)
             .call()
             .await
             .map_err(|_| CheckError::KnownDomainsUnavailable {
@@ -197,16 +192,18 @@ impl Check for Checker {
         }?;
 
         // Check response certification
-        let response_for_verification = HttpResponse {
-            status_code: response.status_code,
-            headers: response
+        let response_for_verification = HttpResponse::ok(
+            // body
+            response.body.clone(),
+            // headers
+            response
                 .headers
                 .iter()
                 .map(|field| (field.0.to_string(), field.1.to_string()))
                 .collect::<Vec<(String, String)>>(),
-            body: response.body.clone(),
-            upgrade: response.upgrade,
-        };
+        )
+        .with_upgrade(response.upgrade.unwrap_or_default())
+        .build();
         let max_cert_time_offset_ns = 300_000_000_000;
         let current_time_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)

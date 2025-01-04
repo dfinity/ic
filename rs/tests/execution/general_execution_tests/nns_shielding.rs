@@ -81,7 +81,7 @@ pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
                         "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
                         nns_canister_id, nns_canister_id,
                         CYCLES_MINTING_CANISTER_ID),
-                    error_code: None})
+                    error_code: Some("IC0504".to_string())})
         );
 
         let after_balance = get_balance(&nns_canister_id, &nns_agent).await;
@@ -178,7 +178,7 @@ pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
                     "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
                     canister_id, canister_id,
                     CYCLES_MINTING_CANISTER_ID),
-                error_code: None})
+                error_code: Some("IC0504".to_string())})
     );
     assert!(
         after_balance == before_balance,
@@ -200,7 +200,7 @@ pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
                     "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
                     canister_id, canister_id,
                     CYCLES_MINTING_CANISTER_ID),
-                error_code: None})
+                error_code: Some("IC0504".to_string())})
     );
     assert!(
         after_balance <= before_balance,
