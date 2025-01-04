@@ -4,12 +4,7 @@ use axum::body::Body;
 use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
-use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, UpdateBuilder},
-    export::Principal,
-    identity::AnonymousIdentity,
-    Agent,
-};
+use ic_agent::{agent::UpdateBuilder, export::Principal, identity::AnonymousIdentity, Agent};
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
 use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
@@ -166,7 +161,8 @@ fn new_update_call(
 ) -> Vec<u8> {
     let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
+        .with_url(format!("http://{}", addr))
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
     let update = UpdateBuilder::new(&agent, effective_canister_id, content.method_name)
