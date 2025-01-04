@@ -1011,7 +1011,7 @@ mod tests {
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            timestamp
+            timestamp,
         };
         registry.changelog_insert(version, &req);
 
@@ -1036,7 +1036,7 @@ mod tests {
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            timestamp
+            timestamp,
         };
 
         registry.changelog_insert(1, &req);
@@ -1052,7 +1052,7 @@ mod tests {
         let max_value = vec![0; max_mutation_value_size(version, timestamp, key)];
         let mutations = vec![upsert(key, &max_value)];
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
-        let registry_value  = registry.get(key, version).unwrap();
+        let registry_value = registry.get(key, version).unwrap();
 
         assert_eq!(registry.latest_version(), version);
         assert_eq!(
@@ -1092,14 +1092,15 @@ mod tests {
         let key = b"key";
         let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let value = vec![0; max_mutation_value_size(version, timestamp, key) + bytes_above_max_size];
+        let value =
+            vec![0; max_mutation_value_size(version, timestamp, key) + bytes_above_max_size];
 
         let mutation = upsert(key, value);
         let mutations = vec![mutation.clone()];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
-            timestamp
+            timestamp,
         };
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
@@ -1227,11 +1228,16 @@ Average length of the values: {} (desired: {})",
     /// Computes the mutation value size (given the version and key) that will
     /// result in a delta of exactly `MAX_REGISTRY_DELTAS_SIZE` bytes.
     fn max_mutation_value_size(version: u64, timestamp: Option<u64>, key: &[u8]) -> usize {
-        fn delta_size(version: u64, timestamp: Option<u64>, key: &[u8], value_size: usize) -> usize {
+        fn delta_size(
+            version: u64,
+            timestamp: Option<u64>,
+            key: &[u8],
+            value_size: usize,
+        ) -> usize {
             let req = RegistryAtomicMutateRequest {
                 mutations: vec![upsert(key, vec![0; value_size])],
                 preconditions: vec![],
-                timestamp
+                timestamp,
             };
 
             let version = EncodedVersion::from(version);

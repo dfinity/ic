@@ -113,6 +113,7 @@ async fn get_changes_since_certified(runtime: &Runtime, upgrade_scenario: Upgrad
     let mutation_request = RegistryAtomicMutateRequest {
         mutations: vec![insert("key1", "value1")],
         preconditions: vec![],
+        timestamp: None,
     };
     assert!(
         forward_call_via_universal_canister(
@@ -157,6 +158,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
                 let mutation_request = RegistryAtomicMutateRequest {
                     mutations: vec![insert(format!("key{}", v), "value")],
                     preconditions: vec![],
+                    timestamp: None,
                 };
                 builder.push_init_mutate_request(mutation_request);
             }

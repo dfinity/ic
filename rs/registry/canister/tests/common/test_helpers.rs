@@ -211,6 +211,7 @@ pub fn prepare_registry_with_nodes_from_template(
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp: None,
     };
 
     (mutate_request, node_ids_and_valid_pks)

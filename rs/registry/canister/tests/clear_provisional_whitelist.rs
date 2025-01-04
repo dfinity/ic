@@ -43,6 +43,7 @@ fn anonymous_user_cannot_clear_the_provisional_whitelist() {
                         .encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -101,6 +102,7 @@ fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_w
                         .encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -153,6 +155,7 @@ fn clear_provisional_whitelist_succeeds() {
                         .encode_to_vec(),
                     }],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )

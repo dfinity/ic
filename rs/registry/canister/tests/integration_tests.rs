@@ -99,6 +99,7 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
             insert("coimbra", "portugal"),
         ],
         preconditions: vec![],
+        timestamp: None,
     };
     assert!(
         forward_call_via_universal_canister(
@@ -146,6 +147,7 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
             RegistryAtomicMutateRequest {
                 mutations: vec![update("zurich", "die Schweiz")],
                 preconditions: vec![],
+                timestamp: None,
             }
             .encode_to_vec()
         )
@@ -225,6 +227,7 @@ async fn get_latest_version_certified(runtime: &Runtime, upgrade_scenario: Upgra
     let mutation_request = RegistryAtomicMutateRequest {
         mutations: vec![insert("key1", "value1")],
         preconditions: vec![],
+        timestamp: None,
     };
     assert!(
         forward_call_via_universal_canister(
