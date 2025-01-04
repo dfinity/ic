@@ -67,6 +67,7 @@ impl Registry {
             value: routing_table_bytes,
             version: _,
             deletion_marker: _,
+            timestamp: _
         } = self
             .get(make_routing_table_record_key().as_bytes(), version)
             .unwrap_or_else(|| panic!("{}routing table not found in the registry.", LOG_PREFIX));

@@ -82,6 +82,9 @@ pub struct RegistryValue {
     /// If true, this change represents a deletion.
     #[prost(bool, tag = "3")]
     pub deletion_marker: bool,
+    /// The timestamp in nanoseconds at which this mutation happened.
+    #[prost(message, optional, tag = "4")]
+    pub timestamp: ::core::option::Option<u64>,
 }
 /// A sequence of changes made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -239,6 +242,9 @@ pub struct RegistryAtomicMutateRequest {
     /// The set of mutations to apply to the registry.
     #[prost(message, repeated, tag = "1")]
     pub mutations: ::prost::alloc::vec::Vec<RegistryMutation>,
+    /// The timestamp in nanoseconds at which the set of mutations happened.
+    #[prost(message, optional, tag = "2")]
+    pub timestamp: ::core::option::Option<u64>,
     /// Preconditions at the key level.
     #[prost(message, repeated, tag = "5")]
     pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
