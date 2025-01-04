@@ -178,6 +178,7 @@ rust_test_suite_with_extra_srcs(
             "tests/deploy_fresh_sns_test.rs",
             "tests/sns_release_qualification_legacy.rs",
             "tests/sns_upgrade_test_utils_legacy.rs",
+            "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
         ],
     ),
     aliases = ALIASES,
@@ -268,6 +269,23 @@ rust_test(
     srcs = [
         "tests/sns_release_qualification_legacy.rs",
         "tests/sns_upgrade_test_utils_legacy.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_sns_controlled_canister_with_large_wasm",
+    timeout = "long",
+    srcs = [
+        "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
     ],
     aliases = ALIASES,
     data = DEV_DATA,

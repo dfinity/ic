@@ -110,6 +110,7 @@ impl InstallCode {
             arg,
             compute_allocation,
             memory_allocation,
+            chunked_canister_wasm: None,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
     }
@@ -307,6 +308,7 @@ mod tests {
                 arg: vec![4, 5, 6],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -375,6 +377,7 @@ mod tests {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
