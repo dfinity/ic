@@ -15,7 +15,7 @@ use ic_types::{
 };
 use std::{env, path::PathBuf, sync::Arc};
 
-/// Parse command-line args into `ReplicaArgs`
+/// Parse command-line args into `ReplicaArgs` misc
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
     let args_result = ReplicaArgs::try_parse_from(env::args());
 

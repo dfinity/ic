@@ -35,12 +35,12 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: dind-test
     container:
       <<: *image
       options: >-
         -e NODE_NAME
-        --privileged --cgroupns host
+        --privileged --cgroupns host --network host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
@@ -94,9 +94,6 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
     env:
       AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -267,9 +264,6 @@ jobs:
     name: Build IC
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      group: ch1
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
