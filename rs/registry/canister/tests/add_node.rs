@@ -390,5 +390,6 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
             value: node_operator_record.encode_to_vec(),
         }],
         preconditions: vec![],
+        timestamp: None,
     }
 }

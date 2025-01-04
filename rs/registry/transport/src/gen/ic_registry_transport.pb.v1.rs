@@ -239,6 +239,9 @@ pub struct RegistryAtomicMutateRequest {
     /// The set of mutations to apply to the registry.
     #[prost(message, repeated, tag = "1")]
     pub mutations: ::prost::alloc::vec::Vec<RegistryMutation>,
+    /// The timestamp in nanoseconds at which the set of mutations happened.
+    #[prost(message, optional, tag = "2")]
+    pub timestamp: ::core::option::Option<u64>,
     /// Preconditions at the key level.
     #[prost(message, repeated, tag = "5")]
     pub preconditions: ::prost::alloc::vec::Vec<Precondition>,

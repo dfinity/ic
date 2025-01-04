@@ -186,6 +186,7 @@ mod tests {
                 key: "_".into(),
                 value: "".into(),
             }],
+            timestamp: None,
             preconditions: vec![],
         }
         .encode_to_vec()

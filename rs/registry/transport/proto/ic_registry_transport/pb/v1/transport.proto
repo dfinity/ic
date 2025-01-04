@@ -190,6 +190,9 @@ message RegistryAtomicMutateRequest {
   // The set of mutations to apply to the registry.
   repeated RegistryMutation mutations = 1;
 
+  // The timestamp in nanoseconds at which the set of mutations happened.
+  google.protobuf.UInt64Value timestamp = 2;
+
   // Preconditions at the key level.
   repeated Precondition preconditions = 5;
 

@@ -184,6 +184,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
                         initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -293,6 +294,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                         .encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -452,6 +454,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
                         subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
@@ -701,6 +704,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                         initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
+                    timestamp: None,
                 })
                 .build(),
         )
