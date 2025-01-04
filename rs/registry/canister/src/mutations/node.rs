@@ -12,7 +12,6 @@ impl Registry {
             value: node_record_vec,
             version: _,
             deletion_marker: _,
-            timestamp: _
         } = self
             .get(
                 &make_node_record_key(node_id).into_bytes(),
