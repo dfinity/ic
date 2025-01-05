@@ -17,7 +17,7 @@ Runbook:
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_boundary_nodes_system_test_utils::{
@@ -28,8 +28,8 @@ use k256::elliptic_curve::SecretKey;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
-use std::{env, net::SocketAddr, time::Duration};
-use tokio::{runtime::Runtime, time::timeout};
+use std::{env, net::SocketAddr};
+use tokio::runtime::Runtime;
 
 use ic_agent::{
     agent::http_transport::reqwest_transport::reqwest::Client, identity::Secp256k1Identity, Agent,
@@ -47,7 +47,7 @@ use ic_system_test_driver::{
             IcNodeContainer,
         },
     },
-    retry_with_msg_async, systest,
+    systest,
     util::runtime_from_url,
 };
 use rate_limits_api::{
