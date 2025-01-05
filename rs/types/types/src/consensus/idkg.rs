@@ -10,6 +10,7 @@ pub use crate::consensus::idkg::common::{
     UnmaskedTranscript,
 };
 use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
+use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::{
     consensus::BasicSignature,
     crypto::{
@@ -1495,7 +1496,7 @@ impl From<&VetKdKeyShare> for pb::VetKdKeyShare {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
             request_id: Some(pb::RequestId::from(value.request_id)),
-            encrypted_key_share: value.share.encrypted_key_share.clone(),
+            encrypted_key_share: value.share.encrypted_key_share.0.clone(),
             node_signature: value.share.node_signature.clone(),
         }
     }
@@ -1511,7 +1512,9 @@ impl TryFrom<&pb::VetKdKeyShare> for VetKdKeyShare {
                 "VetKdKeyShare::request_id",
             )?,
             share: VetKdEncryptedKeyShare {
-                encrypted_key_share: value.encrypted_key_share.clone(),
+                encrypted_key_share: VetKdEncryptedKeyShareContent(
+                    value.encrypted_key_share.clone(),
+                ),
                 node_signature: value.node_signature.clone(),
             },
         })

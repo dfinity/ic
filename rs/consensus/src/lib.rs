@@ -8,6 +8,9 @@
 mod bouncer_metrics;
 pub mod certification;
 pub mod consensus;
+pub mod cup_utils;
 pub mod dkg;
 pub mod idkg;
 pub mod vetkd;
+
+pub use cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
