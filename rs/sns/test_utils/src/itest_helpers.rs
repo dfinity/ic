@@ -1281,7 +1281,7 @@ impl SnsCanisters<'_> {
                 );
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
 
         panic!(
