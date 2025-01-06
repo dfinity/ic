@@ -1,5 +1,3 @@
-# DO NOT MERGE - This line is a noop change.
-
 name: Governance Team Pull Request Template
 
 on:
@@ -39,6 +37,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
           script: |
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             await github.rest.pulls.createReview({
               owner: "dfinity",
               repo: "ic",
