@@ -8,17 +8,20 @@ use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters},
 };
-use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_test_utils::common::modify_wasm_bytes;
-use ic_sns_swap::pb::v1::Lifecycle;
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use pocket_ic::PocketIcBuilder;
-
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_root::change_canister::ChunkedCanisterWasm;
+use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_sns_swap::pb::v1::Lifecycle;
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_wasm;
+use pocket_ic::PocketIcBuilder;
 
 const MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 20;
 const MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 5 * 60;
+
+/// This many bytes would not fit into a single cross-subnet ICP message, so including this many
+/// extra bytes into a WASM module would require splitting the module into multiple chunks.
+const LARGE_WASM_MIN_BYTES: usize = 2 * 1024 * 1024 + 1;
 
 #[tokio::test]
 async fn test_store_same_as_target() {
@@ -64,6 +67,23 @@ mod interim_sns_helpers {
         };
         Decode!(&result, ()).unwrap()
     }
+}
+
+/// Produces a valid WASM module based on `wasm`, extending it with so much junk bytes that it
+/// no longer fits into ICP message limits.
+///
+/// See also [`LARGE_WASM_MIN_BYTES`].
+fn oversize_wasm(wasm: Wasm) -> Wasm {
+    let modify_with = vec![0_u8; LARGE_WASM_MIN_BYTES];
+    let mut wasm_module = ic_wasm::utils::parse_wasm(&wasm.bytes(), false).unwrap();
+    ic_wasm::metadata::add_metadata(
+        &mut wasm_module,
+        ic_wasm::metadata::Kind::Public,
+        "aux",
+        modify_with,
+    );
+    let modified_bytes = wasm_module.emit_wasm();
+    Wasm::from_bytes(&modified_bytes[..])
 }
 
 async fn run_test(store_same_as_target: bool) {
@@ -148,9 +168,7 @@ async fn run_test(store_same_as_target: bool) {
         .await
     };
 
-    // TODO: Make the new WASM bigger than 2 MiB so that it does not fit into an ingress message.
-    let new_wasm = modify_wasm_bytes(&original_wasm.bytes(), 123);
-    let new_wasm = Wasm::from_bytes(new_wasm.to_vec());
+    let new_wasm = oversize_wasm(original_wasm);
     let new_wasm_hash = new_wasm.sha256_hash();
 
     // Smoke test
@@ -171,7 +189,7 @@ async fn run_test(store_same_as_target: bool) {
             .stored_chunks(store_canister_id.into(), Some(sns.root.canister_id.into()))
             .await
             .unwrap();
-        assert_eq!(chunk_hashes_list[0], new_wasm_hash);
+        assert_eq!(chunk_hashes_list.len(), 2);
         chunk_hashes_list
     };
 

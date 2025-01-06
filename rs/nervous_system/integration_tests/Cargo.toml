@@ -26,6 +26,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
+ic-wasm = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
