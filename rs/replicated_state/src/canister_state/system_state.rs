@@ -1607,6 +1607,11 @@ impl SystemState {
     ///  * `Stopping` system states accept responses only.
     ///  * `Stopped` system states accept neither.
     ///
+    /// # Returns
+    ///  * `Ok(true)` on successful induction of a message of any type.
+    ///  * `Ok(false)` for a best-effort `Response` that was silently dropped.
+    ///  * `Err(_)` on induction failure.
+    ///
     /// # Errors
     ///
     /// On failure, returns the provided message along with a `StateError`:
@@ -1627,7 +1632,7 @@ impl SystemState {
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         assert_eq!(
             msg.receiver(),
             self.canister_id,
@@ -1637,7 +1642,14 @@ impl SystemState {
         );
 
         match (&msg, &self.status) {
-            // Requests and responses are both rejected when stopped.
+            // Best-effort responses are silently dropped when stopped.
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+                if response.is_best_effort() =>
+            {
+                Ok(false)
+            }
+
+            // Requests and guaranteed responses are both rejected when stopped.
             (_, CanisterStatus::Stopped { .. }) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }
@@ -1670,7 +1682,7 @@ impl SystemState {
                     .map_err(|err| (err, msg.clone()))?
                     {
                         // Best effort response whose callback is gone. Silently drop it.
-                        return Ok(());
+                        return Ok(false);
                     }
                 }
                 push_input(
@@ -2457,7 +2469,7 @@ pub(crate) fn push_input(
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
-) -> Result<(), (StateError, RequestOrResponse)> {
+) -> Result<bool, (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
         if let Err(required_memory) = can_push(&msg, *subnet_available_memory) {

@@ -22,7 +22,7 @@ use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
 use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE};
-use ic_types::time::UNIX_EPOCH;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
 use ic_types::{CanisterId, CountBytes, Cycles};
 use lazy_static::lazy_static;
@@ -1945,8 +1945,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -1961,8 +1960,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopping {
@@ -1980,11 +1978,14 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                    .build_with(CallbackId::new(callback_id), 0),
-                &mut (i64::MAX / 2),
-            ) {
+            while state
+                .push_input(
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                        .build_with(CallbackId::new(callback_id), 0),
+                    &mut (i64::MAX / 2),
+                )
+                .is_ok()
+            {
                 callback_id += 1;
             }
         },
@@ -2015,6 +2016,113 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
         },
         RejectReason::CanisterMigrating,
     );
+}
+
+#[test]
+fn duplicate_best_effort_response_is_dropped() {
+    with_local_test_setup(
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![BestEffortResponse(*LOCAL_CANISTER, *LOCAL_CANISTER, CoarseTime::from_secs_since_unix_epoch(123))],
+            signals_end: 21,
+            ..StreamConfig::default()
+        }],
+        |stream_handler, mut state, metrics| {
+            let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
+
+            let mut expected_state = state.clone();
+            // The expected state has the response inducted...
+            push_input(&mut expected_state, response.clone());
+            // ...and an empty loopback stream with begin advanced.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 23,
+                signals_end: 23,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            // Push the clone of the best effort response onto the loopback stream.
+            state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
+
+            let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
+            assert_eq!(inducted_state, expected_state);
+
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            // Only one response was recorded by the metrics.
+            metrics.assert_inducted_xnet_messages_eq(&[
+                // Response @21 is inducted successfully.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                // Duplicate Response @22 is dropped.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_DROPPED, 1),
+            ]);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
+        },
+    );
+}
+
+/// Common implementation for tests checking inducting best-effort responses does not raise a
+/// critical error.
+fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
+    prepare_state: impl FnOnce(&mut ReplicatedState),
+) {
+    with_local_test_setup(
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![BestEffortResponse(*LOCAL_CANISTER, *LOCAL_CANISTER, CoarseTime::from_secs_since_unix_epoch(123))],
+            signals_end: 21,
+            ..StreamConfig::default()
+        }],
+        |stream_handler, mut state, metrics| {
+            prepare_state(&mut state);
+
+            // Expecting an unchanged state...
+            let mut expected_state = state.clone();
+            // ...and an empty loopback stream with begin advanced.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 22,
+                signals_end: 22,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
+            assert_eq!(expected_state, inducted_state);
+
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            metrics.assert_inducted_xnet_messages_eq(&[
+                // Response @21 is dropped.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_DROPPED, 1),
+            ]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+        },
+    );
+}
+
+/// Tests that inducting a best-effort response into a stopped canister does not raise a critical
+/// error.
+#[test]
+fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critical_error() {
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
+        // Set `LOCAL_CANISTER` to stopped.
+        state
+            .canister_state_mut(&LOCAL_CANISTER)
+            .unwrap()
+            .system_state
+            .set_status(CanisterStatus::Stopped);
+    });
+}
+
+/// Tests that inducting a best-effort response addressed to a non-existent canister does not raise
+/// a critical error.
+#[test]
+fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error(
+) {
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
+        // Remove the `LOCAL_CANISTER`.
+        state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+    });
 }
 
 // TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
@@ -2073,15 +2181,10 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
-                .system_state = SystemState::new_stopped_for_testing(
-                *LOCAL_CANISTER,
-                PrincipalId::default(),
-                Cycles::new(u128::MAX / 2),
-                NumSeconds::from(0),
-            );
+                .system_state
+                .set_status(CanisterStatus::Stopped);
         },
         RejectReason::CanisterStopped,
     );
@@ -2094,8 +2197,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state = SystemState::new_stopping_for_testing(
                 *LOCAL_CANISTER,
@@ -2115,11 +2217,14 @@ fn legacy_check_stream_handler_generated_reject_response_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                    .build_with(CallbackId::new(callback_id), 0),
-                &mut (i64::MAX / 2),
-            ) {
+            while state
+                .push_input(
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                        .build_with(CallbackId::new(callback_id), 0),
+                    &mut (i64::MAX / 2),
+                )
+                .is_ok()
+            {
                 callback_id += 1;
             }
         },
@@ -3896,10 +4001,15 @@ fn with_test_setup_and_config(
                 .into_iter()
                 .enumerate()
                 .map(|(payload_size_bytes, builder)| {
-                    let (respondent, originator) = match builder {
-                        Request(sender, receiver) => (receiver, sender),
-                        Response(respondent, originator) => (respondent, originator),
-                        RejectResponse(respondent, originator, _) => (respondent, originator),
+                    let (respondent, originator, deadline) = match builder {
+                        Request(sender, receiver) => (receiver, sender, NO_DEADLINE),
+                        Response(respondent, originator) => (respondent, originator, NO_DEADLINE),
+                        BestEffortResponse(respondent, originator, deadline) => {
+                            (respondent, originator, deadline)
+                        }
+                        RejectResponse(respondent, originator, _) => {
+                            (respondent, originator, NO_DEADLINE)
+                        }
                     };
 
                     // Register a callback and make an input queue reservation if `msg_config`
@@ -3910,7 +4020,7 @@ fn with_test_setup_and_config(
                             &mut canister_state,
                             originator,
                             respondent,
-                            NO_DEADLINE,
+                            deadline,
                         );
 
                         // Make an input queue reservation.
@@ -3920,6 +4030,7 @@ fn with_test_setup_and_config(
                                     .sender(originator)
                                     .receiver(respondent)
                                     .sender_reply_callback(callback_id)
+                                    .deadline(deadline)
                                     .build()
                                     .into(),
                                 UNIX_EPOCH,
@@ -4247,6 +4358,8 @@ enum MessageBuilder {
     Request(CanisterId, CanisterId),
     // `(respondent, originator)`
     Response(CanisterId, CanisterId),
+    // `(respondent, originator, deadline)`
+    BestEffortResponse(CanisterId, CanisterId, CoarseTime),
     // `(respondent, originator, reason)`
     RejectResponse(CanisterId, CanisterId, RejectReason),
 }
@@ -4266,6 +4379,14 @@ impl MessageBuilder {
                 .originator(originator)
                 .originator_reply_callback(callback_id)
                 .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
+                .build()
+                .into(),
+            Self::BestEffortResponse(respondent, originator, deadline) => ResponseBuilder::new()
+                .respondent(respondent)
+                .originator(originator)
+                .originator_reply_callback(callback_id)
+                .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
+                .deadline(deadline)
                 .build()
                 .into(),
             Self::RejectResponse(respondent, originator, reason) => generate_reject_response_for(
