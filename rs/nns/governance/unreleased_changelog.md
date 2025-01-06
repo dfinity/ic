@@ -9,10 +9,10 @@
 3. After the proposal is executed, move the entries from this file to a new
    section in the adjacent CHANGELOG.md file.
 
-If you add a function, but it doesn't get called (directly or indirectly) by any
-canister method, then do NOT add an entry to this file, because there is no
-user-visible behavior change yet. Wait until an actual call is added before
-adding an entry to this file.
+If you add a function, but calls to it will only be added in later PR(s), then
+do NOT add an entry to this file, because this new function has no user-visible
+behavior change yet. Wait until an actual call is added before adding an entry
+to this file.
 
 TODO: Automate step 2. by modifying the script that composes the proposal
 summary. It might be helpful to look at nns-dapp's [split-changelog] script for
