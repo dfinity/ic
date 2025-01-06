@@ -11307,6 +11307,7 @@ dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
  "ic-cycles-account-manager",
