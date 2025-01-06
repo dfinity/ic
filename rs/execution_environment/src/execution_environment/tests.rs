@@ -707,6 +707,7 @@ fn get_running_canister_status_from_another_canister() {
     );
 }
 
+//#[ignore]
 #[test]
 fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
