@@ -1594,12 +1594,13 @@ fn transaction_has_expected_memo(
 
     // Convert it to Memo.
     type U64Array = [u8; std::mem::size_of::<u64>()];
-    let observed_icrc1_memo = U64Array::try_from(icrc1_memo.as_ref())
-        .map_err(|_err| NotifyError::InvalidTransaction(format!(
+    let observed_icrc1_memo = U64Array::try_from(icrc1_memo.as_ref()).map_err(|_err| {
+        NotifyError::InvalidTransaction(format!(
             "The transaction's memo ({}) does not have the required value ({}).",
             stringify_memo(transaction.memo),
             stringify_memo(expected_memo),
-        )))?;
+        ))
+    })?;
     let observed_icrc1_memo = Memo(u64::from_le_bytes(observed_icrc1_memo));
 
     // Compare to the required value.
