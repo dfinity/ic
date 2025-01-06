@@ -17,17 +17,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
           script: |
-            const pullRequestNumber = context.payload.number;
-
-            console.log("\n");
-            console.log("BEGIN context");
-            console.log(JSON.stringify(context, null, 2));
-            console.log("END context");
-            console.log("\n");
-
-            // Only remind if nns-team approval is required.
+            // Although this does not DEFINITELY indicated that nns-team MUST
+            // approve the PR, it strongly indicates that nns-team must approve.
+            const nnsTeamReviewRequested = context
+              .payload
+              .pull_request
+              .requested_teams
+              .some(|team| team.name == 'nns-team')
+            console.log("nnsTeamReviewRequested = " + nnsTeamReviewRequested);
+            if (!nnsTeamReviewRequested) {
+              return;
+            }
 
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            const pullRequestNumber = context.payload.number;
             await github.rest.pulls.createReview({
               owner: "dfinity",
               repo: "ic",
