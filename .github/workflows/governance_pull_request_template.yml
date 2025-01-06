@@ -7,6 +7,7 @@ on:
       # DO NOT MERGE
       - synchronize
 
+# DO NOT MERGE - Delete this line. It was added so that there is something to push, and trigger Action.
 jobs:
   mainJob:
     runs-on: ubuntu-latest
