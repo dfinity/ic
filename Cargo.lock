@@ -8389,6 +8389,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
