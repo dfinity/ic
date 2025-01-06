@@ -14,4 +14,6 @@ http://dashboard.internetcomputer.org/proposal/$ID
 
 ## Added
 
-* Flying feature was added to widgets.
+* Flying feature was added to widgets. This feature was discussed and/or
+  proposed at $FORUM_THREAD_URL and $MOTION_PROPOSAL_URL. Perhaps, list
+  implementation PR URLs.
