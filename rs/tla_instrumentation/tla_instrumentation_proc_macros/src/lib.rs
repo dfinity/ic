@@ -199,6 +199,13 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Instructs the TLA instrumentation to "stack" PlusCal labels when entering a function.
+/// This is useful when a Rust function makes inter-canister calls and is called from multiple
+/// locations in the same update method. In this case, we want the labels in the TLA trace to
+/// reflect the different call sites. We do this by "stacking" the labels; for example, if an
+/// update method `upd` calls a function `foo` from two different locations, where the first location
+/// has the label `A` and the second location has the label `B`, and `foo` adds a label `Call` when
+/// it performs the call, then the labels in the TLA trace will be `A_Call` and `B_Call`.
 #[proc_macro_attribute]
 pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
@@ -230,6 +237,13 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     }
+
+    // We need three different ways to invoke the wrapped function.
+    // One is when the function is in an async_trait, as this will get desugared
+    // into a Pin<Box<...>>. There, we will want to await the result even though
+    // the function itself is not async. The other is when the function is async,
+    // in which case we want to await the result. The last is when the function is
+    // synchronous, in which case we just want to call it.
     let call = if async_trait_fn {
         quote! {
             #body.await
