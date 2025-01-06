@@ -30,7 +30,7 @@ jobs:
             const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
             */
             const isInNnsTeam = true;
-            console.log("Is actor in nns-team? " + isInNNsTeam);
+            console.log("Is actor in nns-team? " + isInNnsTeam);
             return isInNnsTeam;
 
       - name: Remind the Author to Update unreleased_changes.md.
