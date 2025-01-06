@@ -54,16 +54,19 @@ jobs:
             // Post a review to remind the author to update unreleased_changelog.md.
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
+            const reminderText = `
+              Did you remember to update unreleased_changes.md? If so (or if this is not
+              necessary), please, explicitly acknowledge this reminder by giving it a
+              thumbs up reaction. To unblock the PR, dismiss the code review by going
+              to the bottom of the pull request page, and use \"Done.\" as the reason.
+            `
+            .replace(/[\s\n]{2,}/gm, '')
+            .trim();
             await github.rest.pulls.createReview({
               owner: "dfinity",
               repo: "ic",
               pull_number: pullRequestNumber,
-              body: (
-                "Did you remember to update unreleased_changes.md? If so, please, " +
-                "explicitly acknowledge this reminder by giving it a thumbs up reaction. " +
-                "To unblock the PR, dismiss the code review by going to the bottom " +
-                "of the pull request page, and use \"Done.\" as the reason."
-              ),
+              body: reminderText,
               event: "REQUEST_CHANGES",
             });
             console.log("Reminder was added successfully.");
