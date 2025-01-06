@@ -125,12 +125,14 @@ static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
 struct CallMaker {}
 
-pub trait CallMakerTrait {
+#[async_trait]
+trait CallMakerTrait {
     async fn call_maker(&self);
 }
 
+#[async_trait]
 impl CallMakerTrait for CallMaker {
-    #[tla_function]
+    #[tla_function(async_trait_fn = true)]
     async fn call_maker(&self) {
         tla_log_request!(
             "WaitForResponse",

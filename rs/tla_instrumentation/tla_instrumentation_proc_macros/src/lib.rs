@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use syn::{parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta};
 
 /// Used to annotate top-level methods (which de-facto start an update call)
 #[proc_macro_attribute]
@@ -200,10 +200,10 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
     let input_fn = parse_macro_input!(item as ItemFn);
-
+    let args = parse_macro_input!(attr as AttributeArgs);
     let mut modified_fn = input_fn.clone();
 
     // Deconstruct the function elements
@@ -218,8 +218,23 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     modified_fn.sig.ident = mangled_name.clone();
 
     let asyncness = sig.asyncness;
+    let mut async_trait_fn = false;
 
-    let call = if asyncness.is_some() {
+    // Examine each attribute argument
+    for arg in args {
+        if let NestedMeta::Meta(Meta::NameValue(name_value)) = arg {
+            if name_value.path.is_ident("async_trait_fn") {
+                if let Lit::Bool(lit_bool) = name_value.lit {
+                    async_trait_fn = lit_bool.value();
+                }
+            }
+        }
+    }
+    let call = if async_trait_fn {
+        quote! {
+            #body.await
+        }
+    } else if asyncness.is_some() {
         quote! {
             (|| async move {
                 #body
@@ -227,37 +242,49 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         quote! {
-            (|| move {
+            (move || {
                 #body
             })()
         }
     };
 
-    let output = quote! {
+    let with_instrumentation = quote! {
+       TLA_INSTRUMENTATION_STATE.try_with(|state| {
+            {
+                let mut handler_state = state.handler_state.borrow_mut();
+                handler_state.context.call_function();
+            }
+       }).unwrap_or_else(|e| {
+           // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
+            println!("Couldn't find TLA_INSTRUMENTATION_STATE when calling a tla_function; ignoring for the moment");
+           ()
+       });
+       let res = #call;
+       TLA_INSTRUMENTATION_STATE.try_with(|state| {
+            {
+                let mut handler_state = state.handler_state.borrow_mut();
+                handler_state.context.return_from_function();
+            }
+       }).unwrap_or_else(|e|
+           // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
+           ()
+       );
+       res
+    };
 
-        #(#attrs)* #vis #sig {
-
-           TLA_INSTRUMENTATION_STATE.try_with(|state| {
-                {
-                    let mut handler_state = state.handler_state.borrow_mut();
-                    handler_state.context.call_function();
-                }
-           }).unwrap_or_else(|e|
-               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
-               ()
-           );
-
-           let res = #call;
-           TLA_INSTRUMENTATION_STATE.try_with(|state| {
-                {
-                    let mut handler_state = state.handler_state.borrow_mut();
-                    handler_state.context.return_from_function();
-                }
-           }).unwrap_or_else(|e|
-               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
-               ()
-           );
-           res
+    let output = if async_trait_fn {
+        quote! {
+            #(#attrs)* #vis #sig {
+                Box::pin(async move {
+                    #with_instrumentation
+                })
+            }
+        }
+    } else {
+        quote! {
+            #(#attrs)* #vis #sig {
+                #with_instrumentation
+            }
         }
     };
 
