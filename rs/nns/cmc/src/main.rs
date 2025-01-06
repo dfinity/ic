@@ -33,7 +33,7 @@ use ic_nns_constants::{
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -1569,6 +1569,55 @@ fn memo_to_intent_str(memo: Memo) -> String {
     }
 }
 
+fn transaction_has_expected_memo(
+    transaction: &Transaction,
+    expected_memo: Memo,
+) -> Result<(), NotifyError> {
+    fn stringify_memo(memo: Memo) -> String {
+        format!("{} ({})", memo_to_intent_str(memo), memo.0)
+    }
+
+    if transaction.memo == expected_memo {
+        return Ok(());
+    }
+
+    // Fall back to icrc1_memo.
+
+    // Read the field.
+    let Some(icrc1_memo) = &transaction.icrc1_memo else {
+        return Err(NotifyError::InvalidTransaction(format!(
+            "The transaction's memo ({}) does not have the required value ({}).",
+            stringify_memo(transaction.memo),
+            stringify_memo(expected_memo),
+        )));
+    };
+
+    // Convert it to Memo.
+    type U64Array = [u8; std::mem::size_of::<u64>()];
+    let observed_icrc1_memo = U64Array::try_from(icrc1_memo.as_ref())
+        .map_err(|_err| NotifyError::InvalidTransaction(format!(
+            "The transaction's memo ({}) does not have the required value ({}).",
+            stringify_memo(transaction.memo),
+            stringify_memo(expected_memo),
+        )))?;
+    let observed_icrc1_memo = Memo(u64::from_le_bytes(observed_icrc1_memo));
+
+    // Compare to the required value.
+    if observed_icrc1_memo == expected_memo {
+        return Ok(());
+    }
+
+    Err(NotifyError::InvalidTransaction(format!(
+        "Neither the memo ({}) nor the icrc1_memo ({}) of the transaction has the required value ({}).",
+        stringify_memo(transaction.memo),
+        stringify_memo(observed_icrc1_memo),
+        stringify_memo(expected_memo),
+    )))
+}
+
+/// Returns amount, and source of the transfer from (ICP) ledger.
+///
+/// Returns Ok if the arguments are matched. (Otherwise, returns Err).
 async fn fetch_transaction(
     block_index: BlockIndex,
     expected_destination_account: AccountIdentifier,
@@ -1588,22 +1637,15 @@ async fn fetch_transaction(
             ))
         }
     };
+
     if to != expected_destination_account {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
             to, expected_destination_account
         )));
     }
-    let memo = block.transaction().memo;
-    if memo != expected_memo {
-        return Err(NotifyError::InvalidTransaction(format!(
-            "Intent in the block ({} == {}) different than in the notification ({} == {})",
-            memo.0,
-            memo_to_intent_str(memo),
-            expected_memo.0,
-            memo_to_intent_str(expected_memo),
-        )));
-    }
+
+    transaction_has_expected_memo(block.transaction().as_ref(), expected_memo)?;
 
     Ok((amount, from))
 }
