@@ -2389,7 +2389,7 @@ impl SystemState {
             |memory_allocation| {
                 debug_assert!(
                     memory_usage_without_wasm_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
+                    "Used non-Wasm memory: {:?} is larger than memory allocation: {:?}.",
                     memory_usage_without_wasm_memory,
                     memory_allocation
                 );
