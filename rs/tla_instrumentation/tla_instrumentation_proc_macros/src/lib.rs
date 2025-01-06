@@ -271,7 +271,6 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
        }).unwrap_or_else(|e| {
            // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
             println!("Couldn't find TLA_INSTRUMENTATION_STATE when calling a tla_function; ignoring for the moment");
-           ()
        });
        let res = #call;
        TLA_INSTRUMENTATION_STATE.try_with(|state| {
