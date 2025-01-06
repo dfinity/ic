@@ -12,10 +12,6 @@ on:
 jobs:
   mainJob:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      organization: read     # required to list team members
-      pull-requests: write   # required to update PR body
     steps:
       - uses: actions/github-script@v6
         id: mainStep
