@@ -55,7 +55,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
     SubnetListRecord::decode(subnet_list_record_vec.as_slice()).unwrap()
 }
 
-pub fn get_node_operator_id_for_node_id(
+pub fn get_node_operator_id_for_node(
     registry: &Registry,
     node_id: NodeId,
 ) -> Result<PrincipalId, String> {

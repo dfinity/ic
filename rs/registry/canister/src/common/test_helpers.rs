@@ -97,14 +97,18 @@ pub fn prepare_registry_with_nodes(
     start_mutation_id: u8,
     nodes: u64,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
-    prepare_registry_with_nodes_and_node_operator_id(start_mutation_id, nodes, None)
+    prepare_registry_with_nodes_and_node_operator_id(
+        start_mutation_id,
+        nodes,
+        PrincipalId::new_user_test_id(999),
+    )
 }
 
 /// Same as above, just with the possibility to provide a node operator principal.
 pub fn prepare_registry_with_nodes_and_node_operator_id(
     start_mutation_id: u8,
     nodes: u64,
-    node_operator_id: Option<PrincipalId>,
+    node_operator_id: PrincipalId,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
@@ -124,9 +128,7 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
                     ip_addr: format!("128.0.{effective_id}.1"),
                     ..Default::default()
                 }),
-                node_operator_id: node_operator_id
-                    .unwrap_or(PrincipalId::new_user_test_id(999))
-                    .into_vec(),
+                node_operator_id: node_operator_id.into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
                 ..Default::default()

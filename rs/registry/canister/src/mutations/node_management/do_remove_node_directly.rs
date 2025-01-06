@@ -1,5 +1,5 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node_id, get_node_operator_record,
+    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
     get_node_provider_id_for_operator_id, get_subnet_list_record,
     make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
@@ -26,7 +26,7 @@ impl Registry {
     pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
-        let node_operator_id = get_node_operator_id_for_node_id(self, payload.node_id)
+        let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
             .map_err(|e| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -244,7 +244,7 @@ mod tests {
             prepare_registry_with_nodes_and_node_operator_id(
                 1, /* mutation id */
                 1, /* node count */
-                Some(operator1_id),
+                operator1_id,
             );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
@@ -293,7 +293,7 @@ mod tests {
             prepare_registry_with_nodes_and_node_operator_id(
                 1, /* mutation id */
                 1, /* node count */
-                Some(operator1_id),
+                operator1_id,
             );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_id = node_ids_and_dkg_pks
