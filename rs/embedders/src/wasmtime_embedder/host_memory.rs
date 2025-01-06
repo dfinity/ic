@@ -187,11 +187,6 @@ impl MmapMemory {
     fn as_ptr(&self) -> *mut c_void {
         self.wasm_memory
     }
-
-    fn wasm_accessible(&self) -> std::ops::Range<usize> {
-        let start = self.wasm_memory as usize;
-        start..start + self.size_in_bytes
-    }
 }
 
 impl Drop for MmapMemory {
