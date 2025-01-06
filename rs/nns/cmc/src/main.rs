@@ -2492,6 +2492,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
+    use serde_bytes::ByteBuf;
     use std::str::FromStr;
 
     pub(crate) fn init_test_state() {
@@ -3206,5 +3207,139 @@ mod tests {
             CandidSource::File(old_interface.as_path()),
         )
         .expect("The CMC canister interface is not compatible with the cmc.did file");
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_happy() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        let transaction_with_legacy_memo = Transaction {
+            memo: Memo(42),
+            icrc1_memo: None,
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_legacy_memo, Memo(42),),
+            Ok(()),
+        );
+
+        // Case B: icrc1_memo is used.
+        let transaction_with_icrc1_memo = Transaction {
+            memo: Memo(0),
+            icrc1_memo: Some(ByteBuf::from(vec![43, 0, 0, 0, 0, 0, 0, 0])),
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_icrc1_memo, Memo(43),),
+            Ok(()),
+        );
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_sad() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        {
+            let transaction = Transaction {
+                memo: Memo(77),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "77", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case B: icrc1_memo is used.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(vec![78, 0, 0, 0, 0, 0, 0, 0])),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "78", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case C: legacy memo is 0, and ircr1_memo is None.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
     }
 }
