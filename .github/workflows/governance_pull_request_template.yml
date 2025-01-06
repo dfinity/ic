@@ -20,6 +20,9 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
+            const pullRequestNumber = context.payload.number;
+
+            /* DO NOT MERGE
             const oldBody = context.payload.pull_request.body;
 
             if (oldBody.match(/Added by GitHub Actions/)) {
@@ -35,7 +38,9 @@ jobs:
 
             newBody = newBody.join("\n\n");
             console.log("newBody = " + JSON.stringify(newBody));
+            */
 
+            /* DO NOT MERGE
             console.log("\n");
             console.log("Calling listMembersInOrg...")
             console.log("\n");
@@ -52,12 +57,22 @@ jobs:
             if (!isInNnsTeam) {
               return;
             }
+            */
 
-            const pullRequestNumber = context.payload.number;
+            /* DO NOT MERGE
             console.log("Setting the body of pull request number " + pullRequestNumber + "...");
             await github.rest.pulls.update({
               owner: "dfinity",
               repo: "ic",
               pull_number: pullRequestNumber,
               body: newBody,
+            });
+            */
+
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: "Did you remember to update unreleased_changes.md?",
+              event: "REQUEST_CHANGES",
             });
