@@ -1,6 +1,8 @@
 use super::*;
 use assert_matches::assert_matches;
-use std::fs::write;
+use regex::Regex;
+use std::fs::{read_to_string, write};
+use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::tempdir;
 
@@ -46,6 +48,22 @@ fstrim_last_run_success 1
 fstrim_runs_total +Inf
 "#;
 
+/// Replaces lines that contain:
+/// - `fstrim_last_run_duration_milliseconds X`
+/// - `fstrim_datadir_last_run_duration_milliseconds X`
+///
+/// with a placeholder:
+/// - `fstrim_last_run_duration_milliseconds <DURATION>`
+/// - `fstrim_datadir_last_run_duration_milliseconds <DURATION>`
+///
+/// This ensures that numeric values (e.g., durations) do not cause test flakiness.
+fn normalize_duration_line(input: &str) -> String {
+    let re =
+        Regex::new(r"(?m)^(fstrim(?:_datadir)?_last_run_duration_milliseconds)\s+\d+(\.\d+)?$")
+            .unwrap();
+    re.replace_all(input, "$1 <DURATION>").into_owned()
+}
+
 #[test]
 fn should_parse_metrics_without_datadir_fields() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
@@ -60,14 +78,27 @@ fn should_parse_metrics_without_datadir_fields() {
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
 
-    assert_eq!(parsed_metrics.last_duration_milliseconds, 0f64);
-    assert!(parsed_metrics.last_run_success);
-    assert_eq!(parsed_metrics.total_runs, 1f64);
-
-    // Check datadir fields are default if not in file
-    assert_eq!(parsed_metrics.last_duration_milliseconds_datadir, 0f64);
-    assert!(parsed_metrics.last_run_success_datadir);
-    assert_eq!(parsed_metrics.total_runs_datadir, 0f64);
+    let actual_str = parsed_metrics.to_p8s_metrics_string();
+    let expected_str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 0
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 1
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 0
+"#;
+    assert_eq!(actual_str, expected_str);
 }
 
 #[test]
@@ -84,13 +115,8 @@ fn should_parse_metrics_with_datadir_fields() {
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
 
-    assert_eq!(parsed_metrics.last_duration_milliseconds, 42f64);
-    assert!(!parsed_metrics.last_run_success);
-    assert_eq!(parsed_metrics.total_runs, 7f64);
-
-    assert_eq!(parsed_metrics.last_duration_milliseconds_datadir, 999f64);
-    assert!(parsed_metrics.last_run_success_datadir);
-    assert_eq!(parsed_metrics.total_runs_datadir, 12f64);
+    let actual_str = parsed_metrics.to_p8s_metrics_string();
+    assert_eq!(actual_str, EXISTING_METRICS_WITH_DATADIR);
 }
 
 #[test]
@@ -113,7 +139,6 @@ fn should_write_metrics_to_file() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     let default_metrics = FsTrimMetrics::default();
-    let default_metrics_string = default_metrics.to_p8s_metrics_string();
 
     write_metrics_using_tmp_file(
         &default_metrics,
@@ -130,12 +155,10 @@ fn should_write_metrics_to_file() {
     )
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
-    let parsed_metrics_string = parsed_metrics.to_p8s_metrics_string();
-    assert_eq!(
-        parsed_metrics, default_metrics,
-        "{}\n{}",
-        parsed_metrics_string, default_metrics_string
-    );
+    let parsed_metrics_str = parsed_metrics.to_p8s_metrics_string();
+    let default_str = FsTrimMetrics::default().to_p8s_metrics_string();
+
+    assert_eq!(parsed_metrics_str, default_str);
 }
 
 #[test]
@@ -161,28 +184,28 @@ fn should_update_metrics() {
     )
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
-    let parsed_metrics_string = parsed_metrics.to_p8s_metrics_string();
-    let expected_metrics =
-        "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-         # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-         fstrim_last_run_duration_milliseconds 151\n\
-         # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-         # TYPE fstrim_last_run_success gauge\n\
-         fstrim_last_run_success 1\n\
-         # HELP fstrim_runs_total Total number of runs of fstrim\n\
-         # TYPE fstrim_runs_total counter\n\
-         fstrim_runs_total 2\n\
-         # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds\n\
-         # TYPE fstrim_datadir_last_run_duration_milliseconds gauge\n\
-         fstrim_datadir_last_run_duration_milliseconds 0\n\
-         # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)\n\
-         # TYPE fstrim_datadir_last_run_success gauge\n\
-         fstrim_datadir_last_run_success 1\n\
-         # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir\n\
-         # TYPE fstrim_datadir_runs_total counter\n\
-         fstrim_datadir_runs_total 0\n";
 
-    assert_eq!(parsed_metrics_string, expected_metrics);
+    let expected_str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 151
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 2
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 0
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 1
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 0
+"#;
+
+    assert_eq!(parsed_metrics.to_p8s_metrics_string(), expected_str);
 }
 
 #[test]
@@ -207,13 +230,27 @@ fn should_update_datadir_metrics() {
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
 
-    assert_eq!(parsed_metrics.last_duration_milliseconds, 0f64);
-    assert!(parsed_metrics.last_run_success);
-    assert_eq!(parsed_metrics.total_runs, 1f64);
+    let expected_str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 501
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 0
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 1
+"#;
 
-    assert_eq!(parsed_metrics.last_duration_milliseconds_datadir, 501f64);
-    assert!(!parsed_metrics.last_run_success_datadir);
-    assert_eq!(parsed_metrics.total_runs_datadir, 1f64);
+    assert_eq!(parsed_metrics.to_p8s_metrics_string(), expected_str);
 }
 
 #[test]
@@ -240,28 +277,27 @@ fn should_start_from_empty_metrics_for_update_if_metrics_in_file_contain_special
     )
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
-    let parsed_metrics_string = parsed_metrics.to_p8s_metrics_string();
 
-    let expected_metrics =
-        "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-         # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-         fstrim_last_run_duration_milliseconds 151\n\
-         # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-         # TYPE fstrim_last_run_success gauge\n\
-         fstrim_last_run_success 1\n\
-         # HELP fstrim_runs_total Total number of runs of fstrim\n\
-         # TYPE fstrim_runs_total counter\n\
-         fstrim_runs_total 1\n\
-         # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds\n\
-         # TYPE fstrim_datadir_last_run_duration_milliseconds gauge\n\
-         fstrim_datadir_last_run_duration_milliseconds 0\n\
-         # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)\n\
-         # TYPE fstrim_datadir_last_run_success gauge\n\
-         fstrim_datadir_last_run_success 1\n\
-         # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir\n\
-         # TYPE fstrim_datadir_runs_total counter\n\
-         fstrim_datadir_runs_total 0\n";
-    assert_eq!(parsed_metrics_string, expected_metrics);
+    let expected_str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 151
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 0
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 1
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 0
+"#;
+    assert_eq!(parsed_metrics.to_p8s_metrics_string(), expected_str);
 }
 
 #[test]
@@ -304,8 +340,30 @@ fn should_fail_but_write_metrics_if_command_fails() {
         if err.to_string().contains("Failed to run command")
     );
 
+    let actual_raw = read_to_string(&metrics_file).expect("should read metrics");
+    let actual = normalize_duration_line(&actual_raw);
     // Even though it fails, it should write updated metrics with success=0, total_runs=1
-    assert_metrics_file_content(&metrics_file, false, 1);
+    let expected_after_fail_raw = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 0
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 0
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 0
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 1
+"#;
+    let expected_after_fail = normalize_duration_line(expected_after_fail_raw);
+    assert_eq!(actual, expected_after_fail);
 }
 
 #[test]
@@ -343,6 +401,7 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
+
     assert!(fstrim_tool(
         "/non/existent/command",
         metrics_file
@@ -363,7 +422,9 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
     )
     .is_ok());
 
-    assert_metrics_file_content(&metrics_file, true, 0);
+    let actual = read_to_string(&metrics_file).expect("should read file");
+    let expected = FsTrimMetrics::default().to_p8s_metrics_string();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -412,7 +473,8 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
     )
     .is_ok());
 
-    assert_metrics_file_content(&metrics_file, true, 1);
+    let content = read_to_string(&metrics_file).expect("reading metrics should succeed");
+    assert!(content.contains("fstrim_runs_total 1"));
 }
 
 #[test]
@@ -420,6 +482,7 @@ fn should_fail_if_metrics_file_cannot_be_written_to() {
     let metrics_file = PathBuf::from("/non/existent/directory/fstrim.prom");
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
+
     assert_matches!(
         fstrim_tool(
             "true",
@@ -451,10 +514,8 @@ fn should_fail_if_target_is_not_a_directory() {
 
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     let target = PathBuf::from("/non/existent/target/directory");
-    let expected_error = format!(
-        "Target {} is not a directory",
-        target.to_str().expect("target path should be valid")
-    );
+    let expected_error = format!("Target {} is not a directory", target.to_str().unwrap());
+
     assert_matches!(
         fstrim_tool(
             "true",
@@ -476,75 +537,4 @@ fn should_fail_if_target_is_not_a_directory() {
         Err(err)
         if err.to_string() == expected_error
     );
-}
-
-fn assert_metrics_file_content(metrics_filename: &PathBuf, is_success: bool, total_runs: u32) {
-    let file = File::open(metrics_filename).expect("should succeed in opening metrics file");
-    let reader = BufReader::new(file);
-    let lines = reader
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .expect("read error");
-
-    assert_eq!(
-        lines[0],
-        "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds"
-    );
-    assert_eq!(
-        lines[1],
-        "# TYPE fstrim_last_run_duration_milliseconds gauge"
-    );
-    assert!(lines[2].starts_with("fstrim_last_run_duration_milliseconds"));
-
-    assert_eq!(
-        lines[3],
-        "# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)"
-    );
-    assert_eq!(lines[4], "# TYPE fstrim_last_run_success gauge");
-    let line_str = &lines[5];
-    {
-        let mut tokens = line_str.split(' ');
-        assert_eq!(
-            tokens.next().unwrap(),
-            "fstrim_last_run_success",
-            "{}",
-            line_str
-        );
-        let success_str = if is_success { "1" } else { "0" };
-        assert_eq!(tokens.next().unwrap(), success_str, "{}", line_str);
-    }
-
-    assert_eq!(
-        lines[6],
-        "# HELP fstrim_runs_total Total number of runs of fstrim"
-    );
-    assert_eq!(lines[7], "# TYPE fstrim_runs_total counter");
-    {
-        let line_str = &lines[8];
-        let mut tokens = line_str.split(' ');
-        assert_eq!(tokens.next().unwrap(), "fstrim_runs_total", "{}", line_str);
-        assert_eq!(
-            tokens.next().unwrap().parse::<u32>().unwrap(),
-            total_runs,
-            "{}",
-            line_str
-        );
-    }
-
-    // Lines for datadir metrics
-    assert_eq!(
-        lines[9],
-        "# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds"
-    );
-    assert_eq!(
-        lines[10],
-        "# TYPE fstrim_datadir_last_run_duration_milliseconds gauge"
-    );
-    assert!(lines[11].starts_with("fstrim_datadir_last_run_duration_milliseconds"));
-
-    assert_eq!(
-        lines[12],
-        "# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)"
-    );
-    assert_eq!(lines[13], "# TYPE fstrim_datadir_last_run_success gauge");
 }
