@@ -5,6 +5,7 @@ use super::{
 use crate::governance::governance_minting_account;
 use lazy_static::lazy_static;
 use std::collections::BTreeSet;
+use std::iter::once;
 use tla_instrumentation::{Label, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment};
 
 const PID: &str = "Disburse_Neuron";
@@ -34,8 +35,7 @@ lazy_static! {
                 let all_accounts = function_range_union(trace, "to_account")
                     .union(&function_domain_union(trace, "neuron_id_by_account"))
                     .filter(|account| **account != "".to_tla_value())
-                    .into_iter()
-                    .chain(vec![&account_to_tla(governance_minting_account())])
+                    .chain(once(&account_to_tla(governance_minting_account())))
                     .cloned()
                     .collect::<BTreeSet<TlaValue>>();
 

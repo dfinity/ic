@@ -327,25 +327,3 @@ pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStrea
     };
     output.into()
 }
-
-/*
-#[proc_macro_attribute]
-/// Apply the tla_function macro to all functions in the given impl
-pub fn tla_function_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(input as syn::ItemImpl);
-    let args = parse_macro_input!(args as syn::AttributeArgs);
-
-    match input {
-        Item::Impl(imp) {
-            for mut item in imp.items {
-                if let syn::ImplItem::Method(method) = item {
-                    let mut attrs = method.attrs;
-                    attrs.push(syn::parse_quote!(#[tla_function]));
-                    method.attrs = attrs;
-                }
-            }
-        }
-    }
-}
-
- */
