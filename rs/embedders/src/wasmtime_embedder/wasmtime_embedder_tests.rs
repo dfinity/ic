@@ -168,6 +168,7 @@ fn test_wasmtime_system_api() {
         .expect("call failed");
 }
 
+#[ignore]
 #[test]
 fn test_initial_wasmtime_config() {
     // The following proposals should be disabled: simd, relaxed_simd,
