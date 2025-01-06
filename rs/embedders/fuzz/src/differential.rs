@@ -1,6 +1,4 @@
-use crate::ic_wasm::ICWasmModule;
-use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
+use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_embedders::InstanceRunResult;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_interfaces::execution_environment::SystemApi;
@@ -108,9 +106,7 @@ fn execute_wasm(
     u64,
 )> {
     let mut result = vec![];
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_embedders_config();
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)
         .with_config(config)

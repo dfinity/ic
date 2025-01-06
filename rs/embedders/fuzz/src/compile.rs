@@ -1,19 +1,18 @@
+use crate::ic_wasm::{ic_embedders_config, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
-use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use wasm_smith::{Config, MemoryOffsetChoices, Module};
+use wasm_smith::{MemoryOffsetChoices, Module};
 
 #[derive(Debug)]
 pub struct MaybeInvalidModule(pub Module);
 
 impl<'a> Arbitrary<'a> for MaybeInvalidModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let mut config = Config::arbitrary(u)?;
+        let mut config = ic_wasm_config(ic_embedders_config());
         config.allow_invalid_funcs = true;
         config.memory_offset_choices = MemoryOffsetChoices(40, 20, 40);
         Ok(MaybeInvalidModule(Module::new(config, u)?))
@@ -22,8 +21,7 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
 
 #[inline(always)]
 pub fn run_fuzzer(module: MaybeInvalidModule) {
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_embedders_config();
     let wasm = module.0.to_bytes();
 
     let rt: Runtime = tokio::runtime::Builder::new_multi_thread()

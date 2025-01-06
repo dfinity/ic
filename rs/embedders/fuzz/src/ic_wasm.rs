@@ -1,6 +1,7 @@
 use crate::imports::system_api_imports;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
 use ic_replicated_state::Global;
 use ic_types::methods::WasmMethod;
@@ -34,7 +35,7 @@ pub struct ICWasmModule {
 
 impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let embedder_config = EmbeddersConfig::new();
+        let embedder_config = ic_embedders_config();
         let exports = generate_exports(embedder_config.clone(), u)?;
         let mut config = ic_wasm_config(embedder_config);
         config.exports = exports;
@@ -130,7 +131,7 @@ impl ICWasmModule {
     }
 }
 
-fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
+pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -158,6 +159,13 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         available_imports: Some(SYSTEM_API_IMPORTS.to_vec()),
         ..Default::default()
     }
+}
+
+pub fn ic_embedders_config() -> EmbeddersConfig {
+    let mut config = EmbeddersConfig::default();
+    config.feature_flags.write_barrier = FlagStatus::Enabled;
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    config
 }
 
 fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
