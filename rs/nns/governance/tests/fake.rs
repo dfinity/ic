@@ -243,9 +243,10 @@ impl FakeDriver {
     }
 }
 
-impl FakeDriver {
-    #[cfg_attr(feature = "tla", tla_function)]
-    async fn transfer_funds_impl(
+#[async_trait]
+impl IcpLedger for FakeDriver {
+    #[cfg_attr(feature = "tla", tla_function(async_trait_fn = true))]
+    async fn transfer_funds(
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
@@ -311,21 +312,6 @@ impl FakeDriver {
         );
 
         Ok(0)
-    }
-}
-
-#[async_trait]
-impl IcpLedger for FakeDriver {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to_account: AccountIdentifier,
-        _: u64,
-    ) -> Result<u64, NervousSystemError> {
-        self.transfer_funds_impl(amount_e8s, fee_e8s, from_subaccount, to_account, 0)
-            .await
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
