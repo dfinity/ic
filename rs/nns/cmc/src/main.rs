@@ -1614,7 +1614,8 @@ fn transaction_has_expected_memo(
     }
 
     Err(NotifyError::InvalidTransaction(format!(
-        "Neither the memo ({}) nor the icrc1_memo ({}) of the transaction has the required value ({}).",
+        "Neither the memo ({}) nor the icrc1_memo ({}) of the transaction \
+         has the required value ({}).",
         stringify_memo(transaction.memo),
         stringify_memo(observed_icrc1_memo),
         stringify_memo(expected_memo),
