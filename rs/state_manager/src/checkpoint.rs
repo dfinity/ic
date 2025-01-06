@@ -28,7 +28,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 #[cfg(test)]
@@ -152,11 +153,7 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
             thread_pool,
             fd_factory,
             metrics,
-        )
-        .map_err(|err| CheckpointError::CorruptedLayout {
-            path: checkpoint_layout.raw_path().to_path_buf(),
-            message: format!("ValidateEq failed: {}", err),
-        })?;
+        );
     }
     Ok(())
 }
@@ -360,13 +357,21 @@ pub fn load_checkpoint(
 
 pub fn validate_eq_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    reference_state: &ReplicatedState, //
-    own_subnet_type: SubnetType,       //
+    reference_state: &ReplicatedState,
+    own_subnet_type: SubnetType,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
-) -> Result<(), String> {
-    // TODO report a critical error
+) {
+    let report_critical_error = |err: String| {
+        error!(
+            &metrics.log,
+            "{}: Replicated state altered: {}",
+            CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+            err
+        );
+        metrics.replicated_state_altered_after_checkpoint.inc();
+    };
     let checkpoint_loader = CheckpointLoader {
         checkpoint_layout: checkpoint_layout.clone(),
         own_subnet_type,
@@ -377,23 +382,27 @@ pub fn validate_eq_checkpoint(
     checkpoint_loader
         .load_canister_states(&mut thread_pool)
         .unwrap()
-        .validate_eq(&reference_state.canister_states)?;
+        .validate_eq(&reference_state.canister_states)
+        .unwrap_or_else(report_critical_error);
     checkpoint_loader
         .load_system_metadata()
         .unwrap()
-        .validate_eq(&reference_state.metadata)?;
+        .validate_eq(&reference_state.metadata)
+        .unwrap_or_else(report_critical_error);
     checkpoint_loader
         .load_subnet_queues()
         .unwrap()
-        .validate_eq(reference_state.subnet_queues())?;
+        .validate_eq(reference_state.subnet_queues())
+        .unwrap_or_else(report_critical_error);
     if checkpoint_loader.load_query_stats().unwrap() != *reference_state.query_stats() {
-        return Err("query_state".to_string());
+        report_critical_error("query_stats".to_string());
+        return;
     }
     checkpoint_loader
         .load_canister_snapshots(&mut thread_pool)
         .unwrap()
-        .validate_eq(&reference_state.canister_snapshots)?;
-    Ok(())
+        .validate_eq(&reference_state.canister_snapshots)
+        .unwrap_or_else(report_critical_error);
 }
 
 #[derive(Default)]

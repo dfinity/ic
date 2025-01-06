@@ -5,8 +5,7 @@ use crate::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -476,25 +475,14 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
-                            if let Err(err) = validate_eq_checkpoint(
+                            validate_eq_checkpoint(
                                 &checkpoint_layout,
                                 &replicated_state,
                                 own_subnet_type,
                                 Some(&mut thread_pool),
                                 fd_factory,
                                 &metrics.checkpoint_metrics,
-                            ) {
-                                error!(
-                                    log,
-                                    "{}: Replicated state altered: {}",
-                                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
-                                    err
-                                );
-                                metrics
-                                    .checkpoint_metrics
-                                    .replicated_state_altered_after_checkpoint
-                                    .inc();
-                            }
+                            );
                         }
 
                         TipRequest::Noop => {}
