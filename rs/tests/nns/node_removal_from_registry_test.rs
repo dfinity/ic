@@ -117,7 +117,11 @@ pub fn test(env: TestEnv) {
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 
-        // Confirm that the node was indeed removed by checking the topology.
+        // Confirm that the node was indeed removed by checking the unassigned node list in the registry.
+        topology
+            .block_for_newer_registry_version()
+            .await
+            .expect("Could not obtain updated registry.");
         let topology = env.topology_snapshot();
         assert_eq!(
             topology
