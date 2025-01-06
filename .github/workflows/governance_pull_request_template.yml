@@ -55,12 +55,19 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              Did you remember to update unreleased_changes.md? If so (or if this is not
-              necessary), please, explicitly acknowledge this reminder by giving it a
-              thumbs up reaction. To unblock the PR, dismiss the code review by going
-              to the bottom of the pull request page, and use \"Done.\" as the reason.
+              If this pull request affects the behavior of any canister owned by
+              the Governance team, remember to update the corresponding
+              unreleased_changes.md file(s).
+
+              To acknowldge this reminder (and unblock the PR), dismiss this
+              code review by going to the bottom of the pull request page, and
+              supply one of the following reasons:
+
+              1. Done.
+
+              2. No canister behavior changes.
             `
-            .replace(/[\s\n]{2,}/gm, '')
+            .replace(/^ +/gm, '')
             .trim();
             await github.rest.pulls.createReview({
               owner: "dfinity",
