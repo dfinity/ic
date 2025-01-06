@@ -6324,7 +6324,7 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
 
     assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
     assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
-    assert_eq!(child_neuron.spawn_at_timestamp_seconds, Some(123));
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, Some(1730737555));
     assert_eq!(
         child_neuron.dissolve_state,
         Some(DissolveState::WhenDissolvedTimestampSeconds(
@@ -6339,6 +6339,15 @@ fn test_maturity_correctly_reset_if_spawn_fails() {
     );
     assert_eq!(child_neuron.kyc_verified, true);
     assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
+    // We expect maturity modulation of 100 basis points, which is 1%, because of the
+    // result returned from FakeDriver when pretending to be CMC.
+    assert_eq!(
+        gov.heap_data
+            .cached_daily_maturity_modulation_basis_points
+            .unwrap(),
+        100
+    );
+    // The value here should be reset to the original value, without being modulated.
     assert_eq!(child_neuron.maturity_e8s_equivalent, 123_456_789);
 }
 

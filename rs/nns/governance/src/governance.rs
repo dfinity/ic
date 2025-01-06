@@ -6946,11 +6946,11 @@ impl Governance {
                         .with_neuron(&neuron_id, |neuron| neuron.clone())
                         .expect("Neuron should exist, just found in list");
 
-                    let maturity = neuron.maturity_e8s_equivalent;
+                    let original_maturity = neuron.maturity_e8s_equivalent;
                     let subaccount = neuron.subaccount();
 
                     let neuron_stake: u64 = match apply_maturity_modulation(
-                        maturity,
+                        original_maturity,
                         maturity_modulation,
                     ) {
                         Ok(neuron_stake) => neuron_stake,
@@ -7019,7 +7019,7 @@ impl Governance {
                                 error,
                             );
                             match self.with_neuron_mut(&neuron_id, |neuron| {
-                                neuron.maturity_e8s_equivalent = neuron_stake;
+                                neuron.maturity_e8s_equivalent = original_maturity;
                                 neuron.cached_neuron_stake_e8s = 0;
                                 neuron.spawn_at_timestamp_seconds =
                                     original_spawn_at_timestamp_seconds;
