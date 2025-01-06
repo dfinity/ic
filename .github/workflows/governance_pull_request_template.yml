@@ -77,7 +77,7 @@ jobs:
                 "Did you remember to update unreleased_changes.md? If so, please, " +
                 "explicitly acknowledge this reminder by giving it a thumbs up reaction. " +
                 "To unblock the PR, dismiss the code review by going to the bottom " +
-                "of the pull request page, and use "Done." as the reason."
+                "of the pull request page, and use \"Done.\" as the reason."
               ),
               event: "REQUEST_CHANGES",
             });
