@@ -73,6 +73,11 @@ jobs:
               owner: "dfinity",
               repo: "ic",
               pull_number: pullRequestNumber,
-              body: "Did you remember to update unreleased_changes.md? If so, simply dismiss this code review by going to the bottom of the pull request page.",
+              body: (
+                "Did you remember to update unreleased_changes.md? If so, please, " +
+                "explicitly acknowledge this reminder by giving it a thumbs up reaction. " +
+                "To unblock the PR, dismiss the code review by going to the bottom " +
+                "of the pull request page."
+              ),
               event: "REQUEST_CHANGES",
             });
