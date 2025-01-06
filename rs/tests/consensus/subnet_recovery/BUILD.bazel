@@ -71,8 +71,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -129,8 +129,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -149,8 +149,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -189,8 +189,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -209,8 +209,8 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "long_test",
         "subnet_recovery",
-        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,

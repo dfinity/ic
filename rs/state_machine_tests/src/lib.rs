@@ -10,8 +10,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl,
-    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
+    make_registry_cup_from_cup_contents,
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
@@ -1596,6 +1596,7 @@ impl StateMachine {
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
+                &state_manager.state_layout().tmp(),
             )
         });
 

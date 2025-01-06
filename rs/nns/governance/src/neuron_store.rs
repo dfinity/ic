@@ -1,8 +1,9 @@
 use crate::{
+    allow_active_neurons_in_stable_memory,
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    is_active_neurons_in_stable_memory_enabled,
+    migrate_active_neurons_to_stable_memory,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
@@ -319,10 +320,14 @@ pub struct NeuronStore {
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
 
-    // Whether to use stable memory for all neurons. This is a temporary flag to change the mode
-    // of operation for the NeuronStore.  Once all neurons are in stable memory, this will be
-    // removed, as well as heap_neurons.
-    use_stable_memory_for_all_neurons: bool,
+    // Whether to allow active neurons in stable memory. When this is true, when finding/iterating
+    // through active neurons, we need to check both heap and stable memory.
+    allow_active_neurons_in_stable_memory: bool,
+
+    /// Whether to migrate active neurons to stable memory. This is a temporary flag to change the
+    /// mode of operation for the NeuronStore. Once all neurons are in stable memory, this will be
+    /// removed.
+    migrate_active_neurons_to_stable_memory: bool,
 
     // Temporary flag to determine which following index to use
     use_stable_following_index: bool,
@@ -338,8 +343,9 @@ impl PartialEq for NeuronStore {
             heap_neurons,
             topic_followee_index,
             clock: _,
-            use_stable_memory_for_all_neurons: _,
+            allow_active_neurons_in_stable_memory: _,
             use_stable_following_index: _,
+            migrate_active_neurons_to_stable_memory: _,
         } = self;
 
         *heap_neurons == other.heap_neurons && *topic_followee_index == other.topic_followee_index
@@ -352,8 +358,9 @@ impl Default for NeuronStore {
             heap_neurons: BTreeMap::new(),
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
-            use_stable_memory_for_all_neurons: false,
+            allow_active_neurons_in_stable_memory: false,
             use_stable_following_index: false,
+            migrate_active_neurons_to_stable_memory: false,
         }
     }
 }
@@ -368,8 +375,9 @@ impl NeuronStore {
             heap_neurons: BTreeMap::new(),
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
-            use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
+            allow_active_neurons_in_stable_memory: allow_active_neurons_in_stable_memory(),
             use_stable_following_index: use_stable_memory_following_index(),
+            migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         };
 
         // Adds the neurons one by one into neuron store.
@@ -400,8 +408,9 @@ impl NeuronStore {
                 .collect(),
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
-            use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
+            allow_active_neurons_in_stable_memory: allow_active_neurons_in_stable_memory(),
             use_stable_following_index: use_stable_memory_following_index(),
+            migrate_active_neurons_to_stable_memory: migrate_active_neurons_to_stable_memory(),
         }
     }
 
@@ -515,7 +524,7 @@ impl NeuronStore {
     // has changed, e.g. after an upgrade (2) the neuron was active, but becomes inactive due to
     // passage of time.
     fn target_storage_location(&self, neuron: &Neuron) -> StorageLocation {
-        if self.use_stable_memory_for_all_neurons || neuron.is_inactive(self.now()) {
+        if self.migrate_active_neurons_to_stable_memory || neuron.is_inactive(self.now()) {
             StorageLocation::Stable
         } else {
             StorageLocation::Heap
@@ -851,7 +860,7 @@ impl NeuronStore {
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
         sections: NeuronSections,
     ) -> R {
-        if self.use_stable_memory_for_all_neurons {
+        if self.allow_active_neurons_in_stable_memory {
             // Note, during migration, we still need heap_neurons, so we chain them onto the iterator
             with_stable_neuron_store(|stable_store| {
                 let now = self.now();
@@ -1218,10 +1227,10 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         modify: impl FnOnce(u64) -> Result<u64, String>,
     ) -> Result<(), NeuronStoreError> {
-        // When `use_stable_memory_for_all_neurons` is true, all the neurons SHOULD be in the stable
+        // When `allow_active_neurons_in_stable_memory` is true, all the neurons SHOULD be in the stable
         // neuron store. Therefore, there is no need to move the neuron between heap/stable as it
         // might become active/inactive due to the change of maturity.
-        if self.use_stable_memory_for_all_neurons {
+        if self.allow_active_neurons_in_stable_memory {
             // The validity of this approach is based on the assumption that none of the neuron
             // indexes can be affected by its maturity.
             if self.heap_neurons.contains_key(&neuron_id.id) {
@@ -1342,7 +1351,7 @@ impl NeuronStore {
 
                     let is_neuron_inactive = neuron.is_inactive(self.now());
 
-                    if self.use_stable_memory_for_all_neurons || is_neuron_inactive {
+                    if self.allow_active_neurons_in_stable_memory || is_neuron_inactive {
                         None
                     } else {
                         // An active neuron in stable neuron store is invalid.
