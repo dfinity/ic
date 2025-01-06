@@ -13,7 +13,7 @@ use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
     consensus::{ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -298,7 +298,7 @@ fn start_consensus(
         log.clone(),
     ));
 
-    let dkg_key_manager = Arc::new(Mutex::new(dkg::DkgKeyManager::new(
+    let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
@@ -439,7 +439,7 @@ fn start_consensus(
         // Create the DKG client.
         let (client, jh) = create_artifact_handler(
             dkg_tx,
-            dkg::DkgImpl::new(
+            ic_consensus_dkg::DkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_crypto),
                 Arc::clone(&consensus_pool_cache),
@@ -453,7 +453,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = Arc::new(dkg::DkgBouncer::new(metrics_registry));
+        let bouncer = Arc::new(ic_consensus_dkg::DkgBouncer::new(metrics_registry));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
