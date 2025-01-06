@@ -45,7 +45,10 @@ jobs:
             });
             const alreadyRemindedAboutUnreleasedChangelog = reviews
               .data
-              .some(review => review.body.startsWith("Did you remember to update unreleased_changes.md?"));
+              .some(review => review
+                .body
+                .startsWith("If this pull request affects the behavior of any canister owned by")
+              );
             console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
             if (alreadyRemindedAboutUnreleasedChangelog) {
               return;
