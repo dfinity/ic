@@ -1527,6 +1527,10 @@ pub enum CallError {
 }
 
 /// This enum describes the result of retrieving ingress status.
+/// The `IngressStatusResult::Forbidden` variant is produced
+/// if an optional caller is provided and a corresponding read state request
+/// for the status of the same update call signed by that specified caller
+/// was rejected because the update call was submitted by a different caller.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum IngressStatusResult {
     NotAvailable,
