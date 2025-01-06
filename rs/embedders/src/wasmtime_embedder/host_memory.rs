@@ -231,8 +231,8 @@ unsafe impl LinearMemory for WasmtimeMemory {
         convert_pages_to_bytes(self.used.load(Ordering::SeqCst))
     }
 
-    fn maximum_byte_size(&self) -> Option<usize> {
-        Some(convert_pages_to_bytes(self.max_size_in_pages))
+    fn byte_capacity(&self) -> usize {
+        convert_pages_to_bytes(self.max_size_in_pages)
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
@@ -263,9 +263,5 @@ unsafe impl LinearMemory for WasmtimeMemory {
 
     fn as_ptr(&self) -> *mut u8 {
         self.mem.as_ptr() as *mut _
-    }
-
-    fn wasm_accessible(&self) -> std::ops::Range<usize> {
-        self.mem.wasm_accessible()
     }
 }
