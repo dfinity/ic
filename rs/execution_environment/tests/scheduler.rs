@@ -189,7 +189,7 @@ fn test_postponing_raw_rand_management_message() {
     assert_eq!(
         sm.get_latest_state()
             .subnet_queues()
-            .output_queues_message_count(),
+            .input_queues_message_count(),
         0
     );
     assert_eq!(
