@@ -4,47 +4,47 @@ use std::fs::write;
 use std::time::Duration;
 use tempfile::tempdir;
 
-const EXISTING_METRICS_WITH_DATADIR: &str =
-    "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-     # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-     fstrim_last_run_duration_milliseconds 42\n\
-     # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-     # TYPE fstrim_last_run_success gauge\n\
-     fstrim_last_run_success 0\n\
-     # HELP fstrim_runs_total Total number of runs of fstrim\n\
-     # TYPE fstrim_runs_total counter\n\
-     fstrim_runs_total 7\n\
-     # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds\n\
-     # TYPE fstrim_datadir_last_run_duration_milliseconds gauge\n\
-     fstrim_datadir_last_run_duration_milliseconds 999\n\
-     # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)\n\
-     # TYPE fstrim_datadir_last_run_success gauge\n\
-     fstrim_datadir_last_run_success 1\n\
-     # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir\n\
-     # TYPE fstrim_datadir_runs_total counter\n\
-     fstrim_datadir_runs_total 12\n";
+const EXISTING_METRICS_CONTENT: &str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 1
+"#;
 
-const EXISTING_METRICS_CONTENT: &str =
-    "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-     # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-     fstrim_last_run_duration_milliseconds 0\n\
-     # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-     # TYPE fstrim_last_run_success gauge\n\
-     fstrim_last_run_success 1\n\
-     # HELP fstrim_runs_total Total number of runs of fstrim\n\
-     # TYPE fstrim_runs_total counter\n\
-     fstrim_runs_total 1\n";
+const EXISTING_METRICS_WITH_DATADIR: &str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 42
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 0
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 7
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 999
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 1
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 12
+"#;
 
-const EXISTING_METRICS_CONTENT_WITH_SPECIAL_VALUES: &str =
-    "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
-     # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-     fstrim_last_run_duration_milliseconds 0\n\
-     # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
-     # TYPE fstrim_last_run_success gauge\n\
-     fstrim_last_run_success 1\n\
-     # HELP fstrim_runs_total Total number of runs of fstrim\n\
-     # TYPE fstrim_runs_total counter\n\
-     fstrim_runs_total +Inf\n";
+const EXISTING_METRICS_CONTENT_WITH_SPECIAL_VALUES: &str = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 0
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total +Inf
+"#;
 
 #[test]
 fn should_parse_metrics_without_datadir_fields() {
