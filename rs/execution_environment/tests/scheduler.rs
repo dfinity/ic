@@ -126,7 +126,7 @@ fn test_induct_same_subnet_management_messages() {
         "update",
         deletion_call,
     );
-    // known, but not done yet
+    // Should be Known, but not Done yet
     assert!(matches!(
         sm.ingress_status(&ingress_id),
         IngressStatus::Known {
@@ -146,6 +146,73 @@ fn test_induct_same_subnet_management_messages() {
             ..
         }
     ));
-    // observe the effect
+    // observe the effect: canister2 should be gone.
     assert_eq!(sm.get_latest_state().canister_state(&canister2), None);
+}
+
+#[test]
+fn test_postponing_raw_rand_management_message() {
+    let sm = StateMachine::new();
+    let canister_id = sm
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let rand_call = wasm()
+        .call_simple(
+            Principal::management_canister(),
+            Method::RawRand,
+            call_args()
+                .other_side(Encode!().unwrap())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let ingress_id = sm.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        rand_call,
+    );
+    sm.tick();
+    assert!(matches!(
+        sm.ingress_status(&ingress_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    ));
+    // One tick is not enough: The raw request is postponed to the next round.
+    assert_eq!(
+        sm.get_latest_state()
+            .subnet_queues()
+            .output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        sm.get_latest_state()
+            .subnet_queues()
+            .output_queues_message_count(),
+        0
+    );
+    assert_eq!(
+        sm.get_latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+    sm.tick();
+    assert!(matches!(
+        sm.ingress_status(&ingress_id),
+        IngressStatus::Known {
+            state: IngressState::Completed(..),
+            ..
+        }
+    ));
+    println!("res: {:?}", sm.ingress_status(&ingress_id));
 }
