@@ -43,7 +43,7 @@ jobs:
             console.log("\n");
 
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
-            console.log("Adding reminder to update unreleased
+            console.log("Adding reminder to update unreleased_changelog.md...");
             await github.rest.pulls.createReview({
               owner: "dfinity",
               repo: "ic",
@@ -56,3 +56,4 @@ jobs:
               ),
               event: "REQUEST_CHANGES",
             });
+            console.log("Reminder was added successfully.");
