@@ -189,9 +189,8 @@ fn test_few_large_messages(env: TestEnv) {
     test(env, 1_999_000, 1.0)
 }
 
-#[allow(dead_code)]
 fn test_large_messages(env: TestEnv) {
-    test(env, 1_999_000, 4.0)
+    test(env, 950_000, 4.0)
 }
 
 fn main() -> Result<()> {
@@ -203,9 +202,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_few_small_messages))
         .add_test(systest!(test_small_messages))
         .add_test(systest!(test_few_large_messages))
-        // TODO: re-enable this once hashes-in-blocks feature is re-enabled, without the feature
-        // consensus cannot handle such a load
-        //.add_test(systest!(test_large_messages))
+        .add_test(systest!(test_large_messages))
         .execute_from_args()?;
     Ok(())
 }
