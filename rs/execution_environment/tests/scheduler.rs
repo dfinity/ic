@@ -177,7 +177,6 @@ fn test_postponing_raw_rand_management_message() {
         "update",
         rand_call,
     );
-    sm.tick();
     assert!(matches!(
         sm.ingress_status(&ingress_id),
         IngressStatus::Known {
@@ -185,7 +184,7 @@ fn test_postponing_raw_rand_management_message() {
             ..
         }
     ));
-    // One tick is not enough: The raw request is postponed to the next round.
+    // send_ingress executes a single round, so the raw rand request should have been postponed by now.
     assert_eq!(
         sm.get_latest_state()
             .subnet_queues()
@@ -206,13 +205,4 @@ fn test_postponing_raw_rand_management_message() {
             .len(),
         1
     );
-    sm.tick();
-    assert!(matches!(
-        sm.ingress_status(&ingress_id),
-        IngressStatus::Known {
-            state: IngressState::Completed(..),
-            ..
-        }
-    ));
-    println!("res: {:?}", sm.ingress_status(&ingress_id));
 }

@@ -6322,64 +6322,6 @@ fn charge_idle_canisters_for_full_execution_round() {
 }
 
 // #[test]
-// fn test_postponing_raw_rand_management_message() {
-//     let mut test = SchedulerTestBuilder::new().build();
-//     let subnet_id = test.own_subnet_id();
-
-//     let sender_id = test.create_canister_with(
-//         Cycles::new(10_000_000_000_000),
-//         ComputeAllocation::zero(),
-//         MemoryAllocation::BestEffort,
-//         Some(SystemMethod::CanisterHeartbeat),
-//         None,
-//         None,
-//     );
-//     test.expect_heartbeat(sender_id, instructions(100));
-
-//     // Push request into the output queue of canister identified by `sender_id`.
-//     test.push_output_request(
-//         &sender_id,
-//         RequestBuilder::new()
-//             .sender(sender_id)
-//             .receiver(CanisterId::from(subnet_id))
-//             .method_name(Method::RawRand)
-//             .method_payload(EmptyBlob.encode())
-//             .payment(Cycles::zero())
-//             .build(),
-//     );
-
-//     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
-//     assert_eq!(
-//         test.state().subnet_queues().output_queues_message_count(),
-//         0
-//     );
-//     assert_eq!(
-//         test.state()
-//             .metadata
-//             .subnet_call_context_manager
-//             .raw_rand_contexts
-//             .len(),
-//         0
-//     );
-
-//     // After executing a round, the raw request is postponed.
-//     test.execute_round(ExecutionRoundType::OrdinaryRound);
-//     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
-//     assert_eq!(
-//         test.state().subnet_queues().output_queues_message_count(),
-//         0
-//     );
-//     assert_eq!(
-//         test.state()
-//             .metadata
-//             .subnet_call_context_manager
-//             .raw_rand_contexts
-//             .len(),
-//         1
-//     );
-// }
-
-// #[test]
 // fn test_execute_raw_rand_routed_by_message_routing() {
 //     let mut test = SchedulerTestBuilder::new().build();
 
