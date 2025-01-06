@@ -45,7 +45,7 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::performance::persist_metrics;
+use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_vm};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -74,17 +74,33 @@ const NODES_COUNT: usize = 13;
 const DKG_INTERVAL: u64 = 999;
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
-const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
+const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
+
+/// When set to `true` a [Jaeger](https://www.jaegertracing.io/) instance will be spawned.
+/// Look for "Jaeger frontend available at: $URL" in the logs and follow the link to visualize &
+/// analyze traces.
+const SHOULD_SPAWN_JAEGER_VM: bool = false;
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
+
+    let mut ic_builder = InternetComputer::new();
+
+    if SHOULD_SPAWN_JAEGER_VM {
+        let jaeger_ipv6 = setup_jaeger_vm(&env);
+        ic_builder = ic_builder.with_jaeger_addr(std::net::SocketAddr::new(
+            std::net::IpAddr::V6(jaeger_ipv6),
+            4317,
+        ));
+    }
+
+    ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -153,6 +169,9 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             test_metrics,
             message_size,
             rps,
+            LATENCY,
+            BANDWIDTH_MBITS * 1_000_000,
+            NODES_COUNT,
             &logger,
         ));
     }
@@ -164,6 +183,10 @@ fn test_few_small_messages(env: TestEnv) {
 
 fn test_small_messages(env: TestEnv) {
     test(env, 4_000, 500.0)
+}
+
+fn test_few_large_messages(env: TestEnv) {
+    test(env, 1_999_000, 1.0)
 }
 
 fn test_large_messages(env: TestEnv) {
@@ -178,6 +201,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test_few_small_messages))
         .add_test(systest!(test_small_messages))
+        .add_test(systest!(test_few_large_messages))
         .add_test(systest!(test_large_messages))
         .execute_from_args()?;
     Ok(())

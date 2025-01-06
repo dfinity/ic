@@ -90,7 +90,11 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
             AddConfigError::Internal(anyhow!("No config for version={current_version} found"))
         })?;
 
-        let next_version = current_version + 1;
+        let next_version = current_version.checked_add(1).ok_or_else(|| {
+            AddConfigError::Internal(anyhow!(
+                "Overflow occurred while incrementing the current version {current_version}"
+            ))
+        })?;
 
         // Ordered IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
