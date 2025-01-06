@@ -11,6 +11,7 @@ jobs:
   mainJob:
     runs-on: ubuntu-latest
     steps:
+
       - name: Is the Author in nns-team?
         uses: actions/github-script@v6
         id: isAuthorInNnsTeam
@@ -31,7 +32,6 @@ jobs:
             */
             const isInNnsTeam = true;
             console.log("Is actor in nns-team? " + isInNnsTeam);
-            return isInNnsTeam;
 
       - name: Remind the Author to Update unreleased_changes.md.
         uses: actions/github-script@v6
