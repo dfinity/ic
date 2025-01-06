@@ -19,18 +19,13 @@ jobs:
           script: |
             const pullRequestNumber = context.payload.number;
 
+            console.log("\n");
+            console.log("BEGIN context");
+            console.log(JSON.stringify(context, null, 2));
+            console.log("END context");
+            console.log("\n");
+
             // Only remind if nns-team approval is required.
-            const reviews = await github.pulls.getReviews({
-              owner: "dfinity",
-              repo: "ic",
-              pull_number: pullRequestNumber,
-            });
-            console.log("reviews = " + JSON.stringify(reviews));
-            const requiredTeams = reviews.data.required_pull_request_reviews;
-            const nnsTeamApprovalRequired = requiredTeams.some((team) => team.team_id === 'nns-team');
-            if (!nnsTeamApprovalRequired) {
-              return;
-            }
 
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             await github.rest.pulls.createReview({
