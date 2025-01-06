@@ -3699,7 +3699,7 @@ async fn main() {
                 &opts.key_id.expect(
                     "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
                 ),
-                &opts.pin.unwrap(
+                &opts.pin.expect(
                     "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
                 ),
             )
