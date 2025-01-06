@@ -6732,6 +6732,7 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-dkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto",
@@ -6784,7 +6785,6 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rayon",
  "rstest",
  "serde_cbor",
  "slog",
@@ -6795,6 +6795,35 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "ic-consensus-dkg"
+version = "0.9.0"
+dependencies = [
+ "ic-artifact-pool",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-crypto-test-utils-ni-dkg",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-replicated-state",
+ "ic-test-artifact-pool",
+ "ic-test-utilities",
+ "ic-test-utilities-consensus",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "prometheus",
+ "rayon",
+ "slog",
 ]
 
 [[package]]
@@ -12769,6 +12798,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-dkg",
  "ic-consensus-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
