@@ -49,7 +49,7 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         )
         .await
         .map(|(response,): (ChangeCanisterControllersResponse,)| response)
-        .map_err(|err| (Some(err.0 as i32), err.1))
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 
     async fn canister_status(
@@ -63,7 +63,7 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         )
         .await
         .map(|(response,): (CanisterStatusResult,)| response)
-        .map_err(|err| (Some(err.0 as i32), err.1))
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 }
 
