@@ -16,11 +16,9 @@ jobs:
         id: isAuthorInNnsTeam
         with:
           github-token: ${{ secrets.CLA_BOT_PRIVATE_KEY }}
-          result-encoding: string
           retries: 3
           script: |
-            return 'true';
-
+            /* DO NOT MERGE
             const pullRequestNumber = context.payload.number;
             console.log("Calling listMembersInOrg...")
             const nnsTeamMembers = await await github.rest.teams.listMembersInOrg({
@@ -30,12 +28,14 @@ jobs:
             console.log("nnsTeamMemebrs = " + JSON.stringify(nnsTeamMembers));
 
             const isInNnsTeam = nnsTeamMembers.data.some(member => member.login == context.actor);
+            */
+            const isInNnsTeam = true;
             console.log("Is actor in nns-team? " + isInNNsTeam);
-            return isInNnsTeam
+            return isInNnsTeam;
 
       - name: Remind the Author to Update unreleased_changes.md.
         uses: actions/github-script@v6
-        if: steps.isAuthorInNnsTeam == 'true'
+        if: steps.isAuthorInNnsTeam.outputs.isInNnsTeam == 'true'
         id: remindAuthorToUpdateUnreleasedChangelog
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
