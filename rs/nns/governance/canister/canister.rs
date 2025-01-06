@@ -158,7 +158,7 @@ fn set_governance(gov: Governance) {
 
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
@@ -280,19 +280,15 @@ const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
 // id.
 const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
 
-fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdProto) {
+fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
     ic_cdk_timers::set_timer(delay, move || {
-        let next_neuron_id = governance_mut().batch_adjust_neurons_storage(start_neuron_id);
-        match next_neuron_id {
-            Some(next_neuron_id) => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_BATCH_INTERVAL,
-                next_neuron_id,
-            ),
-            None => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_ROUND_INTERVAL,
-                NeuronIdProto { id: 0 },
-            ),
+        let next = governance_mut().batch_adjust_neurons_storage(next);
+        let next_delay = if next == Bound::Unbounded {
+            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
+        } else {
+            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
         };
+        schedule_adjust_neurons_storage(next_delay, next);
     });
 }
 
