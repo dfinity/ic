@@ -8,21 +8,13 @@ use rate_limits_api::{
 use serde::Deserialize;
 use std::{fs, path::PathBuf, str};
 use tracing::{debug, info};
-use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 pub async fn submit_config(
     config_file: PathBuf,
     canister_id: Principal,
     agent: Agent,
-    debug: bool,
 ) -> Result<(), Error> {
-    // initialize tracing subscriber with corresponding log level
-    let log_level = if debug { "debug" } else { "info" };
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::new(log_level))
-        .init();
-
     // read the rules
     let rules = read_yaml_file(&config_file)?;
 
@@ -83,6 +75,11 @@ pub async fn submit_config(
     Ok(())
 }
 
+pub fn check_config(config_file: PathBuf) -> Result<(), Error> {
+    let _ = read_yaml_file(&config_file)?;
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 struct YamlRule {
     #[serde(flatten)]
@@ -95,8 +92,7 @@ fn read_yaml_file(file_path: &PathBuf) -> Result<Vec<InputRule>, Error> {
     let yaml_str = fs::read_to_string(file_path).context("Unable to read file")?;
 
     // Deserialize directly into `YamlRule` and transform `InputRule`
-    let yaml_rules: Vec<YamlRule> =
-        serde_yaml::from_str(&yaml_str).context("Failed to parse YAML")?;
+    let yaml_rules: Vec<YamlRule> = serde_yaml::from_str(&yaml_str)?;
     let input_rules = yaml_rules
         .into_iter()
         .map(|entry| InputRule {

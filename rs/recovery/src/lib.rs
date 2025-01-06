@@ -304,7 +304,14 @@ impl Recovery {
 
     /// Return a [DownloadCertificationsStep] downloading the certification pools of all reachable
     /// nodes in the given subnet to the recovery data directory using the readonly account.
-    pub fn get_download_certs_step(&self, subnet_id: SubnetId, admin: bool) -> impl Step {
+    /// If auto-retry is false, the user will be prompted on what to do (skip or continue). In
+    /// non-interactive recoveries, auto-retry should be set to true.
+    pub fn get_download_certs_step(
+        &self,
+        subnet_id: SubnetId,
+        admin: bool,
+        auto_retry: bool,
+    ) -> impl Step {
         DownloadCertificationsStep {
             logger: self.logger.clone(),
             subnet_id,
@@ -312,6 +319,7 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            auto_retry,
             admin,
         }
     }

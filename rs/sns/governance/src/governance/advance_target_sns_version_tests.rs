@@ -61,7 +61,7 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
     let proposal = ProposalData {
         action: (&action).into(),
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
