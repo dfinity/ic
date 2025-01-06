@@ -265,10 +265,6 @@ impl IcpLedger for FakeDriver {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
-        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
-            return Err(err);
-        }
-
         // Minting operations (sending ICP from Gov main account) should just create ICP.
         let is_minting_operation = from_subaccount.is_none();
 
@@ -292,6 +288,18 @@ impl IcpLedger for FakeDriver {
             ]))
         );
 
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            println!("Failing the ledger transfer because we were instructed to fail the next ledger call");
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                }
+            );
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -302,6 +310,13 @@ impl IcpLedger for FakeDriver {
 
         if !is_minting_operation {
             if *from_e8s < requested_e8s {
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    tla::TlaValue::Variant {
+                        tag: "Fail".to_string(),
+                        value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                    }
+                );
                 return Err(NervousSystemError::new_with_message(format!(
                     "Insufficient funds. Available {} requested {}",
                     *from_e8s, requested_e8s
@@ -334,12 +349,6 @@ impl IcpLedger for FakeDriver {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
-            return Err(err);
-        }
-
-        let accounts = &mut self.state.try_lock().unwrap().accounts;
-
         tla_log_request!(
             "WaitForBalanceQuery",
             Destination::new("ledger"),
@@ -349,6 +358,19 @@ impl IcpLedger for FakeDriver {
                 account_to_tla(account)
             )]))
         );
+
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            );
+            return Err(err);
+        }
+
+        let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         tla_log_response!(
