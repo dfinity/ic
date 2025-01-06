@@ -1569,6 +1569,11 @@ fn memo_to_intent_str(memo: Memo) -> String {
     }
 }
 
+/// Returns Ok if transaction matches expected_memo.
+///
+/// First, looks at the memo field. If that does not match, falls back to the
+/// icrc1_field. If that is of length 8, converts assuming little endian, and if
+/// that matches, returns Ok.
 fn transaction_has_expected_memo(
     transaction: &Transaction,
     expected_memo: Memo,
