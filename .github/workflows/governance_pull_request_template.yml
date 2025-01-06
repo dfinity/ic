@@ -30,8 +30,20 @@ jobs:
               return;
             }
 
-            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             const pullRequestNumber = context.payload.number;
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            console.log("\n");
+            console.log("BEGIN reviews");
+            console.log(JSON.stringify(reviews, null, 2));
+            console.log("END reviews");
+            console.log("\n");
+
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            console.log("Adding reminder to update unreleased
             await github.rest.pulls.createReview({
               owner: "dfinity",
               repo: "ic",
