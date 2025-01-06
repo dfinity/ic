@@ -6867,6 +6867,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-logger",
  "ic-management-canister-types",
+ "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-replicated-state",
@@ -6876,6 +6877,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "prometheus",
  "rand 0.8.5",
  "slog",
 ]
@@ -8337,6 +8339,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
+ "ic-utils-thread",
  "ic-wasm-transform",
  "ic-wasm-types",
  "itertools 0.12.1",
@@ -13332,6 +13335,9 @@ version = "0.9.0"
 [[package]]
 name = "ic-utils-thread"
 version = "0.9.0"
+dependencies = [
+ "crossbeam-channel",
+]
 
 [[package]]
 name = "ic-validate-eq"
