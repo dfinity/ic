@@ -54,33 +54,39 @@ impl FsTrimMetrics {
     }
 
     pub fn to_p8s_metrics_string(&self) -> String {
+        let fstrim_last_run_duration_milliseconds = to_go_f64(self.last_duration_milliseconds);
+        let fstrim_last_run_success = if self.last_run_success { "1" } else { "0" };
+        let fstrim_runs_total = to_go_f64(self.total_runs);
+
+        let fstrim_datadir_last_run_duration_milliseconds =
+            to_go_f64(self.last_duration_milliseconds_datadir);
+        let fstrim_datadir_last_run_success = if self.last_run_success_datadir {
+            "1"
+        } else {
+            "0"
+        };
+        let fstrim_datadir_runs_total = to_go_f64(self.total_runs_datadir);
+
         format!(
             "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
             # TYPE fstrim_last_run_duration_milliseconds gauge\n\
-            fstrim_last_run_duration_milliseconds {}\n\
+            fstrim_last_run_duration_milliseconds {fstrim_last_run_duration_milliseconds}\n\
             # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
             # TYPE fstrim_last_run_success gauge\n\
-            fstrim_last_run_success {}\n\
+            fstrim_last_run_success {fstrim_last_run_success}\n\
             # HELP fstrim_runs_total Total number of runs of fstrim\n\
             # TYPE fstrim_runs_total counter\n\
-            fstrim_runs_total {}\n\
+            fstrim_runs_total {fstrim_runs_total}\n\
             # HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds\n\
             # TYPE fstrim_datadir_last_run_duration_milliseconds gauge\n\
-            fstrim_datadir_last_run_duration_milliseconds {}\n\
+            fstrim_datadir_last_run_duration_milliseconds {fstrim_datadir_last_run_duration_milliseconds}\n\
             # HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)\n\
             # TYPE fstrim_datadir_last_run_success gauge\n\
-            fstrim_datadir_last_run_success {}\n\
+            fstrim_datadir_last_run_success {fstrim_datadir_last_run_success}\n\
             # HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir\n\
             # TYPE fstrim_datadir_runs_total counter\n\
-            fstrim_datadir_runs_total {}\n",
-            to_go_f64(self.last_duration_milliseconds),
-            if self.last_run_success { "1" } else { "0" },
-            to_go_f64(self.total_runs),
-            to_go_f64(self.last_duration_milliseconds_datadir),
-            if self.last_run_success_datadir { "1" } else { "0" },
-            to_go_f64(self.total_runs_datadir),
+            fstrim_datadir_runs_total {fstrim_datadir_runs_total}\n"
         )
-        .to_string()
     }
 
     fn are_valid(&self) -> bool {
