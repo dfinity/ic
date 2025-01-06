@@ -3,11 +3,15 @@ name: Remind Governance Team to Update unreleased_changelog.md.
 on:
   pull_request:
     types:
+      - assigned
+      - labeled
       - opened
-      # DO NOT MERGE
+      - edited
+      - reopened
       - synchronize
+      - ready_for_review
+      - review_requested
 
-# DO NOT MERGE - Delete this line. It was added so that there is something to push, and trigger Action.
 jobs:
   mainJob:
     runs-on: ubuntu-latest
@@ -18,8 +22,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
           script: |
-            // Although this does not DEFINITELY indicated that nns-team MUST
-            // approve the PR, it strongly indicates that nns-team must approve.
+            // nns-team is automatically added as a reviewer if an approval from
+            // nns-team is required. Therefore, this only skips posting a
+            // reminder when nns-team approval is not required.
             const nnsTeamReviewRequested = context
               .payload
               .pull_request
@@ -32,7 +37,7 @@ jobs:
 
             const pullRequestNumber = context.payload.number;
 
-            // Skip reminder if we already reminded.
+            // Skip reminder if we already reminded (to avoid spam).
             const reviews = await github.rest.pulls.listReviews({
               owner: "dfinity",
               repo: "ic",
