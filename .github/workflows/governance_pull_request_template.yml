@@ -1,4 +1,4 @@
-name: Governance Team Pull Request Template
+name: Remind Governance Team to Update unreleased_changelog.md.
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
           result-encoding: string
           retries: 3
           script: |
-            return true;
+            return 'true';
 
             const pullRequestNumber = context.payload.number;
             console.log("Calling listMembersInOrg...")
