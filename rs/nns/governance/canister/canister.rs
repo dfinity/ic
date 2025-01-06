@@ -167,6 +167,9 @@ fn schedule_timers() {
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
+
+    // Schedule the fix for the locked neuron
+    schedule_locked_spawning_neuron_fix();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -322,6 +325,18 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
         spawn(governance_mut().process_voting_state_machines());
+    });
+}
+
+// TODO(NNS1-3526): Remove this method once it is released.
+fn schedule_locked_spawning_neuron_fix() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        spawn(async {
+            governance_mut()
+                .fix_locked_spawn_neuron()
+                .await
+                .expect("Failed to fix locked neuron");
+        });
     });
 }
 
