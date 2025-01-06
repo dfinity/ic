@@ -7,7 +7,7 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 #[test]
-fn should_compare_f64() {
+fn test_f64_comparison() {
     assert!(f64_approx_eq(f64::NAN, f64::NAN));
     assert!(f64_approx_eq(f64::INFINITY, f64::INFINITY));
     assert!(f64_approx_eq(f64::INFINITY + 1f64, f64::INFINITY));
@@ -18,7 +18,7 @@ fn should_compare_f64() {
 }
 
 #[test]
-fn should_parse_valid_metrics_file() {
+fn test_parse_valid_metrics_file() {
     let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let metrics_file_content =
@@ -46,7 +46,7 @@ fn should_parse_valid_metrics_file() {
 }
 
 #[test]
-fn should_only_consider_first_parsed_value_when_parsing_metrics_file() {
+fn test_ignore_subsequent_values_for_same_metric() {
     let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let metrics_file_content =
@@ -77,7 +77,7 @@ fn should_only_consider_first_parsed_value_when_parsing_metrics_file() {
 }
 
 #[test]
-fn should_return_error_when_parsing_empty_metrics_file() {
+fn test_error_on_empty_metrics_file() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "").expect("error writing to file");
@@ -86,7 +86,7 @@ fn should_return_error_when_parsing_empty_metrics_file() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_too_many_tokens() {
+fn test_error_when_metrics_file_has_too_many_tokens() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "pineapple on pizza is delicious").expect("error writing to file");
@@ -97,7 +97,7 @@ fn should_return_error_for_metrics_file_with_too_many_tokens() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_unknown_metric_name() {
+fn test_error_when_unknown_metric_name() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "pineapple pizza").expect("error writing to file");
@@ -108,7 +108,7 @@ fn should_return_error_for_metrics_file_with_unknown_metric_name() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_timestamp() {
+fn test_error_when_metrics_file_has_timestamp() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(
@@ -123,7 +123,7 @@ fn should_return_error_for_metrics_file_with_timestamp() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_non_numeric_value() {
+fn test_error_when_metrics_file_has_non_numeric_value() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, format!("{} pizza", METRICS_RUNS_TOTAL).as_str())
@@ -135,7 +135,7 @@ fn should_return_error_for_metrics_file_with_non_numeric_value() {
 }
 
 #[test]
-fn should_return_none_when_parsing_if_metrics_file_does_not_exist() {
+fn test_if_file_does_not_exist() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let parsed_metrics = parse_existing_metrics_from_file(&test_file.to_string_lossy()).unwrap();
@@ -143,7 +143,7 @@ fn should_return_none_when_parsing_if_metrics_file_does_not_exist() {
 }
 
 #[test]
-fn should_set_metrics() {
+fn test_set_metrics() {
     let mut existing_metrics = FsTrimMetrics::default();
     existing_metrics
         .update(true, Duration::from_millis(110))
@@ -158,7 +158,7 @@ fn should_set_metrics() {
 }
 
 #[test]
-fn should_update_metrics() {
+fn test_update_metrics() {
     let mut rng = reproducible_rng();
     for _ in 0..100 {
         let total_runs: u64 = rng.gen_range(0..10000000);
@@ -196,7 +196,7 @@ fn update_metrics_locally(metrics: &mut FsTrimMetrics, success: bool, duration: 
 }
 
 #[test]
-fn should_update_metric_with_infinite_values() {
+fn test_update_metrics_with_infinite_values() {
     let mut existing_metrics = FsTrimMetrics {
         total_runs: f64::INFINITY,
         ..FsTrimMetrics::default()
@@ -217,7 +217,7 @@ fn should_update_metric_with_infinite_values() {
 }
 
 #[test]
-fn should_update_metric_with_nan_values() {
+fn test_update_metrics_with_nan_values() {
     let mut existing_metrics = FsTrimMetrics {
         total_runs: f64::NAN,
         ..FsTrimMetrics::default()
@@ -244,7 +244,7 @@ fn verify_invariants(i: f64, existing_metrics: &FsTrimMetrics) {
 }
 
 #[test]
-fn should_maintain_invariants() {
+fn test_maintain_invariants() {
     let mut existing_metrics = FsTrimMetrics::default();
     let rng = &mut reproducible_rng();
     for i in 0..100 {
@@ -258,7 +258,7 @@ fn should_maintain_invariants() {
 }
 
 #[test]
-fn should_update_datadir_metrics() {
+fn test_update_datadir_metrics() {
     let mut metrics = FsTrimMetrics::default();
     assert_eq!(metrics.total_runs_datadir, 0.0);
     assert_eq!(metrics.last_duration_milliseconds_datadir, 0.0);

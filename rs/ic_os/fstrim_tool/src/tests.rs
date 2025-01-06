@@ -65,7 +65,7 @@ fn normalize_duration_line(input: &str) -> String {
 }
 
 #[test]
-fn should_parse_metrics_without_datadir_fields() {
+fn test_parse_metrics_without_datadir_fields() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_CONTENT).expect("error writing to file");
@@ -102,7 +102,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_parse_metrics_with_datadir_fields() {
+fn test_parse_metrics_with_datadir_fields() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_WITH_DATADIR).expect("error writing to file");
@@ -120,7 +120,7 @@ fn should_parse_metrics_with_datadir_fields() {
 }
 
 #[test]
-fn should_return_error_if_metrics_in_file_contain_special_values() {
+fn test_error_if_metrics_in_file_has_special_values() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_CONTENT_WITH_SPECIAL_VALUES)
@@ -135,7 +135,7 @@ fn should_return_error_if_metrics_in_file_contain_special_values() {
 }
 
 #[test]
-fn should_write_metrics_to_file() {
+fn test_write_metrics_to_file() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     let default_metrics = FsTrimMetrics::default();
@@ -162,7 +162,7 @@ fn should_write_metrics_to_file() {
 }
 
 #[test]
-fn should_update_metrics() {
+fn test_update_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_CONTENT).expect("error writing to file");
@@ -209,7 +209,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_update_datadir_metrics() {
+fn test_update_datadir_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_CONTENT).expect("error writing to file");
@@ -254,7 +254,7 @@ fstrim_datadir_runs_total 1
 }
 
 #[test]
-fn should_start_from_empty_metrics_for_update_if_metrics_in_file_contain_special_values() {
+fn test_start_from_empty_metrics_when_file_has_special_values() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     write(&metrics_file, EXISTING_METRICS_CONTENT_WITH_SPECIAL_VALUES)
@@ -301,18 +301,18 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_return_ok_from_successfully_run_command() {
+fn test_successfully_run_command() {
     run_command("true", "/").expect("running command should succeed");
 }
 
 #[test]
-fn should_return_error_from_unsuccessfully_run_command() {
+fn test_unsuccessfully_run_command() {
     let res = run_command("false", "/");
     assert_matches!(res, Err(err) if err.to_string().contains("Failed to run command"));
 }
 
 #[test]
-fn should_fail_but_write_metrics_if_command_fails() {
+fn test_command_fails_but_writes_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 
@@ -367,7 +367,7 @@ fstrim_datadir_runs_total 1
 }
 
 #[test]
-fn should_fail_if_command_cannot_be_run() {
+fn test_fails_if_command_cannot_be_run() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 
@@ -397,7 +397,7 @@ fn should_fail_if_command_cannot_be_run() {
 }
 
 #[test]
-fn should_not_run_command_but_initialize_metrics_if_flag_set() {
+fn test_init_flag() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
@@ -428,7 +428,7 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
 }
 
 #[test]
-fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
+fn test_init_flag_does_not_overwrite_existing_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 
@@ -478,7 +478,7 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
 }
 
 #[test]
-fn should_fail_if_metrics_file_cannot_be_written_to() {
+fn test_fails_if_metrics_file_cannot_be_written() {
     let metrics_file = PathBuf::from("/non/existent/directory/fstrim.prom");
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
@@ -508,7 +508,7 @@ fn should_fail_if_metrics_file_cannot_be_written_to() {
 }
 
 #[test]
-fn should_fail_if_target_is_not_a_directory() {
+fn test_fails_if_target_is_not_a_directory() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 

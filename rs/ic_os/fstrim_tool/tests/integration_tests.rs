@@ -30,7 +30,7 @@ fn normalize_duration_line(input: &str) -> String {
 }
 
 #[test]
-fn should_successfully_initialize_metrics_if_flag_is_set() {
+fn test_initialize_metrics_if_flag_is_set() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -76,7 +76,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_fail_but_write_metrics_if_target_is_not_a_directory() {
+fn test_fails_but_writes_metrics_if_target_not_a_directory() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -95,7 +95,7 @@ fn should_fail_but_write_metrics_if_target_is_not_a_directory() {
         .failure();
 
     let actual = read_to_string(&metrics_file).expect("reading metrics file should succeed");
-    // The command fails, so success=0, runs=1. Datadir not updated => datadir success=1, runs=0 by default
+    // The command fails, so success=0, runs=1. Datadir not updated => datadir success=1, runs=0
     let expected = r#"# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
 # TYPE fstrim_last_run_duration_milliseconds gauge
 fstrim_last_run_duration_milliseconds 0
@@ -120,7 +120,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_fail_but_write_metrics_with_discard_not_supported_with_correct_parameters() {
+fn test_fails_but_writes_metrics_when_discard_not_supported() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -172,7 +172,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn should_fail_if_arguments_missing() {
+fn test_fails_if_arguments_missing() {
     new_fstrim_tool_command()
         .assert()
         .stdout(predicate::str::is_empty())
