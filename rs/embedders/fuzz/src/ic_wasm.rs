@@ -208,7 +208,7 @@ fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
     }
 }
 
-fn generate_exports(
+pub fn generate_exports(
     embedder_config: EmbeddersConfig,
     u: &mut Unstructured,
 ) -> Result<Option<Vec<u8>>> {

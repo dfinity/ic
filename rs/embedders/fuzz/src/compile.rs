@@ -1,18 +1,25 @@
-use crate::ic_wasm::{ic_embedders_config, ic_wasm_config};
+use crate::ic_wasm::{generate_exports, ic_embedders_config, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use wasm_smith::{MemoryOffsetChoices, Module};
+use wasm_smith::{Config, MemoryOffsetChoices, Module};
 
 #[derive(Debug)]
 pub struct MaybeInvalidModule(pub Module);
 
 impl<'a> Arbitrary<'a> for MaybeInvalidModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let mut config = ic_wasm_config(ic_embedders_config());
+        let mut config = if u.ratio(1, 2)? {
+            let mut config = ic_wasm_config(ic_embedders_config());
+            config.exports = generate_exports(ic_embedders_config(), u)?;
+            config
+        } else {
+            Config::arbitrary(u)?
+        };
+
         config.allow_invalid_funcs = true;
         config.memory_offset_choices = MemoryOffsetChoices(40, 20, 40);
         Ok(MaybeInvalidModule(Module::new(config, u)?))
