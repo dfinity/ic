@@ -20,7 +20,7 @@ jobs:
             const pullRequestNumber = context.payload.number;
 
             // Only remind if nns-team approval is required.
-            const reviews = await octokit.pulls.getReviews({
+            const reviews = await github.pulls.getReviews({
               owner: "dfinity",
               repo: "ic",
               pull_number: pullRequestNumber,
