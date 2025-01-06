@@ -23,7 +23,7 @@ jobs:
               .payload
               .pull_request
               .requested_teams
-              .some(|team| team.name == 'nns-team')
+              .some(team => team.name == 'nns-team')
             console.log("nnsTeamReviewRequested = " + nnsTeamReviewRequested);
             if (!nnsTeamReviewRequested) {
               return;
