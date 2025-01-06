@@ -11424,6 +11424,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-dkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
  "ic-crypto-interfaces-sig-verification",
