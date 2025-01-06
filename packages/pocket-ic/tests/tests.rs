@@ -9,8 +9,8 @@ use pocket_ic::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc,
-    PocketIcBuilder, WasmResult,
+    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
+    PocketIc, PocketIcBuilder, WasmResult,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
@@ -2018,16 +2018,39 @@ fn ingress_status() {
         )
         .unwrap();
 
-    assert!(pic.ingress_status(msg_id.clone()).is_none());
+    match pic.ingress_status(msg_id.clone(), None) {
+        IngressStatusResult::NotAvailable => (),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
+
+    // since the ingress status is not available, any caller can attempt to retrieve it
+    let bogus_caller = Principal::from_slice(&[0xFF; 29]);
+    match pic.ingress_status(msg_id.clone(), Some(bogus_caller)) {
+        IngressStatusResult::NotAvailable => (),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
 
     pic.tick();
 
-    let ingress_status = pic.ingress_status(msg_id).unwrap().unwrap();
-    let principal = match ingress_status {
+    let reply = match pic.ingress_status(msg_id.clone(), None) {
+        IngressStatusResult::Success(result) => result.unwrap(),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    };
+    let principal = match reply {
         WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
         WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
     };
     assert_eq!(principal, canister_id.to_string());
+
+    // now that the ingress status is available, the caller must match
+    match pic.ingress_status(msg_id.clone(), Some(bogus_caller)) {
+        IngressStatusResult::Forbidden(msg) => assert_eq!(
+            msg,
+            "Forbidden(\"The user tries to access Request ID not signed by the caller.\")"
+                .to_string()
+        ),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
 }
 
 #[test]
