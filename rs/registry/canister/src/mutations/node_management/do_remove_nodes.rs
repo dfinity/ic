@@ -33,13 +33,6 @@ impl Registry {
         // 3. Loop through each node
         let mutations = nodes_to_be_removed
             .into_iter().flat_map(|node_to_remove| {
-                // 4. Skip nodes that are not in the registry.
-                // This tackles the race condition where a node is removed from the registry
-                // by another transaction before this transaction is processed.
-                if self.get_node(node_to_remove).is_none() {
-                    println!("{}do_remove_nodes: node {} not found in registry, skipping", LOG_PREFIX, node_to_remove);
-                    return vec![];
-                };
 
                 // 4. Find the node operator id for this record
                 // and abort if the node record is not found
@@ -47,7 +40,7 @@ impl Registry {
                     .map_err(|e| format!("{}do_remove_nodes: Aborting node removal: {}", LOG_PREFIX, e))
                     .unwrap();
 
-                // 5. Ensure node is not in a subnet
+                // 5. Ensure node is not in a subnet 
                 let is_node_in_subnet = find_subnet_for_node(self, node_to_remove, &subnet_list_record);
                 if let Some(subnet_id) = is_node_in_subnet {
                     panic!("{}do_remove_nodes: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
