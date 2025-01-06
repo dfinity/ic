@@ -969,7 +969,6 @@ fn on_low_wasm_memory_is_executed_before_message() {
     );
 }
 
-//here
 #[test]
 fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
