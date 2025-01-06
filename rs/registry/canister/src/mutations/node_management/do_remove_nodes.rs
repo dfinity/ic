@@ -110,11 +110,9 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes};
     use ic_base_types::PrincipalId;
-    use ic_protobuf::registry::{node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetType};
+    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
-    use ic_registry_transport::pb::v1::RegistryMutation;
-    use ic_types::ReplicaVersion;
     use prost::Message;
 
     #[test]
