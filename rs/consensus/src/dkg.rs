@@ -2,11 +2,7 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::{
-    bouncer_metrics::BouncerMetrics,
-    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
-};
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
@@ -24,7 +20,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         Signed,
     },
-    Height, NodeId,
+    Height, NodeId, ReplicaVersion,
 };
 pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use prometheus::Histogram;
@@ -34,13 +30,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+pub mod dkg_key_manager;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_validator;
+
 #[cfg(test)]
 mod test_utils;
 mod utils;
 
-pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
+pub use {
+    dkg_key_manager::DkgKeyManager,
+    payload_builder::{create_payload, make_genesis_summary, PayloadCreationError},
+};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -196,7 +197,7 @@ impl DkgImpl {
             return Mutations::new();
         };
 
-        if check_protocol_version(&message.content.version).is_err() {
+        if message.content.version != ReplicaVersion::default() {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 

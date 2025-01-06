@@ -12,7 +12,7 @@ use ic_artifact_pool::{
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
-    consensus::{dkg_key_manager::DkgKeyManager, ConsensusBouncer, ConsensusImpl},
+    consensus::{ConsensusBouncer, ConsensusImpl},
     dkg, idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
@@ -298,7 +298,7 @@ fn start_consensus(
         log.clone(),
     ));
 
-    let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
+    let dkg_key_manager = Arc::new(Mutex::new(dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
