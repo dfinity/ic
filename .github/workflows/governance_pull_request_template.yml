@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/github-script@v6
         id: mainStep
-        if: contains(github.event.pull_request.labels.*.name, '@nns-team')
+        if: contains(github.event.requested_teams.*.name, 'nns-team')
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
