@@ -4,11 +4,6 @@ on:
   pull_request:
     types:
       - assigned
-      - labeled
-      - opened
-      - edited
-      - reopened
-      - synchronize
       - ready_for_review
       - review_requested
 
