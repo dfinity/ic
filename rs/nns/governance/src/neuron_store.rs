@@ -31,7 +31,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Debug, Display, Formatter},
     ops::{Bound, Deref, RangeBounds},
 };
@@ -1241,7 +1241,7 @@ impl NeuronStore {
     pub fn get_neuron_ids_readable_by_caller(
         &self,
         principal_id: PrincipalId,
-    ) -> HashSet<NeuronId> {
+    ) -> BTreeSet<NeuronId> {
         with_stable_neuron_indexes(|indexes| {
             indexes
                 .principal()
