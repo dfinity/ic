@@ -78,6 +78,11 @@ fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
 }
 
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn install_backtrace_handler();
+}
+
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
@@ -89,6 +94,10 @@ fn main() {
     // before the arguments are parsed because the parent process does not pass
     // all the normally required arguments of `pocket-ic-server`.
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        unsafe {
+            install_backtrace_handler();
+        }
         canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
