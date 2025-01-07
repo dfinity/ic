@@ -54,7 +54,7 @@ pub fn run_fuzzer(module: MaybeInvalidModule) {
     });
 
     rt.block_on(async move {
-        // The omitted field is Result<InstancePre<StoreData>, HypervisorError>
+        // The omitted field is EmbedderCache(Result<InstancePre<StoreData>, HypervisorError>)
         // 1. InstancePre<StoreData> doesn't implement PartialEq
         // 2. HypervisorError is the same in compilation_result which is checked for equality
 
