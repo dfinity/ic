@@ -128,6 +128,22 @@ generate_nns_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    # If the canister has an unrelease_changelog.md file, use that to populate
+    # the "Features & Fixes" section of the upgrade proposal. Eventually, all of
+    # our canisters will have such a file, but for now, we are still test
+    # driving this process.
+    FEATURES_AND_FIXES="TODO Hand-craft this section."
+    PRIMARY_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+        FEATURES_AND_FIXES=$( \
+            sed -n '/# Next Upgrade Proposal/,$p' \
+                "${UNRELEASED_CHANGELOG_PATH}" \
+                | tail -n +3 \
+                | sed 's/^## /### /g' \
+        )
+    fi
+
     ARGS_HASH=""
     if [ ! -z "$CANDID_ARGS" ]; then
         FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
@@ -144,9 +160,11 @@ __Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
-## Summary
 
-TODO add a summary of changes
+## Features & Fixes
+
+$FEATURES_AND_FIXES
+
 
 ## New Commits
 
