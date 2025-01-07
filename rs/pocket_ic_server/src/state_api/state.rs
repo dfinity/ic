@@ -255,6 +255,7 @@ pub enum PocketIcError {
     InvalidMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
+    Forbidden(String),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -327,6 +328,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
                 write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
+            }
+            OpOut::Error(PocketIcError::Forbidden(msg)) => {
+                write!(f, "Forbidden({})", msg)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
