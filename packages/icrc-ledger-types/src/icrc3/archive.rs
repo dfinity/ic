@@ -4,10 +4,15 @@ use super::{
     blocks::{BlockRange, GetBlocksRequest},
     transactions::{GetTransactionsRequest, TransactionRange},
 };
+use crate::icrc3::blocks::GetBlocksResult;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 use std::marker::PhantomData;
 
+/// Deprecated. The information in the `ArchivedRange` struct is returned as part of the return value
+/// of [`GetBlocksResult`] from the
+/// [`icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchivedRange<Callback> {
     pub start: Nat,
@@ -15,6 +20,10 @@ pub struct ArchivedRange<Callback> {
     pub callback: Callback,
 }
 
+/// Details on the callback function using which archived blocks can be retrieved. Returned as part
+/// of [`GetBlocksResult`] from the
+/// [`icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
 pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
@@ -108,6 +117,7 @@ impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input,
     }
 }
 
+/// Deprecated: Use `ICRC3ArchiveInfo`.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub canister_id: Principal,
@@ -117,6 +127,9 @@ pub struct ArchiveInfo {
 pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksRequest, BlockRange>;
 pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
 
+/// The argument for the
+/// [`icrc3_get_archives`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetArchivesArgs {
     // The last archive seen by the client.
@@ -126,6 +139,9 @@ pub struct GetArchivesArgs {
     pub from: Option<Principal>,
 }
 
+/// The information returned as part of the return value for the
+/// [`icrc3_get_archives`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ICRC3ArchiveInfo {
     // The id of the archive
@@ -138,4 +154,7 @@ pub struct ICRC3ArchiveInfo {
     pub end: Nat,
 }
 
+/// The return value for the
+/// [`icrc3_get_archives`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint.
 pub type GetArchivesResult = Vec<ICRC3ArchiveInfo>;
