@@ -6,8 +6,7 @@ CONSTANT
 
 CONSTANTS
     Governance_Account_Ids,
-    Minting_Account_Id,
-    Neuron_Ids
+    Minting_Account_Id
 
 CONSTANTS
     Split_Neuron_Process_Ids
@@ -41,6 +40,7 @@ variables
     \* The queue of messages sent from the governance canister to the ledger canister
     governance_to_ledger = <<>>;
     ledger_to_governance = {};
+    spawning_neurons = FALSE;
 
 macro sn_reset_local_vars() {
     sn_parent_neuron_id := 0;
@@ -117,14 +117,14 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "15d571de" /\ chksum(tla) = "521933de")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-          ledger_to_governance, sn_parent_neuron_id, sn_amount,
-          sn_child_neuron_id, sn_child_account_id
+\* BEGIN TRANSLATION (chksum(pcal) = "49714083" /\ chksum(tla) = "1f5b129d")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, sn_parent_neuron_id, 
+          sn_amount, sn_child_neuron_id, sn_child_account_id
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-           ledger_to_governance, sn_parent_neuron_id, sn_amount,
-           sn_child_neuron_id, sn_child_account_id >>
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, sn_parent_neuron_id, 
+           sn_amount, sn_child_neuron_id, sn_child_account_id >>
 
 ProcSet == (Split_Neuron_Process_Ids)
 
@@ -134,6 +134,7 @@ Init == (* Global variables *)
         /\ locks = {}
         /\ governance_to_ledger = <<>>
         /\ ledger_to_governance = {}
+        /\ spawning_neurons = FALSE
         (* Process Split_Neuron *)
         /\ sn_parent_neuron_id = [self \in Split_Neuron_Process_Ids |-> 0]
         /\ sn_amount = [self \in Split_Neuron_Process_Ids |-> 0]
@@ -151,7 +152,7 @@ SplitNeuron1(self) == /\ pc[self] = "SplitNeuron1"
                                      /\ sn_amount' = [sn_amount EXCEPT ![self] = amt]
                                      /\ sn_child_account_id' = [sn_child_account_id EXCEPT ![self] = fresh_account_id]
                                      /\ sn_child_neuron_id' = [sn_child_neuron_id EXCEPT ![self] = FRESH_NEURON_ID(DOMAIN(neuron))]
-                                     /\ Assert(sn_child_neuron_id'[self] \notin locks,
+                                     /\ Assert(sn_child_neuron_id'[self] \notin locks, 
                                                "Failure of assertion at line 80, column 13.")
                                      /\ (sn_amount'[self] >= MIN_STAKE + TRANSACTION_FEE /\ neuron[sn_parent_neuron_id'[self]].cached_stake - neuron[sn_parent_neuron_id'[self]].fees >= MIN_STAKE + sn_amount'[self])
                                      /\ locks' = (locks \union {sn_parent_neuron_id'[self], sn_child_neuron_id'[self]})
@@ -161,7 +162,7 @@ SplitNeuron1(self) == /\ pc[self] = "SplitNeuron1"
                                      /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                 request(self, transfer(neuron'[sn_parent_neuron_id'[self]].account, neuron'[sn_child_neuron_id'[self]].account, sn_amount'[self] - TRANSACTION_FEE, TRANSACTION_FEE)))
                             /\ pc' = [pc EXCEPT ![self] = "SplitNeuron1_WaitForTransfer"]
-                      /\ UNCHANGED ledger_to_governance
+                      /\ UNCHANGED << ledger_to_governance, spawning_neurons >>
 
 SplitNeuron1_WaitForTransfer(self) == /\ pc[self] = "SplitNeuron1_WaitForTransfer"
                                       /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self}:
@@ -181,7 +182,8 @@ SplitNeuron1_WaitForTransfer(self) == /\ pc[self] = "SplitNeuron1_WaitForTransfe
                                       /\ sn_child_neuron_id' = [sn_child_neuron_id EXCEPT ![self] = 0]
                                       /\ sn_child_account_id' = [sn_child_account_id EXCEPT ![self] = DUMMY_ACCOUNT]
                                       /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                      /\ UNCHANGED governance_to_ledger
+                                      /\ UNCHANGED << governance_to_ledger, 
+                                                      spawning_neurons >>
 
 Split_Neuron(self) == SplitNeuron1(self)
                          \/ SplitNeuron1_WaitForTransfer(self)
