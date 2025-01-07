@@ -38,8 +38,15 @@ use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
-use ic_agent::{export::Principal, Agent};
-use reqwest::{redirect::Policy, ClientBuilder, Method, StatusCode};
+use ic_agent::{
+    agent::http_transport::{
+        hyper_transport::hyper::StatusCode,
+        reqwest_transport::{reqwest, ReqwestTransport},
+    },
+    export::Principal,
+    Agent,
+};
+use reqwest::{redirect::Policy, ClientBuilder, Method};
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::{runtime::Runtime, time::sleep};
@@ -173,10 +180,9 @@ pub fn api_query_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env, logger.clone()).await?;
 
-        let agent = Agent::builder()
-            .with_url(format!("https://{host}/"))
-            .with_http_client(client)
-            .build()?;
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
         let out = agent.query(&cid, "read").call().await?;
@@ -214,10 +220,8 @@ pub fn api_call_test(env: TestEnv) {
             .unwrap();
 
         // check that the update call went through
-        let agent = Agent::builder()
-            .with_url(format!("https://{host}/"))
-            .with_http_client(client)
-            .build()?;
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+        let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
         let out = agent.query(&cid, "read").call().await?;
@@ -246,10 +250,10 @@ pub fn api_sync_call_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-        let agent = Agent::builder()
-            .with_url(format!("https://{host}/"))
-            .with_http_client(client)
-            .build()?;
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
+            .with_use_call_v3_endpoint();
+
+        let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
         // update call
@@ -281,10 +285,9 @@ pub fn api_canister_read_state_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-        let agent = Agent::builder()
-            .with_url(format!("https://{host}/"))
-            .with_http_client(client)
-            .build()?;
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
         let _ = agent.read_state_canister_info(cid, "module_hash").await?;
@@ -308,10 +311,9 @@ pub fn api_subnet_read_state_test(env: TestEnv) {
     let (client, host) = setup_client(env.clone()).expect("failed to setup client");
 
     block_on(async move {
-        let agent = Agent::builder()
-            .with_url(format!("https://{host}/"))
-            .with_http_client(client)
-            .build()?;
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
         let subnet_id: Principal = env

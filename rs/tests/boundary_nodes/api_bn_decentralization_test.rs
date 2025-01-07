@@ -36,8 +36,11 @@ use registry_canister::mutations::{
 
 use ic_agent::{
     agent::{
-        http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
-        route_provider::RouteProvider,
+        http_transport::{
+            reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
+            route_provider::RouteProvider,
+            ReqwestTransport,
+        },
         ApiBoundaryNode,
     },
     export::Principal,
@@ -182,9 +185,11 @@ async fn test(env: TestEnv) {
         assert!(rules.contains("ct state new add @connection_limit"));
     }
 
+    let transport =
+        ReqwestTransport::create_with_client("https://api1.com", http_client.clone()).unwrap();
+
     let bn_agent = Agent::builder()
-        .with_url("https://api1.com")
-        .with_http_client(http_client.clone())
+        .with_transport(transport)
         .with_identity(AnonymousIdentity {})
         .build()
         .unwrap();
@@ -297,9 +302,10 @@ async fn test(env: TestEnv) {
         "Incrementing counters on canisters for the second time"
     );
 
+    let transport = ReqwestTransport::create_with_client("https://api3.com", http_client).unwrap();
+
     let bn_agent = Agent::builder()
-        .with_url("https://api3.com")
-        .with_http_client(http_client)
+        .with_transport(transport)
         .with_identity(AnonymousIdentity {})
         .build()
         .unwrap();

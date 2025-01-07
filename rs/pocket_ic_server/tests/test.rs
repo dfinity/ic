@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_agent::agent::CallResponse;
+use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
@@ -313,10 +313,14 @@ async fn test_gateway(server_url: Url, https: bool) {
     }
     let client = builder.build().unwrap();
 
-    // create agent
+    // create agent with custom transport
+    let transport = ReqwestTransport::create_with_client(
+        format!("{}://{}:{}", proto, localhost, port),
+        client.clone(),
+    )
+    .unwrap();
     let agent = ic_agent::Agent::builder()
-        .with_url(format!("{}://{}:{}", proto, localhost, port))
-        .with_http_client(client.clone())
+        .with_transport(transport)
         .build()
         .unwrap();
     agent.fetch_root_key().await.unwrap();
@@ -893,9 +897,12 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
+        let transport = ReqwestTransport::create(endpoint.clone())
+            .unwrap()
+            .with_use_call_v3_endpoint();
+
         let agent = ic_agent::Agent::builder()
-            .with_url(endpoint)
-            .with_http_client(reqwest::Client::new())
+            .with_transport(transport)
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
