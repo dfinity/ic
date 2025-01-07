@@ -181,6 +181,7 @@ impl InitArgsBuilder {
             feature_flags: None,
             maximum_number_of_accounts: None,
             accounts_overflow_trim_quantity: None,
+            index_principal: None,
         })
     }
 
@@ -265,6 +266,7 @@ pub struct InitArgs {
     pub feature_flags: Option<FeatureFlags>,
     pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -343,6 +345,8 @@ pub struct UpgradeArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
@@ -576,6 +580,8 @@ pub struct Ledger {
 
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
+
+    index_principal: Option<Principal>,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -632,6 +638,7 @@ impl Ledger {
             feature_flags,
             maximum_number_of_accounts,
             accounts_overflow_trim_quantity,
+            index_principal,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -674,6 +681,7 @@ impl Ledger {
                 .try_into()
                 .unwrap(),
             ledger_version: LEDGER_VERSION,
+            index_principal,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -837,6 +845,10 @@ impl Ledger {
         self.decimals
     }
 
+    pub fn index_principal(&self) -> Option<Principal> {
+        self.index_principal
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -852,6 +864,12 @@ impl Ledger {
             "icrc1:max_memo_length",
             self.max_memo_length() as u64,
         ));
+        if let Some(index_principal) = self.index_principal() {
+            records.push(Value::entry(
+                "icrc106:index_principal",
+                index_principal.to_text(),
+            ));
+        }
         records
     }
 
@@ -920,6 +938,9 @@ impl Ledger {
             if let Some(archive) = maybe_archive.deref_mut() {
                 change_archive_options.apply(archive);
             }
+        }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
         }
     }
 
