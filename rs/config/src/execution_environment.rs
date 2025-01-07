@@ -141,8 +141,11 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 // TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
-/// The capacity of the Wasm compilation cache.
+/// The capacity in memory of the Wasm compilation cache.
 pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
+
+/// The capacity on disk for the Wasm compilation cache.
+pub const MAX_COMPILATION_CACHE_DISK_SIZE: NumBytes = NumBytes::new(100 * GIB);
 
 /// Maximum number of controllers allowed in a request (specified in the interface spec).
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
@@ -288,8 +291,11 @@ pub struct Config {
     /// The upper limit on how long the data certificate stays valid in the query cache.
     pub query_cache_data_certificate_expiry_time: Duration,
 
-    /// The capacity of the Wasm compilation cache.
+    /// The capacity of the Wasm compilation cache in memory.
     pub max_compilation_cache_size: NumBytes,
+
+    /// The capacity of the Wasm compilation cache on disk.
+    pub max_compilation_cache_disk_size: NumBytes,
 
     /// Indicate whether query stats should be collected or not.
     pub query_stats_aggregation: FlagStatus,
@@ -383,6 +389,7 @@ impl Default for Config {
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
             query_cache_data_certificate_expiry_time: QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
+            max_compilation_cache_disk_size: MAX_COMPILATION_CACHE_DISK_SIZE,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
