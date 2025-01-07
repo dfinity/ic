@@ -121,7 +121,7 @@ use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
     future::Future,
@@ -146,8 +146,6 @@ pub mod tla_macros;
 pub mod tla;
 
 use crate::storage::with_voting_state_machines_mut;
-#[cfg(feature = "tla")]
-use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
@@ -2314,12 +2312,28 @@ impl Governance {
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
 
+        if let Some(start_from_neuron_id) = start_from_neuron_id {
+            requested_neuron_ids = requested_neuron_ids
+                .into_iter()
+                .skip_while(|id| id.id != *start_from_neuron_id)
+                .collect();
+        }
+
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
         let mut full_neurons = vec![];
 
+        const MAX_LIST_NEURONS_COUNT: usize = 500;
+
+        let mut requested_neuron_ids = requested_neuron_ids.into_iter();
+        let mut count = 0;
+        let mut next_start_from_neuron_id = None;
         // Populate the above two neuron collections.
-        for neuron_id in requested_neuron_ids {
+        for neuron_id in &mut requested_neuron_ids {
+            if count >= MAX_LIST_NEURONS_COUNT {
+                next_start_from_neuron_id = Some(neuron_id.id);
+                break;
+            }
             // Ignore when a neuron is not found. It is not guaranteed that a
             // neuron will be found, because some of the elements in
             // requested_neuron_ids are supplied by the caller.
@@ -2354,13 +2368,15 @@ impl Governance {
                     full_neurons.push(api::Neuron::from(proto));
                 }
             });
+            // See if we should exit
+            count += 1;
         }
 
         // Assemble final result.
         ListNeuronsResponse {
             neuron_infos,
             full_neurons,
-            next_start_from_neuron_id: None,
+            next_start_from_neuron_id,
         }
     }
 
@@ -3761,7 +3777,7 @@ impl Governance {
         match proposal_data {
             None => None,
             Some(pd) => {
-                let caller_neurons: HashSet<NeuronId> =
+                let caller_neurons: BTreeSet<NeuronId> =
                     self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
                 let now = self.env.now();
                 Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
@@ -3847,7 +3863,7 @@ impl Governance {
     ///   retrieve dropped payloads by calling `get_proposal_info` for
     ///   each proposal of interest.
     pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
-        let caller_neurons: HashSet<NeuronId> =
+        let caller_neurons: BTreeSet<NeuronId> =
             self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
         let now = self.env.now();
         self.get_pending_proposals_data()
@@ -3885,7 +3901,7 @@ impl Governance {
     fn proposal_data_to_info(
         &self,
         data: &ProposalData,
-        caller_neurons: &HashSet<NeuronId>,
+        caller_neurons: &BTreeSet<NeuronId>,
         now_seconds: u64,
         multi_query: bool,
     ) -> ProposalInfo {
@@ -3917,7 +3933,7 @@ impl Governance {
         /// in `except_from`.
         fn remove_ballots_not_cast_by(
             all_ballots: &HashMap<u64, Ballot>,
-            except_from: &HashSet<NeuronId>,
+            except_from: &BTreeSet<NeuronId>,
         ) -> HashMap<u64, Ballot> {
             let mut ballots = HashMap::new();
             for neuron_id in except_from.iter() {
@@ -3957,7 +3973,7 @@ impl Governance {
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,
-        caller_neurons: &HashSet<NeuronId>,
+        caller_neurons: &BTreeSet<NeuronId>,
     ) -> bool {
         // Is 'info' a manage neuron proposal?
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
@@ -4027,7 +4043,7 @@ impl Governance {
         caller: &PrincipalId,
         req: &ListProposalInfo,
     ) -> ListProposalInfoResponse {
-        let caller_neurons: HashSet<NeuronId> =
+        let caller_neurons: BTreeSet<NeuronId> =
             self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
         let exclude_topic: HashSet<i32> = req.exclude_topic.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
