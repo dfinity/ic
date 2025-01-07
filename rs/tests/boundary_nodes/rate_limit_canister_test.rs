@@ -21,6 +21,7 @@ Runbook:
 end::catalog[] */
 
 use anyhow::{bail, Result};
+use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Wasm};
 use ic_base_types::PrincipalId;
@@ -36,12 +37,16 @@ use k256::elliptic_curve::SecretKey;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
-use std::{env, net::SocketAddr, time::Duration};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
 use ic_agent::{
-    agent::http_transport::reqwest_transport::reqwest::Client, identity::Secp256k1Identity, Agent,
-    AgentError, Identity,
+    agent::{
+        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
+        HttpService,
+    },
+    identity::Secp256k1Identity,
+    Agent, AgentError, Identity,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -173,8 +178,8 @@ async fn test_async(env: TestEnv) {
             .expect("Could not create HTTP client.");
         let agent = Agent::builder()
             .with_url(format!("https://{api_bn_domain}"))
-            .with_http_client(client)
             .with_identity(full_access_identity)
+            .with_arc_http_middleware(Arc::new(HttpServiceNoRetry { client })) // do not use inbuilt retry logic for 429 responses
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -416,4 +421,21 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
+}
+
+// The default HttpService in ic-agent retries on 429 errors, but we expect these and don't want retries.
+#[derive(Debug)]
+struct HttpServiceNoRetry {
+    client: Client,
+}
+
+#[async_trait]
+impl HttpService for HttpServiceNoRetry {
+    async fn call<'a>(
+        &'a self,
+        req: &'a (dyn Fn() -> Result<Request, AgentError> + Send + Sync),
+        _max_tcp_retries: usize,
+    ) -> Result<Response, AgentError> {
+        Ok(self.client.call(req, _max_tcp_retries).await?)
+    }
 }
