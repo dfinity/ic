@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::marker::PhantomData;
 
 /// Deprecated. The information in the `ArchivedRange` struct is returned as part of the return value
-/// of [`GetBlocksResult`] from the
+/// of [`crate::icrc3::blocks::GetBlocksResult`] from the
 /// [`icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
 /// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub struct ArchivedRange<Callback> {
 }
 
 /// Details on the callback function using which archived blocks can be retrieved. Returned as part
-/// of [`GetBlocksResult`] from the
+/// of [`crate::icrc3::blocks::GetBlocksResult`] from the
 /// [`icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
 /// endpoint.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
