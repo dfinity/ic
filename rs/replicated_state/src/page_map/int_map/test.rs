@@ -361,21 +361,6 @@ fn test_eq(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<
 }
 
 #[test_strategy::proptest]
-fn test_extend(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] first: Vec<u64>,
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] second: Vec<u64>,
-) {
-    let (mut btree_map, _, mut mutable_int_map) = make_maps(first);
-    let (second_btree_map, _, second_mutable_int_map) = make_maps(second);
-
-    btree_map.extend(second_btree_map);
-    mutable_int_map.extend(second_mutable_int_map);
-
-    prop_assert_eq!(btree_map.len(), mutable_int_map.len());
-    prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
-}
-
-#[test_strategy::proptest]
 fn test_u64_values(
     #[strategy(proptest::collection::vec(any::<u64>(), 0..10))] keys: Vec<u64>,
     #[strategy(proptest::collection::vec(any::<u64>(), 10))] lookups: Vec<u64>,
@@ -422,4 +407,47 @@ fn test_u128_values(
         prop_assert_eq!(btree_map.get(&key), int_map.get(&key));
         prop_assert_eq!(btree_map.get(&key), mutable_int_map.get(&key));
     }
+}
+
+#[test]
+fn test_validate_eq() {
+    use ic_validate_eq::ValidateEq;
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct MyU64(u64);
+    impl ValidateEq for MyU64 {
+        fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+            if self.0 != rhs.0 {
+                return Err(format!("{} != {}", self.0, rhs.0));
+            }
+            Ok(())
+        }
+    }
+
+    fn do_validate_eq(lhs: &[(u64, u64)], rhs: &[(u64, u64)]) -> Result<(), String> {
+        let left: IntMap<u64, MyU64, u64> = lhs.iter().map(|(k, v)| (*k, MyU64(*v))).collect();
+        let right: IntMap<u64, MyU64, u64> = rhs.iter().map(|(k, v)| (*k, MyU64(*v))).collect();
+        left.validate_eq(&right)
+    }
+
+    assert!(do_validate_eq(&[], &[]).is_ok());
+    assert!(do_validate_eq(&[(1, 2)], &[(1, 2)]).is_ok());
+    assert!(do_validate_eq(&[(1, 2), (7, 8)], &[(1, 2), (7, 8)]).is_ok());
+
+    assert_eq!(
+        Err("Length divergence: 0 != 1".to_string()),
+        do_validate_eq(&[], &[(1, 2)])
+    );
+    assert_eq!(
+        Err("Length divergence: 2 != 1".to_string()),
+        do_validate_eq(&[(1, 2), (7, 8)], &[(1, 2)])
+    );
+    assert_eq!(
+        Err("Key divergence: 7 != 8".to_string()),
+        do_validate_eq(&[(1, 2), (7, 8)], &[(1, 2), (8, 8)])
+    );
+    assert_eq!(
+        Err("Value divergence @7: 8 != 7".to_string()),
+        do_validate_eq(&[(1, 2), (7, 8)], &[(1, 2), (7, 7)])
+    );
 }

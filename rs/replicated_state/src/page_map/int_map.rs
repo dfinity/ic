@@ -140,7 +140,18 @@ fn take_arc<T: Clone>(p: Arc<T>) -> T {
 /// See the comments of the public `bounds()` method.
 pub(crate) type Bounds<'a, K, V> = (Option<(&'a K, &'a V)>, Option<(&'a K, &'a V)>);
 
+mod sealed {
+    /// Limit the types that can be used as `IntKey` to unsigned integer types.
+    ///
+    /// Warning! Do not implement this trait for other types.
+    pub(super) trait UnsignedInt {}
+
+    impl UnsignedInt for u64 {}
+    impl UnsignedInt for u128 {}
+}
+
 /// An integer key type for `IntMap` (implemented for `u64` and `u128`).
+#[allow(private_bounds)]
 pub trait IntKey:
     Sized
     + Eq
@@ -153,6 +164,7 @@ pub trait IntKey:
     + Not<Output = Self>
     + Shl<u8, Output = Self>
     + Debug
+    + sealed::UnsignedInt
 {
     /// The type's zero value.
     fn zero() -> Self;
@@ -263,6 +275,7 @@ where
                 left,
                 right,
             } => {
+                debug_assert!(left.len() > 0 && right.len() > 0);
                 if !matches_prefix(key, *prefix, *branching_bit) {
                     None
                 } else if key & (I::one() << *branching_bit) == I::zero() {
@@ -638,6 +651,40 @@ impl<K, V, I> Tree<K, V, I> {
     }
 }
 
+impl<K, V, I> ValidateEq for Tree<K, V, I>
+where
+    K: PartialEq + std::fmt::Debug,
+    V: ValidateEq,
+{
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        let mut left_iter = IntMapIter::new(self);
+        let mut right_iter = IntMapIter::new(rhs);
+
+        loop {
+            match (left_iter.next(), right_iter.next()) {
+                (None, None) => return Ok(()),
+
+                (Some((lk, lv)), Some((rk, rv))) => {
+                    if lk != rk {
+                        return Err(format!("Key divergence: {:#?} != {:#?}", lk, rk));
+                    }
+                    if let Err(err) = lv.validate_eq(rv) {
+                        return Err(format!("Value divergence @{:#?}: {}", lk, err));
+                    }
+                }
+
+                _ => {
+                    return Err(format!(
+                        "Length divergence: {} != {}",
+                        self.len(),
+                        rhs.len()
+                    ))
+                }
+            }
+        }
+    }
+}
+
 /// Purely functional persistent sorted map with an integer-like key.
 ///
 /// Persistence means that the map can be cheaply cloned (in `O(1)`), and each
@@ -674,14 +721,14 @@ where
 
     /// Looks up a value by key.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn get(&self, key: &K) -> Option<&V> {
         self.0.get(key.as_int())
     }
 
     /// Returns `true` if the map contains the specified key.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn contains_key(&self, key: &K) -> bool {
         self.0.get(key.as_int()).is_some()
     }
@@ -700,22 +747,24 @@ where
     /// - `lower == Some((k, v))` implies `self.get(k) == v`,
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn bounds(&self, key: &K) -> Bounds<K, V> {
         self.0.bounds(key)
     }
 
-    /// Inserts a new entry into this map.
+    /// Inserts a new entry into this map. Returns the mutated map and the previous
+    /// value for the key, if any.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn insert(self, key: K, value: V) -> (Self, Option<V>) {
         let (tree, res) = self.0.insert(key, value);
         (Self(tree), res)
     }
 
-    /// Removes the entry with the given key from this map.
+    /// Removes the entry with the given key from this map. Returns the mutated map
+    /// and the removed value, if any.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn remove(self, key: &K) -> (Self, Option<V>) {
         let (tree, res) = self.0.remove(key);
         (Self(tree), res)
@@ -763,7 +812,7 @@ impl<K, V, I> IntMap<K, V, I> {
     /// Returns the largest key in this map.
     /// If the tree is empty, then it returns `None`.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn max_key(&self) -> Option<&K> {
         self.0.max().map(|(k, _v)| k)
     }
@@ -801,25 +850,7 @@ where
     V: ValidateEq,
 {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
-        if self.len() != rhs.len() {
-            return Err(format!(
-                "Length divergence:\nlhs keys = {:#?}\nrhs keys = {:#?}",
-                self.keys().collect::<Vec<_>>(),
-                rhs.keys().collect::<Vec<_>>()
-            ));
-        }
-        for (l, r) in self.iter().zip(rhs.iter()) {
-            if l.0 != r.0 {
-                return Err(format!(
-                    "Key divergence:\nlhs = {:#?}\nrhs = {:#?}",
-                    l.0, r.0
-                ));
-            }
-            if let Err(err) = l.1.validate_eq(r.1) {
-                return Err(format!("key={:#?}.{}", l.0, err));
-            }
-        }
-        Ok(())
+        self.0.validate_eq(&rhs.0)
     }
 }
 
@@ -875,7 +906,7 @@ impl<K, V, I> MutableIntMap<K, V, I> {
     /// Returns the smallest key in this map.
     /// If the tree is empty, then it returns `None`.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn min_key(&self) -> Option<&K> {
         self.tree.min().map(|(k, _v)| k)
     }
@@ -883,7 +914,7 @@ impl<K, V, I> MutableIntMap<K, V, I> {
     /// Returns the largest key in this map.
     /// If the tree is empty, then it returns `None`.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn max_key(&self) -> Option<&K> {
         self.tree.max().map(|(k, _v)| k)
     }
@@ -911,14 +942,14 @@ where
 {
     /// Looks up a value by integer key.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn get(&self, key: &K) -> Option<&V> {
         self.tree.get(key.as_int())
     }
 
     /// Returns `true` if the map contains a value for the specified key.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn contains_key(&self, key: &K) -> bool {
         self.tree.get(key.as_int()).is_some()
     }
@@ -937,7 +968,7 @@ where
     /// - `lower == Some((k, v))` implies `self.get(k) == v`,
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn bounds(&self, key: &K) -> Bounds<K, V> {
         self.tree.bounds(key)
     }
@@ -945,7 +976,7 @@ where
     /// Inserts a new entry into this map. Returns the previous value for the key,
     /// if any.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         let tree = std::mem::take(&mut self.tree);
         let res;
@@ -961,7 +992,7 @@ where
 
     /// Removes and returns the entry with the given key, if any, from this map.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn remove(&mut self, key: &K) -> Option<V> {
         let tree = std::mem::take(&mut self.tree);
         let res;
@@ -981,21 +1012,21 @@ where
     pub fn union(&mut self, other: Self) {
         let tree = std::mem::take(&mut self.tree);
         self.tree = tree.union(other.tree);
-        // TODO: Have `Tree::union()` also return the new length.
+        // TODO(MR-645): Have `Tree::union()` also return the new length.
         self.len = self.tree.len();
     }
 
     /// Splits the collection into two at the given key. Returns everything after
     /// the given key, including the key.
     ///
-    /// Complexity: `O(min(N, 64))`
+    /// Complexity: `O(min(N, |key|))`.
     pub fn split_off(&mut self, key: &K) -> Self {
         let tree = std::mem::take(&mut self.tree);
         let right;
         (self.tree, right) = tree.split(key);
 
         let old_len = self.len;
-        // TODO: Have `Tree::split()` also return the new lengths.
+        // TODO(MR-645): Have `Tree::split()` also return the new lengths.
         self.len = self.tree.len();
 
         Self {
@@ -1023,22 +1054,6 @@ where
     }
 }
 
-impl<K, V, I> Extend<(K, V)> for MutableIntMap<K, V, I>
-where
-    K: AsInt<I>,
-    V: Clone,
-    I: IntKey,
-{
-    fn extend<Iter>(&mut self, iter: Iter)
-    where
-        Iter: IntoIterator<Item = (K, V)>,
-    {
-        for (k, v) in iter {
-            self.insert(k, v);
-        }
-    }
-}
-
 impl<K: PartialEq, V: PartialEq, I> PartialEq for MutableIntMap<K, V, I> {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter())
@@ -1053,25 +1068,7 @@ where
     V: ValidateEq,
 {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
-        if self.len() != rhs.len() {
-            return Err(format!(
-                "Length divergence:\nlhs keys = {:#?}\nrhs keys = {:#?}",
-                self.keys().collect::<Vec<_>>(),
-                rhs.keys().collect::<Vec<_>>()
-            ));
-        }
-        for (l, r) in self.iter().zip(rhs.iter()) {
-            if l.0 != r.0 {
-                return Err(format!(
-                    "Key divergence:\nlhs = {:#?}\nrhs = {:#?}",
-                    l.0, r.0
-                ));
-            }
-            if let Err(err) = l.1.validate_eq(r.1) {
-                return Err(format!("key={:#?}.{}", l.0, err));
-            }
-        }
-        Ok(())
+        self.tree.validate_eq(&rhs.tree)
     }
 }
 
@@ -1096,6 +1093,7 @@ impl<'a, K, V, I> std::iter::Iterator for IntMapIter<'a, K, V, I> {
         // Find the leftmost subtree, pushing all the right hand side nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
+            debug_assert!(left.len() > 0 && right.len() > 0);
             self.0.push(right);
             p = left;
         }
@@ -1107,7 +1105,7 @@ impl<'a, K, V, I> std::iter::Iterator for IntMapIter<'a, K, V, I> {
     }
 }
 
-/// Consuming iIterator over an `IntMap`, visiting keys in sorted order.
+/// Consuming iterator over an `IntMap`, visiting keys in sorted order.
 ///
 /// A full traversal requires `O(N)` operations.
 pub struct IntMapIntoIter<K, V, I>(
@@ -1135,6 +1133,7 @@ where
         // Find the leftmost subtree, pushing all the right hand side nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
+            debug_assert!(left.len() > 0 && right.len() > 0);
             self.0.push(take_arc(right));
             p = take_arc(left);
         }
