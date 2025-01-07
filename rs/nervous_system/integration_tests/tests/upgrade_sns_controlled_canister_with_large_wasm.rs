@@ -1,3 +1,4 @@
+use candid::Principal;
 use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::CanisterInstallMode;
@@ -14,10 +15,14 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm;
+use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
+use ic_nervous_system_common_test_utils::wasm_helpers;
 
 const MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 20;
 const MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 5 * 60;
+
+const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
 /// This many bytes would not fit into a single cross-subnet ICP message, so including this many
 /// extra bytes into a WASM module would require splitting the module into multiple chunks.
@@ -69,21 +74,64 @@ mod interim_sns_helpers {
     }
 }
 
-/// Produces a valid WASM module based on `wasm`, extending it with so much junk bytes that it
-/// no longer fits into ICP message limits.
+/// Produces a valid, gzipped WASM module based on `wasm`, extending it with so much junk bytes
+/// that it no longer fits into ICP message limits.
 ///
 /// See also [`LARGE_WASM_MIN_BYTES`].
 fn oversize_wasm(wasm: Wasm) -> Wasm {
     let modify_with = vec![0_u8; LARGE_WASM_MIN_BYTES];
     let mut wasm_module = ic_wasm::utils::parse_wasm(&wasm.bytes(), false).unwrap();
-    ic_wasm::metadata::add_metadata(
-        &mut wasm_module,
-        ic_wasm::metadata::Kind::Public,
-        "aux",
-        modify_with,
-    );
+    // ic_wasm::metadata::add_metadata(
+    //     &mut wasm_module,
+    //     ic_wasm::metadata::Kind::Public,
+    //     "aux",
+    //     modify_with,
+    // );
+    wasm_module.globals.add_local();
     let modified_bytes = wasm_module.emit_wasm();
+
     Wasm::from_bytes(&modified_bytes[..])
+}
+
+/// Uploads `wasm` into the store canister, one [`CHUNK_SIZE`]-sized chunk at a time.
+///
+/// Returns the vector of uploaded chunk hashes.
+async fn upload_wasm_as_chinks(
+    pocket_ic: &PocketIc,
+    store_controller_id: Principal,
+    store_canister_id: Principal,
+    wasm: Wasm,
+    num_chunks_expected: usize,
+) -> Vec<Vec<u8>> {
+    let sender = Some(store_controller_id);
+
+    let mut published_chunk_hashes = Vec::new();
+
+    for chunk in wasm.bytes().chunks(CHUNK_SIZE) {
+        let uploaded_chunk_hash = pocket_ic
+            .upload_chunk(store_canister_id, sender, chunk.to_vec())
+            .await
+            .unwrap();
+        
+        println!("uploaded_chunk_hash: {:?}", uploaded_chunk_hash);
+        published_chunk_hashes.push(uploaded_chunk_hash);
+    }
+
+    // Smoke test
+    {
+        let mut stored_chunk_hashes = pocket_ic
+            .stored_chunks(store_canister_id, sender)
+            .await
+            .unwrap();
+        stored_chunk_hashes.sort();
+
+        let mut published_chunk_hashes = published_chunk_hashes.clone();
+        published_chunk_hashes.sort();
+
+        assert_eq!(stored_chunk_hashes.len(), num_chunks_expected);
+    }
+
+    chunk_hashes_list
 }
 
 async fn run_test(store_same_as_target: bool) {
@@ -110,7 +158,8 @@ async fn run_test(store_same_as_target: bool) {
     };
 
     // Install a dapp canister.
-    let original_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec());
+    let original_wasm = wasm_helpers::ungzip_wasm(&UNIVERSAL_CANISTER_WASM.to_vec()[..]);
+    let original_wasm = Wasm::from_bytes(original_wasm);
     let original_wasm_hash = original_wasm.sha256_hash();
 
     let app_subnet = pocket_ic.topology().await.get_app_subnets()[0];
@@ -174,24 +223,28 @@ async fn run_test(store_same_as_target: bool) {
     // Smoke test
     assert_ne!(new_wasm_hash, original_wasm_hash);
 
-    let chunk_hashes_list = {
-        pocket_ic
-            .upload_chunk(
-                store_canister_id.into(),
-                // This is a simplification; for now, we assume the Root itself decides to upload
-                // some WASM chunks, but eventually this should be triggered via proposal.
-                Some(sns.root.canister_id.into()),
-                new_wasm.bytes(),
-            )
-            .await
-            .unwrap();
-        let chunk_hashes_list = pocket_ic
-            .stored_chunks(store_canister_id.into(), Some(sns.root.canister_id.into()))
-            .await
-            .unwrap();
-        assert_eq!(chunk_hashes_list.len(), 2);
-        chunk_hashes_list
-    };
+    // We take a WASM under 1 MiB (`UNIVERSAL_CANISTER_WASM`), oversize it by adding ~2 MiB
+    // (`LARGE_WASM_MIN_BYTES`), then split into 1 MiB chunks.
+    let num_chunks_expected = 3;
+
+    let chunk_hashes_list = upload_wasm_as_chinks(
+        &pocket_ic,
+        sns.root.canister_id.into(),
+        store_canister_id.into(),
+        new_wasm,
+        num_chunks_expected,
+    ).await;
+
+    println!("chunk_hashes_list = {:#?}", chunk_hashes_list);
+
+    pocket_ic.add_cycles(
+        target_canister_id.into(),
+        40_000_000_000_000_000
+    ).await;
+    pocket_ic.add_cycles(
+        store_canister_id.into(),
+        40_000_000_000_000_000
+    ).await;
 
     // 2. Run code under test.
     interim_sns_helpers::change_canister(

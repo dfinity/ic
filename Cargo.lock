@@ -9909,6 +9909,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",

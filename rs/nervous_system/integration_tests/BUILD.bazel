@@ -42,6 +42,7 @@ BASE_DEPENDENCIES = [
         "//packages/pocket-ic",
         "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
+        "//rs/nervous_system/common/test_utils",
         "//rs/nns/constants",
         "//rs/protobuf",
         "//rs/registry/canister",
