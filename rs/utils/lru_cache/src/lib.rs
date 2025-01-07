@@ -25,11 +25,7 @@ where
     V: CountBytes,
 {
     fn memory_count_bytes(&self) -> usize {
-        self.memory_size
-    }
-
-    fn disk_count_bytes(&self) -> usize {
-        self.disk_size
+        self.size
     }
 }
 
@@ -67,12 +63,13 @@ where
     /// the cache or other cache entries are evicted (due to the cache capacity),
     /// then it returns the old entry's key-value pairs. Otherwise, returns an empty vector.
     pub fn push(&mut self, key: K, value: V) -> Vec<(K, V)> {
-        let size = key.count_bytes() + value.count_bytes();
+        let size = key.memory_count_bytes() + value.memory_count_bytes();
         assert!(size <= MAX_SIZE);
 
         let removed_entry = self.cache.push(key, value);
         if let Some((removed_key, removed_value)) = &removed_entry {
-            let removed_size = removed_key.count_bytes() + removed_value.count_bytes();
+            let removed_size =
+                removed_key.memory_count_bytes() + removed_value.memory_count_bytes();
             debug_assert!(self.size >= removed_size);
             // This cannot underflow because we know that `self.size` is
             // the sum of sizes of all items in the cache.
@@ -93,7 +90,7 @@ where
     /// `None` if it does not exist.
     pub fn pop(&mut self, key: &K) -> Option<V> {
         if let Some((key, value)) = self.cache.pop_entry(key) {
-            let size = key.count_bytes() + value.count_bytes();
+            let size = key.memory_count_bytes() + value.memory_count_bytes();
             debug_assert!(self.size >= size);
             self.size -= size;
             self.check_invariants();
@@ -127,7 +124,7 @@ where
         while self.size > self.capacity {
             match self.cache.pop_lru() {
                 Some((key, value)) => {
-                    let size = key.count_bytes() + value.count_bytes();
+                    let size = key.memory_count_bytes() + value.memory_count_bytes();
                     debug_assert!(self.size >= size);
                     // This cannot underflow because we know that `self.size` is
                     // the sum of sizes of all items in the cache.
@@ -150,7 +147,7 @@ where
                 self.size,
                 self.cache
                     .iter()
-                    .map(|(key, value)| key.count_bytes() + value.count_bytes())
+                    .map(|(key, value)| key.memory_count_bytes() + value.memory_count_bytes())
                     .sum::<usize>()
             );
         }
@@ -166,7 +163,7 @@ mod tests {
     struct ValueSize(u32, usize);
 
     impl CountBytes for ValueSize {
-        fn count_bytes(&self) -> usize {
+        fn memory_count_bytes(&self) -> usize {
             self.1
         }
     }
@@ -175,7 +172,7 @@ mod tests {
     struct Key(u32);
 
     impl CountBytes for Key {
-        fn count_bytes(&self) -> usize {
+        fn memory_count_bytes(&self) -> usize {
             0
         }
     }
@@ -384,23 +381,23 @@ mod tests {
     #[test]
     fn lru_cache_count_bytes_and_len() {
         let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
-        assert_eq!(0, lru.count_bytes());
+        assert_eq!(0, lru.memory_count_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
         lru.push(Key(0), ValueSize(0, 4));
-        assert_eq!(4, lru.count_bytes());
+        assert_eq!(4, lru.memory_count_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.push(Key(1), ValueSize(1, 6));
-        assert_eq!(10, lru.count_bytes());
+        assert_eq!(10, lru.memory_count_bytes());
         assert_eq!(2, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(0));
-        assert_eq!(6, lru.count_bytes());
+        assert_eq!(6, lru.memory_count_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(1));
-        assert_eq!(0, lru.count_bytes());
+        assert_eq!(0, lru.memory_count_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
     }
