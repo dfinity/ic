@@ -1,5 +1,5 @@
 {
-  "checksum": "cb75bff2d9f6d8056d5a1b773fe08cd804f54831a43b9b23ed7da9d675a827c2",
+  "checksum": "07235e2434b10c31e76bd9a0241a6cacdfce000dd6c4c568fbdbee7b0ef6d7ab",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18949,7 +18949,7 @@
               "target": "intmap"
             },
             {
-              "id": "ipnet 2.8.0",
+              "id": "ipnet 2.10.1",
               "target": "ipnet"
             },
             {
@@ -27522,7 +27522,7 @@
               "target": "idna"
             },
             {
-              "id": "ipnet 2.8.0",
+              "id": "ipnet 2.10.1",
               "target": "ipnet"
             },
             {
@@ -35827,14 +35827,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ipnet 2.8.0": {
+    "ipnet 2.10.1": {
       "name": "ipnet",
-      "version": "2.8.0",
+      "version": "2.10.1",
       "package_url": "https://github.com/krisprice/ipnet",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ipnet/2.8.0/download",
-          "sha256": "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
+          "url": "https://static.crates.io/crates/ipnet/2.10.1/download",
+          "sha256": "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708"
         }
       },
       "targets": [
@@ -35859,12 +35859,22 @@
         "crate_features": {
           "common": [
             "default",
+            "serde",
             "std"
           ],
           "selects": {}
         },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2018",
-        "version": "2.8.0"
+        "version": "2.10.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -56977,7 +56987,7 @@
                 "target": "hyper"
               },
               {
-                "id": "ipnet 2.8.0",
+                "id": "ipnet 2.10.1",
                 "target": "ipnet"
               },
               {
@@ -58367,7 +58377,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "ipnet 2.8.0",
+                "id": "ipnet 2.10.1",
                 "target": "ipnet"
               },
               {
@@ -76782,7 +76792,7 @@
               "target": "idna"
             },
             {
-              "id": "ipnet 2.8.0",
+              "id": "ipnet 2.10.1",
               "target": "ipnet"
             },
             {
@@ -87737,7 +87747,7 @@
     "insta 1.34.0",
     "instant-acme 0.7.2",
     "intmap 1.1.0",
-    "ipnet 2.8.0",
+    "ipnet 2.10.1",
     "isocountry 0.3.2",
     "itertools 0.12.0",
     "json-patch 0.2.7",

@@ -79,7 +79,7 @@ impl From<OutputRule> for api::OutputRule {
     fn from(value: OutputRule) -> Self {
         api::OutputRule {
             description: value.description,
-            id: value.id.to_string(),
+            rule_id: value.id.to_string(),
             incident_id: value.incident_id.to_string(),
             rule_raw: value.rule_raw,
         }
@@ -299,7 +299,7 @@ pub struct OutputRuleMetadata {
 impl From<OutputRuleMetadata> for api::OutputRuleMetadata {
     fn from(value: OutputRuleMetadata) -> Self {
         api::OutputRuleMetadata {
-            id: value.id.0.to_string(),
+            rule_id: value.id.0.to_string(),
             incident_id: value.incident_id.0.to_string(),
             rule_raw: value.rule_raw,
             description: value.description,
