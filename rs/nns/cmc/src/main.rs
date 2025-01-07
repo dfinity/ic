@@ -3286,11 +3286,13 @@ mod tests {
             }
         }
 
-        // Case B: icrc1_memo is used.
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
         {
             let transaction = Transaction {
                 memo: Memo(0),
-                icrc1_memo: Some(ByteBuf::from(vec![78, 0, 0, 0, 0, 0, 0, 0])),
+                icrc1_memo: Some(ByteBuf::from(78_u64.to_le_bytes().to_vec())),
 
                 // Irrelevant to this test.
                 operation: operation.clone(),
