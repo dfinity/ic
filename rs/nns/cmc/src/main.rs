@@ -1622,7 +1622,7 @@ fn transaction_has_expected_memo(
     )))
 }
 
-/// Returns amount, and source of the transfer from (ICP) ledger.
+/// Returns amount, and source of the transfer in (ICP) ledger.
 ///
 /// Returns Ok if the arguments are matched. (Otherwise, returns Err).
 async fn fetch_transaction(
@@ -3232,7 +3232,9 @@ mod tests {
             Ok(()),
         );
 
-        // Case B: icrc1_memo is used.
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
         let transaction_with_icrc1_memo = Transaction {
             memo: Memo(0),
             icrc1_memo: Some(ByteBuf::from(vec![43, 0, 0, 0, 0, 0, 0, 0])),
