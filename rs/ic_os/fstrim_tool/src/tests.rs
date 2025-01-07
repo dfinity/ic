@@ -138,10 +138,17 @@ fn test_error_if_metrics_in_file_has_special_values() {
 fn test_write_metrics_to_file() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
-    let default_metrics = FsTrimMetrics::default();
+    let metrics = FsTrimMetrics {
+        last_duration_milliseconds: 64.,
+        last_run_success: false,
+        total_runs: 60.,
+        last_duration_milliseconds_datadir: 3.,
+        last_run_success_datadir: true,
+        total_runs_datadir: 16.,
+    };
 
     write_metrics_using_tmp_file(
-        &default_metrics,
+        &metrics,
         metrics_file
             .to_str()
             .expect("metrics file path should be valid"),
@@ -155,10 +162,13 @@ fn test_write_metrics_to_file() {
     )
     .expect("parsing metrics should succeed")
     .expect("parsed metrics should be some");
-    let parsed_metrics_str = parsed_metrics.to_p8s_metrics_string();
-    let default_str = FsTrimMetrics::default().to_p8s_metrics_string();
 
-    assert_eq!(parsed_metrics_str, default_str);
+    assert_eq!(parsed_metrics.last_duration_milliseconds, 64.);
+    assert!(!parsed_metrics.last_run_success);
+    assert_eq!(parsed_metrics.total_runs, 60.);
+    assert_eq!(parsed_metrics.last_duration_milliseconds_datadir, 3.);
+    assert!(parsed_metrics.last_run_success_datadir);
+    assert_eq!(parsed_metrics.total_runs_datadir, 16.);
 }
 
 #[test]
