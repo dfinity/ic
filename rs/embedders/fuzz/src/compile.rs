@@ -28,23 +28,26 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
 }
 
 #[inline(always)]
-pub fn run_fuzzer(module: &[u8]) {
+pub fn run_fuzzer(bytes: &[u8]) {
     let config = ic_embedders_config();
-    let mut u = Unstructured::new(module);
+    let mut u = Unstructured::new(bytes);
 
     // Arbitrary Wasm module generation probabilities
     // 33% - Random bytes
     // 33% - Wasm with arbitrary wasm-smith config + maybe invalid functions
-    // 33% - IC complaint wasm + maybe invalid functions
+    // 33% - IC compliant wasm + maybe invalid functions
 
-    let wasm = if u.ratio(1, 3).unwrap() {
-        let mut wasm: Vec<u8> = b"\x00asm".to_vec();
-        wasm.extend_from_slice(module);
-        wasm
+    let wasm = if u.ratio(1, 3).unwrap()
+        || bytes.len() < <MaybeInvalidModule as Arbitrary>::size_hint(0).0
+    {
+        raw_wasm_bytes(bytes)
     } else {
-        let module = <MaybeInvalidModule as Arbitrary>::arbitrary_take_rest(u)
-            .expect("Unable to extract wasm from Unstructured data");
-        module.0.to_bytes()
+        let data = <MaybeInvalidModule as Arbitrary>::arbitrary_take_rest(u);
+
+        match data {
+            Ok(data) => data.0.to_bytes(),
+            Err(_) => raw_wasm_bytes(bytes),
+        }
     };
 
     let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
@@ -92,6 +95,13 @@ pub fn run_fuzzer(module: &[u8]) {
             time_removed_compilation_result_2
         );
     });
+}
+
+#[inline(always)]
+fn raw_wasm_bytes(data: &[u8]) -> Vec<u8> {
+    let mut wasm: Vec<u8> = b"\x00asm".to_vec();
+    wasm.extend_from_slice(data);
+    wasm
 }
 
 #[cfg(test)]
