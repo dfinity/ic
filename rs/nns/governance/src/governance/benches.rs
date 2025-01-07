@@ -565,6 +565,7 @@ fn list_neurons_benchmark() -> BenchResult {
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: Some(false),
         include_public_neurons_in_full_neurons: None,
+        start_from_neuron_id: None,
     };
 
     bench_fn(|| {
