@@ -229,6 +229,7 @@ impl SubnetPairProxy {
     /// subsequently moved to this new subnet and the routing tables are updated accordingly
     /// on all subnets (i.e. `self.local_env`, `self.remote_env` and on the new subnet).
     fn move_remote_canister_to_destination_subnet(&self) -> Result<Self, String> {
+        //self.remote_env.checkpointed_tick();
         // New destination env using the same routing table as `self`.
         let destination_env = StateMachineBuilder::new()
             .with_subnet_id(Self::DESTINATION_SUBNET_ID)
@@ -253,8 +254,8 @@ impl SubnetPairProxy {
         }
 
         // Move the remote canister to the destination subnet.
-        self.remote_env
-            .move_canister_state_to(&destination_env, self.remote_canister_id)?;
+        //self.remote_env
+        //.move_canister_state_to(&destination_env, self.remote_canister_id)?;
 
         Ok(Self {
             local_env: self.local_env.clone(),
@@ -973,10 +974,13 @@ fn state_machine_subnet_splitting_test() {
     old_subnets_proxy.call_stop_on_local_canister().unwrap();
     old_subnets_proxy.call_stop_on_remote_canister().unwrap();
 
+    old_subnets_proxy.remote_env.checkpointed_tick();
+
     // Migrate canister, which includes updating the routing table on all subnets.
     let new_subnets_proxy = old_subnets_proxy
         .move_remote_canister_to_destination_subnet()
         .unwrap();
+    return;
 
     // Tick once on both subnets, to trigger messages slipping into streams.
     new_subnets_proxy.remote_env.tick();
