@@ -83,7 +83,7 @@ pub struct SerializedModule {
 }
 
 impl CountBytes for SerializedModule {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.bytes.0.len()
     }
 }
@@ -148,7 +148,7 @@ pub struct OnDiskSerializedModule {
 }
 
 impl CountBytes for OnDiskSerializedModule {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
     }
 }

@@ -94,7 +94,7 @@ fn max_response_count_bytes() {
         response.payload_size_bytes()
     );
     // And its total size must be exactly `MAX_RESPONSE_COUNT_BYTES`.
-    assert_eq!(MAX_RESPONSE_COUNT_BYTES, response.count_bytes());
+    assert_eq!(MAX_RESPONSE_COUNT_BYTES, response.memory_count_bytes());
 
     // A reject response with a maximum size payload.
     let max_reject_payload_size =
@@ -118,7 +118,7 @@ fn max_response_count_bytes() {
         reject.payload_size_bytes()
     );
     // And its total size must be exactly `MAX_RESPONSE_COUNT_BYTES`.
-    assert_eq!(MAX_RESPONSE_COUNT_BYTES, reject.count_bytes());
+    assert_eq!(MAX_RESPONSE_COUNT_BYTES, reject.memory_count_bytes());
 }
 
 #[test]

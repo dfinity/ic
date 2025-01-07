@@ -651,7 +651,7 @@ impl CustomSection {
 }
 
 impl CountBytes for CustomSection {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of_val(&self.visibility) + self.content.len()
     }
 }
@@ -709,7 +709,7 @@ impl WasmMetadata {
             memory_usage: NumBytes::from(
                 custom_sections
                     .iter()
-                    .map(|(k, v)| k.len() + v.count_bytes())
+                    .map(|(k, v)| k.len() + v.memory_count_bytes())
                     .sum::<usize>() as u64,
             ),
             custom_sections: Arc::new(custom_sections),
@@ -735,7 +735,7 @@ impl WasmMetadata {
             NumBytes::from(
                 self.custom_sections
                     .iter()
-                    .map(|(k, v)| k.len() + v.count_bytes())
+                    .map(|(k, v)| k.len() + v.memory_count_bytes())
                     .sum::<usize>() as u64,
             )
         );

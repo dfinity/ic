@@ -117,7 +117,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context.validation_context,
                     max_size,
                 );
-                let size = NumBytes::new(ingress.count_bytes() as u64);
+                let size = NumBytes::new(ingress.memory_count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
                 if let Err(err) = builder.validate_ingress_payload(
@@ -349,7 +349,7 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                     proposal_context.validation_context,
                 )?;
-                Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
+                Ok(NumBytes::new(payload.ingress.memory_count_bytes() as u64))
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);

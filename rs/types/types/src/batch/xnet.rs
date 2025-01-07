@@ -68,7 +68,9 @@ impl XNetPayload {
         self.stream_slices
             .values()
             .map(|slice| {
-                slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes()
+                slice.payload.len()
+                    + slice.merkle_proof.len()
+                    + slice.certification.memory_count_bytes()
             })
             .sum()
     }

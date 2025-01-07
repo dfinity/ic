@@ -157,7 +157,7 @@ fn streams_stats() {
             .response_payload(Payload::Data(payload.as_bytes().to_vec()))
             .build()
             .into();
-        let req_bytes = rep.count_bytes();
+        let req_bytes = rep.memory_count_bytes();
         (rep, req_bytes)
     }
 

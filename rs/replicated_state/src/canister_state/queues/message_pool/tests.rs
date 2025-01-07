@@ -720,9 +720,9 @@ fn test_message_stats_best_effort() {
     // Insert a bunch of best-effort messages.
     //
     let request = request(time(10));
-    let request_size_bytes = request.count_bytes();
+    let request_size_bytes = request.memory_count_bytes();
     let response = response(time(20));
-    let response_size_bytes = response.count_bytes();
+    let response_size_bytes = response.memory_count_bytes();
 
     let _ = pool.insert_inbound(request.clone().into());
     stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
@@ -799,9 +799,9 @@ fn test_message_stats_guaranteed_response() {
     // Insert a bunch of guaranteed response messages.
     //
     let request = request(NO_DEADLINE);
-    let request_size_bytes = request.count_bytes();
+    let request_size_bytes = request.memory_count_bytes();
     let response = response(NO_DEADLINE);
-    let response_size_bytes = response.count_bytes();
+    let response_size_bytes = response.memory_count_bytes();
 
     let inbound_request_id = pool.insert_inbound(request.clone().into());
     stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
@@ -886,12 +886,12 @@ fn test_message_stats_oversized_requests() {
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         time(10),
     );
-    let best_effort_size_bytes = best_effort.count_bytes();
+    let best_effort_size_bytes = best_effort.memory_count_bytes();
     let guaranteed = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 2000,
         NO_DEADLINE,
     );
-    let guaranteed_size_bytes = guaranteed.count_bytes();
+    let guaranteed_size_bytes = guaranteed.memory_count_bytes();
     // The 2000 bytes we added above; plus the method name provided by
     // `RequestBuilder`; plus any difference in size between the `Request` and
     // `Response` structs, so better to compute it
@@ -1096,7 +1096,7 @@ fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
         Class::BestEffort
     };
 
-    let size_bytes = req.count_bytes();
+    let size_bytes = req.memory_count_bytes();
     let (best_effort_message_bytes, oversized_guaranteed_requests_extra_bytes) = match class {
         GuaranteedResponse => (0, size_bytes.saturating_sub(MAX_RESPONSE_COUNT_BYTES)),
         BestEffort => (size_bytes, 0),
@@ -1143,7 +1143,7 @@ fn response_stats_delta2(rep: &Response, context: Context) -> MessageStats {
         Class::BestEffort
     };
 
-    let size_bytes = rep.count_bytes();
+    let size_bytes = rep.memory_count_bytes();
     let (best_effort_message_bytes, guaranteed_responses_size_bytes) = match class {
         GuaranteedResponse => (0, size_bytes),
         BestEffort => (size_bytes, 0),

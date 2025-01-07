@@ -342,7 +342,7 @@ impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for SignedIngress {
 }
 
 impl CountBytes for SignedIngress {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         // Since we not only add the message, but also the pointer to the message,
         // we need to account for that when building the length
         self.binary().len() + EXPECTED_MESSAGE_ID_LENGTH
@@ -442,7 +442,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
 }
 
 impl CountBytes for Ingress {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<Ingress>() + self.method_name.len() + self.method_payload.len()
     }
 }

@@ -2021,11 +2021,11 @@ impl StateMachine {
             .unwrap();
 
         // Validate the size of the ingress message.
-        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+        if msg.memory_count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
             return Err(SubmitIngressError::HttpError(format!(
                 "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
                 msg.id(),
-                msg.count_bytes(),
+                msg.memory_count_bytes(),
                 ingress_registry_settings.max_ingress_bytes_per_message
             )));
         }

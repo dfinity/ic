@@ -1394,7 +1394,7 @@ impl Stream {
 
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: RequestOrResponse) {
-        self.messages_size_bytes += message.count_bytes();
+        self.messages_size_bytes += message.memory_count_bytes();
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
     }
@@ -1435,7 +1435,7 @@ impl Stream {
             let (index, msg) = self.messages.pop().unwrap();
 
             // Deduct every discarded message from the stream's byte size.
-            self.messages_size_bytes -= msg.count_bytes();
+            self.messages_size_bytes -= msg.memory_count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
             // If we received a reject signal for this message, collect it in
@@ -1487,7 +1487,7 @@ impl Stream {
 
     /// Calculates the estimated byte size of the given messages.
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
-        messages.iter().map(|(_, m)| m.count_bytes()).sum()
+        messages.iter().map(|(_, m)| m.memory_count_bytes()).sum()
     }
 
     /// Returns a reference to the reverse stream flags.
@@ -1502,7 +1502,7 @@ impl Stream {
 }
 
 impl CountBytes for Stream {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         // Count one byte per reject signal, same as the payload builder.
         size_of::<Stream>() + self.messages_size_bytes + self.reject_signals.len()
     }
@@ -1557,7 +1557,7 @@ impl Streams {
                 *self
                     .guaranteed_responses_size_bytes
                     .entry(response.respondent)
-                    .or_default() += msg.count_bytes();
+                    .or_default() += msg.memory_count_bytes();
             }
         }
 
@@ -1624,7 +1624,7 @@ impl Streams {
                     if response.deadline == NO_DEADLINE {
                         *guaranteed_responses_size_bytes
                             .entry(response.respondent)
-                            .or_default() += msg.count_bytes();
+                            .or_default() += msg.memory_count_bytes();
                     }
                 }
             }
@@ -1694,7 +1694,7 @@ impl<'a> StreamHandle<'a> {
     ///
     /// Returns the byte size of the pushed message.
     pub fn push(&mut self, message: RequestOrResponse) -> usize {
-        let size_bytes = message.count_bytes();
+        let size_bytes = message.memory_count_bytes();
         if let RequestOrResponse::Response(response) = &message {
             if response.deadline == NO_DEADLINE {
                 *self
@@ -1739,7 +1739,7 @@ impl<'a> StreamHandle<'a> {
                         .expect(
                             "No `guaranteed_responses_size_bytes` entry for discarded response",
                         );
-                    *canister_guaranteed_responses_size_bytes -= msg.count_bytes();
+                    *canister_guaranteed_responses_size_bytes -= msg.memory_count_bytes();
                 }
             }
         }

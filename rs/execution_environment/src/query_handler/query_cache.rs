@@ -141,7 +141,7 @@ pub(crate) struct EntryKey {
 }
 
 impl CountBytes for EntryKey {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of_val(self) + self.method_name.len() + self.method_payload.len()
     }
 }
@@ -212,8 +212,8 @@ pub(crate) struct EntryValue {
 }
 
 impl CountBytes for EntryValue {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self) + self.result.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        size_of_val(self) + self.result.memory_count_bytes()
     }
 }
 
@@ -378,8 +378,8 @@ pub(crate) struct QueryCache {
 }
 
 impl CountBytes for QueryCache {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self) + self.cache.lock().unwrap().count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        size_of_val(self) + self.cache.lock().unwrap().memory_count_bytes()
     }
 }
 
@@ -422,7 +422,9 @@ impl QueryCache {
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
                 // Update the `count_bytes` metric.
-                self.metrics.count_bytes.set(cache.count_bytes() as i64);
+                self.metrics
+                    .count_bytes
+                    .set(cache.memory_count_bytes() as i64);
             }
         }
         None
@@ -470,7 +472,7 @@ impl QueryCache {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        let count_bytes = cache.count_bytes() as i64;
+        let count_bytes = cache.memory_count_bytes() as i64;
         self.metrics.count_bytes.set(count_bytes);
         self.metrics.len.set(cache.len() as i64);
     }

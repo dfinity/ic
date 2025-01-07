@@ -756,7 +756,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
         .unwrap());
 
     assert_eq!(
-        -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
+        -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.memory_count_bytes() as i64,
         subnet_available_memory
     );
 }

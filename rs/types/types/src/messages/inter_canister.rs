@@ -44,7 +44,7 @@ pub struct CallbackIdTag;
 pub type CallbackId = Id<CallbackIdTag, u64>;
 
 impl CountBytes for CallbackId {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<CallbackId>()
     }
 }
@@ -576,10 +576,10 @@ impl RequestOrResponse {
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
+/// `RequestOrResponse::Request(self).memory_count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Request {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
             + self.payload_size_bytes().get() as usize
@@ -587,10 +587,10 @@ impl CountBytes for Request {
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponse::Response(self).count_bytes()`, so we don't need to wrap
+/// `RequestOrResponse::Response(self).memory_count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Response {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Response>()
             + self.payload_size_bytes().get() as usize
@@ -598,10 +598,10 @@ impl CountBytes for Response {
 }
 
 impl CountBytes for RequestOrResponse {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         match self {
-            RequestOrResponse::Request(req) => req.count_bytes(),
-            RequestOrResponse::Response(resp) => resp.count_bytes(),
+            RequestOrResponse::Request(req) => req.memory_count_bytes(),
+            RequestOrResponse::Response(resp) => resp.memory_count_bytes(),
         }
     }
 }

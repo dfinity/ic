@@ -2179,14 +2179,14 @@ fn test_stats_best_effort() {
     let request2_ = request(2, t10);
     let request3 = request(3, t10);
     let request4 = request(4, t10);
-    let request_size_bytes = request1_.count_bytes();
-    assert_eq!(request_size_bytes, request2_.count_bytes());
-    assert_eq!(request_size_bytes, request3.count_bytes());
-    assert_eq!(request_size_bytes, request4.count_bytes());
+    let request_size_bytes = request1_.memory_count_bytes();
+    assert_eq!(request_size_bytes, request2_.memory_count_bytes());
+    assert_eq!(request_size_bytes, request3.memory_count_bytes());
+    assert_eq!(request_size_bytes, request4.memory_count_bytes());
     let response1 = response_with_payload(1000, 1, t20);
     let response2 = response_with_payload(1000, 2, t20);
-    let response_size_bytes = response1.count_bytes();
-    assert_eq!(response_size_bytes, response2.count_bytes());
+    let response_size_bytes = response1.memory_count_bytes();
+    assert_eq!(response_size_bytes, response2.memory_count_bytes());
 
     // Make reservations for the responses.
     assert!(queues.push_input(request1_.into(), LocalSubnet).unwrap());
@@ -2281,7 +2281,7 @@ fn test_stats_best_effort() {
     // Only one best-effort reject response (the dropped response is no longer in
     // the pool).
     let reject_response = generate_timeout_response(&request4);
-    let reject_response_size_bytes = reject_response.count_bytes();
+    let reject_response_size_bytes = reject_response.memory_count_bytes();
     assert_eq!(
         &message_pool::MessageStats {
             size_bytes: reject_response_size_bytes,
@@ -2333,16 +2333,16 @@ fn test_stats_guaranteed_response() {
     let request2_ = request_with_payload(100, 2, NO_DEADLINE);
     let request3 = request_with_payload(100, 3, NO_DEADLINE);
     let request4 = request_with_payload(100, 4, NO_DEADLINE);
-    let request_size_bytes = request1_.count_bytes();
-    assert_eq!(request_size_bytes, request2_.count_bytes());
-    assert_eq!(request_size_bytes, request3.count_bytes());
-    assert_eq!(request_size_bytes, request4.count_bytes());
+    let request_size_bytes = request1_.memory_count_bytes();
+    assert_eq!(request_size_bytes, request2_.memory_count_bytes());
+    assert_eq!(request_size_bytes, request3.memory_count_bytes());
+    assert_eq!(request_size_bytes, request4.memory_count_bytes());
     let response1 = response(1, NO_DEADLINE);
     let response2 = response(2, NO_DEADLINE);
     let response4_ = response(4, NO_DEADLINE);
-    let response_size_bytes = response1.count_bytes();
-    assert_eq!(response_size_bytes, response2.count_bytes());
-    assert_eq!(response_size_bytes, response4_.count_bytes());
+    let response_size_bytes = response1.memory_count_bytes();
+    assert_eq!(response_size_bytes, response2.memory_count_bytes());
+    assert_eq!(response_size_bytes, response4_.memory_count_bytes());
 
     // Make reservations for the responses.
     assert!(queues.push_input(request1_.into(), LocalSubnet).unwrap());
@@ -2469,13 +2469,13 @@ fn test_stats_oversized_requests() {
         1,
         SOME_DEADLINE,
     );
-    let best_effort_size_bytes = best_effort.count_bytes();
+    let best_effort_size_bytes = best_effort.memory_count_bytes();
     let guaranteed = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 2000,
         2,
         NO_DEADLINE,
     );
-    let guaranteed_size_bytes = guaranteed.count_bytes();
+    let guaranteed_size_bytes = guaranteed.memory_count_bytes();
     // The 2000 bytes we added above; plus the method name provided by
     // `RequestBuilder`; plus any difference in size between the `Request` and
     // `Response` structs, so better compute it.

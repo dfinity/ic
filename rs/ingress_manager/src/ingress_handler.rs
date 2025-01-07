@@ -161,7 +161,7 @@ impl IngressManager {
         registry_version: RegistryVersion,
     ) -> Result<(), IngressMessageValidationError> {
         // If the message is too large, consider the ingress message invalid
-        let size = ingress_object.count_bytes();
+        let size = ingress_object.memory_count_bytes();
         if size > settings.max_ingress_bytes_per_message {
             return Err(IngressMessageValidationError::IngressMessageTooLarge {
                 max: settings.max_ingress_bytes_per_message,

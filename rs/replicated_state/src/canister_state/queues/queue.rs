@@ -490,7 +490,7 @@ impl IngressQueue {
 
     /// Returns an estimate of the size of an ingress message in bytes.
     fn ingress_size_bytes(msg: &Ingress) -> usize {
-        size_of::<Arc<Ingress>>() + msg.count_bytes()
+        size_of::<Arc<Ingress>>() + msg.memory_count_bytes()
     }
 
     /// Calculates the size in bytes of an `IngressQueue` holding the given
@@ -527,7 +527,7 @@ impl Default for IngressQueue {
 
 impl CountBytes for IngressQueue {
     /// Estimate of the queue size in bytes, including metadata.
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.size_bytes
     }
 }

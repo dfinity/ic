@@ -283,7 +283,7 @@ fn memory_taken_by_canister_queues() {
 
     // Memory used by response only.
     assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_message_memory_taken(response.memory_count_bytes(), &fixture);
     assert_canister_history_memory_taken(0, &fixture);
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
@@ -336,7 +336,7 @@ fn memory_taken_by_subnet_queues() {
 
     // Memory used by response only.
     assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_message_memory_taken(response.memory_count_bytes(), &fixture);
     assert_canister_history_memory_taken(0, &fixture);
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
@@ -360,7 +360,7 @@ fn memory_taken_by_stream_responses() {
 
     // Memory only used by response, not request.
     assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_message_memory_taken(response.memory_count_bytes(), &fixture);
     assert_canister_history_memory_taken(0, &fixture);
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
@@ -756,7 +756,7 @@ fn enforce_best_effort_message_limit() {
         let mut request = request_to(*receiver);
         request.deadline = SOME_DEADLINE;
         request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
-        message_sizes.push(NumBytes::from(request.count_bytes() as u64));
+        message_sizes.push(NumBytes::from(request.memory_count_bytes() as u64));
         assert!(fixture.push_input(request.into()).unwrap());
     }
 

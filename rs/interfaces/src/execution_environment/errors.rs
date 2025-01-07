@@ -386,7 +386,7 @@ impl std::fmt::Display for HypervisorError {
 }
 
 impl CountBytes for HypervisorError {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
     }
 }

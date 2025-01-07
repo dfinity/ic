@@ -1089,7 +1089,7 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
             RejectCode::CanisterError,
             format!(
                 "Cannot induct request. Out of memory: requested {}",
-                request.count_bytes().max(MAX_RESPONSE_COUNT_BYTES),
+                request.memory_count_bytes().max(MAX_RESPONSE_COUNT_BYTES),
             ),
         ),
         RejectReason::Unknown => (

@@ -97,7 +97,7 @@ proptest! {
                 assert!(!payload.is_empty());
 
                 // Check the size explicitly
-                assert!((payload.count_bytes() as u64) < MAX_BLOCK_SIZE);
+                assert!((payload.memory_count_bytes() as u64) < MAX_BLOCK_SIZE);
 
                 // Any payload generated should pass verification.
                 // If not, we have an issue with the payload builder

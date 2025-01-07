@@ -225,13 +225,13 @@ impl IngressValidator {
         let registry_version = registry_client.get_latest_version();
         let (ingress_registry_settings, provisional_whitelist) =
             get_registry_data(&log, subnet_id, registry_version, registry_client.as_ref())?;
-        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+        if msg.memory_count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
             Err(HttpError {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 message: format!(
                 "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
                 message_id,
-                msg.count_bytes(),
+                msg.memory_count_bytes(),
                 ingress_registry_settings.max_ingress_bytes_per_message
             ),
             })?;

@@ -230,7 +230,7 @@ fn legacy_induct_loopback_stream_reject_response() {
                 RejectReason::CanisterNotFound,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+            let reject_response_count_bytes = reject_response.memory_count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a loopback stream with begin advanced and a reject response.
@@ -311,7 +311,7 @@ fn induct_loopback_stream_reroute_response() {
             // the request @23 is expected to trigger a reject response which is inducted
             // successfully.
             let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22);
-            let inducted_response_count_bytes = inducted_response.count_bytes();
+            let inducted_response_count_bytes = inducted_response.memory_count_bytes();
             push_inputs(
                 &mut expected_state,
                 [
@@ -408,7 +408,7 @@ fn legacy_induct_loopback_stream_reroute_response() {
             );
             // The response @22 is expected to be inducted successfully.
             let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22).clone();
-            let inducted_response_count_bytes = inducted_response.count_bytes();
+            let inducted_response_count_bytes = inducted_response.memory_count_bytes();
             push_input(&mut expected_state, inducted_response);
 
             // The request @23 is expected to trigger a reject response in the loopback stream.
@@ -416,7 +416,7 @@ fn legacy_induct_loopback_stream_reroute_response() {
                 RejectReason::CanisterMigrating,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+            let reject_response_count_bytes = reject_response.memory_count_bytes();
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 25,
                 messages: vec![reject_response],
@@ -502,7 +502,7 @@ fn induct_loopback_stream_success() {
                 &mut expected_state,
                 messages_in_stream(loopback_stream, 21..=22),
             );
-            let response_count_bytes = response_in_stream(loopback_stream, 22).count_bytes();
+            let response_count_bytes = response_in_stream(loopback_stream, 22).memory_count_bytes();
 
             // The loopback stream should be empty with `begin` and `signals_end` advanced.
             let loopback_stream = stream_from_config(StreamConfig {
@@ -1286,7 +1286,7 @@ fn garbage_collect_local_state_success() {
             let mut expected_state = state.clone();
             // The expected stream has the first two messages gc'ed and the stream flags set.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
-            let response_count_bytes = response_in_stream(outgoing_stream, 32).count_bytes();
+            let response_count_bytes = response_in_stream(outgoing_stream, 32).memory_count_bytes();
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 33,
                 messages: vec![message_in_stream(outgoing_stream, 33).clone()],
@@ -2308,7 +2308,7 @@ fn induct_stream_slices_partial_success() {
                 messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
             );
             let response_count_bytes =
-                response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
+                response_in_slice(slices.get(&REMOTE_SUBNET), 45).memory_count_bytes();
 
             // The expected stream has...
             let expected_stream = stream_from_config(StreamConfig {
@@ -2434,13 +2434,13 @@ fn legacy_induct_stream_slices_partial_success() {
                 messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
             );
             let response_count_bytes =
-                response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
+                response_in_slice(slices.get(&REMOTE_SUBNET), 45).memory_count_bytes();
 
             let reject_response = generate_reject_response_for(
                 RejectReason::CanisterNotFound,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 46),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+            let reject_response_count_bytes = reject_response.memory_count_bytes();
 
             // The expected stream has...
             let expected_stream = stream_from_config(StreamConfig {
@@ -2742,7 +2742,7 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+            let reject_response_count_bytes = reject_response.memory_count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2926,7 +2926,7 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+            let reject_response_count_bytes = reject_response.memory_count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...

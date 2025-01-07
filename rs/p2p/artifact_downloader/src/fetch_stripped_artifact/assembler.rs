@@ -198,7 +198,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             } else {
                 self.metrics
                     .missing_ingress_messages_bytes
-                    .observe(ingress.count_bytes() as f64);
+                    .observe(ingress.memory_count_bytes() as f64);
                 ingress_messages_from_peers += 1;
             }
 

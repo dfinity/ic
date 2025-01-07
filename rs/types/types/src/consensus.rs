@@ -1422,14 +1422,14 @@ impl TryFrom<pb::Block> for Block {
 }
 
 impl CountBytes for NiDkgId {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
     }
 }
 
 impl<T> CountBytes for ThresholdSignature<T> {
-    fn count_bytes(&self) -> usize {
-        self.signature.get_ref().0.len() + self.signer.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.signature.get_ref().0.len() + self.signer.memory_count_bytes()
     }
 }
 

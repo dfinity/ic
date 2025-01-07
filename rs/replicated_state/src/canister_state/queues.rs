@@ -1242,7 +1242,7 @@ impl CanisterQueues {
 
     /// Returns the total byte size of enqueued ingress messages.
     pub fn ingress_queue_size_bytes(&self) -> usize {
-        self.ingress_queue.count_bytes()
+        self.ingress_queue.memory_count_bytes()
     }
 
     /// Returns the number of non-stale canister messages enqueued in input queues.
@@ -2015,8 +2015,8 @@ impl QueueStats {
 ///    always return memory.
 ///  * `Ok(())` if `msg` is a guaranteed response `Request` and
 ///    `available_memory` is sufficient.
-///  * `Err(msg.count_bytes())` if `msg` is a guaranteed response `Request` and
-///    `msg.count_bytes() > available_memory`.
+///  * `Err(msg.memory_count_bytes())` if `msg` is a guaranteed response `Request` and
+///    `msg.memory_count_bytes() > available_memory`.
 pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), usize> {
     match msg {
         RequestOrResponse::Request(req) => {
@@ -2036,13 +2036,13 @@ pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), us
 ///
 /// For best-effort requests, this is always zero. For guaranteed response
 /// requests, this is the maximum of `MAX_RESPONSE_COUNT_BYTES` (to be reserved
-/// for a guaranteed response) and `req.count_bytes()` (if larger).
+/// for a guaranteed response) and `req.memory_count_bytes()` (if larger).
 pub fn memory_required_to_push_request(req: &Request) -> usize {
     if req.deadline != NO_DEADLINE {
         return 0;
     }
 
-    req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
+    req.memory_count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
 }
 
 pub mod testing {

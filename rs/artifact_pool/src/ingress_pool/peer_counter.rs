@@ -41,15 +41,19 @@ impl PeerCounters {
 
     pub(super) fn observe(&mut self, ingress_message: &IngressPoolObject) {
         self.message_counters.add(ingress_message.originator_id, 1);
-        self.bytes_counters
-            .add(ingress_message.originator_id, ingress_message.count_bytes());
+        self.bytes_counters.add(
+            ingress_message.originator_id,
+            ingress_message.memory_count_bytes(),
+        );
     }
 
     pub(super) fn forget(&mut self, ingress_message: &IngressPoolObject) {
         self.message_counters
             .subtract(ingress_message.originator_id, 1);
-        self.bytes_counters
-            .subtract(ingress_message.originator_id, ingress_message.count_bytes());
+        self.bytes_counters.subtract(
+            ingress_message.originator_id,
+            ingress_message.memory_count_bytes(),
+        );
     }
 
     pub(super) fn count_total_bytes(&self) -> usize {
@@ -140,7 +144,7 @@ mod tests {
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_2, 2);
         let ingress_message_3 = fake_ingress_pool_object(NODE_2, 3);
-        let message_size = ingress_message_1.count_bytes();
+        let message_size = ingress_message_1.memory_count_bytes();
 
         peer_counters.observe(&ingress_message_1);
         peer_counters.observe(&ingress_message_2);
@@ -162,7 +166,7 @@ mod tests {
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_2, 2);
         let ingress_message_3 = fake_ingress_pool_object(NODE_2, 3);
-        let message_size = ingress_message_1.count_bytes();
+        let message_size = ingress_message_1.memory_count_bytes();
 
         peer_counters.observe(&ingress_message_1);
         peer_counters.observe(&ingress_message_2);

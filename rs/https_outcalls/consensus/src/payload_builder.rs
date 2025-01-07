@@ -227,7 +227,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 .iter()
             {
                 unique_includable_responses += 1;
-                let candidate_size = callback_id.count_bytes();
+                let candidate_size = callback_id.memory_count_bytes();
                 let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                 if size >= max_payload_size {
                     // All timeouts have the same size, so we can stop iterating.
@@ -325,7 +325,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 match candidate_or_divergence {
                     CandidateOrDivergence::Candidate((metadata, shares, content)) => {
                         let candidate_size =
-                            size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                            size_of::<CanisterHttpResponseProof>() + content.memory_count_bytes();
                         let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                         if size < max_payload_size {
                             candidates.push((metadata.clone(), shares, content));
@@ -334,7 +334,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
                     CandidateOrDivergence::Divergence(divergence) => {
-                        let divergence_size = divergence.count_bytes();
+                        let divergence_size = divergence.memory_count_bytes();
                         let size = NumBytes::new((accumulated_size + divergence_size) as u64);
                         if size < max_payload_size {
                             divergence_responses.push(divergence);

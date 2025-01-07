@@ -303,7 +303,7 @@ impl StreamBuilderImpl {
             let stream_messages_len = stream.messages().len();
 
             if stream_messages_len >= max_stream_messages
-                || stream.count_bytes() >= target_stream_size_bytes
+                || stream.memory_count_bytes() >= target_stream_size_bytes
             {
                 // At limit if message count or byte size limits (enforced across all outgoing
                 // streams) are hit.
@@ -504,7 +504,7 @@ impl StreamBuilderImpl {
                 (
                     subnet.to_string(),
                     stream.messages().len(),
-                    stream.count_bytes(),
+                    stream.memory_count_bytes(),
                     stream.messages_begin(),
                     stream.signals_end(),
                 )

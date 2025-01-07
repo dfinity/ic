@@ -522,37 +522,59 @@ impl TryFrom<NumBytes> for MemoryAllocation {
     }
 }
 
-/// Allow an object to report its own byte size. It is only meant to be an
-/// estimate, and not an exact measure of its heap usage or length of serialized
-/// bytes.
+/// Allow an object to report its own byte size in memory and on disk. It is
+/// only meant to be an estimate, and not an exact measure of its heap usage,
+/// disk usage, or length of serialized bytes.
 pub trait CountBytes {
-    fn count_bytes(&self) -> usize;
+    fn memory_count_bytes(&self) -> usize;
+    fn disk_count_bytes(&self) -> usize {
+        0
+    }
 }
 
 impl CountBytes for Time {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         8
+    }
+
+    fn disk_count_bytes(&self) -> usize {
+        0
     }
 }
 
 impl<T: CountBytes, E: CountBytes> CountBytes for Result<T, E> {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         match self {
-            Ok(result) => result.count_bytes(),
-            Err(err) => err.count_bytes(),
+            Ok(result) => result.memory_count_bytes(),
+            Err(err) => err.memory_count_bytes(),
+        }
+    }
+
+    fn disk_count_bytes(&self) -> usize {
+        match self {
+            Ok(result) => result.disk_count_bytes(),
+            Err(err) => err.disk_count_bytes(),
         }
     }
 }
 
 impl<T: CountBytes> CountBytes for Arc<T> {
-    fn count_bytes(&self) -> usize {
-        self.as_ref().count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.as_ref().memory_count_bytes()
+    }
+
+    fn disk_count_bytes(&self) -> usize {
+        self.as_ref().disk_count_bytes()
     }
 }
 
 // Implementing `CountBytes` in `ic_error_types` introduces a circular dependency.
 impl CountBytes for ic_error_types::UserError {
-    fn count_bytes(&self) -> usize {
-        self.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.memory_count_bytes()
+    }
+
+    fn disk_count_bytes(&self) -> usize {
+        0
     }
 }

@@ -88,8 +88,8 @@ pub struct Signed<T, S> {
 }
 
 impl<T: CountBytes, S: CountBytes> CountBytes for Signed<T, S> {
-    fn count_bytes(&self) -> usize {
-        self.content.count_bytes() + self.signature.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.content.memory_count_bytes() + self.signature.memory_count_bytes()
     }
 }
 
@@ -281,7 +281,7 @@ impl fmt::Display for UserPublicKey {
 }
 
 impl CountBytes for UserPublicKey {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.key.len()
     }
 }
@@ -646,14 +646,14 @@ impl fmt::Debug for BasicSig {
 pub type BasicSigOf<T> = Id<T, BasicSig>; // Use newtype instead? E.g., `pub struct BasicSigOf<T>(Id<T, BasicSig>);`
 
 impl CountBytes for BasicSig {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.0.len()
     }
 }
 
 impl<T: CountBytes> CountBytes for BasicSigOf<T> {
-    fn count_bytes(&self) -> usize {
-        self.get_ref().count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.get_ref().memory_count_bytes()
     }
 }
 
@@ -664,14 +664,14 @@ pub struct IndividualMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 pub type IndividualMultiSigOf<T> = Id<T, IndividualMultiSig>; // Use newtype instead?
 
 impl CountBytes for IndividualMultiSig {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.0.len()
     }
 }
 
 impl<T: CountBytes> CountBytes for IndividualMultiSigOf<T> {
-    fn count_bytes(&self) -> usize {
-        self.get_ref().count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.get_ref().memory_count_bytes()
     }
 }
 
@@ -694,14 +694,14 @@ pub struct CombinedMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 pub type CombinedMultiSigOf<T> = Id<T, CombinedMultiSig>; // Use newtype instead?
 
 impl CountBytes for CombinedMultiSig {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.0.len()
     }
 }
 
 impl<T: CountBytes> CountBytes for CombinedMultiSigOf<T> {
-    fn count_bytes(&self) -> usize {
-        self.get_ref().count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.get_ref().memory_count_bytes()
     }
 }
 

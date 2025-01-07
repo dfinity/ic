@@ -179,7 +179,7 @@ fn build_streams_success() {
             ),
             Default::default(),
         );
-        let expected_stream_bytes = expected_stream.count_bytes() as u64;
+        let expected_stream_bytes = expected_stream.memory_count_bytes() as u64;
         let expected_stream_begin = expected_stream.messages_begin().get();
         let expected_signals_end = expected_stream.signals_end().get();
 
@@ -288,7 +288,7 @@ fn build_streams_local_canisters() {
             ),
             Default::default(),
         );
-        let expected_stream_bytes = expected_stream.count_bytes() as u64;
+        let expected_stream_bytes = expected_stream.memory_count_bytes() as u64;
 
         // The expected_canister_states contains both the source canisters with consumed
         // messages, but also the destination canisters of all messages.
@@ -386,7 +386,8 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
-                Stream::new(StreamIndexedQueue::default(), Default::default()).count_bytes() as u64
+                Stream::new(StreamIndexedQueue::default(), Default::default()).memory_count_bytes()
+                    as u64
             )]),
             nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES))
         );
@@ -421,7 +422,7 @@ fn build_streams_impl_respects_limits(
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
         let msg_count = msgs.len();
         // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.first().unwrap().count_bytes() as u64;
+        let msg_size = msgs.first().unwrap().memory_count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,
@@ -499,7 +500,8 @@ fn build_streams_impl_respects_limits(
         assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
-                Stream::new(StreamIndexedQueue::default(), Default::default()).count_bytes() as u64
+                Stream::new(StreamIndexedQueue::default(), Default::default()).memory_count_bytes()
+                    as u64
                     + expected_messages * msg_size
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
@@ -611,7 +613,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
             ),
             Default::default(),
         );
-        let expected_stream_bytes = expected_stream.count_bytes() as u64;
+        let expected_stream_bytes = expected_stream.memory_count_bytes() as u64;
 
         // Expected ReplicatedState has the message routed from the canister output
         // queue into the remote stream.
@@ -804,7 +806,7 @@ fn build_streams_with_oversized_payloads() {
         expected_stream_messages.push(data_response_reject.into());
         expected_stream_messages.push(reject_response_reject.into());
         let expected_stream = Stream::new(expected_stream_messages, Default::default());
-        let expected_stream_bytes = expected_stream.count_bytes() as u64;
+        let expected_stream_bytes = expected_stream.memory_count_bytes() as u64;
         expected_state.modify_streams(|streams| {
             streams.insert(LOCAL_SUBNET, expected_stream);
         });
@@ -922,7 +924,7 @@ fn requests_into_queue_round_robin(
                     }
                 }
                 let req: RequestOrResponse = request.into();
-                bytes_routed += req.count_bytes() as u64;
+                bytes_routed += req.memory_count_bytes() as u64;
                 queue.push(req);
                 requests.push_back((dst, req_queue));
             }

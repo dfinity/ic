@@ -253,7 +253,7 @@ impl BitcoinPayloadBuilder {
 
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, since);
-        let size = NumBytes::new(payload.count_bytes() as u64);
+        let size = NumBytes::new(payload.memory_count_bytes() as u64);
 
         Ok(size)
     }
@@ -295,7 +295,7 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             }
         };
 
-        let size = NumBytes::new(payload.count_bytes() as u64);
+        let size = NumBytes::new(payload.memory_count_bytes() as u64);
         (payload, size.min(byte_limit))
     }
 

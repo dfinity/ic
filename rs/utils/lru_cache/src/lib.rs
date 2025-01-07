@@ -24,8 +24,12 @@ where
     K: CountBytes + Eq + Hash,
     V: CountBytes,
 {
-    fn count_bytes(&self) -> usize {
-        self.size
+    fn memory_count_bytes(&self) -> usize {
+        self.memory_size
+    }
+
+    fn disk_count_bytes(&self) -> usize {
+        self.disk_size
     }
 }
 

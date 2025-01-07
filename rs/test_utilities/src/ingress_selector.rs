@@ -67,7 +67,7 @@ impl IngressSelector for FakeIngressSelector {
             .find(|(_, payloads)| {
                 (payloads
                     .iter()
-                    .map(|payload| payload.count_bytes())
+                    .map(|payload| payload.memory_count_bytes())
                     .sum::<usize>() as u64)
                     < byte_limit.get()
             })
