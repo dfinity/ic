@@ -3238,6 +3238,11 @@ impl StateMachine {
         (self.ingress_history_reader.get_latest_status())(msg_id)
     }
 
+    /// Returns the caller of the ingress message with the specified ID if available.
+    pub fn ingress_caller(&self, msg_id: &MessageId) -> Option<UserId> {
+        self.get_latest_state().get_ingress_status(msg_id).user_id()
+    }
+
     /// Starts the canister with the specified ID.
     pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         self.start_canister_as(PrincipalId::new_anonymous(), canister_id)
