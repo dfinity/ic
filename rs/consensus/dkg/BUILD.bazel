@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,7 +17,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:slog",
-
 ]
 
 DEV_DEPENDENCIES = [
@@ -31,8 +29,8 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "//rs/test_utilities/types",
     "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
 ]
 
 rust_library(
