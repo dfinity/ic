@@ -475,14 +475,6 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
-                            validate_eq_checkpoint(
-                                &checkpoint_layout,
-                                &replicated_state,
-                                own_subnet_type,
-                                Some(&mut thread_pool),
-                                fd_factory,
-                                &metrics.checkpoint_metrics,
-                            );
                         }
 
                         TipRequest::Noop => {}

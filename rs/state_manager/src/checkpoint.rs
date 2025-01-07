@@ -1,7 +1,7 @@
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::error;
+use ic_logger::{error, fatal};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
@@ -364,7 +364,7 @@ pub fn validate_eq_checkpoint(
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) {
     let report_critical_error = |err: String| {
-        error!(
+        fatal!(
             &metrics.log,
             "{}: Replicated state altered: {}",
             CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
