@@ -15,11 +15,12 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
         let mut config = if u.ratio(1, 2)? {
             let mut config = ic_wasm_config(ic_embedders_config());
             config.exports = generate_exports(ic_embedders_config(), u)?;
+            config.min_data_segments = 2;
+            config.max_data_segments = 10;
             config
         } else {
             Config::arbitrary(u)?
         };
-
         config.allow_invalid_funcs = true;
         config.memory_offset_choices = MemoryOffsetChoices(40, 20, 40);
         Ok(MaybeInvalidModule(Module::new(config, u)?))
@@ -27,9 +28,24 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
 }
 
 #[inline(always)]
-pub fn run_fuzzer(module: MaybeInvalidModule) {
+pub fn run_fuzzer(module: &[u8]) {
     let config = ic_embedders_config();
-    let wasm = module.0.to_bytes();
+    let mut u = Unstructured::new(module);
+
+    // Arbitrary Wasm module generation probabilities
+    // 33% - Random bytes
+    // 33% - Wasm with arbitrary wasm-smith config + maybe invalid functions
+    // 33% - IC complaint wasm + maybe invalid functions
+
+    let wasm = if u.ratio(1, 3).unwrap() {
+        let mut wasm: Vec<u8> = b"\x00asm".to_vec();
+        wasm.extend_from_slice(module);
+        wasm
+    } else {
+        let module = <MaybeInvalidModule as Arbitrary>::arbitrary_take_rest(u)
+            .expect("Unable to extract wasm from Unstructured data");
+        module.0.to_bytes()
+    };
 
     let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(3)
@@ -81,14 +97,10 @@ pub fn run_fuzzer(module: MaybeInvalidModule) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arbitrary::{Arbitrary, Unstructured};
 
     #[test]
     fn test_compile_wasm_using_embedder_single_run() {
         let arbitrary_str: &str = "this is a test string";
-        let unstrucutred = Unstructured::new(arbitrary_str.as_bytes());
-        let module = <MaybeInvalidModule as Arbitrary>::arbitrary_take_rest(unstrucutred)
-            .expect("Unable to extract wasm from Unstructured data");
-        run_fuzzer(module);
+        run_fuzzer(arbitrary_str.as_bytes());
     }
 }
