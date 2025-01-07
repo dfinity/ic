@@ -2,7 +2,7 @@ use candid::{Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::{CanisterIdRecord, CanisterSettingsArgsBuilder, Method};
 use ic_state_machine_tests::StateMachine;
-use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -204,5 +204,34 @@ fn test_postponing_raw_rand_management_message() {
             .raw_rand_contexts
             .len(),
         1
+    );
+    // now we execute the actual raw_rand
+    sm.tick();
+    assert_eq!(
+        sm.get_latest_state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+    assert_eq!(
+        fetch_histogram_stats(
+            sm.metrics_registry(),
+            "execution_round_subnet_queue_messages",
+        ),
+        // we executed 3 messages of this type:
+        // - create_canister
+        // - install_code
+        // - postpone raw_rand
+        Some(HistogramStats { sum: 3.0, count: 7 })
+    );
+    assert_eq!(
+        fetch_histogram_stats(
+            sm.metrics_registry(),
+            "execution_round_postponed_raw_rand_queue_messages",
+        ),
+        // we executed 1 message of this type: execute the postponed raw_rand
+        Some(HistogramStats { sum: 1.0, count: 4 })
     );
 }

@@ -6322,68 +6322,6 @@ fn charge_idle_canisters_for_full_execution_round() {
 }
 
 // #[test]
-// fn test_execute_raw_rand_routed_by_message_routing() {
-//     let mut test = SchedulerTestBuilder::new().build();
-
-//     let sender_id = test.create_canister_with(
-//         Cycles::new(10_000_000_000_000),
-//         ComputeAllocation::zero(),
-//         MemoryAllocation::BestEffort,
-//         Some(SystemMethod::CanisterHeartbeat),
-//         None,
-//         None,
-//     );
-//     test.expect_heartbeat(sender_id, instructions(100));
-
-//     // Added directly in the subnet queues.
-//     // Will be executed immediately.
-//     test.inject_call_to_ic00(
-//         Method::RawRand,
-//         EmptyBlob.encode(),
-//         Cycles::zero(),
-//         canister_test_id(10),
-//         InputQueueType::LocalSubnet,
-//     );
-
-//     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
-//     assert_eq!(
-//         test.state().subnet_queues().output_queues_message_count(),
-//         0
-//     );
-//     assert_eq!(
-//         test.state()
-//             .metadata
-//             .subnet_call_context_manager
-//             .raw_rand_contexts
-//             .len(),
-//         0
-//     );
-
-//     // After executing a round, the raw request is executed.
-//     test.execute_round(ExecutionRoundType::OrdinaryRound);
-//     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
-//     assert_eq!(
-//         test.state().subnet_queues().output_queues_message_count(),
-//         1
-//     );
-//     assert_eq!(
-//         test.state()
-//             .metadata
-//             .subnet_call_context_manager
-//             .raw_rand_contexts
-//             .len(),
-//         0
-//     );
-//     assert_eq!(
-//         fetch_histogram_stats(
-//             test.metrics_registry(),
-//             "execution_round_subnet_queue_messages",
-//         ),
-//         Some(HistogramStats { sum: 1.0, count: 3 })
-//     );
-// }
-
-// #[test]
 // fn test_inner_round_loop_with_multiple_same_subnet_install_code() {
 //     let mut test = SchedulerTestBuilder::new()
 //         .with_scheduler_config(SchedulerConfig {
