@@ -136,11 +136,11 @@ generate_nns_upgrade_proposal_text() {
     PRIMARY_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
     UNRELEASED_CHANGELOG_PATH="${PRIMARY_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
     if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
-        FEATURES_AND_FIXES=$( \
+        FEATURES_AND_FIXES=$(
             sed -n '/# Next Upgrade Proposal/,$p' \
                 "${UNRELEASED_CHANGELOG_PATH}" \
                 | tail -n +3 \
-                | sed 's/^## /### /g' \
+                | sed 's/^## /### /g'
         )
     fi
 
