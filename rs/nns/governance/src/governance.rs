@@ -2325,11 +2325,9 @@ impl Governance {
 
         const MAX_LIST_NEURONS_COUNT: usize = 500;
 
-        let mut requested_neuron_ids = requested_neuron_ids.into_iter();
-        let mut count = 0;
         let mut next_start_from_neuron_id = None;
         // Populate the above two neuron collections.
-        for neuron_id in &mut requested_neuron_ids {
+        for (count, neuron_id) in &mut requested_neuron_ids.into_iter().enumerate() {
             if count >= MAX_LIST_NEURONS_COUNT {
                 next_start_from_neuron_id = Some(neuron_id.id);
                 break;
@@ -2368,8 +2366,6 @@ impl Governance {
                     full_neurons.push(api::Neuron::from(proto));
                 }
             });
-            // See if we should exit
-            count += 1;
         }
 
         // Assemble final result.

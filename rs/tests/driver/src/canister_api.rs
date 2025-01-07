@@ -738,6 +738,7 @@ impl ListNnsNeuronsRequest {
                 include_neurons_readable_by_caller,
                 include_empty_neurons_readable_by_caller: None,
                 include_public_neurons_in_full_neurons: None,
+                start_from_neuron_id: None,
             },
         }
     }
