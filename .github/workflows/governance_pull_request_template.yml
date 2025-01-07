@@ -3,9 +3,7 @@ name: Remind Governance Team to Update unreleased_changelog.md.
 on:
   pull_request:
     types:
-      - assigned
-      - ready_for_review
-      - review_requested
+      - labeled
 
 jobs:
   mainJob:
@@ -13,23 +11,11 @@ jobs:
     steps:
       - uses: actions/github-script@v6
         id: mainStep
+        if: contains(github.event.pull_request.labels.*.name, '@nns-team')
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
           script: |
-            // nns-team is automatically added as a reviewer if an approval from
-            // nns-team is required. Therefore, this only skips posting a
-            // reminder when nns-team approval is not required.
-            const nnsTeamReviewRequested = context
-              .payload
-              .pull_request
-              .requested_teams
-              .some(team => team.name == 'nns-team')
-            console.log("nnsTeamReviewRequested = " + nnsTeamReviewRequested);
-            if (!nnsTeamReviewRequested) {
-              return;
-            }
-
             const pullRequestNumber = context.payload.number;
 
             // Skip reminder if we already reminded (to avoid spam).
