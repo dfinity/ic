@@ -3317,7 +3317,37 @@ mod tests {
             }
         }
 
-        // Case C: legacy memo is 0, and ircr1_memo is None.
+        // Case C: icrc1's memo is used, but is not of length 8, and we
+        // therefore do not consider it to contain a (little endian) u64.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(vec![1, 2, 3])),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case D: legacy memo is 0, and ircr1_memo is None.
         {
             let transaction = Transaction {
                 memo: Memo(0),
