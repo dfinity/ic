@@ -1,12 +1,13 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
-use futures::stream;
-use futures::StreamExt;
+use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
+use ic_nervous_system_agent::{
+    pocketic_impl::{PocketIcAgent, PocketIcCallError},
+    sns::Sns,
+    CallCanisters,
+};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -60,8 +61,7 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
-use itertools::EitherOrBoth;
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{
     management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
@@ -69,8 +69,7 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::ops::Range;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, ops::Range, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -833,6 +832,7 @@ pub mod nns {
                         include_neurons_readable_by_caller: true,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        start_from_neuron_id: None
                     })
                     .unwrap(),
                 )
@@ -1366,8 +1366,9 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
-        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-        use ic_sns_governance::pb::v1::get_neuron_response;
+        use ic_sns_governance::{
+            governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1::get_neuron_response,
+        };
         use pocket_ic::ErrorCode;
         use sns_pb::UpgradeSnsControlledCanister;
 
