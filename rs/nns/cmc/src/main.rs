@@ -3237,7 +3237,7 @@ mod tests {
         // to 0.
         let transaction_with_icrc1_memo = Transaction {
             memo: Memo(0),
-            icrc1_memo: Some(ByteBuf::from(vec![43, 0, 0, 0, 0, 0, 0, 0])),
+            icrc1_memo: Some(ByteBuf::from(43_u64.to_le_bytes().to_vec())),
 
             // Irrelevant to this test.
             operation: operation.clone(),
