@@ -72,6 +72,7 @@ jobs:
               repo: "ic",
               pull_number: pullRequestNumber,
               body: reminderText,
+              // This is what forces the author to explicitly acknowledge.
               event: "REQUEST_CHANGES",
             });
             console.log("Reminder was added successfully.");
