@@ -2423,6 +2423,7 @@ impl Governance {
             include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller,
             include_public_neurons_in_full_neurons,
+            start_from_neuron_id,
         } = list_neurons;
 
         let include_empty_neurons_readable_by_caller = include_empty_neurons_readable_by_caller
@@ -2498,6 +2499,7 @@ impl Governance {
         ListNeuronsResponse {
             neuron_infos,
             full_neurons,
+            next_start_from_neuron_id: None,
         }
     }
 

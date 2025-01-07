@@ -2659,6 +2659,11 @@ message ListNeurons {
   // since this feature was added later, it is opt in to avoid confusing
   // existing (unmigrated) callers.
   optional bool include_public_neurons_in_full_neurons = 4;
+  // If this is set, it skips all neuron IDs until this value is reached, then returns
+  // the remaining neurons up until the internal limit is reached.  This is only needed
+  // if the caller is paginating through the list of neurons, and did not get the full
+  // list in the first request.
+  optional fixed64 start_from_neuron_id = 5;
 }
 
 // A response to a `ListNeurons` request.
@@ -2673,6 +2678,9 @@ message ListNeuronsResponse {
   // hot key, or controller or hot key of some followee on the
   // `ManageNeuron` topic).
   repeated Neuron full_neurons = 2;
+  // This is returned if there are more neurons to list.  The caller can repeat the original
+  // request with `start_from_neuron_id` set to the value of this field to get the next batch.
+  optional fixed64 next_start_from_neuron_id = 3;
 }
 
 // A response to "ListKnownNeurons"

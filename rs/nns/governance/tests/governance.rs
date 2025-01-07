@@ -2336,6 +2336,7 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![full_neuron],
+            next_start_from_neuron_id: None,
         },
     );
 }
@@ -2391,6 +2392,7 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![full_neuron],
+            next_start_from_neuron_id: None,
         },
     );
 }
@@ -10789,6 +10791,7 @@ fn test_include_public_neurons_in_full_neurons() {
 
             // This should have no effect.
             include_empty_neurons_readable_by_caller: Some(true),
+            start_from_neuron_id: None,
         },
         caller,
     );
@@ -14852,6 +14855,7 @@ fn test_neuron_info_private_enforcement() {
                         include_neurons_readable_by_caller: false,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        start_from_neuron_id: None,
                     },
                     requester,
                 )
