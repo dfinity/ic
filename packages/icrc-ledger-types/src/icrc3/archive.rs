@@ -4,7 +4,6 @@ use super::{
     blocks::{BlockRange, GetBlocksRequest},
     transactions::{GetTransactionsRequest, TransactionRange},
 };
-use crate::icrc3::blocks::GetBlocksResult;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 use std::marker::PhantomData;
