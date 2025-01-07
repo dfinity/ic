@@ -1,4 +1,4 @@
-name: Remind Governance Team to Update unreleased_changelog.md.
+name: Governance Unreleased Changelog Reminder
 
 on:
   pull_request:
