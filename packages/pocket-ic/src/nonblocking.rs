@@ -620,7 +620,10 @@ impl PocketIc {
                 };
                 IngressStatusResult::Success(result)
             }
-            Err(message) => IngressStatusResult::Forbidden(message),
+            Err((status, message)) => {
+                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for PocketIc::ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                IngressStatusResult::Forbidden(message)
+            }
         }
     }
 
@@ -1379,7 +1382,7 @@ impl PocketIc {
         &self,
         endpoint: &str,
         body: B,
-    ) -> Result<T, String> {
+    ) -> Result<T, (StatusCode, String)> {
         self.try_request(HttpMethod::Post, endpoint, body).await
     }
 
@@ -1397,7 +1400,7 @@ impl PocketIc {
         http_method: HttpMethod,
         endpoint: &str,
         body: B,
-    ) -> Result<T, String> {
+    ) -> Result<T, (StatusCode, String)> {
         // we may have to try several times if the instance is busy
         let start = std::time::SystemTime::now();
         loop {
@@ -1408,9 +1411,10 @@ impl PocketIc {
                 HttpMethod::Post => reqwest_client.post(url).json(&body),
             };
             let result = builder.send().await.expect("HTTP failure");
+            let status = result.status();
             match ApiResponse::<_>::from_response(result).await {
                 ApiResponse::Success(t) => break Ok(t),
-                ApiResponse::Error { message } => break Err(message),
+                ApiResponse::Error { message } => break Err((status, message)),
                 ApiResponse::Busy { state_label, op_id } => {
                     debug!(
                         "instance_id={} Instance is busy (with a different computation): state_label: {}, op_id: {}",
@@ -1440,9 +1444,10 @@ impl PocketIc {
                                 String::from_utf8(result.bytes().await.unwrap().to_vec()).unwrap();
                             debug!("Polling has not succeeded yet: {}", message);
                         } else {
+                            let status = result.status();
                             match ApiResponse::<_>::from_response(result).await {
                                 ApiResponse::Error { message } => {
-                                    return Err(message);
+                                    return Err((status, message));
                                 }
                                 ApiResponse::Success(t) => {
                                     return Ok(t);

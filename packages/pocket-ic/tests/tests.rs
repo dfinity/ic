@@ -1,4 +1,7 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use ic_certification::Label;
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
@@ -14,6 +17,7 @@ use pocket_ic::{
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{io::Read, time::SystemTime};
 
@@ -2009,13 +2013,9 @@ fn ingress_status() {
     pic.add_cycles(canister_id, INIT_CYCLES);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
+    let caller = Principal::from_slice(&[0xFF; 29]);
     let msg_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "whoami",
-            encode_one(()).unwrap(),
-        )
+        .submit_call(canister_id, caller, "whoami", encode_one(()).unwrap())
         .unwrap();
 
     match pic.ingress_status(msg_id.clone(), None) {
@@ -2024,8 +2024,7 @@ fn ingress_status() {
     }
 
     // since the ingress status is not available, any caller can attempt to retrieve it
-    let bogus_caller = Principal::from_slice(&[0xFF; 29]);
-    match pic.ingress_status(msg_id.clone(), Some(bogus_caller)) {
+    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
         IngressStatusResult::NotAvailable => (),
         status => panic!("Unexpected ingress status: {:?}", status),
     }
@@ -2043,14 +2042,62 @@ fn ingress_status() {
     assert_eq!(principal, canister_id.to_string());
 
     // now that the ingress status is available, the caller must match
-    match pic.ingress_status(msg_id.clone(), Some(bogus_caller)) {
-        IngressStatusResult::Forbidden(msg) => assert_eq!(
-            msg,
-            "Forbidden(\"The user tries to access Request ID not signed by the caller.\")"
-                .to_string()
-        ),
+    let expected_err = "The user tries to access Request ID not signed by the caller.";
+    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
+        IngressStatusResult::Forbidden(msg) => assert_eq!(msg, expected_err,),
         status => panic!("Unexpected ingress status: {:?}", status),
     }
+
+    // confirm the behavior of read state requests
+    let resp = read_state_request_status(&pic, canister_id, msg_id.message_id.as_slice());
+    assert_eq!(resp.status(), reqwest::StatusCode::FORBIDDEN);
+    assert_eq!(
+        String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap(),
+        expected_err
+    );
+}
+
+fn read_state_request_status(
+    pic: &PocketIc,
+    canister_id: Principal,
+    msg_id: &[u8],
+) -> reqwest::blocking::Response {
+    let path = vec!["request_status".into(), Label::from_bytes(msg_id)];
+    let paths = vec![path.clone()];
+    let content = ReadState {
+        ingress_expiry: pic
+            .get_time()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+            + 240_000_000_000,
+        sender: Principal::anonymous(),
+        paths,
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/read_state",
+        pic.instance_id(),
+        canister_id.to_text()
+    );
+    let client = reqwest::blocking::Client::new();
+    client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .unwrap()
 }
 
 #[test]
