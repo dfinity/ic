@@ -12,8 +12,8 @@ use ic_artifact_pool::{
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
-    consensus::{dkg_key_manager::DkgKeyManager, ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    consensus::{ConsensusBouncer, ConsensusImpl},
+    idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -65,7 +65,7 @@ use tower_http::trace::TraceLayer;
 /// we will reconstruct the blocks by looking up the referenced ingress messages in the ingress
 /// pool or, if they are not there, by fetching missing ingress messages from peers who are
 /// advertising the blocks.
-const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = true;
+const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = false;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
 /// This limit is used to protect against a malicious peer advertising many ingress messages.
@@ -298,7 +298,7 @@ fn start_consensus(
         log.clone(),
     ));
 
-    let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
+    let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
         log.clone(),
@@ -439,7 +439,7 @@ fn start_consensus(
         // Create the DKG client.
         let (client, jh) = create_artifact_handler(
             dkg_tx,
-            dkg::DkgImpl::new(
+            ic_consensus_dkg::DkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_crypto),
                 Arc::clone(&consensus_pool_cache),
@@ -453,7 +453,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = Arc::new(dkg::DkgBouncer::new(metrics_registry));
+        let bouncer = Arc::new(ic_consensus_dkg::DkgBouncer::new(metrics_registry));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),

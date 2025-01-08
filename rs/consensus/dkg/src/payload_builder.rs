@@ -401,7 +401,7 @@ fn compute_remote_dkg_data(
     Ok((configs, new_transcripts_vec, attempts))
 }
 
-pub(super) fn get_dkg_summary_from_cup_contents(
+pub fn get_dkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
