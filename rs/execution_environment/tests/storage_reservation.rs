@@ -168,3 +168,40 @@ fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_av
         reserved_balance_before_snapshot
     );
 }
+
+#[test]
+fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles_available() {
+    // This test verifies that a canister cannot take a snapshot if it does not have enough
+    // cycles to cover the storage reservation triggered by the snapshot operation. The main
+    // point of the test is to verify that the error message is informative and includes the
+    // amount of cycles required to cover the storage reservation.
+    //
+    // The error message is produced by running the test once and checking the output. Calculating
+    // the exact amounts is hard to do in advance. Note that any changes to cycles cost or how
+    // the reservation mechanism works may require updating the error message in the test.
+
+    let (env, canister_id) = setup(
+        SUBNET_MEMORY_THRESHOLD,
+        SUBNET_MEMORY_CAPACITY,
+        Some(300_400_000_000),
+    );
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Grow memory in update call, should trigger storage reservation.
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(3000).build());
+    let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
+
+    // Take a snapshot to trigger more storage reservation. The canister does not have
+    // enough cycles in its balance, so this should fail.
+    let res = env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None));
+    match res {
+        Ok(_) => panic!("Expected an error but got Ok(_)"),
+        Err(err) => {
+            assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+            assert!(err.description().contains(
+                "Canister cannot grow memory by 200067930 bytes due to insufficient cycles. At least 339_603_710_662 additional cycles are required."
+            ));
+        }
+    }
+}
