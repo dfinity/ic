@@ -10,7 +10,7 @@ use std::{
 
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, CountBytes, NumInstructions};
+use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumInstructions};
 use ic_wasm_types::WasmEngineError;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use serde::{Deserialize, Serialize};
@@ -82,9 +82,13 @@ pub struct SerializedModule {
     pub is_wasm64: bool,
 }
 
-impl CountBytes for SerializedModule {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for SerializedModule {
+    fn memory_bytes(&self) -> usize {
         self.bytes.0.len()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
@@ -147,9 +151,15 @@ pub struct OnDiskSerializedModule {
     pub is_wasm64: bool,
 }
 
-impl CountBytes for OnDiskSerializedModule {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for OnDiskSerializedModule {
+    fn memory_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        // TODO: cache to avoid repeated syscalls.
+        (self.bytes.metadata().unwrap().len() + self.initial_state_data.metadata().unwrap().len())
+            as usize
     }
 }
 

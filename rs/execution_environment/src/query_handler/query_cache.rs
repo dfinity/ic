@@ -8,7 +8,7 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{Query, QuerySource},
-    CountBytes, Cycles, PrincipalId, Time, UserId,
+    Cycles, MemoryDiskBytes, PrincipalId, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
@@ -36,7 +36,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_transient_error: IntCounter,
     pub invalidated_entries_duration: Histogram,
-    pub count_bytes: IntGauge,
+    pub memory_bytes: IntGauge,
     pub len: IntGauge,
     pub push_errors: IntCounter,
     pub validation_errors: IntCounter,
@@ -103,8 +103,8 @@ impl QueryCacheMetrics {
                 "The duration of invalidated cache entries in seconds",
                 metrics_registry,
             ),
-            count_bytes: metrics_registry.int_gauge(
-                "execution_query_cache_count_bytes",
+            memory_bytes: metrics_registry.int_gauge(
+                "execution_query_cache_memory_bytes",
                 "The current replica side query cache size in bytes",
             ),
             len: metrics_registry.int_gauge(
@@ -140,9 +140,13 @@ pub(crate) struct EntryKey {
     pub method_payload: Vec<u8>,
 }
 
-impl CountBytes for EntryKey {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for EntryKey {
+    fn memory_bytes(&self) -> usize {
         size_of_val(self) + self.method_name.len() + self.method_payload.len()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
@@ -211,9 +215,13 @@ pub(crate) struct EntryValue {
     ignore_canister_balances: bool,
 }
 
-impl CountBytes for EntryValue {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self) + self.result.count_bytes()
+impl MemoryDiskBytes for EntryValue {
+    fn memory_bytes(&self) -> usize {
+        size_of_val(self) + self.result.memory_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
@@ -377,9 +385,13 @@ pub(crate) struct QueryCache {
     pub(crate) metrics: QueryCacheMetrics,
 }
 
-impl CountBytes for QueryCache {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self) + self.cache.lock().unwrap().count_bytes()
+impl MemoryDiskBytes for QueryCache {
+    fn memory_bytes(&self) -> usize {
+        size_of_val(self) + self.cache.lock().unwrap().memory_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
@@ -392,7 +404,7 @@ impl QueryCache {
         data_certificate_expiry_time: Duration,
     ) -> Self {
         QueryCache {
-            cache: Mutex::new(LruCache::new(capacity)),
+            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(0))),
             max_expiry_time,
             data_certificate_expiry_time,
             metrics: QueryCacheMetrics::new(metrics_registry),
@@ -421,8 +433,8 @@ impl QueryCache {
             } else {
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
-                // Update the `count_bytes` metric.
-                self.metrics.count_bytes.set(cache.count_bytes() as i64);
+                // Update the `memory_bytes` metric.
+                self.metrics.memory_bytes.set(cache.memory_bytes() as i64);
             }
         }
         None
@@ -470,8 +482,8 @@ impl QueryCache {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        let count_bytes = cache.count_bytes() as i64;
-        self.metrics.count_bytes.set(count_bytes);
+        let memory_bytes = cache.memory_bytes() as i64;
+        self.metrics.memory_bytes.set(memory_bytes);
         self.metrics.len.set(cache.len() as i64);
     }
 }
