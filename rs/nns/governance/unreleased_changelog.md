@@ -15,8 +15,6 @@ because this new function has no user-visible behavior change yet. Wait until it
 is active (e.g. the feature flag is flipped to "enable") before adding an entry
 to this file.
 
-TODO: Automate moving content from unreleased_changelog.md to CHANGELOG.md.
-
 
 # How to Write a Good Entry
 
