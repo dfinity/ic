@@ -199,6 +199,7 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         Ok(_) => panic!("Expected an error but got Ok(_)"),
         Err(err) => {
             assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+            println!("error description {}", err.description());
             assert!(err.description().contains(
                 "Canister cannot grow memory by 200067930 bytes due to insufficient cycles. At least 339_603_710_662 additional cycles are required."
             ));
