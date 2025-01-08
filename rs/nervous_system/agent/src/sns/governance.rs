@@ -15,27 +15,30 @@ impl GovernanceCanister {
     pub async fn metadata<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<GetMetadataResponse, C::Error> {
+    ) -> Result<GetMetadataResponse, C::CallError> {
         agent.call(self.canister_id, GetMetadataRequest {}).await
     }
 
     pub async fn version<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<GetRunningSnsVersionResponse, C::Error> {
+    ) -> Result<GetRunningSnsVersionResponse, C::CallError> {
         agent
             .call(self.canister_id, GetRunningSnsVersionRequest {})
             .await
     }
 
-    pub async fn get_mode<C: CallCanisters>(&self, agent: &C) -> Result<GetModeResponse, C::Error> {
+    pub async fn get_mode<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<GetModeResponse, C::CallError> {
         agent.call(self.canister_id, GetMode {}).await
     }
 
     pub async fn get_nervous_system_parameters<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<NervousSystemParameters, C::Error> {
+    ) -> Result<NervousSystemParameters, C::CallError> {
         let request = NullRequest::new("get_nervous_system_parameters", false);
         agent.call(self.canister_id, request).await
     }

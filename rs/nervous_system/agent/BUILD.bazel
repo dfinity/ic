@@ -14,6 +14,8 @@ DEPENDENCIES = [
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",

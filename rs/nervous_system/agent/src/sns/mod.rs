@@ -26,7 +26,7 @@ impl Sns {
     pub async fn remaining_upgrade_steps<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<ListUpgradeStepsResponse, C::Error> {
+    ) -> Result<ListUpgradeStepsResponse, C::CallError> {
         let version = self.governance.version(agent).await?;
         let list_upgrade_steps_request = ListUpgradeStepsRequest {
             limit: 0,

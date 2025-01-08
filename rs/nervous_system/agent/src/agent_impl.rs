@@ -1,6 +1,8 @@
 use crate::Request;
 use candid::Principal;
 use ic_agent::Agent;
+use ic_management_canister_types::InstallCodeArgs;
+use ic_types::Cycles;
 use thiserror::Error;
 
 use crate::CallCanisters;
@@ -18,12 +20,15 @@ pub enum AgentCallError {
 impl crate::sealed::Sealed for Agent {}
 
 impl CallCanisters for Agent {
-    type Error = AgentCallError;
+    type CallError = AgentCallError;
+    type CreateCanisterError = AgentCallError;
+    type InstallWasmError = AgentCallError;
+
     async fn call<R: Request>(
         &self,
         canister_id: impl Into<Principal> + Send,
         request: R,
-    ) -> Result<R::Response, Self::Error> {
+    ) -> Result<R::Response, Self::CallError> {
         let canister_id = canister_id.into();
         let request_bytes = request.payload();
         let response = if request.update() {
@@ -49,5 +54,17 @@ impl CallCanisters for Agent {
         let response =
             candid::decode_one(response.as_slice()).map_err(AgentCallError::CandidDecode)?;
         Ok(response)
+    }
+
+    async fn create_canister(
+        &self,
+        _cycles: Cycles,
+        _controllers: Vec<Principal>,
+    ) -> Result<Principal, Self::CreateCanisterError> {
+        unimplemented!()
+    }
+
+    async fn install_wasm(&self, _args: InstallCodeArgs) -> Result<(), Self::InstallWasmError> {
+        unimplemented!()
     }
 }

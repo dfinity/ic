@@ -33,7 +33,7 @@ impl RootCanister {
     pub async fn sns_canisters_summary<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<GetSnsCanistersSummaryResponse, C::Error> {
+    ) -> Result<GetSnsCanistersSummaryResponse, C::CallError> {
         agent
             .call(
                 self.canister_id,
@@ -47,7 +47,7 @@ impl RootCanister {
     pub async fn list_sns_canisters<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<Sns, ListSnsCanistersError<C::Error>> {
+    ) -> Result<Sns, ListSnsCanistersError<C::CallError>> {
         let response = agent
             .call(self.canister_id, ListSnsCanistersRequest {})
             .await?;
