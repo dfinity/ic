@@ -8,11 +8,7 @@ unreleased_changelog.md file. In general though, the entries you see here were
 moved from there.
 
 
-# TEMPLATE: Proposal $ID
+INSERT NEW RELEASES HERE
 
-http://dashboard.internetcomputer.org/proposal/$ID
 
-## Added
-
-* Flying feature was added to widgets. This feature was discussed and/or
-  proposed at $FORUM_THREAD_URL and $MOTION_PROPOSAL_URL.
+END

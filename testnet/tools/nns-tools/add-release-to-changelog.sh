@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
+
+help() {
+    print_green "
+Usage: $0 <PROPOSAL_ID>
+    PROPOSAL_ID: The ID of a recently executed Governance backend canister upgrade proposal.
+
+    Moves the pending new changelog entry from unreleased_changelog.md to CHANGELOG.md.
+
+    The commit that the proposal is baded on MUST be currently check out.
+    Otherwise, this script will do nothing, and terminate with a nonzero exit
+    status.
+
+" >&2
+    exit 1
+}
+
+PROPOSAL_ID="${1}"
+
+cd $(repo_root)
+PWD=$(pwd)
+
+# Fetch the proposal.
+print_purple "Fetching proposal ${PROPOSAL_ID}..." >&2
+PROPOSAL_INFO=$(
+    __dfx --quiet \
+          canister call \
+          --ic \
+          --candid rs/nns/governance/canister/governance.did \
+          $(nns_canister_id governance) \
+          get_proposal_info "(${PROPOSAL_ID})" \
+        | idl2json
+)
+# Unwrap.
+LEN=$(echo "${PROPOSAL_INFO}" | jq '. | length')
+if [[ "${LEN}" -ne 1 ]]; then
+    print_red "Unexpected result from the get_proposal_info method:" >&2
+    print_red "Should have one element, but has ${LEN}" >&2
+    exit 1
+fi
+PROPOSAL_INFO=$(echo "${PROPOSAL_INFO}" | jq '.[0]')
+
+# Assert was executed.
+EXECUTED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.executed_timestamp_seconds | tonumber')
+if [[ "${EXECUTED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
+    print_red "Proposal ${PROPOSAL_ID} exists, but was not successfully executed." >&2
+    exit 1
+fi
+SECONDS_AGO=$(( $(date +%s) - "${EXECUTED_TIMESTAMP_SECONDS}" ))
+EXECUTED_ON=$(
+    date --utc \
+         --date=@"${EXECUTED_TIMESTAMP_SECONDS}" \
+         --iso-8601
+)
+print_purple "Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." >&2
+
+# Extract which canister was upgraded, and to what commit.
+TITLE=$(echo $PROPOSAL_INFO | jq -r '.proposal[0].summary' | head -n 1)
+CANISTER_NAME=$(
+    echo "${TITLE}" \
+        | sed 's/# Upgrade the //' | sed 's/ Canister to Commit .*//' \
+        | tr '[:upper:]' '[:lower:]'
+)
+DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/# Upgrade the .* Canister to Commit //')
+
+# Fail if the proposal's commit is not checked out.
+if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
+    echo >&2
+    print_red "You currently have $(git rev-parse HEAD)" >&2
+    print_red "checked out, but this command only supports being run when" >&2
+    print_red "the proposal's commit (${DESTINATION_COMMIT_ID}) is checked out." >&2
+    exit 1
+fi
+
+# cd to the canister's primary code path.
+CANISTER_CODE_PATH=$(
+    get_nns_canister_code_location "${CANISTER_NAME}" \
+        | sed "s^${PWD}^.^g" \
+        | cut -d' ' -f1
+)
+cd "${CANISTER_CODE_PATH}"
+
+# Assert that there is a CHANGELOG.md file.
+if [[ ! -e CHANGELOG.md ]]; then
+    echo >&2
+    print_red "${CANISTER_NAME} has no CHANGELOG.md file." >&2
+    exit 1
+fi
+# TODO: Also verify that unreleased_changelog.md exists.
+# TODO: Verify that there are no uncommited changes in this dir, the canister's primary code path.
+
+# Construct new entry for CHANGELOG.md
+#
+# Python is used to filter out empty sections.
+# Python is used because I cannot figure out how to do that using mac sed.
+NEW_FEATURES_AND_FIXES=$(
+    sed '1,/^# Next Upgrade Proposal$/d' \
+        unreleased_changelog.md \
+        | python3 -c 'import sys, re; s = sys.stdin.read(); print(re.sub(r"## [\w ]+\n+(?=##|\Z)", "", s).strip())'
+)
+if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
+    echo >&2
+    print_red "The ${CANISTER_NAME} canister has no information in its unreleased_changelog.md." >&2
+    exit 1
+fi
+NEW_ENTRY="# ${EXECUTED_ON}: Proposal ${PROPOSAL_ID}
+
+http://dashboard.internetcomputer.org/proposals/${PROPOSAL_ID}
+
+${NEW_FEATURES_AND_FIXES}
+"
+
+CHANGELOG_INTRODUCTION=$(sed -n '/^INSERT NEW RELEASES HERE$/q;p' CHANGELOG.md)
+CHANGELOG_EARLIER_RELEASES=$(sed '1,/^INSERT NEW RELEASES HERE$/d' CHANGELOG.md)
+
+# Insert new entry into CHANGELOG.md.
+echo -n "${CHANGELOG_INTRODUCTION}
+
+
+INSERT NEW RELEASES HERE
+
+
+${NEW_ENTRY}${CHANGELOG_EARLIER_RELEASES}
+" \
+> CHANGELOG.md
+
+UNRELEASED_CHANGELOG_INTRODUCTION=$(sed -n '/^# Next Upgrade Proposal$/q;p' unreleased_changelog.md)
+echo -n "${UNRELEASED_CHANGELOG_INTRODUCTION}
+
+
+# Next Upgrade Proposal
+
+## Added
+
+## Changed
+
+## Deprecated
+
+## Removed
+
+## Fixed
+
+## Security
+""" \
+> unreleased_changelog.md
