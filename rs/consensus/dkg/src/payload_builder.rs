@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     utils, MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS,
     REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
 };
@@ -73,7 +73,7 @@ pub fn create_payload(
     if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
-        return create_summary_payload(
+        create_summary_payload(
             subnet_id,
             registry_client,
             crypto,
@@ -85,11 +85,29 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary);
+        .map(dkg::Payload::Summary)
+    } else {
+        // If the height is not a start height, create a payload with new dealings.
+        create_data_payload(
+            pool_reader,
+            dkg_pool,
+            parent,
+            max_dealings_per_block,
+            &last_summary_block,
+            last_dkg_summary,
+        )
+        .map(dkg::Payload::Data)
     }
+}
 
-    // If the height is not a start height, create a payload with new dealings.
-
+fn create_data_payload(
+    pool_reader: &PoolReader<'_>,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    parent: &Block,
+    max_dealings_per_block: usize,
+    last_summary_block: &Block,
+    last_dkg_summary: &Summary,
+) -> Result<dkg::DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
@@ -107,10 +125,10 @@ pub fn create_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::Payload::Data(dkg::DkgDataPayload::new(
+    Ok(dkg::DkgDataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
-    )))
+    ))
 }
 
 /// Creates a summary payload for the given parent and registry_version.
