@@ -1708,7 +1708,7 @@ impl CanisterManager {
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                             bytes: chunk_bytes,
                             available,
-                            threshold: requested,
+                            required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -1914,7 +1914,7 @@ impl CanisterManager {
                     Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: new_snapshot_increase,
                         available: canister.system_state.balance(),
-                        threshold: threshold + reservation_cycles,
+                        required: threshold + reservation_cycles,
                     }),
                     NumInstructions::new(0),
                 );
@@ -1948,7 +1948,7 @@ impl CanisterManager {
                     } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: new_snapshot_increase,
                         available,
-                        threshold: requested,
+                        required: requested,
                     },
                     ReservationError::ReservedLimitExceed { requested, limit } => {
                         CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -2403,7 +2403,7 @@ pub(crate) enum CanisterManagerError {
     InsufficientCyclesInMemoryGrow {
         bytes: NumBytes,
         available: Cycles,
-        threshold: Cycles,
+        required: Cycles,
     },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
@@ -2831,7 +2831,7 @@ impl From<CanisterManagerError> for UserError {
                 )
 
             }
-            InsufficientCyclesInMemoryGrow { bytes, available, threshold} =>
+            InsufficientCyclesInMemoryGrow { bytes, available, required} =>
             {
                 Self::new(
                     ErrorCode::InsufficientCyclesInMemoryGrow,
@@ -2839,7 +2839,7 @@ impl From<CanisterManagerError> for UserError {
                         "Canister cannot grow memory by {} bytes due to insufficient cycles. \
                          At least {} additional cycles are required.{additional_help}",
                          bytes,
-                         threshold - available)
+                         required - available)
                 )
             }
             ReservedCyclesLimitExceededInMemoryAllocation { memory_allocation, requested, limit} =>
