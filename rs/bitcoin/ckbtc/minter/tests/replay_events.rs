@@ -1,6 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::state::eventlog::{replay, Event};
+use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
 use std::path::PathBuf;
@@ -60,7 +60,7 @@ fn should_replay_events_and_check_invariants() {
 async fn should_not_grow_number_of_useless_events() {
     for file in [GetEventsFile::Mainnet, GetEventsFile::Testnet] {
         let events = file.deserialize();
-        let received_utxo_to_minter_with_empty_utxos = Event::ReceivedUtxos {
+        let received_utxo_to_minter_with_empty_utxos = EventType::ReceivedUtxos {
             mint_txid: None,
             to_account: file.minter_canister_id().into(),
             utxos: vec![],
@@ -83,12 +83,15 @@ async fn should_not_grow_number_of_useless_events() {
         }
     }
 
-    fn assert_useless_events_eq(events: &[Event], expected_useless_event: &Event) -> Vec<usize> {
+    fn assert_useless_events_eq(
+        events: &[Event],
+        expected_useless_event: &EventType,
+    ) -> Vec<usize> {
         let mut indexes = Vec::new();
         for (index, event) in events.iter().enumerate() {
-            match &event {
-                Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                    assert_eq!(event, expected_useless_event);
+            match &event.payload {
+                EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                    assert_eq!(&event.payload, expected_useless_event);
                     indexes.push(index);
                 }
                 _ => {}
@@ -199,7 +202,13 @@ impl GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
+        // TODO XC-261 The logic here assumes the compressed events in the file still use the
+        //  'old' Candid interface (i.e. a vector of `EventTypes`). Once the deployed minter
+        //  canister on mainnet/testnet return a result with the new interface, the explicit
+        //  conversion from `EventType` to `Event` must be removed.
+        Decode!(&decompressed_buffer, GetEventTypesResult)
+            .expect("Failed to decode events")
+            .into()
     }
 }
 
@@ -215,13 +224,38 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
         .call_and_wait()
         .await
         .expect("Failed to call get_events");
-    Decode!(&raw_result, Vec<Event>).unwrap()
+    // TODO XC-261 The logic here assumes the result we get from the minter canister `get_events`
+    //  endpoint still uses the 'old' Candid interface (i.e. a vector of `EventTypes`). Once the
+    //  deployed minter canisters on mainnet/testnet return a result with the new interface, the
+    //  explicit conversion from `EventType` to `Event` must be removed.
+    Decode!(&raw_result, Vec<EventType>)
+        .unwrap()
+        .into_iter()
+        .map(Event::from)
+        .collect()
+}
+
+// TODO XC-261: Remove
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct GetEventTypesResult {
+    pub events: Vec<EventType>,
+    pub total_event_count: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
     pub events: Vec<Event>,
     pub total_event_count: u64,
+}
+
+// TODO XC-261: Remove
+impl From<GetEventTypesResult> for GetEventsResult {
+    fn from(value: GetEventTypesResult) -> Self {
+        Self {
+            events: value.events.into_iter().map(Event::from).collect(),
+            total_event_count: value.total_event_count,
+        }
+    }
 }
 
 /// This struct is used to skip the check invariants when replaying the events

@@ -1,18 +1,20 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
+use candid::Nat;
 use ic_btc_checker::{
-    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    blocklist::is_blocked, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
     CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
-use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::str::FromStr;
 
 mod dashboard;
@@ -25,12 +27,28 @@ use fetch::{FetchEnv, FetchResult, TryFetchResult};
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
+enum HttpsOutcallStatus {
+    ResponseTooLarge,
+    IcError(RejectionCode),
+    HttpStatusCode(Nat),
+}
+
+impl fmt::Display for HttpsOutcallStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ResponseTooLarge => write!(f, "ResponseTooLarge"),
+            Self::IcError(rejection_code) => write!(f, "IcError({})", *rejection_code as i32),
+            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({})", status_code),
+        }
+    }
+}
+
 #[derive(Default)]
 struct Stats {
-    https_outcall_status: BTreeMap<(String, u16), u64>,
+    https_outcall_status: BTreeMap<(String, HttpsOutcallStatus), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
-    check_address_count: u64,
 }
 
 thread_local! {
@@ -42,10 +60,10 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
         && (message.contains("size limit") || message.contains("length limit"))
 }
 
-#[ic_cdk::query]
 /// Return `Passed` if the given bitcion address passed the check, or
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
+#[ic_cdk::query]
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
@@ -56,12 +74,11 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
-    STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
         CheckMode::Normal => {
-            if blocklist_contains(&address) {
+            if is_blocked(&address) {
                 return CheckAddressResponse::Failed;
             }
             CheckAddressResponse::Passed
@@ -69,7 +86,6 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     }
 }
 
-#[ic_cdk::update]
 /// Return `Passed` if all input addresses of the transaction of the given
 /// transaction id passed the check, or `Failed` if any of them did not.
 ///
@@ -87,14 +103,29 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// If a permanent error occurred in the process, e.g, when a transaction data
 /// fails to decode or its transaction id does not match, then `Error` is returned
 /// together with a text description.
+#[ic_cdk::update]
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
+    check_transaction_with(|| Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string()))
+        .await
+}
+
+#[ic_cdk::update]
+async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactionResponse {
+    use std::str::FromStr;
+    check_transaction_with(|| Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string()))
+        .await
+}
+
+async fn check_transaction_with<F: FnOnce() -> Result<Txid, String>>(
+    get_txid: F,
+) -> CheckTransactionResponse {
     if ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
         < CHECK_TRANSACTION_CYCLES_SERVICE_FEE
     {
         return CheckTransactionStatus::NotEnoughCycles.into();
     }
 
-    match Txid::try_from(args.txid.as_ref()) {
+    match get_txid() {
         Ok(txid) => {
             STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
             if ic_cdk::api::call::msg_cycles_available128()
@@ -107,9 +138,7 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => {
-            CheckTransactionIrrecoverableError::InvalidTransactionId(err.to_string()).into()
-        }
+        Err(err) => CheckTransactionIrrecoverableError::InvalidTransactionId(err).into(),
     }
 }
 
@@ -129,7 +158,7 @@ fn init(arg: CheckArg) {
             Config::new_and_validate(
                 init_arg.btc_network,
                 init_arg.check_mode,
-                state::default_num_subnet_nodes(),
+                init_arg.num_subnet_nodes,
             )
             .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),
@@ -219,7 +248,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                     .value(
                         &[
                             ("provider", provider.as_str()),
-                            ("status", status.to_string().as_str()),
+                            ("status", status.to_string().as_ref()),
                         ],
                         *count as f64,
                     )
@@ -245,11 +274,6 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 .value(
                     &[("type", "check_transaction")],
                     stats.check_transaction_count as f64,
-                )
-                .unwrap()
-                .value(
-                    &[("type", "check_address")],
-                    stats.check_address_count as f64,
                 )
                 .unwrap();
         });
@@ -360,7 +384,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((provider.name(), response.status.0.to_u16().unwrap()))
+                        .entry((
+                            provider.name(),
+                            HttpsOutcallStatus::HttpStatusCode(response.status.clone()),
+                        ))
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
@@ -408,8 +435,26 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 }
                 Ok(tx)
             }
-            Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
+            Err((r, m)) if is_response_too_large(&r, &m) => {
+                if max_response_bytes >= RETRY_MAX_RESPONSE_BYTES {
+                    STATS.with(|s| {
+                        let mut stat = s.borrow_mut();
+                        *stat
+                            .https_outcall_status
+                            .entry((provider.name(), HttpsOutcallStatus::ResponseTooLarge))
+                            .or_default() += 1;
+                    });
+                }
+                Err(HttpGetTxError::ResponseTooLarge)
+            }
             Err((r, m)) => {
+                STATS.with(|s| {
+                    let mut stat = s.borrow_mut();
+                    *stat
+                        .https_outcall_status
+                        .entry((provider.name(), HttpsOutcallStatus::IcError(r)))
+                        .or_default() += 1;
+                });
                 log!(
                     DEBUG,
                     "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}, Request: {request:?}"

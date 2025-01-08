@@ -1,5 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
+use futures::stream;
+use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
@@ -181,6 +183,33 @@ pub async fn install_canister_with_controllers(
         "Installed the {} canister ({}) onto {:?}",
         name, canister_id, subnet_id
     );
+}
+
+pub async fn install_canister_on_subnet(
+    pocket_ic: &PocketIc,
+    subnet_id: Principal,
+    arg: Vec<u8>,
+    wasm: Option<Wasm>,
+    controllers: Vec<PrincipalId>,
+) -> CanisterId {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
+    let settings = Some(CanisterSettings {
+        controllers: Some(controllers),
+        ..Default::default()
+    });
+    let canister_id = pocket_ic
+        .create_canister_on_subnet(None, settings, subnet_id)
+        .await;
+    pocket_ic
+        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
+        .await;
+    if let Some(wasm) = wasm {
+        pocket_ic
+            .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
+            .await;
+    }
+    CanisterId::unchecked_from_principal(canister_id.into())
 }
 
 // TODO migrate this to nns::governance
@@ -1045,20 +1074,29 @@ pub mod nns {
         use super::*;
         use icp_ledger::{Memo, TransferArgs};
 
-        pub async fn icrc1_transfer(
+        pub async fn icrc1_transfer_request(
             pocket_ic: &PocketIc,
             sender: PrincipalId,
             transfer_arg: TransferArg,
-        ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
                     LEDGER_CANISTER_ID.into(),
                     Principal::from(sender),
                     "icrc1_transfer",
                     Encode!(&transfer_arg).unwrap(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+        }
+
+        pub async fn icrc1_transfer(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> Result<Nat, TransferError> {
+            let call_id = icrc1_transfer_request(pocket_ic, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             let result = match result {
                 WasmResult::Reply(result) => result,
                 WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
@@ -1972,21 +2010,32 @@ pub mod sns {
             Decode!(&result, Nat).unwrap()
         }
 
-        pub async fn icrc1_transfer(
+        pub async fn icrc1_transfer_request(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             sender: PrincipalId,
             transfer_arg: TransferArg,
-        ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
                     canister_id.into(),
                     Principal::from(sender),
                     "icrc1_transfer",
                     Encode!(&transfer_arg).unwrap(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+        }
+
+        pub async fn icrc1_transfer(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> Result<Nat, TransferError> {
+            let call_id =
+                icrc1_transfer_request(pocket_ic, canister_id, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             let result = match result {
                 WasmResult::Reply(result) => result,
                 WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
@@ -2230,28 +2279,40 @@ pub mod sns {
         const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 2000;
 
         // Generate a bunch of SNS token transactions.
-        for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {
-            let user_principal_id = PrincipalId::new_user_test_id(i);
-            let direct_participant_swap_account = Account {
-                owner: user_principal_id.0,
-                subaccount: None,
-            };
-            let _block_height = ledger::icrc1_transfer(
-                pocket_ic,
-                sns_ledger_canister_id,
-                sns_governance_canister_id,
-                TransferArg {
-                    from_subaccount: None,
-                    to: direct_participant_swap_account,
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
-                },
-            )
-            .await
-            .unwrap();
-        }
+        // Sending all the requests, then awaiting all the responses, is much faster than sending each request in
+        // serial.
+        let transfer_requests = stream::iter(0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE)
+            .map(|i| {
+                async move {
+                    let user_principal_id = PrincipalId::new_user_test_id(i);
+                    let direct_participant_swap_account = Account {
+                        owner: user_principal_id.0,
+                        subaccount: None,
+                    };
+                    ledger::icrc1_transfer_request(
+                        pocket_ic,
+                        sns_ledger_canister_id,
+                        sns_governance_canister_id,
+                        TransferArg {
+                            from_subaccount: None,
+                            to: direct_participant_swap_account,
+                            fee: None,
+                            created_at_time: None,
+                            memo: None,
+                            amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
+                        },
+                    )
+                    .await
+                }
+            })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
+        let _transfer_responses = stream::iter(transfer_requests)
+            .map(|call_id| async move { pocket_ic.await_call(call_id).await.unwrap() })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
 
         let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
 

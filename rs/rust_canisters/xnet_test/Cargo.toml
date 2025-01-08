@@ -18,3 +18,4 @@ ic-cdk-macros = { workspace = true }
 rand = { workspace = true }
 rand_pcg = "0.3"
 serde = { workspace = true }
+serde_bytes = { workspace = true }

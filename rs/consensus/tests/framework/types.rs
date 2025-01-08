@@ -6,7 +6,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -349,7 +349,7 @@ pub struct ConsensusDriver<'a> {
     pub(crate) consensus:
         Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
     pub(crate) consensus_bouncer: ConsensusBouncer,
-    pub(crate) dkg: dkg::DkgImpl,
+    pub(crate) dkg: ic_consensus_dkg::DkgImpl,
     pub(crate) idkg:
         Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
     pub(crate) certifier:

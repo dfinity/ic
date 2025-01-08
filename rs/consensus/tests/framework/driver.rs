@@ -31,7 +31,7 @@ impl<'a> ConsensusDriver<'a> {
             dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>,
         >,
         consensus_bouncer: ConsensusBouncer,
-        dkg: ic_consensus::dkg::DkgImpl,
+        dkg: ic_consensus_dkg::DkgImpl,
         idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, Mutations = IDkgChangeSet>>,
         certifier: Box<
             dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations>

@@ -236,6 +236,9 @@ fn check_calls_conclude_with_migrating_canister_impl(
     });
 
     config.receivers = fixture.canisters();
+//    config.best_effort_weight = 0;
+//    config.guaranteed_response_weight = 1;
+
     let migrating_canister = fixture.local_canisters.first().unwrap().clone();
 
     // Send config to `migrating_canister` and seed its rng.
