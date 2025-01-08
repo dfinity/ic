@@ -13,6 +13,7 @@ use tokio::runtime::Runtime;
 pub fn run_fuzzer(module: ICWasmModule) {
     let wasm = module.module.to_bytes();
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
+    let memory64_enabled = module.config.memory64_enabled;
 
     if wasm_methods.is_empty() {
         return;
@@ -31,10 +32,11 @@ pub fn run_fuzzer(module: ICWasmModule) {
         let wasm = wasm.clone();
         let wasm_methods = wasm_methods.clone();
 
-        async move { execute_wasm(wasm, wasm_methods) }
+        async move { execute_wasm(wasm, wasm_methods, memory64_enabled) }
     });
 
-    let second_execution = rt.spawn(async move { execute_wasm(wasm, wasm_methods) });
+    let second_execution =
+        rt.spawn(async move { execute_wasm(wasm, wasm_methods, memory64_enabled) });
 
     rt.block_on(async move {
         let first = first_execution.await.unwrap();
@@ -100,13 +102,14 @@ pub fn run_fuzzer(module: ICWasmModule) {
 fn execute_wasm(
     wasm: Vec<u8>,
     wasm_methods: BTreeSet<WasmMethod>,
+    memory64_enabled: bool,
 ) -> Vec<(
     HypervisorResult<Option<WasmResult>>,
     HypervisorResult<InstanceRunResult>,
     u64,
 )> {
     let mut result = vec![];
-    let config = ic_embedders_config();
+    let config = ic_embedders_config(memory64_enabled);
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)
         .with_config(config)

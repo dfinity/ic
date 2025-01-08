@@ -9,7 +9,7 @@ pub fn run_fuzzer(module: ICWasmModule) -> Corpus {
     let wasm = module.module.to_bytes();
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
-    let config = ic_embedders_config();
+    let config = ic_embedders_config(module.config.memory64_enabled);
 
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)

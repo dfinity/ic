@@ -57,7 +57,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
-    let embedder_config = ic_embedders_config();
+    let embedder_config = ic_embedders_config(module.config.memory64_enabled);
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 

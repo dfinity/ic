@@ -17,7 +17,8 @@ use wasm_smith::{Config, Module};
 use wasmparser::*;
 
 lazy_static! {
-    static ref SYSTEM_API_IMPORTS: Vec<u8> = system_api_imports();
+    static ref SYSTEM_API_IMPORTS_WASM32: Vec<u8> = system_api_imports(ic_embedders_config(false));
+    static ref SYSTEM_API_IMPORTS_WASM64: Vec<u8> = system_api_imports(ic_embedders_config(true));
 }
 
 #[derive(Debug)]
@@ -35,7 +36,8 @@ pub struct ICWasmModule {
 
 impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let embedder_config = ic_embedders_config();
+        let memory64_enabled = u.ratio(2, 3)?;
+        let embedder_config = ic_embedders_config(memory64_enabled);
         let exports = generate_exports(embedder_config.clone(), u)?;
         let mut config = ic_wasm_config(embedder_config);
         config.exports = exports;
@@ -149,22 +151,32 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
-        memory64_enabled: true,
+        memory64_enabled: embedder_config.feature_flags.wasm64 == FlagStatus::Enabled,
 
         threads_enabled: false,
         relaxed_simd_enabled: false,
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(SYSTEM_API_IMPORTS.to_vec()),
+        available_imports: Some(
+            if embedder_config.feature_flags.wasm64 == FlagStatus::Enabled {
+                SYSTEM_API_IMPORTS_WASM64.to_vec()
+            } else {
+                SYSTEM_API_IMPORTS_WASM32.to_vec()
+            },
+        ),
         ..Default::default()
     }
 }
 
-pub fn ic_embedders_config() -> EmbeddersConfig {
+pub fn ic_embedders_config(memory64_enabled: bool) -> EmbeddersConfig {
     let mut config = EmbeddersConfig::default();
     config.feature_flags.write_barrier = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    if memory64_enabled {
+        config.feature_flags.wasm64 = FlagStatus::Enabled;
+    } else {
+        config.feature_flags.wasm64 = FlagStatus::Disabled;
+    }
     config
 }
 
