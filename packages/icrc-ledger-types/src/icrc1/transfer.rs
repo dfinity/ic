@@ -7,6 +7,7 @@ use std::fmt;
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
 
+/// The arguments for the [ICRC-1 `transfer`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-) endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferArg {
     #[serde(default)]
@@ -21,6 +22,9 @@ pub struct TransferArg {
     pub amount: NumTokens,
 }
 
+/// The [`Memo`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-)
+/// is an arbitrary blob that has no meaning to the ledger. The ledger SHOULD allow memos of at
+/// least 32 bytes in length.
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
 )]
@@ -51,6 +55,9 @@ impl From<Memo> for ByteBuf {
     }
 }
 
+/// Errors defined for the
+/// [ICRC-1 `transfer`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError {
     BadFee { expected_fee: NumTokens },

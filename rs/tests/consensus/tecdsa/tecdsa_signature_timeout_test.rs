@@ -67,7 +67,7 @@ fn test(env: TestEnv) {
                 AgentError::CertifiedReject(RejectResponse {
                     reject_code: RejectCode::CanisterReject,
                     reject_message: "Signature request expired".to_string(),
-                    error_code: None
+                    error_code: Some("IC0406".to_string())
                 })
             )
         }

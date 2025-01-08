@@ -6946,11 +6946,11 @@ impl Governance {
                         .with_neuron(&neuron_id, |neuron| neuron.clone())
                         .expect("Neuron should exist, just found in list");
 
-                    let maturity = neuron.maturity_e8s_equivalent;
+                    let original_maturity = neuron.maturity_e8s_equivalent;
                     let subaccount = neuron.subaccount();
 
                     let neuron_stake: u64 = match apply_maturity_modulation(
-                        maturity,
+                        original_maturity,
                         maturity_modulation,
                     ) {
                         Ok(neuron_stake) => neuron_stake,
@@ -7019,7 +7019,7 @@ impl Governance {
                                 error,
                             );
                             match self.with_neuron_mut(&neuron_id, |neuron| {
-                                neuron.maturity_e8s_equivalent = neuron_stake;
+                                neuron.maturity_e8s_equivalent = original_maturity;
                                 neuron.cached_neuron_stake_e8s = 0;
                                 neuron.spawn_at_timestamp_seconds =
                                     original_spawn_at_timestamp_seconds;
@@ -7058,6 +7058,67 @@ impl Governance {
 
         // Release the global spawning lock
         self.heap_data.spawning_neurons = Some(false);
+    }
+
+    // TODO(NNS1-3526): Remove this method once it is released.
+    pub async fn fix_locked_spawn_neuron(&mut self) -> Result<(), GovernanceError> {
+        // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
+        // Neuron's state was updated, but the ledger transaction did not finish.
+        const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
+
+        let id = 17912780790050115461;
+        let neuron_id = NeuronId { id };
+
+        let now_seconds = self.env.now();
+
+        match self.heap_data.in_flight_commands.get(&id) {
+            None => {
+                return Ok(());
+            }
+            Some(existing_lock) => {
+                let NeuronInFlightCommand {
+                    timestamp,
+                    command: _,
+                } = existing_lock;
+
+                // We check the exact timestamp so that new locks couldn't trigger this condition
+                // which would allow that neuron to repeatedly mint under the right conditions.
+                if *timestamp != TARGETED_LOCK_TIMESTAMP {
+                    return Ok(());
+                }
+            }
+        };
+
+        let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
+            let neuron_stake = neuron.cached_neuron_stake_e8s;
+            let subaccount = neuron.subaccount();
+            (neuron_stake, subaccount)
+        })?;
+
+        // Mint the ICP
+        match self
+            .ledger
+            .transfer_funds(
+                neuron_stake,
+                0, // Minting transfer don't pay a fee.
+                None,
+                neuron_subaccount(subaccount),
+                now_seconds,
+            )
+            .await
+        {
+            Ok(_) => {
+                self.heap_data.in_flight_commands.remove(&id);
+                Ok(())
+            }
+            Err(error) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                format!(
+                    "Error fixing locked neuron: {:?}. Ledger update failed with err: {:?}.",
+                    neuron_id, error
+                ),
+            )),
+        }
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise
@@ -7284,9 +7345,11 @@ impl Governance {
         })
     }
 
-    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        self.neuron_store
-            .batch_adjust_neurons_storage(start_neuron_id)
+    pub fn batch_adjust_neurons_storage(
+        &mut self,
+        next: std::ops::Bound<NeuronId>,
+    ) -> std::ops::Bound<NeuronId> {
+        self.neuron_store.batch_adjust_neurons_storage(next)
     }
 
     /// Recompute cached metrics once per day

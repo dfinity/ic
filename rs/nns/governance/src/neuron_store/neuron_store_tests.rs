@@ -944,30 +944,20 @@ fn test_batch_adjust_neurons_storage() {
     warp_time_to_make_neuron_inactive(&mut neuron_store);
 
     // Step 1.5: define a lambda which always returns false, for checking instructions.
-    let always_false = || false;
+    let always_true = || true;
 
     // Step 1.6: make sure the counts of neurons in heap and stable are expected.
     assert_eq!(neuron_store.heap_neuron_store_len(), 10);
     assert_eq!(neuron_store.stable_neuron_store_len(), 0);
 
-    // Step 2: adjust the storage of neurons for the first 6 neurons and verifies the counts. Since
-    // the first 5 neurons are active because of their stake, only 1 neuron is moved.
-    let next_neuron_id = neuron_store.adjust_neuron_storage_with_max_instructions(
-        NeuronId { id: 0 },
-        6,
-        always_false,
+    // Step 2: adjust the storage of neurons and verifies the counts.
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 0 }),
+        always_true,
     );
-    assert_eq!(next_neuron_id, Some(NeuronId { id: 7 }));
-    assert_eq!(neuron_store.heap_neuron_store_len(), 9);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 1);
-
-    // Step 3: adjust the storage of neurons for the rest of 4 neurons and verifies the counts.
-    let next_neuron_id = neuron_store.adjust_neuron_storage_with_max_instructions(
-        NeuronId { id: 7 },
-        6,
-        always_false,
-    );
-    assert_eq!(next_neuron_id, None);
+    assert_eq!(next_neuron_id, Bound::Unbounded);
     assert_eq!(neuron_store.heap_neuron_store_len(), 5);
     assert_eq!(neuron_store.stable_neuron_store_len(), 5);
 }
@@ -995,26 +985,35 @@ fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     assert_eq!(neuron_store.heap_neuron_store_len(), 5);
     assert_eq!(neuron_store.stable_neuron_store_len(), 0);
 
-    // Step 2: adjust the storage of neurons for the first 10 neurons, however, the instruction
-    // limit checker returns true for the 4th time it's called, allowing moving only 3 neurons.
+    // Step 2: adjust the storage of neurons for the first 10 neurons, however, the `carry_on`
+    // returns false for the 3rd time it's called, allowing `groom_some_neurons` continue 2 times,
+    // moving only 3 neurons.
     let counter = Cell::new(0);
-    let next_neuron_id =
-        neuron_store.adjust_neuron_storage_with_max_instructions(NeuronId { id: 0 }, 10, || {
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 0 }),
+        || {
             counter.set(counter.get() + 1);
-            counter.get() > 3
-        });
-    assert_eq!(next_neuron_id, Some(NeuronId { id: 4 }));
+            counter.get() <= 2
+        },
+    );
+    assert_eq!(next_neuron_id, Bound::Excluded(NeuronId { id: 3 }));
     assert_eq!(neuron_store.heap_neuron_store_len(), 2);
     assert_eq!(neuron_store.stable_neuron_store_len(), 3);
 
     // Step 3: adjust the storage of neurons for the rest of 4 neurons and verifies the counts.
     let counter = Cell::new(0);
-    let next_neuron_id =
-        neuron_store.adjust_neuron_storage_with_max_instructions(NeuronId { id: 4 }, 10, || {
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 3 }),
+        || {
             counter.set(counter.get() + 1);
-            counter.get() > 3
-        });
-    assert_eq!(next_neuron_id, None);
+            counter.get() <= 2
+        },
+    );
+    assert_eq!(next_neuron_id, Bound::Unbounded);
     assert_eq!(neuron_store.heap_neuron_store_len(), 0);
     assert_eq!(neuron_store.stable_neuron_store_len(), 5);
 }
