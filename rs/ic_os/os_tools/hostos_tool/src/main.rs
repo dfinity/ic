@@ -31,6 +31,9 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct HostOSArgs {
+    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    hostos_config_object_path: String,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -46,8 +49,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let hostos_config: HostOSConfig =
-                deserialize_config(DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)?;
+            let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
             eprintln!(
                 "Network settings config: {:?}",
@@ -68,8 +70,7 @@ pub fn main() -> Result<()> {
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let hostos_config: HostOSConfig =
-                deserialize_config(DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)?;
+            let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
             eprintln!(
                 "Network settings config: {:?}",
@@ -99,8 +100,7 @@ pub fn main() -> Result<()> {
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
-            let hostos_config: HostOSConfig =
-                deserialize_config(DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)?;
+            let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
             eprintln!(
                 "Network settings config: {:?}",
