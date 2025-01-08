@@ -6807,6 +6807,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-management-canister-types",

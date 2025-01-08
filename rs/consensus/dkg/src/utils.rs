@@ -55,7 +55,7 @@ pub(super) fn get_dkg_dealings(
 }
 
 /// Fetch all key ids for which the subnet should hold a key
-fn get_enabled_vet_keys(
+pub(crate) fn get_enabled_vet_keys(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,

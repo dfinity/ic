@@ -1,6 +1,6 @@
 use crate::{
-    utils, MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS,
-    REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
+    utils::{self, get_enabled_vet_keys},
+    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
@@ -43,6 +43,7 @@ pub enum PayloadCreationError {
     DkgCreateTranscriptError(DkgCreateTranscriptError),
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    FailedToGetVetKdKeyList(RegistryClientError),
     MissingDkgStartBlock,
 }
 
@@ -249,6 +250,7 @@ pub(super) fn create_summary_payload(
     // block, which determines receivers of the dealings.
     configs.append(&mut get_configs_for_local_transcripts(
         subnet_id,
+        registry_client,
         get_node_list(
             subnet_id,
             registry_client,
@@ -469,6 +471,7 @@ pub fn get_dkg_summary_from_cup_contents(
     let height = Height::from(cup_contents.height);
     let configs = get_configs_for_local_transcripts(
         subnet_id,
+        registry,
         committee,
         height,
         &transcripts,
@@ -501,16 +504,20 @@ pub fn get_dkg_summary_from_cup_contents(
 /// Creates DKG configs for the local subnet for the next DKG intervals.
 pub(crate) fn get_configs_for_local_transcripts(
     subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
     node_ids: BTreeSet<NodeId>,
     start_block_height: Height,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
-    ////////////////////////////////////////////////////////////////////////////////
-    // TODO(CON-1413): In addition to iterating over TAGS, also iterate over all vetKD keys that were requested by registry
-    ///////////////////////////////////////////////////////////////////////////////
-    for tag in TAGS.iter() {
+    let vet_kd_ids = get_enabled_vet_keys(subnet_id, registry_client, registry_version)
+        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?
+        .into_iter()
+        .map(|key| NiDkgTag::HighThresholdForKey(key))
+        .collect::<Vec<_>>();
+
+    for tag in TAGS.iter().chain(vet_kd_ids.iter()) {
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
@@ -820,6 +827,7 @@ mod tests {
         Dependencies,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+    use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -846,9 +854,12 @@ mod tests {
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
 
+        let registry = MockRegistryClient::new();
+
         // Tests the happy path.
         let configs = get_configs_for_local_transcripts(
             subnet_id,
+            &registry,
             receivers.clone(),
             start_block_height,
             &vec![(
