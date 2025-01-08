@@ -1,6 +1,6 @@
-use std::io::Read;
 use ic_wasm;
 use libflate::gzip;
+use std::io::Read;
 
 /// A small, valid WASM suitable for tests.
 pub const SMALLEST_VALID_WASM_BYTES: &[u8; 8] = &[0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
@@ -40,6 +40,8 @@ pub fn gzip_wasm(wasm: &[u8]) -> Vec<u8> {
 pub fn ungzip_wasm(gzipped_bytes: &[u8]) -> Vec<u8> {
     let mut decoder = gzip::Decoder::new(gzipped_bytes).expect("Failed to create gzip decoder.");
     let mut wasm_buf = Vec::new();
-    decoder.read_to_end(&mut wasm_buf).expect("Failed decoding Wasm.");
+    decoder
+        .read_to_end(&mut wasm_buf)
+        .expect("Failed decoding Wasm.");
     wasm_buf
 }
