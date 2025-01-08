@@ -126,9 +126,10 @@ pub fn test(env: TestEnv) {
         assert_eq!(
             topology
                 .unassigned_nodes()
-                .find(|node| node.node_id == unassigned_node_id)
-                .map(|node| node.node_id),
-            None
+                .filter(|node| node.node_id == unassigned_node_id)
+                .map(|node| node.node_id)
+                .collect::<Vec<_>>(),
+            vec![]
         );
     });
 }

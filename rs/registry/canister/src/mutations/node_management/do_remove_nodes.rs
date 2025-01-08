@@ -118,10 +118,10 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_node() {
         let mut registry = invariant_compliant_registry(0);
-        let nonexistent_node = NodeId::from(PrincipalId::new_user_test_id(999));
 
+        let nonexistent_node_id = NodeId::from(PrincipalId::new_user_test_id(999));
         let payload = RemoveNodesPayload {
-            node_ids: vec![nonexistent_node],
+            node_ids: vec![nonexistent_node_id],
         };
 
         // Should not panic, just skip the nonexistent node
@@ -136,12 +136,13 @@ mod tests {
         let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        let node_id = node_ids.keys().next().unwrap().to_owned();
+        let node_id = *node_ids.keys().next().unwrap();
         let node_operator_id =
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
 
-        // Add node operator record with initial allowance
-        let initial_allowance = 0;
+        // Allow this node operator to onboard 1 more node; the initial value is not important in this test.
+        // We just want to later see that node_allowance gets incremented by `do_remove_nodes`.
+        let initial_allowance = 1;
         let node_operator_record = NodeOperatorRecord {
             node_allowance: initial_allowance,
             ..Default::default()
@@ -156,9 +157,7 @@ mod tests {
         let payload = RemoveNodesPayload {
             node_ids: vec![node_id],
         };
-
         registry.do_remove_nodes(payload);
-
         // Verify node is removed
         assert!(registry
             .get(
@@ -171,13 +170,12 @@ mod tests {
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
         assert_eq!(updated_operator.node_allowance, initial_allowance + 1);
     }
-
     #[test]
     fn test_remove_multiple_nodes_same_operator() {
         let mut registry = invariant_compliant_registry(0);
 
         // Add multiple nodes to the registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 3);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let node_ids: Vec<NodeId> = node_ids.keys().cloned().collect();
@@ -197,22 +195,25 @@ mod tests {
             node_operator_record.encode_to_vec(),
         )]);
 
-        // Remove both nodes
+        // Remove two nodes
         let payload = RemoveNodesPayload {
-            node_ids: node_ids.clone(),
+            node_ids: node_ids[..2].to_vec(),
         };
 
         registry.do_remove_nodes(payload);
 
-        // Verify both nodes are removed
-        for node_id in node_ids {
+        // Verify the two nodes are removed
+        for node_id in &node_ids[..2] {
             assert!(registry
                 .get(
-                    make_node_record_key(node_id).as_bytes(),
+                    make_node_record_key(*node_id).as_bytes(),
                     registry.latest_version()
                 )
                 .is_none());
         }
+
+        // Verify the third node is still present
+        assert!(registry.get_node(node_ids[2]).is_some());
 
         // Verify node operator allowance was incremented by 2
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
@@ -220,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_duplicate_node_ids() {
+    fn test_remove_duplicate_and_nonexistent_node_ids() {
         let mut registry = invariant_compliant_registry(0);
 
         // Add a node to the registry
@@ -245,7 +246,13 @@ mod tests {
 
         // Try to remove the same node multiple times
         let payload = RemoveNodesPayload {
-            node_ids: vec![node_id, node_id, node_id],
+            node_ids: vec![
+                node_id,
+                NodeId::from(PrincipalId::new_node_test_id(111)),
+                node_id,
+                NodeId::from(PrincipalId::new_node_test_id(222)),
+                node_id,
+            ],
         };
 
         registry.do_remove_nodes(payload);
@@ -257,6 +264,11 @@ mod tests {
                 registry.latest_version()
             )
             .is_none());
+
+        // Verify other node_ids are still in the registry
+        for other_node_id in node_ids.keys().skip(1) {
+            assert!(registry.get_node(*other_node_id).is_some());
+        }
 
         // Verify node operator allowance was incremented only once
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();

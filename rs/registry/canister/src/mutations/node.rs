@@ -18,15 +18,10 @@ impl Registry {
 
     /// Get the Node record if it exists in the Registry.
     pub fn get_node(&self, node_id: NodeId) -> Option<NodeRecord> {
-        let reg_value: &RegistryValue = match self.get(
+        let reg_value: &RegistryValue = self.get(
             &make_node_record_key(node_id).into_bytes(),
             self.latest_version(),
-        ) {
-            Some(v) => v,
-            None => {
-                return None;
-            }
-        };
+        )?;
 
         Some(NodeRecord::decode(reg_value.value.as_slice()).unwrap())
     }
