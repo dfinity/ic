@@ -1914,7 +1914,7 @@ impl CanisterManager {
                     Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: new_snapshot_increase,
                         available: canister.system_state.balance(),
-                        threshold,
+                        threshold: threshold + reservation_cycles,
                     }),
                     NumInstructions::new(0),
                 );
