@@ -1056,6 +1056,7 @@ impl SchedulerImpl {
                                             &err
                                         );
                                     })
+                                    .map(|_bool| ())
                             } else {
                                 Err(())
                             }

@@ -888,7 +888,8 @@ impl ReplicatedState {
                                 log,
                                 "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
                             );
-                        }),
+                        })
+                        .map(|_bool| ()),
                     None => Err(()),
                 }
             });

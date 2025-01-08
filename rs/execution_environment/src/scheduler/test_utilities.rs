@@ -37,8 +37,7 @@ use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory,
-    ReplicatedState,
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
@@ -56,8 +55,7 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
-        CallContextId, CallbackId, Ingress, MessageId, Request, RequestMetadata, RequestOrResponse,
-        Response, NO_DEADLINE,
+        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
@@ -93,6 +91,7 @@ use std::collections::BTreeSet;
 /// test.send_ingress(canister_id, message);
 /// test.execute_round(ExecutionRoundType::OrdinaryRound);
 /// ```
+#[allow(dead_code)]
 pub(crate) struct SchedulerTest {
     // The current replicated state. The option type allows taking the state for
     // execution and then putting it back afterwards.
@@ -133,6 +132,7 @@ impl std::fmt::Debug for SchedulerTest {
     }
 }
 
+#[allow(dead_code)]
 impl SchedulerTest {
     pub fn state(&self) -> &ReplicatedState {
         self.state.as_ref().unwrap()
