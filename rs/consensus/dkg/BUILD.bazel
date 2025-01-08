@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
+    "//rs/types/management_canister_types",
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:slog",

@@ -6809,6 +6809,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
+ "ic-management-canister-types",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
