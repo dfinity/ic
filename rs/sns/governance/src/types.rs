@@ -2677,25 +2677,21 @@ pub mod test_helpers {
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
                 // This needs to be non-zero
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
     }
 
     impl NativeEnvironment {
+        pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+
         pub fn new(local_canister_id: Option<CanisterId>) -> Self {
             Self {
                 local_canister_id,
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
 

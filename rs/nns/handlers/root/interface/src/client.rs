@@ -3,9 +3,8 @@ use crate::{
     ChangeCanisterControllersResponse, ChangeCanisterControllersResult,
 };
 use async_trait::async_trait;
-use dfn_candid::candid_one;
-use dfn_core::call;
 use ic_base_types::PrincipalId;
+use ic_cdk::call;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
@@ -44,12 +43,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         change_canister_controllers_request: ChangeCanisterControllersRequest,
     ) -> Result<ChangeCanisterControllersResponse, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "change_canister_controllers",
-            candid_one,
-            change_canister_controllers_request,
+            (change_canister_controllers_request,),
         )
         .await
+        .map(|(response,): (ChangeCanisterControllersResponse,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 
     async fn canister_status(
@@ -57,12 +57,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         canister_id_record: CanisterIdRecord,
     ) -> Result<CanisterStatusResult, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "canister_status",
-            candid_one,
-            canister_id_record,
+            (canister_id_record,),
         )
         .await
+        .map(|(response,): (CanisterStatusResult,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 }
 
