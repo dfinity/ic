@@ -156,13 +156,13 @@ where
                     debug_assert!(self.memory_size >= memory_size);
                     // This cannot underflow because we know that `self.memory_size` is
                     // the sum of memory sizes of all items in the cache.
-                    self.memory_size -= memory_size;
+                    self.memory_size = self.memory_size.saturating_sub(memory_size);
 
                     let disk_size = key.disk_bytes() + value.disk_bytes();
                     debug_assert!(self.disk_size >= disk_size);
                     // This cannot underflow because we know that `self.disk_size` is
                     // the sum of disk sizes of all items in the cache.
-                    self.disk_size -= disk_size;
+                    self.disk_size = self.disk_size.saturating_sub(disk_size);
 
                     ret.push((key, value));
                 }

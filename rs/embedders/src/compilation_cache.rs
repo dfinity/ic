@@ -15,7 +15,7 @@ use crate::{
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, NumBytes, NumInstructions};
+use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumBytes, NumInstructions};
 use ic_utils_lru_cache::LruCache;
 use ic_wasm_types::{CanisterModule, WasmHash};
 
@@ -34,6 +34,22 @@ pub enum CompilationCache {
         /// Atomic counter to deduplicate files in the case of concurrent compilations of the same module.
         counter: AtomicU64,
     },
+}
+
+impl MemoryDiskBytes for CompilationCache {
+    fn memory_bytes(&self) -> usize {
+        match self {
+            CompilationCache::Memory { cache } => cache.lock().unwrap().memory_bytes(),
+            CompilationCache::Disk { cache, .. } => cache.lock().unwrap().memory_bytes(),
+        }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        match self {
+            CompilationCache::Memory { cache } => cache.lock().unwrap().disk_bytes(),
+            CompilationCache::Disk { cache, .. } => cache.lock().unwrap().disk_bytes(),
+        }
+    }
 }
 
 impl CompilationCache {
