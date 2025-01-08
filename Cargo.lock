@@ -12630,7 +12630,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 4.5.20",
+ "clap 4.5.23",
  "config",
  "config_types",
  "crossbeam-channel",
@@ -14828,7 +14828,7 @@ checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
- "clap 4.5.20",
+ "clap 4.5.23",
  "config",
  "config_types",
  "ic-prep",
