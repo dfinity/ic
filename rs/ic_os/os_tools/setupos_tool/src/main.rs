@@ -27,6 +27,9 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct SetupOSArgs {
+    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    setupos_config_object_path: String,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -42,7 +45,7 @@ pub fn main() -> Result<()> {
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let setupos_config: SetupOSConfig =
-                deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
+                deserialize_config(&opts.setupos_config_object_path)?;
 
             eprintln!(
                 "Network settings config: {:?}",
@@ -65,7 +68,7 @@ pub fn main() -> Result<()> {
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let setupos_config: SetupOSConfig =
-                deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
+                deserialize_config(&opts.setupos_config_object_path)?;
 
             eprintln!(
                 "Network settings config: {:?}",
