@@ -214,6 +214,9 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
+/// The maximum number of neurons returned by `list_neurons`
+const MAX_LIST_NEURONS_RESULTS: usize = 500;
+
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
 /// The number of e8s per ICP;
@@ -2323,12 +2326,10 @@ impl Governance {
         let mut neuron_infos = hashmap![];
         let mut full_neurons = vec![];
 
-        const MAX_LIST_NEURONS_COUNT: usize = 500;
-
         let mut next_start_from_neuron_id = None;
         // Populate the above two neuron collections.
         for (count, neuron_id) in &mut requested_neuron_ids.into_iter().enumerate() {
-            if count >= MAX_LIST_NEURONS_COUNT {
+            if count >= MAX_LIST_NEURONS_RESULTS {
                 next_start_from_neuron_id = Some(neuron_id.id);
                 break;
             }
