@@ -16,7 +16,8 @@ Quick Start
 
     ```sh
     cp *.min rs/execution_environment/benches/baseline
-    git add -m "Update benches baseline" rs/execution_environment/benches/baseline/*
+    git add rs/execution_environment/benches/baseline/*
+    git commit -m "Update benches baseline"
     ```
 
 Adding a New Benchmark
