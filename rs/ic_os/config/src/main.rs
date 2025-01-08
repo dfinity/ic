@@ -197,18 +197,20 @@ pub fn main() -> Result<()> {
 
             let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
-            let node_reward_type = node_reward_type.expect("Node reward type is required.");
-
-            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
-            if !node_reward_type_pattern.is_match(&node_reward_type) {
-                anyhow::bail!(
-                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                    node_reward_type
-                );
+            if let Some(ref node_reward_type) = node_reward_type {
+                let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+                if !node_reward_type_pattern.is_match(node_reward_type) {
+                    anyhow::bail!(
+                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                            node_reward_type
+                        );
+                }
+            } else {
+                println!("Node reward type is not set. Skipping validation.");
             }
 
             let icos_settings = ICOSSettings {
-                node_reward_type: Some(node_reward_type),
+                node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging: Logging::default(),

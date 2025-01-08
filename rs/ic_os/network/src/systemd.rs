@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -74,45 +75,6 @@ pub fn restart_systemd_networkd() {
     // Explicitly don't care about return code status...
 }
 
-fn generate_and_write_systemd_files(
-    output_directory: &Path,
-    interface: &Interface,
-    generated_mac: Option<&MacAddr6>,
-    ipv6_address: &str,
-    ipv6_gateway: &str,
-) -> Result<()> {
-    eprintln!("Creating directory: {}", output_directory.to_string_lossy());
-    create_dir_all(output_directory)?;
-
-    let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={mac}"),
-        None => String::new(),
-    };
-
-    let interface_filename = format!("20-{}.network", interface.name);
-    let interface_path = output_directory.join(interface_filename);
-    let interface_content = generate_network_interface_content(&interface.name, &mac_line);
-    eprintln!("Writing {}", interface_path.to_string_lossy());
-    write(interface_path, interface_content)?;
-
-    let bridge6_netdev_filename = "20-br6.netdev";
-    let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
-    eprintln!("Writing {}", bridge6_netdev_path.to_string_lossy());
-    write(bridge6_netdev_path, BRIDGE6_NETDEV_CONTENT)?;
-
-    let bridge6_filename = "20-br6.network";
-    let bridge6_path = output_directory.join(bridge6_filename);
-    let bridge6_content = generate_bridge6_network_content(
-        ipv6_address,
-        ipv6_gateway,
-        IPV6_NAME_SERVER_NETWORKD_CONTENTS,
-    );
-    eprintln!("Writing {}", bridge6_path.to_string_lossy());
-    write(bridge6_path, bridge6_content)?;
-
-    Ok(())
-}
-
 pub fn generate_systemd_config_files(
     output_directory: &Path,
     ipv6_config: &DeterministicIpv6Config,
@@ -120,8 +82,7 @@ pub fn generate_systemd_config_files(
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by_key(|v| v.speed_mbps);
-    interfaces.reverse();
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = ipv6_config.gateway.to_string();
@@ -157,6 +118,45 @@ pub fn generate_systemd_config_files(
 
     println!("Restarting systemd networkd");
     restart_systemd_networkd();
+
+    Ok(())
+}
+
+fn generate_and_write_systemd_files(
+    output_directory: &Path,
+    interface: &Interface,
+    generated_mac: Option<&MacAddr6>,
+    ipv6_address: &str,
+    ipv6_gateway: &str,
+) -> Result<()> {
+    eprintln!("Creating directory: {}", output_directory.to_string_lossy());
+    create_dir_all(output_directory)?;
+
+    let mac_line = match generated_mac {
+        Some(mac) => format!("MACAddress={mac}"),
+        None => String::new(),
+    };
+
+    let interface_filename = format!("20-{}.network", interface.name);
+    let interface_path = output_directory.join(interface_filename);
+    let interface_content = generate_network_interface_content(&interface.name, &mac_line);
+    eprintln!("Writing {}", interface_path.to_string_lossy());
+    write(interface_path, interface_content)?;
+
+    let bridge6_netdev_filename = "20-br6.netdev";
+    let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
+    eprintln!("Writing {}", bridge6_netdev_path.to_string_lossy());
+    write(bridge6_netdev_path, BRIDGE6_NETDEV_CONTENT)?;
+
+    let bridge6_filename = "20-br6.network";
+    let bridge6_path = output_directory.join(bridge6_filename);
+    let bridge6_content = generate_bridge6_network_content(
+        ipv6_address,
+        ipv6_gateway,
+        IPV6_NAME_SERVER_NETWORKD_CONTENTS,
+    );
+    eprintln!("Writing {}", bridge6_path.to_string_lossy());
+    write(bridge6_path, bridge6_content)?;
 
     Ok(())
 }
