@@ -186,6 +186,8 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         SUBNET_MEMORY_CAPACITY,
         Some(300_400_000_000),
     );
+    println!("canister's balance: {}", env.cycle_balance(canister_id));
+    assert_eq!(1, 2);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     // Grow memory in update call, should trigger storage reservation.
