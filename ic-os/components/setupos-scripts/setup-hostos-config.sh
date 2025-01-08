@@ -42,7 +42,7 @@ function copy_config_files() {
             cp -a "${CONFIG_DIR}/ssh_authorized_keys" /media/
             log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
         else
-            echo >&2 "Warning: SSH authorized keys are not configured."
+            log_and_halt_installation_on_error "1" "use_ssh_authorized_keys set to true but not found"
         fi
     else
         echo >&2 "SSH keys not in use."
