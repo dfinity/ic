@@ -22,7 +22,6 @@ use ic_types::{
     },
     Height, NodeId, ReplicaVersion,
 };
-pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
@@ -31,8 +30,10 @@ use std::{
 };
 
 pub mod dkg_key_manager;
-pub(crate) mod payload_builder;
-pub(crate) mod payload_validator;
+pub mod payload_builder;
+pub mod payload_validator;
+
+pub use crate::payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 
 #[cfg(test)]
 mod test_utils;

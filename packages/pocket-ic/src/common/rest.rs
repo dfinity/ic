@@ -123,6 +123,12 @@ pub struct RawMessageId {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawIngressStatusArgs {
+    pub raw_message_id: RawMessageId,
+    pub raw_caller: Option<RawPrincipalId>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawSubmitIngressResult {
     Ok(RawMessageId),
     Err(UserError),
