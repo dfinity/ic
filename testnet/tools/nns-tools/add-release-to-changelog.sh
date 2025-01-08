@@ -28,11 +28,11 @@ PWD=$(pwd)
 print_purple "Fetching proposal ${PROPOSAL_ID}..." >&2
 PROPOSAL_INFO=$(
     __dfx --quiet \
-          canister call \
-          --ic \
-          --candid rs/nns/governance/canister/governance.did \
-          $(nns_canister_id governance) \
-          get_proposal_info "(${PROPOSAL_ID})" \
+        canister call \
+        --ic \
+        --candid rs/nns/governance/canister/governance.did \
+        $(nns_canister_id governance) \
+        get_proposal_info "(${PROPOSAL_ID})" \
         | idl2json
 )
 # Unwrap.
@@ -50,11 +50,11 @@ if [[ "${EXECUTED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
     print_red "Proposal ${PROPOSAL_ID} exists, but was not successfully executed." >&2
     exit 1
 fi
-SECONDS_AGO=$(( $(date +%s) - "${EXECUTED_TIMESTAMP_SECONDS}" ))
+SECONDS_AGO=$(($(date +%s) - "${EXECUTED_TIMESTAMP_SECONDS}"))
 EXECUTED_ON=$(
     date --utc \
-         --date=@"${EXECUTED_TIMESTAMP_SECONDS}" \
-         --iso-8601
+        --date=@"${EXECUTED_TIMESTAMP_SECONDS}" \
+        --iso-8601
 )
 print_purple "Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." >&2
 
@@ -126,7 +126,7 @@ INSERT NEW RELEASES HERE
 
 ${NEW_ENTRY}${CHANGELOG_EARLIER_RELEASES}
 " \
-> CHANGELOG.md
+    >CHANGELOG.md
 
 UNRELEASED_CHANGELOG_INTRODUCTION=$(sed -n '/^# Next Upgrade Proposal$/q;p' unreleased_changelog.md)
 echo -n "${UNRELEASED_CHANGELOG_INTRODUCTION}
@@ -146,4 +146,4 @@ echo -n "${UNRELEASED_CHANGELOG_INTRODUCTION}
 
 ## Security
 """ \
-> unreleased_changelog.md
+    >unreleased_changelog.md
