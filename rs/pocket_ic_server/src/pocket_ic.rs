@@ -1711,29 +1711,49 @@ impl Operation for ExecuteIngressMessage {
 }
 
 #[derive(Clone, Debug)]
-pub struct IngressMessageStatus(pub MessageId);
+pub struct IngressMessageStatus {
+    pub message_id: MessageId,
+    pub caller: Option<Principal>,
+}
 
 impl Operation for IngressMessageStatus {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(pic, self.0.effective_principal.clone(), false);
+        let subnet = route(pic, self.message_id.effective_principal.clone(), false);
         match subnet {
-            Ok(subnet) => match subnet.ingress_status(&self.0.msg_id) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(result),
-                    ..
-                } => Ok(result).into(),
-                IngressStatus::Known {
-                    state: IngressState::Failed(error),
-                    ..
-                } => Err(error).into(),
-                _ => OpOut::NoOutput,
-            },
+            Ok(subnet) => {
+                if let Some(caller) = self.caller {
+                    if let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id) {
+                        if caller != actual_caller.get().0 {
+                            return OpOut::Error(PocketIcError::Forbidden(
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+                match subnet.ingress_status(&self.message_id.msg_id) {
+                    IngressStatus::Known {
+                        state: IngressState::Completed(result),
+                        ..
+                    } => Ok(result).into(),
+                    IngressStatus::Known {
+                        state: IngressState::Failed(error),
+                        ..
+                    } => Err(error).into(),
+                    _ => OpOut::NoOutput,
+                }
+            }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
         }
     }
 
     fn id(&self) -> OpId {
-        OpId(format!("ingress_status_{}", self.0.msg_id))
+        OpId(format!(
+            "ingress_status({},{:?},{:?})",
+            self.message_id.msg_id,
+            self.message_id.effective_principal,
+            self.caller.map(|caller| caller.to_string())
+        ))
     }
 }
 
@@ -2563,7 +2583,18 @@ fn route(
         EffectivePrincipal::CanisterId(canister_id) => match pic.try_route_canister(canister_id) {
             Some(subnet) => Ok(subnet),
             None => {
-                if is_provisional_create_canister {
+                // Canisters created via `provisional_create_canister_with_cycles`
+                // with the management canister ID as the effective canister ID
+                // are created on the subnet with the default effective canister ID.
+                if is_provisional_create_canister && canister_id == CanisterId::ic_00() {
+                    Ok(pic
+                        .try_route_canister(
+                            PrincipalId(pic.topology.default_effective_canister_id)
+                                .try_into()
+                                .unwrap(),
+                        )
+                        .unwrap())
+                } else if is_provisional_create_canister {
                     // We retrieve the PocketIC instace time (consistent across all subnets) from one subnet.
                     let time = pic.subnets.get_all().first().unwrap().state_machine.time();
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.

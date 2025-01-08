@@ -79,6 +79,7 @@ use ic_types::{
     CanisterId, Cycles, ExecutionRound, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
+use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
@@ -290,6 +291,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.
@@ -345,6 +347,7 @@ pub struct ExecutionEnvironment {
     // parallel and potentially reserving resources. It should be initialized to
     // the number of scheduler cores.
     resource_saturation_scaling: usize,
+    deallocator_thread: DeallocatorThread,
 }
 
 /// This is a helper enum that indicates whether the current DTS execution of
@@ -425,6 +428,13 @@ impl ExecutionEnvironment {
             Arc::clone(&ingress_history_writer),
             fd_factory,
         );
+        // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
+        // 0.1 ms between deallocations, to spread out the load on the memory allocator
+        // (the 0.1 ms was determined by running a benchmark with thousands of messages
+        // executed per round and checking CPU profiles to ensure that the vast majority
+        // of deallocations happened on the background thread).
+        let deallocator_thread =
+            DeallocatorThread::new("ExecutionDeallocator", Duration::from_micros(100));
         Self {
             log,
             hypervisor,
@@ -438,6 +448,7 @@ impl ExecutionEnvironment {
             own_subnet_type,
             paused_execution_registry: Default::default(),
             resource_saturation_scaling,
+            deallocator_thread,
         }
     }
 
@@ -1771,6 +1782,7 @@ impl ExecutionEnvironment {
                     subnet_size,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
+                    self.deallocator_thread.sender(),
                 )
             }
             WasmMethod::System(_) => {
@@ -1808,6 +1820,7 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
+            self.deallocator_thread.sender(),
         )
     }
 
@@ -2368,6 +2381,7 @@ impl ExecutionEnvironment {
             scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
+            self.deallocator_thread.sender(),
         )
     }
 
@@ -3648,6 +3662,16 @@ impl ExecutionEnvironment {
     }
 }
 
+#[cfg(debug_assertions)]
+impl Drop for ExecutionEnvironment {
+    fn drop(&mut self) {
+        // In tests, wait for all states to be dropped before continuing, to avoid any
+        // race conditions. This is not an issue in the replica, as it never drops the
+        // `ExecutionEnvironment`.
+        self.deallocator_thread.flush_deallocation_channel();
+    }
+}
+
 /// Indicates whether the full time spent compiling this canister or a reduced
 /// amount should count against the round instruction limits. Reduced amounts
 /// should be counted when the module was deserialized from a previous
@@ -3811,6 +3835,7 @@ pub fn execute_canister(
                     round_limits,
                     subnet_size,
                     &exec_env.call_tree_metrics,
+                    exec_env.deallocator_thread.sender(),
                 );
                 let (canister, instructions_used, heap_delta, ingress_status) =
                     exec_env.process_result(result);

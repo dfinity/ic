@@ -108,9 +108,9 @@ check_ic_repo() {
 
     log_debug "Check the repository is an IC repository"
     # Possible values of `git_remote` are listed below
-    # git@github.com:dfinity/ic.git
-    # https://github.com/dfinity/ic.git
-    if [[ "$git_remote" == */ic.git ]] || [[ "$git_remote" == */ic ]]; then
+    # git@github.com:dfinity/ic.git, https://github.com/dfinity/ic.git
+    # git@github.com:dfinity/ic-private.git, https://github.com/dfinity/ic-private.git
+    if [[ "$git_remote" == *dfinity/ic* ]]; then
         log_debug "Inside IC repository"
     else
         error "When not specifying any option please run this script inside an IC git repository"

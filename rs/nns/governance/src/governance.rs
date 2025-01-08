@@ -14,7 +14,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
+        prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -116,7 +117,7 @@ use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
     future::Future,
@@ -140,6 +141,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
@@ -273,6 +275,70 @@ impl NetworkEconomics {
             max_proposals_to_keep_per_topic: 100,
             neurons_fund_economics: Some(NeuronsFundNetworkEconomicsPb::with_default_values()),
             voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
+        }
+    }
+
+    /// Returns a modified copy of self where fields containing the default
+    /// value are replaced with the value from defaults. In particular, 0 and
+    /// None are replaced.
+    fn inherit_from(&self, defaults: &Self) -> Self {
+        /// Returns ours if it is the default (for its type). Otherwise, returns default.
+        fn inherit_from<T>(ours: T, default: T) -> T
+        where
+            T: Default + PartialEq,
+        {
+            if ours == T::default() {
+                return default;
+            }
+
+            ours
+        }
+
+        Self {
+            reject_cost_e8s: inherit_from(self.reject_cost_e8s, defaults.reject_cost_e8s),
+            neuron_minimum_stake_e8s: inherit_from(
+                self.neuron_minimum_stake_e8s,
+                defaults.neuron_minimum_stake_e8s,
+            ),
+            neuron_management_fee_per_proposal_e8s: inherit_from(
+                self.neuron_management_fee_per_proposal_e8s,
+                defaults.neuron_management_fee_per_proposal_e8s,
+            ),
+            minimum_icp_xdr_rate: inherit_from(
+                self.minimum_icp_xdr_rate,
+                defaults.minimum_icp_xdr_rate,
+            ),
+            neuron_spawn_dissolve_delay_seconds: inherit_from(
+                self.neuron_spawn_dissolve_delay_seconds,
+                defaults.neuron_spawn_dissolve_delay_seconds,
+            ),
+            maximum_node_provider_rewards_e8s: inherit_from(
+                self.maximum_node_provider_rewards_e8s,
+                defaults.maximum_node_provider_rewards_e8s,
+            ),
+            transaction_fee_e8s: inherit_from(
+                self.transaction_fee_e8s,
+                defaults.transaction_fee_e8s,
+            ),
+            max_proposals_to_keep_per_topic: inherit_from(
+                self.max_proposals_to_keep_per_topic,
+                defaults.max_proposals_to_keep_per_topic,
+            ),
+
+            // TODO(NNS1-3499): Ideally, we would recurse into T, because
+            // otherwise, you have to set a bundle of parameters all at once. In
+            // other words, the current implementation does not support setting
+            // individual subfields, a la carte.
+            neurons_fund_economics: inherit_from(
+                self.neurons_fund_economics.as_ref(),
+                defaults.neurons_fund_economics.as_ref(),
+            )
+            .cloned(),
+            voting_power_economics: inherit_from(
+                self.voting_power_economics.as_ref(),
+                defaults.voting_power_economics.as_ref(),
+            )
+            .cloned(),
         }
     }
 }
@@ -1162,6 +1228,11 @@ impl ProposalData {
         now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds)
     }
 
+    /// Returns true if the proposal has unprocessed votes in the state machine.
+    pub fn has_unprocessed_votes(&self) -> bool {
+        with_voting_state_machines_mut(|vsm| vsm.machine_has_votes_to_process(self.id.unwrap()))
+    }
+
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
@@ -1328,7 +1399,13 @@ impl ProposalData {
             // equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds, voting_period_seconds);
+            let can_accept_votes = self.accepts_vote(now_seconds, voting_period_seconds);
+            let votes_still_processing = self.has_unprocessed_votes();
+            let polls_open_or_still_counting = can_accept_votes || votes_still_processing;
+            let expired = !polls_open_or_still_counting;
+
+            // NOTE: expired is not exactly the right concept in the case where votes are still
+            // processing.
             let decision_reason = match (majority, expired) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
@@ -1858,6 +1935,30 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
 }
 
 impl Governance {
+    /// Creates a new Governance instance with uninitialized fields. The canister should only have
+    /// such state before the state is recovered from the stable memory in post_upgrade or
+    /// initialized in init. In any other case, the `Governance` object should be initialized with
+    /// either `new` or `new_restored`.
+    pub fn new_uninitialized(
+        env: Box<dyn Environment>,
+        ledger: Box<dyn IcpLedger>,
+        cmc: Box<dyn CMC>,
+    ) -> Self {
+        Self {
+            heap_data: HeapGovernanceData::default(),
+            neuron_store: NeuronStore::new(BTreeMap::new()),
+            env,
+            ledger,
+            cmc,
+            closest_proposal_deadline_timestamp_seconds: 0,
+            latest_gc_timestamp_seconds: 0,
+            latest_gc_num_proposals: 0,
+            neuron_data_validator: NeuronDataValidator::new(),
+            minting_node_provider_rewards: false,
+            neuron_rate_limits: NeuronRateLimits::default(),
+        }
+    }
+
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
@@ -4596,46 +4697,8 @@ impl Governance {
                     Err(e) => self.set_proposal_execution_status(pid, Err(e)),
                 }
             }
-            Action::ManageNetworkEconomics(ne) => {
-                if let Some(economics) = &mut self.heap_data.economics {
-                    // The semantics of the proposal is to modify all values specified with a
-                    // non-default value in the proposed new `NetworkEconomics`.
-                    if ne.reject_cost_e8s != 0 {
-                        economics.reject_cost_e8s = ne.reject_cost_e8s
-                    }
-                    if ne.neuron_minimum_stake_e8s != 0 {
-                        economics.neuron_minimum_stake_e8s = ne.neuron_minimum_stake_e8s
-                    }
-                    if ne.neuron_management_fee_per_proposal_e8s != 0 {
-                        economics.neuron_management_fee_per_proposal_e8s =
-                            ne.neuron_management_fee_per_proposal_e8s
-                    }
-                    if ne.minimum_icp_xdr_rate != 0 {
-                        economics.minimum_icp_xdr_rate = ne.minimum_icp_xdr_rate
-                    }
-                    if ne.neuron_spawn_dissolve_delay_seconds != 0 {
-                        economics.neuron_spawn_dissolve_delay_seconds =
-                            ne.neuron_spawn_dissolve_delay_seconds
-                    }
-                    if ne.maximum_node_provider_rewards_e8s != 0 {
-                        economics.maximum_node_provider_rewards_e8s =
-                            ne.maximum_node_provider_rewards_e8s
-                    }
-                    if ne.transaction_fee_e8s != 0 {
-                        economics.transaction_fee_e8s = ne.transaction_fee_e8s
-                    }
-                    if ne.max_proposals_to_keep_per_topic != 0 {
-                        economics.max_proposals_to_keep_per_topic =
-                            ne.max_proposals_to_keep_per_topic
-                    }
-                    if ne.neurons_fund_economics.is_some() {
-                        economics.neurons_fund_economics = ne.neurons_fund_economics
-                    }
-                } else {
-                    // If for some reason, we don't have an
-                    // 'economics' proto, use the proposed one.
-                    self.heap_data.economics = Some(ne)
-                }
+            Action::ManageNetworkEconomics(network_economics) => {
+                self.perform_manage_network_economics(network_economics);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             // A motion is not executed, just recorded for posterity.
@@ -4799,6 +4862,22 @@ impl Governance {
                 format!("Proposal action {:?} is obsolete.", obsolete_action),
             )),
         );
+    }
+
+    fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
+        let Some(original_network_economics) = &self.heap_data.economics else {
+            // This wouldn't happen in production, but if it does, we try to do
+            // the best we can, because doing nothing seems more catastrophic.
+            println!(
+                "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
+                LOG_PREFIX, new_network_economics,
+            );
+            self.heap_data.economics = Some(new_network_economics);
+            return;
+        };
+
+        self.heap_data.economics =
+            Some(new_network_economics.inherit_from(original_network_economics));
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
@@ -6129,6 +6208,14 @@ impl Governance {
         )
     }
 
+    pub fn backfill_some_voting_power_refreshed_timestamps(
+        &mut self,
+        begin: std::ops::Bound<NeuronId>,
+        carry_on: impl FnMut() -> bool,
+    ) -> std::ops::Bound<NeuronId> {
+        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
+    }
+
     /// Creates a new neuron or refreshes the stake of an existing
     /// neuron from a ledger account.
     ///
@@ -6569,15 +6656,6 @@ impl Governance {
         ));
     }
 
-    fn maybe_run_validations(&mut self) {
-        // Running validations might increase heap size. Do not run it when heap should not grow.
-        if self.check_heap_can_grow().is_err() {
-            return;
-        }
-        self.neuron_data_validator
-            .maybe_validate(self.env.now(), &self.neuron_store);
-    }
-
     /// Increment neuron allowances if enough time has passed.
     fn maybe_increase_neuron_allowances(&mut self) {
         // We  increase the allowance over the maximum per hour to account
@@ -6674,10 +6752,8 @@ impl Governance {
             }
         }
 
-        self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
         self.maybe_run_migrations();
-        self.maybe_run_validations();
         self.maybe_increase_neuron_allowances();
     }
 
@@ -6696,16 +6772,20 @@ impl Governance {
         };
 
         let now_seconds = self.env.now();
-        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
-        if maturity_modulation.is_err() {
-            println!(
-                "{}Couldn't update maturity modulation. Error: {}",
-                LOG_PREFIX,
-                maturity_modulation.err().unwrap()
-            );
-            return;
-        }
-        let maturity_modulation = maturity_modulation.unwrap();
+        let maturity_modulation = match self.cmc.neuron_maturity_modulation().await {
+            Ok(maturity_modulation) => maturity_modulation,
+            Err(err) => {
+                let silence_message =
+                    err.contains("Canister rkp4c-7iaaa-aaaaa-aaaca-cai not found");
+                if !silence_message {
+                    println!(
+                        "{}Couldn't update maturity modulation. Error: {}",
+                        LOG_PREFIX, err
+                    );
+                }
+                return;
+            }
+        };
         println!(
             "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
             LOG_PREFIX, maturity_modulation, now_seconds, self.heap_data.maturity_modulation_last_updated_at_timestamp_seconds,
@@ -6748,6 +6828,15 @@ impl Governance {
         Ok(())
     }
 
+    pub fn maybe_run_validations(&mut self) {
+        // Running validations might increase heap size. Do not run it when heap should not grow.
+        if self.check_heap_can_grow().is_err() {
+            return;
+        }
+        self.neuron_data_validator
+            .maybe_validate(self.env.now(), &self.neuron_store);
+    }
+
     /// Returns the 30-day average of the ICP/XDR conversion rate.
     ///
     /// Returns `None` if the data has not been fetched from the CMC canister yet.
@@ -6759,7 +6848,7 @@ impl Governance {
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
     /// which can be spawned (and is modulated).
-    fn unstake_maturity_of_dissolved_neurons(&mut self) {
+    pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
         // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
         // No neuron in stable storage should have staked maturity.
@@ -6857,11 +6946,11 @@ impl Governance {
                         .with_neuron(&neuron_id, |neuron| neuron.clone())
                         .expect("Neuron should exist, just found in list");
 
-                    let maturity = neuron.maturity_e8s_equivalent;
+                    let original_maturity = neuron.maturity_e8s_equivalent;
                     let subaccount = neuron.subaccount();
 
                     let neuron_stake: u64 = match apply_maturity_modulation(
-                        maturity,
+                        original_maturity,
                         maturity_modulation,
                     ) {
                         Ok(neuron_stake) => neuron_stake,
@@ -6882,16 +6971,17 @@ impl Governance {
                         LOG_PREFIX, neuron
                     );
 
-                    let staked_neuron_clone = self
+                    let (staked_neuron_clone, original_spawn_at_timestamp_seconds) = self
                         .with_neuron_mut(&neuron_id, |neuron| {
                             // Reset the neuron's maturity and set that it's spawning before we actually mint
                             // the stake. This is conservative to prevent a neuron having _both_ the stake and
                             // the maturity at any point in time.
+                            let original_spawn_ts = neuron.spawn_at_timestamp_seconds;
                             neuron.maturity_e8s_equivalent = 0;
                             neuron.spawn_at_timestamp_seconds = None;
                             neuron.cached_neuron_stake_e8s = neuron_stake;
 
-                            neuron.clone()
+                            (neuron.clone(), original_spawn_ts)
                         })
                         .unwrap();
 
@@ -6921,18 +7011,35 @@ impl Governance {
                             );
                         }
                         Err(error) => {
-                            // Retain the neuron lock, the neuron won't be able to undergo stake changing
-                            // operations until this is fixed.
-                            // This is different from what we do in most places because we usually rely
-                            // on trapping to retain the lock, but we can't do that here since we're not
-                            // working on a single neuron.
-                            lock.retain();
                             println!(
-                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
+                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
+                                Reverting state, so another attempt can be made.",
                                 LOG_PREFIX,
                                 neuron_id,
                                 error,
-                                );
+                            );
+                            match self.with_neuron_mut(&neuron_id, |neuron| {
+                                neuron.maturity_e8s_equivalent = original_maturity;
+                                neuron.cached_neuron_stake_e8s = 0;
+                                neuron.spawn_at_timestamp_seconds =
+                                    original_spawn_at_timestamp_seconds;
+                            }) {
+                                Ok(_) => (),
+                                Err(e) => {
+                                    println!(
+                                        "{} Error reverting state for neuron: {:?}. Retaining lock: {}",
+                                        LOG_PREFIX,
+                                        neuron_id,
+                                        e
+                                    );
+                                    // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                                    // operations until this is fixed.
+                                    // This is different from what we do in most places because we usually rely
+                                    // on trapping to retain the lock, but we can't do that here since we're not
+                                    // working on a single neuron.
+                                    lock.retain();
+                                }
+                            };
                         }
                     };
                 }
@@ -6953,6 +7060,67 @@ impl Governance {
         self.heap_data.spawning_neurons = Some(false);
     }
 
+    // TODO(NNS1-3526): Remove this method once it is released.
+    pub async fn fix_locked_spawn_neuron(&mut self) -> Result<(), GovernanceError> {
+        // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
+        // Neuron's state was updated, but the ledger transaction did not finish.
+        const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
+
+        let id = 17912780790050115461;
+        let neuron_id = NeuronId { id };
+
+        let now_seconds = self.env.now();
+
+        match self.heap_data.in_flight_commands.get(&id) {
+            None => {
+                return Ok(());
+            }
+            Some(existing_lock) => {
+                let NeuronInFlightCommand {
+                    timestamp,
+                    command: _,
+                } = existing_lock;
+
+                // We check the exact timestamp so that new locks couldn't trigger this condition
+                // which would allow that neuron to repeatedly mint under the right conditions.
+                if *timestamp != TARGETED_LOCK_TIMESTAMP {
+                    return Ok(());
+                }
+            }
+        };
+
+        let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
+            let neuron_stake = neuron.cached_neuron_stake_e8s;
+            let subaccount = neuron.subaccount();
+            (neuron_stake, subaccount)
+        })?;
+
+        // Mint the ICP
+        match self
+            .ledger
+            .transfer_funds(
+                neuron_stake,
+                0, // Minting transfer don't pay a fee.
+                None,
+                neuron_subaccount(subaccount),
+                now_seconds,
+            )
+            .await
+        {
+            Ok(_) => {
+                self.heap_data.in_flight_commands.remove(&id);
+                Ok(())
+            }
+            Err(error) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                format!(
+                    "Error fixing locked neuron: {:?}. Ledger update failed with err: {:?}.",
+                    neuron_id, error
+                ),
+            )),
+        }
+    }
+
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
         let latest_distribution_nominal_end_timestamp_seconds =
@@ -6970,7 +7138,7 @@ impl Governance {
     ///   can no longer accept votes for the purpose of rewards and that have
     ///   not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
-    fn distribute_rewards(&mut self, supply: Tokens) {
+    pub(crate) fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
         let now = self.env.now();
 
@@ -7044,19 +7212,29 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
-            let result = self.heap_data.proposals.get(&proposal_id.id);
-            if result.is_none() {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                         but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
-            }
-            result
-        });
-        let (voters_to_used_voting_right, total_voting_rights) =
-            sum_weighted_voting_power(proposals);
+        // We filter out proposals with votes that still need to be propogated to the ballots.
+        let considered_proposals: Vec<ProposalId> = considered_proposals
+            .into_iter()
+            .filter(
+                |proposal_id| match self.heap_data.proposals.get(&proposal_id.id) {
+                    None => {
+                        println!(
+                            "{}ERROR: Trying to give voting rewards for proposal {}, \
+                             but it was not found.",
+                            LOG_PREFIX, proposal_id.id,
+                        );
+                        false
+                    }
+                    Some(proposal_data) => !proposal_data.has_unprocessed_votes(),
+                },
+            )
+            .collect();
+
+        let (voters_to_used_voting_right, total_voting_rights) = sum_weighted_voting_power(
+            considered_proposals
+                .iter()
+                .flat_map(|proposal_id| self.heap_data.proposals.get(&proposal_id.id)),
+        );
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //
@@ -7167,9 +7345,11 @@ impl Governance {
         })
     }
 
-    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        self.neuron_store
-            .batch_adjust_neurons_storage(start_neuron_id)
+    pub fn batch_adjust_neurons_storage(
+        &mut self,
+        next: std::ops::Bound<NeuronId>,
+    ) -> std::ops::Bound<NeuronId> {
+        self.neuron_store.batch_adjust_neurons_storage(next)
     }
 
     /// Recompute cached metrics once per day
@@ -8018,6 +8198,13 @@ impl Governance {
 
     /// Iterate over all neurons and compute `GovernanceCachedMetrics`
     pub fn compute_cached_metrics(&self, now: u64, icp_supply: Tokens) -> GovernanceCachedMetrics {
+        let network_economics = self.economics();
+        let neuron_minimum_stake_e8s = network_economics.neuron_minimum_stake_e8s;
+        let voting_power_economics = network_economics
+            .voting_power_economics
+            .as_ref()
+            .unwrap_or(&VotingPowerEconomics::DEFAULT);
+
         let NeuronMetrics {
             dissolving_neurons_count,
             dissolving_neurons_e8s_buckets,
@@ -8054,9 +8241,13 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_ect,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
-        } = self
-            .neuron_store
-            .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
+            declining_voting_power_neuron_subset_metrics,
+            fully_lost_voting_power_neuron_subset_metrics,
+        } = self.neuron_store.compute_neuron_metrics(
+            neuron_minimum_stake_e8s,
+            voting_power_economics,
+            now,
+        );
 
         let total_staked_e8s_non_self_authenticating_controller =
             Some(non_self_authenticating_controller_neuron_subset_metrics.total_staked_e8s);
@@ -8068,6 +8259,12 @@ impl Governance {
         );
         let public_neuron_subset_metrics =
             Some(NeuronSubsetMetricsPb::from(public_neuron_subset_metrics));
+        let declining_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
+            declining_voting_power_neuron_subset_metrics,
+        ));
+        let fully_lost_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
+            fully_lost_voting_power_neuron_subset_metrics,
+        ));
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -8110,6 +8307,8 @@ impl Governance {
 
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
+            declining_voting_power_neuron_subset_metrics,
+            fully_lost_voting_power_neuron_subset_metrics,
         }
     }
 
@@ -8130,12 +8329,16 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
             total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent,
             total_voting_power,
+            total_deciding_voting_power,
+            total_potential_voting_power,
 
             count_buckets,
             staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets,
             voting_power_buckets,
+            deciding_voting_power_buckets,
+            potential_voting_power_buckets,
         } = src;
 
         let count = Some(count);
@@ -8143,6 +8346,8 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
         let total_staked_maturity_e8s_equivalent = Some(total_staked_maturity_e8s_equivalent);
         let total_maturity_e8s_equivalent = Some(total_maturity_e8s_equivalent);
         let total_voting_power = Some(total_voting_power);
+        let total_deciding_voting_power = Some(total_deciding_voting_power);
+        let total_potential_voting_power = Some(total_potential_voting_power);
 
         NeuronSubsetMetricsPb {
             count,
@@ -8150,12 +8355,16 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
             total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent,
             total_voting_power,
+            total_deciding_voting_power,
+            total_potential_voting_power,
 
             count_buckets,
             staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets,
             voting_power_buckets,
+            deciding_voting_power_buckets,
+            potential_voting_power_buckets,
         }
     }
 }

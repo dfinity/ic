@@ -19,6 +19,11 @@ pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct CheckTransactionStrArgs {
+    pub txid: String,
+}
+
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
     /// When check finishes and all input addresses passed.
@@ -83,6 +88,7 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 pub struct InitArg {
     pub btc_network: BtcNetwork,
     pub check_mode: CheckMode,
+    pub num_subnet_nodes: u16,
 }
 
 #[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
@@ -132,9 +138,10 @@ impl fmt::Display for BtcNetwork {
     }
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Default, Deserialize, Serialize)]
 pub struct UpgradeArg {
     pub check_mode: Option<CheckMode>,
+    pub num_subnet_nodes: Option<u16>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]

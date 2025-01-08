@@ -1844,9 +1844,6 @@ message ProposalInfo {
 // to set the parameters that it wishes to change.
 // In other words, it's not possible to set any of the values of
 // NetworkEconomics to 0.
-//
-// NOTE: If adding a value to this proto, make sure there is a corresponding
-// `if` in Governance::perform_action().
 message NetworkEconomics {
   reserved 3, 7;
   // The number of E8s (10E-8 of an ICP token) that a rejected
@@ -2260,6 +2257,7 @@ message UpdateCanisterSettings {
     optional uint64 freezing_threshold = 4;
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
+    optional uint64 wasm_memory_threshold = 7;
   }
 
   // The settings to update. Required.
@@ -2435,23 +2433,39 @@ message Governance {
       // analogous fields (declared a little lower in this message). For
       // example, count = count_buckets.values().sum().
       optional uint64 count = 1;
+
       optional uint64 total_staked_e8s = 2;
       optional uint64 total_staked_maturity_e8s_equivalent = 3;
       optional uint64 total_maturity_e8s_equivalent = 4;
+
+      // Deprecated. Use one of the following instead.
       optional uint64 total_voting_power = 5;
+      // Used to decide proposals. If all neurons refresh their voting
+      // power/following frequently enough, this will be equal to potential
+      // voting power. If not, this will be less.
+      optional uint64 total_deciding_voting_power = 11;
+      // Used for voting rewards.
+      optional uint64 total_potential_voting_power = 12;
 
       // These fields are keyed by floor(dissolve delay / 0.5 years). These are
       // analogous to the (singular) fields above. Here, the usual definition of
       // year for the IC is used: exactly 365.25 days.
       map<uint64, uint64> count_buckets = 6;
+
       map<uint64, uint64> staked_e8s_buckets = 7;
       map<uint64, uint64> staked_maturity_e8s_equivalent_buckets = 8;
       map<uint64, uint64> maturity_e8s_equivalent_buckets = 9;
+
+      // Deprecated. Use one of the following instead.
       map<uint64, uint64> voting_power_buckets = 10;
+      map<uint64, uint64> deciding_voting_power_buckets = 13;
+      map<uint64, uint64> potential_voting_power_buckets = 14;
     }
 
     NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
     NeuronSubsetMetrics public_neuron_subset_metrics = 39;
+    NeuronSubsetMetrics declining_voting_power_neuron_subset_metrics = 40;
+    NeuronSubsetMetrics fully_lost_voting_power_neuron_subset_metrics = 41;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -3007,4 +3021,14 @@ message ArchivedMonthlyNodeProviderRewards {
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
+}
+
+// Internal type to allow ProposalVotingStateMachine to be stored
+// in stable memory.
+message ProposalVotingStateMachine {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Topic topic = 2;
+  repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
+  repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
+  map<uint64, Vote> recent_neuron_ballots_to_record = 5;
 }

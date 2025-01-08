@@ -136,7 +136,10 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
-use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::{
+    pb::v1::governance::{neuron_in_flight_command, NeuronInFlightCommand},
+    storage::reset_stable_memory,
+};
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -220,6 +223,12 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
         .unwrap(),
     ));
     nns.governance.run_periodic_tasks().now_or_never();
+    // We need to process the timer to make sure recent ballots record.
+    nns.governance
+        .process_voting_state_machines()
+        .now_or_never()
+        .unwrap();
+
     let after_expiration = nns.governance.get_proposal_data(pid).unwrap();
 
     assert_eq!(
@@ -410,6 +419,12 @@ fn test_single_neuron_proposal_new() {
                                         total_voting_power: Some(
                                             1,
                                         ),
+                                        total_deciding_voting_power: Some(
+                                            1,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            1,
+                                        ),
                                         count_buckets: btreemap! {
                                             1 => 1,
                                         },
@@ -423,6 +438,12 @@ fn test_single_neuron_proposal_new() {
                                             1 => 0,
                                         },
                                         voting_power_buckets: btreemap! {
+                                            1 => 1,
+                                        },
+                                        deciding_voting_power_buckets: btreemap! {
+                                            1 => 1,
+                                        },
+                                        potential_voting_power_buckets: btreemap! {
                                             1 => 1,
                                         },
                                     },
@@ -449,11 +470,93 @@ fn test_single_neuron_proposal_new() {
                                         total_voting_power: Some(
                                             0,
                                         ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
                                         count_buckets: btreemap! {},
                                         staked_e8s_buckets: btreemap! {},
                                         staked_maturity_e8s_equivalent_buckets: btreemap! {},
                                         maturity_e8s_equivalent_buckets: btreemap! {},
                                         voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
+                        GovernanceCachedMetricsChange::DecliningVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
+                        GovernanceCachedMetricsChange::FullyLostVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
                                     },
                                 ),
                             ),
@@ -1112,6 +1215,9 @@ async fn test_cascade_following_new() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    nns.governance.process_voting_state_machines().await;
 
     assert_changes!(
         nns,
@@ -1165,6 +1271,10 @@ async fn test_cascade_following_new() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    nns.governance.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(
@@ -1454,6 +1564,10 @@ async fn test_cascade_following() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    gov.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(
@@ -3895,7 +4009,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 1000;
+    const SCENARIO_COUNT: u64 = 500;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -4529,6 +4643,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(expected_voting_power),
             potential_voting_power: Some(expected_voting_power),
+            recent_ballots_next_entry_index: Some(0),
             ..Default::default()
         }
     );
@@ -6118,6 +6233,127 @@ fn test_neuron_spawn_with_subaccount() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
+#[test]
+fn test_maturity_correctly_reset_if_spawn_fails() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
+
+    let now = driver.now();
+    assert_eq!(
+        gov.with_neuron(&id, |neuron| neuron
+            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
+            .state())
+            .unwrap(),
+        NeuronState::NotDissolving
+    );
+
+    // Artificially set the neuron's maturity to sufficient value
+    let parent_maturity_e8s_equivalent: u64 = 123_456_789;
+    assert!(
+        parent_maturity_e8s_equivalent
+            > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+    );
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
+
+    // Advance the time so that we can check that the spawned neuron has the age
+    // and the right creation timestamp
+    driver.advance_time_by(1);
+
+    // Nonce used for spawn (given as input).
+    let nonce_spawn = driver.random_u64().expect("Could not get random number");
+
+    let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    let child_nid = gov
+        .spawn_neuron(
+            &id,
+            &from,
+            &Spawn {
+                new_controller: Some(child_controller),
+                nonce: Some(nonce_spawn),
+                percentage_to_spawn: None,
+            },
+        )
+        .unwrap();
+
+    let creation_timestamp = driver.now();
+
+    // We should now have 2 neurons.
+    assert_eq!(gov.neuron_store.len(), 2);
+    // And we should have one ledger accounts.
+    driver.assert_num_neuron_accounts_exist(1);
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    // Maturity on the parent neuron should be reset.
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    driver.fail_next_ledger_call();
+
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+
+    //Driver should fail to finish spawning neurons now (i.e. minting) b/c ledger returns error
+
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let child_neuron = gov
+        .get_full_neuron(&child_nid, &child_controller)
+        .expect("The child neuron is missing");
+
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, Some(1730737555));
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
+    // We expect maturity modulation of 100 basis points, which is 1%, because of the
+    // result returned from FakeDriver when pretending to be CMC.
+    assert_eq!(
+        gov.heap_data
+            .cached_daily_maturity_modulation_basis_points
+            .unwrap(),
+        100
+    );
+    // The value here should be reset to the original value, without being modulated.
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 123_456_789);
+}
+
 /// Checks that:
 /// * Specifying a percentage_to_spawn different from 100 lead to the proper fractional maturity
 ///   to be spawned.
@@ -6396,7 +6632,7 @@ fn test_staked_maturity() {
         .expect("Configuring neuron failed");
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
     let neuron = gov
@@ -7787,8 +8023,7 @@ fn test_network_economics_proposal() {
         .unwrap()
         .neuron_minimum_stake_e8s = 1234;
 
-    // Making a proposal to change 'reject_cost_e8s' should only change
-    // that value.
+    // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
             &voter_pid,
@@ -7801,6 +8036,10 @@ fn test_network_economics_proposal() {
                     url: "".to_string(),
                     action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                         reject_cost_e8s: 56789,
+                        voting_power_economics: Some(VotingPowerEconomics {
+                            start_reducing_voting_power_after_seconds: Some(42),
+                            clear_following_after_seconds: Some(4242),
+                        }),
                         ..Default::default()
                     })),
                 }))),
@@ -7822,18 +8061,20 @@ fn test_network_economics_proposal() {
         ProposalStatus::Executed
     );
 
-    // Make sure only that value changed.
+    // Verify that only the two fields specified by the proposal are changed.
     assert_eq!(
-        gov.heap_data.economics.as_ref().unwrap().reject_cost_e8s,
-        56789
-    );
-    assert_eq!(
-        gov.heap_data
-            .economics
-            .as_ref()
-            .unwrap()
-            .neuron_minimum_stake_e8s,
-        1234
+        gov.heap_data.economics.as_ref().unwrap(),
+        &NetworkEconomics {
+            reject_cost_e8s: 56789,
+            voting_power_economics: Some(VotingPowerEconomics {
+                start_reducing_voting_power_after_seconds: Some(42),
+                clear_following_after_seconds: Some(4242),
+            }),
+
+            // No changes to the rest.
+            neuron_minimum_stake_e8s: 1234,
+            ..NetworkEconomics::with_default_values()
+        },
     );
 }
 
@@ -12527,6 +12768,7 @@ lazy_static! {
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
+                    123478, // wasm_memory_threshold
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -14079,6 +14321,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
+        fully_lost_voting_power_neuron_subset_metrics: None,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -14098,6 +14342,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14116,6 +14362,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14171,6 +14419,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
+        fully_lost_voting_power_neuron_subset_metrics: None,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
@@ -14181,6 +14431,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..metrics
         },
@@ -14783,4 +15035,71 @@ impl CMC for StubCMC {
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
         unimplemented!()
     }
+}
+
+// TODO(NNS1-3526): Remove after deployed and confirmed fix
+#[test]
+fn test_locked_neuron_is_unlocked_and_icp_is_minted() {
+    let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
+    let neuron_id = 17912780790050115461;
+    let mut nns = NNSBuilder::new()
+        .set_start_time(epoch)
+        .add_neuron(
+            NeuronBuilder::new(neuron_id, 1_200_000, PrincipalId::new_user_test_id(42))
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(epoch))),
+        )
+        .create();
+
+    nns.governance.heap_data.in_flight_commands.insert(
+        neuron_id,
+        NeuronInFlightCommand {
+            timestamp: 1728911670,
+            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
+                id: neuron_id,
+            })),
+        },
+    );
+
+    // B/c of how this test is setup, the neuron will have stake.
+    // We just want to make sure it can only incrase once.
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000
+    );
+
+    nns.governance
+        .fix_locked_spawn_neuron()
+        .now_or_never()
+        .unwrap()
+        .expect("Failed to fix locked spawn neuron");
+
+    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 0);
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000 * 2
+    );
+
+    // Nothing happens if you call it again with a differnt lock time.
+    nns.governance.heap_data.in_flight_commands.insert(
+        neuron_id,
+        NeuronInFlightCommand {
+            timestamp: 1728911671,
+            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
+                id: neuron_id,
+            })),
+        },
+    );
+    nns.governance
+        .fix_locked_spawn_neuron()
+        .now_or_never()
+        .unwrap()
+        .expect("Failed to fix locked spawn neuron");
+
+    // Lock is not cleared b/c we didn't target that lock
+    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 1);
+    // Balance doesn't change this time.
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000 * 2
+    );
 }

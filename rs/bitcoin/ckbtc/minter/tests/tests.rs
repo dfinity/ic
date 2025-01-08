@@ -33,6 +33,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
+use regex::Regex;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -422,6 +423,14 @@ fn test_no_new_utxos() {
             suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
+        ); // no metrics for update call with new UTXOs
 }
 
 #[test]
@@ -481,6 +490,14 @@ fn update_balance_should_return_correct_confirmations() {
             suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ); // exactly 1 match for an update call with new UTXOs
 }
 
 #[test]
@@ -658,6 +675,7 @@ impl CkBtcSetup {
             Encode!(&CheckArg::InitArg(CheckerInitArg {
                 btc_network: CheckerBtcNetwork::Mainnet,
                 check_mode: CheckMode::AcceptAll,
+                num_subnet_nodes: 1,
             }))
             .unwrap(),
         )
@@ -1212,6 +1230,10 @@ impl CkBtcSetup {
         )
         .unwrap()
         .expect("minter self-check failed")
+    }
+
+    pub fn check_minter_metrics(self) -> MetricsAssert {
+        MetricsAssert::from_querying_metrics(self.env, self.minter_id)
     }
 }
 
@@ -2045,6 +2067,7 @@ fn test_retrieve_btc_with_approval_fail() {
             btc_checker_wasm(),
             Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
                 check_mode: Some(CheckMode::RejectAll),
+                ..CheckerUpgradeArg::default()
             })))
             .unwrap(),
         )
@@ -2086,4 +2109,70 @@ fn test_retrieve_btc_with_approval_fail() {
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
     );
+}
+
+pub struct MetricsAssert {
+    metrics: Vec<String>,
+}
+
+impl MetricsAssert {
+    pub fn from_querying_metrics(state_machine: StateMachine, canister_id: CanisterId) -> Self {
+        use ic_canisters_http_types::{HttpRequest, HttpResponse};
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/metrics".to_string(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+        let response = Decode!(
+            &assert_reply(
+                state_machine
+                    .query(
+                        canister_id,
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to get metrics")
+            ),
+            HttpResponse
+        )
+        .unwrap();
+        assert_eq!(response.status_code, 200_u16);
+        let metrics = String::from_utf8_lossy(response.body.as_slice())
+            .trim()
+            .split('\n')
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+        Self { metrics }
+    }
+
+    pub fn assert_contains_metric_matching(self, pattern: &str) -> Self {
+        assert!(
+            !self.find_metrics_matching(pattern).is_empty(),
+            "Expected to find metric matching '{}', but none matched in:\n{:?}",
+            pattern,
+            self.metrics
+        );
+        self
+    }
+
+    pub fn assert_does_not_contain_metric_matching(self, pattern: &str) -> Self {
+        let matches = self.find_metrics_matching(pattern);
+        assert!(
+            matches.is_empty(),
+            "Expected not to find any metric matching '{}', but found the following matches:\n{:?}",
+            pattern,
+            matches
+        );
+        self
+    }
+
+    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
+        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
+        self.metrics
+            .iter()
+            .filter(|line| regex.is_match(line))
+            .cloned()
+            .collect()
+    }
 }

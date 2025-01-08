@@ -33,6 +33,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p1"],
             patches = ["@@//bazel:cc_rs.patch"],
         )],
+        "libssh2-sys": [crate.annotation(
+            # Patch for determinism issues
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:libssh2-sys.patch"],
+        )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -322,7 +327,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.7.2",
+                version = "^1.9.0",
             ),
             "cached": crate.spec(
                 version = "^0.49",
@@ -520,7 +525,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.1.0",
+                version = "^1.2.0",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -564,32 +569,25 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.18.11",
             ),
             "ic-agent": crate.spec(
-                version = "^0.37.1",
-                features = [
-                    "experimental_sync_call",
-                    "hyper",
-                    "reqwest",
-                    "pem",
-                ],
+                version = "^0.39.2",
+                features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "2496803db52d8182f578f098a3ffe4fcb9573fcd",
+                rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
-            ),
-            "ic-btc-test-utils": crate.spec(
-                version = "^0.1.0",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
             "ic-canister-sig-creation": crate.spec(
-                version = "^1.0.1",
+                git = "https://github.com/dfinity/ic-canister-sig-creation",
+                rev = "7f9e931954637526295269155881207f6c832d6d",
             ),
             "ic-cbor": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.16.0",
@@ -604,17 +602,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-certificate-verification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-http-certification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-http-gateway": crate.spec(
-                git = "https://github.com/dfinity/http-gateway",
-                tag = "0.1.0-b0",
+                version = "0.1.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -624,7 +621,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-response-verification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-sha3": crate.spec(
                 version = "^1.0.0",
@@ -644,10 +641,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-transport-types": crate.spec(
-                version = "^0.37.1",
+                version = "^0.39.2",
             ),
             "ic-utils": crate.spec(
-                version = "^0.37.0",
+                version = "^0.39.0",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
@@ -693,7 +690,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "ipnet": crate.spec(
-                version = "^2.5.0",
+                version = "^2.10.1",
+                features = ["serde"],
             ),
             "isocountry": crate.spec(
                 version = "^0.3.2",
@@ -876,7 +874,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "opentelemetry_sdk": crate.spec(
-                version = "^0.27.0",
+                version = "^0.27.1",
                 features = [
                     "trace",
                     "rt-tokio",
@@ -1282,14 +1280,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.41.1",
+                version = "^1.42.0",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.3.1",
+                version = "^0.4.0",
             ),
             "tokio-rustls": crate.spec(
                 version = "^0.26.0",
@@ -1312,7 +1310,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.4",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.12",
+                version = "^0.7.13",
                 features = [
                     "codec",
                     "time",
@@ -1354,7 +1352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.0",
             ),
             "tracing": crate.spec(
-                version = "^0.1.40",
+                version = "^0.1.41",
             ),
             "tracing-appender": crate.spec(
                 version = "^0.2.3",
@@ -1372,7 +1370,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
-                version = "^0.3.18",
+                version = "^0.3.19",
                 features = [
                     "env-filter",
                     "fmt",
@@ -1432,17 +1430,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "^26.0.0",
+                version = "^27.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
                     "gc",
+                    "gc-null",
                     "parallel-compilation",
                     "runtime",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^26.0.0",
+                version = "^27.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",

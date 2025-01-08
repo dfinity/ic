@@ -4,11 +4,14 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         neuron::Followees, proposal::Action, Ballot, BallotInfo, Governance as GovernanceProto,
-        KnownNeuron, Neuron as NeuronProto, ProposalData, Topic, Vote, VotingPowerEconomics,
+        KnownNeuron, ListNeurons, Neuron as NeuronProto, ProposalData, Topic, Vote,
+        VotingPowerEconomics,
     },
-    temporarily_disable_active_neurons_in_stable_memory,
+    temporarily_disable_allow_active_neurons_in_stable_memory,
+    temporarily_disable_migrate_active_neurons_to_stable_memory,
     temporarily_disable_stable_memory_following_index,
-    temporarily_enable_active_neurons_in_stable_memory,
+    temporarily_enable_allow_active_neurons_in_stable_memory,
+    temporarily_enable_migrate_active_neurons_to_stable_memory,
     temporarily_enable_stable_memory_following_index,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -391,8 +394,9 @@ fn make_neuron(
 
 #[bench(raw)]
 fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_stable_memory_following_index();
+    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
@@ -405,8 +409,9 @@ fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
 
 #[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
@@ -419,8 +424,9 @@ fn cascading_vote_stable_everything() -> BenchResult {
 
 #[bench(raw)]
 fn cascading_vote_all_heap() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_stable_memory_following_index();
+    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
@@ -433,8 +439,9 @@ fn cascading_vote_all_heap() -> BenchResult {
 
 #[bench(raw)]
 fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
@@ -447,8 +454,9 @@ fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
 
 #[bench(raw)]
 fn single_vote_all_stable() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::SingleVote { num_neurons: 151 },
@@ -458,8 +466,9 @@ fn single_vote_all_stable() -> BenchResult {
 
 #[bench(raw)]
 fn centralized_following_all_stable() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
         SetUpStrategy::Centralized { num_neurons: 151 },
@@ -467,26 +476,12 @@ fn centralized_following_all_stable() -> BenchResult {
     )
 }
 
-/// Benchmark the `cascading_vote` function with stable neurons and a heap index.
-/// Before we do the migration of the ballots function to be more efficient:
-/// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 78.49 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-//
-// After we migrate to be more efficient:
-// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 1.50 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-//
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
 
-    let _f = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let neurons = (0..100)
         .map(|id| {
             (
@@ -526,4 +521,61 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
             )
             .expect("Failed!");
     })
+}
+
+fn list_neurons_benchmark() -> BenchResult {
+    let neurons = (0..100)
+        .map(|id| {
+            (id, {
+                let mut neuron: NeuronProto = make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                )
+                .into_proto(&VotingPowerEconomics::DEFAULT, 123_456_789);
+                neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
+                neuron
+            })
+        })
+        .collect::<BTreeMap<u64, NeuronProto>>();
+
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..GovernanceProto::default()
+    };
+
+    let governance = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let request = ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+        include_empty_neurons_readable_by_caller: Some(false),
+        include_public_neurons_in_full_neurons: None,
+    };
+
+    bench_fn(|| {
+        governance.list_neurons(&request, PrincipalId::new_user_test_id(1));
+    })
+}
+
+/// Benchmark list_neurons
+#[bench(raw)]
+fn list_neurons_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    list_neurons_benchmark()
+}
+
+/// Benchmark list_neurons
+#[bench(raw)]
+fn list_neurons_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    list_neurons_benchmark()
 }

@@ -187,17 +187,17 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 fn compute_min_withdrawal_amount(
     median_fee_rate_e3s: MillisatoshiPerByte,
     min_withdrawal_amount: u64,
+    check_fee: u64,
 ) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-    const PER_REQUEST_CHECK_FEE: u64 = 2_000;
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
         + PER_REQUEST_VSIZE_BOUND * median_fee_rate
         + PER_REQUEST_MINTER_FEE_BOUND
-        + PER_REQUEST_CHECK_FEE)
+        + check_fee)
         / 50_000)
         * 50_000
         + min_withdrawal_amount
@@ -220,8 +220,11 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
                     s.last_fee_per_vbyte.clone_from(&fees);
-                    s.fee_based_retrieve_btc_min_amount =
-                        compute_min_withdrawal_amount(fees[50], s.retrieve_btc_min_amount);
+                    s.fee_based_retrieve_btc_min_amount = compute_min_withdrawal_amount(
+                        fees[50],
+                        s.retrieve_btc_min_amount,
+                        s.check_fee,
+                    );
                 });
                 Some(fees[50])
             } else {
@@ -310,7 +313,7 @@ async fn submit_pending_requests() {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    state::audit::remove_retrieve_btc_request(s, request);
+                    state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                 }
                 None
             }
@@ -324,7 +327,7 @@ async fn submit_pending_requests() {
                 for request in batch {
                     if request.address == address && request.amount == amount {
                         // Finalize the request that we cannot fulfill.
-                        state::audit::remove_retrieve_btc_request(s, request);
+                        state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                     } else {
                         // Keep the rest of the requests in the batch, we will
                         // try to build a new transaction on the next iteration.
@@ -410,6 +413,7 @@ async fn submit_pending_requests() {
                                     submitted_at: ic_cdk::api::time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                 },
+                                &IC_CANISTER_RUNTIME,
                             );
                         });
                     }
@@ -483,7 +487,12 @@ async fn reimburse_failed_kyt() {
         .await
         {
             state::mutate_state(|s| {
-                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
+                state::audit::reimbursed_failed_deposit(
+                    s,
+                    burn_block_index,
+                    block_index,
+                    &IC_CANISTER_RUNTIME,
+                )
             });
         }
     }
@@ -533,10 +542,10 @@ async fn finalize_requests() {
 
     state::mutate_state(|s| {
         if !new_utxos.is_empty() {
-            state::audit::add_utxos(s, None, main_account, new_utxos);
+            state::audit::add_utxos(s, None, main_account, new_utxos, &IC_CANISTER_RUNTIME);
         }
         for txid in &confirmed_transactions {
-            state::audit::confirm_transaction(s, txid);
+            state::audit::confirm_transaction(s, txid, &IC_CANISTER_RUNTIME);
             maybe_finalized_transactions.remove(txid);
         }
     });
@@ -556,7 +565,7 @@ async fn finalize_requests() {
                 "[finalize_requests]: finalized transaction {} assumed to be stuck",
                 &txid
             );
-            state::audit::confirm_transaction(s, &txid);
+            state::audit::confirm_transaction(s, &txid, &IC_CANISTER_RUNTIME);
         }
     });
 
@@ -730,7 +739,7 @@ async fn finalize_requests() {
                 };
 
                 state::mutate_state(|s| {
-                    state::audit::replace_transaction(s, old_txid, new_tx);
+                    state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
                 });
             }
             Err(err) => {
@@ -855,7 +864,7 @@ pub async fn sign_transaction(
     ecdsa_public_key: &ECDSAPublicKey,
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
-) -> Result<tx::SignedTransaction, management::CallError> {
+) -> Result<tx::SignedTransaction, CallError> {
     use crate::address::{derivation_path, derive_public_key};
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
@@ -1160,9 +1169,13 @@ pub async fn distribute_kyt_fees() {
         match mint(amount, provider, crate::memo::encode(&memo).into()).await {
             Ok(block_index) => {
                 state::mutate_state(|s| {
-                    if let Err(state::Overdraft(overdraft)) =
-                        state::audit::distributed_kyt_fee(s, provider, amount, block_index)
-                    {
+                    if let Err(state::Overdraft(overdraft)) = state::audit::distributed_kyt_fee(
+                        s,
+                        provider,
+                        amount,
+                        block_index,
+                        &IC_CANISTER_RUNTIME,
+                    ) {
                         // This should never happen because:
                         //  1. The fee distribution task is guarded (at most one copy is active).
                         //  2. Fee distribution is the only way to decrease the balance.
@@ -1283,8 +1296,7 @@ pub trait CanisterRuntime {
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
@@ -1325,10 +1337,9 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
-        management::call("bitcoin_get_utxos", cycles, &request).await
+        management::bitcoin_get_utxos(request).await
     }
 
     async fn check_transaction(

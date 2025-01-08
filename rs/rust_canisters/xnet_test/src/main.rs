@@ -70,6 +70,7 @@ struct Request {
     /// Local time observed in the round when this message was sent.
     time_nanos: u64,
     /// Optional padding, to bring the payload to the desired byte size.
+    #[serde(with = "serde_bytes")]
     padding: Vec<u8>,
 }
 
@@ -80,6 +81,7 @@ struct Reply {
     /// roundtrip latency on the caller side.
     time_nanos: u64,
     /// Optional padding, to bring the payload to the desired byte size.
+    #[serde(with = "serde_bytes")]
     padding: Vec<u8>,
 }
 
@@ -172,6 +174,7 @@ async fn fanout() {
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
 
+    let mut futures = vec![];
     for canisters in network_topology {
         if canisters.is_empty() {
             continue;
@@ -182,7 +185,6 @@ async fn fanout() {
             continue;
         }
 
-        let mut futures = vec![];
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
             let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
             let canister = canisters[idx];
@@ -200,30 +202,30 @@ async fn fanout() {
             futures.push(res);
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
+    }
 
-        let results = join_all(futures).await;
+    let results = join_all(futures).await;
 
-        for res in results {
-            match res {
-                Ok((reply,)) => {
-                    let elapsed = Duration::from_nanos(time() - reply.time_nanos);
-                    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
-                }
-                Err((err_code, err_message)) => {
-                    // Catch whether the call failed due to a synchronous or
-                    // asynchronous error. Based on the current implementation of
-                    // the Rust CDK, a synchronous error will contain a specific
-                    // error message.
-                    if err_message.contains("Couldn't send message") {
-                        log(&format!(
-                            "{} call failed with {:?}",
-                            time() / 1_000_000,
-                            err_code
-                        ));
-                        METRICS.with(|m| m.borrow_mut().call_errors += 1);
-                    } else {
-                        METRICS.with(|m| m.borrow_mut().reject_responses += 1);
-                    }
+    for res in results {
+        match res {
+            Ok((reply,)) => {
+                let elapsed = Duration::from_nanos(time() - reply.time_nanos);
+                METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
+            }
+            Err((err_code, err_message)) => {
+                // Catch whether the call failed due to a synchronous or
+                // asynchronous error. Based on the current implementation of
+                // the Rust CDK, a synchronous error will contain a specific
+                // error message.
+                if err_message.contains("Couldn't send message") {
+                    log(&format!(
+                        "{} call failed with {:?}",
+                        time() / 1_000_000,
+                        err_code
+                    ));
+                    METRICS.with(|m| m.borrow_mut().call_errors += 1);
+                } else {
+                    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
                 }
             }
         }

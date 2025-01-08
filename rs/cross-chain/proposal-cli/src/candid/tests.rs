@@ -55,8 +55,8 @@ fn should_parse_constructor_parameters() {
             (
                 TargetCanister::CkBtcArchive,
                 "(principal, nat64, opt nat64, opt nat64)"
-            ) | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
-                | (TargetCanister::CkBtcKyt, "(LifecycleArg)")
+            ) | (TargetCanister::BtcChecker, "(CheckArg)")
+                | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
                 | (TargetCanister::CkBtcLedger, "(LedgerArg)")
                 | (TargetCanister::CkBtcMinter, "(MinterArg)")
                 | (

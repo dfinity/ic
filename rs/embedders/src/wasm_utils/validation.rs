@@ -528,6 +528,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "mint_cycles128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "call_cycles_add128",
             vec![(
                 API_VERSION_IC0,
@@ -1464,7 +1474,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
         // of `wasmtime::MemoryCreator`.
         .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
-        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
+        .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(MAX_WASM_STACK_SIZE);
     config
 }
@@ -1481,11 +1491,8 @@ fn can_compile(
 ) -> Result<(), WasmValidationError> {
     let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
-    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
-        WasmValidationError::WasmtimeValidation(format!(
-            "wasmtime::Module::validate() failed with {}",
-            err
-        ))
+    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|_err| {
+        WasmValidationError::WasmtimeValidation("wasmtime::Module::validate() failed".into())
     })
 }
 

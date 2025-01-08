@@ -436,6 +436,7 @@ pub async fn install_btc_checker(
     let init_args = CheckArg::InitArg(CheckerInitArg {
         btc_network: BtcNetwork::Regtest { json_rpc_url },
         check_mode: CheckMode::Normal,
+        num_subnet_nodes: 1,
     });
 
     install_rust_canister_from_path(
@@ -455,6 +456,7 @@ pub async fn upgrade_btc_checker(
 ) -> CanisterId {
     let upgrade_arg = CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
         check_mode: Some(mode),
+        ..CheckerUpgradeArg::default()
     }));
 
     btc_checker_canister

@@ -1313,6 +1313,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &self.metrics.dkg_validator,
+            &self.log,
         )
         .map_err(|err| {
             err.map(
