@@ -833,7 +833,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
         if upgrade_from_version < 2 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-            print(format!("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.").as_str());
+            print(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
             clear_stable_balances_data();
             ledger.copy_token_pool();
         }
