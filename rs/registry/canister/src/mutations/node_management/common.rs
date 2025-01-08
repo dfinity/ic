@@ -95,12 +95,17 @@ pub fn get_node_provider_id_for_operator_id(
             |result| {
                 PrincipalId::try_from(
                     NodeOperatorRecord::decode(result.value.as_slice())
-                        .unwrap()
+                        .map_err(|_| {
+                            format!(
+                                "Could not decode node_operator_record for Node Operator Id {}",
+                                node_operator_id
+                            )
+                        })?
                         .node_provider_principal_id,
                 )
                 .map_err(|_| {
                     format!(
-                        "Could not decode node_operator_record's node_provider_id for Node Operator Id {}",
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
                         node_operator_id
                     )
                 })
