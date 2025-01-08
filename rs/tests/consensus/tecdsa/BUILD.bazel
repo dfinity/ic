@@ -133,7 +133,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -157,7 +157,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -177,7 +177,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -198,7 +198,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -254,7 +254,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,

@@ -8,6 +8,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
+use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -123,6 +124,7 @@ pub(crate) fn validate_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
+    log: &ReplicaLogger,
 ) -> ValidationResult<PayloadValidationError> {
     let current_height = parent.height.increment();
     let registry_version = pool_reader
@@ -163,6 +165,28 @@ pub(crate) fn validate_payload(
                     summary_payload.dkg.clone(),
                 )
                 .into());
+            }
+            for (tag, transcript) in summary_payload.dkg.current_transcripts() {
+                if *tag != transcript.dkg_id.dkg_tag {
+                    metrics.with_label_values(&["tag_mismatch"]).inc();
+                    warn!(
+                        log,
+                        "Current transcript key {:?} doesn't match transcript tag {:?}!",
+                        tag,
+                        transcript.dkg_id.dkg_tag
+                    );
+                }
+            }
+            for (tag, transcript) in summary_payload.dkg.next_transcripts() {
+                if *tag != transcript.dkg_id.dkg_tag {
+                    metrics.with_label_values(&["tag_mismatch"]).inc();
+                    warn!(
+                        log,
+                        "Next transcript key {:?} doesn't match transcript tag {:?}!",
+                        tag,
+                        transcript.dkg_id.dkg_tag
+                    );
+                }
             }
             Ok(())
         }
@@ -275,6 +299,7 @@ fn validate_dealings_payload(
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -343,6 +368,7 @@ mod tests {
                 state_manager.as_ref(),
                 &context,
                 &mock_metrics(),
+                &no_op_logger(),
             )
             .is_ok());
 
@@ -364,6 +390,7 @@ mod tests {
                 state_manager.as_ref(),
                 &context,
                 &mock_metrics(),
+                &no_op_logger(),
             )
             .is_ok());
         })
@@ -559,6 +586,7 @@ mod tests {
                 state_manager.as_ref(),
                 &context,
                 &mock_metrics(),
+                &no_op_logger(),
             );
 
             result
