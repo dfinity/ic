@@ -9,9 +9,10 @@
 3. After the proposal is executed, move the entries from this file to a new
    section in the adjacent CHANGELOG.md file.
 
-If you add a function, but calls to it will only be added in later PR(s), then
-do NOT add an entry to this file, because this new function has no user-visible
-behavior change yet. Wait until an actual call is added before adding an entry
+If your new code is not active in release builds (because it is behind a feature
+flag, or it is simply not called yet), then do NOT add an entry to this file,
+because this new function has no user-visible behavior change yet. Wait until it
+is active (e.g. the feature flag is flipped to "enable") before adding an entry
 to this file.
 
 TODO: Automate step 2. by modifying the script that composes the proposal
