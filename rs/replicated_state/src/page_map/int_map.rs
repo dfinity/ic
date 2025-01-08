@@ -1068,6 +1068,9 @@ where
     V: ValidateEq,
 {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        if self.len != rhs.len {
+            return Err(format!("Length divergence: {} != {}", self.len, rhs.len));
+        }
         self.tree.validate_eq(&rhs.tree)
     }
 }
