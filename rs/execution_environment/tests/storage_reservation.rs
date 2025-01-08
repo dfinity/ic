@@ -189,7 +189,12 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     // Grow memory in update call, should trigger storage reservation.
-    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(3000).build());
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(1000).build());
+    println!(
+        "canister's balance after stable grow: {}",
+        env.cycle_balance(canister_id)
+    );
+    assert_eq!(1, 2);
     let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
     assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
 
