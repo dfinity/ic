@@ -99,7 +99,6 @@ function get_if_address_retries() {
     done
 }
 
-
 function read_config_variables() {
     NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
     BACKUP_RETENTION_TIME_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
