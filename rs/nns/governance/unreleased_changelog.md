@@ -15,15 +15,7 @@ because this new function has no user-visible behavior change yet. Wait until it
 is active (e.g. the feature flag is flipped to "enable") before adding an entry
 to this file.
 
-TODO: Automate step 2. by modifying the script that composes the proposal
-summary. It might be helpful to look at nns-dapp's [split-changelog] script for
-inspiration.
-
-[split-changelog]: https://github.com/dfinity/nns-dapp/blob/main/scripts/nns-dapp/split-changelog
-
-TODO: Perhaps, the script that drafts the proposal summary can also move content
-from here to CHANGELOG.md (step 3.). OTOH, it might be better if this is done by
-a second (new) script, because the proposal ID is not known until later?
+TODO: Automate moving content from unreleased_changelog.md to CHANGELOG.md.
 
 
 # How to Write a Good Entry
