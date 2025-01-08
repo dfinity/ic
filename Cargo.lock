@@ -6408,7 +6408,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_tokenstream 0.2.2",
- "syn 2.0.87",
+ "syn 2.0.90",
 ]
 
 [[package]]
