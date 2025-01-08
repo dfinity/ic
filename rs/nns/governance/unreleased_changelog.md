@@ -34,6 +34,21 @@ links to keepachangelog.com as its source of inspiration.
 
 ## Added
 
+### Periodic Confirmation
+
+Enabled voting power adjustment and follow pruning.
+
+This feature was proposed and approved in motion [proposal 132411].
+
+[proposal 132411]: https://dashboard.internetcomputer.org/proposal/132411
+
+We have already been recording how long it's been since neurons refreshed their
+voting power/following. We also supported refreshing. Those who have never
+refreshed are considered as having refreshed on Sep 1, 2024.
+
+With this enablement, not refreshing for > 6 months will start to affect the
+neuron.
+
 ## Changed
 
 ## Deprecated
