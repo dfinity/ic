@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::fs::write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -7,10 +8,9 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 
 use config::config_ini::config_map_from_path;
-use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
-use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
+use network::{IPV6_NAME_SERVER_NETWORKD_CONTENTS, SYSFS_NETWORK_DIR};
 
 pub static DEFAULT_GUESTOS_NETWORK_CONFIG_PATH: &str = "/boot/config/network.conf";
 
@@ -272,6 +272,32 @@ fn get_interface_name() -> Result<String> {
     let interface_name = get_valid_interface_name(first_valid_interface)?;
     eprintln!("Chosen interface name: {:?}", interface_name);
     Ok(interface_name)
+}
+
+pub fn get_valid_interface_name(interface_path: &PathBuf) -> Result<String> {
+    interface_path
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .context(format!(
+            "Error getting filename from path: {:?}",
+            interface_path
+        ))
+}
+
+/// Get paths of all available network interfaces. E.g. /sys/class/net/enp0s31f6
+pub fn get_interface_paths() -> Vec<PathBuf> {
+    match fs::read_dir(SYSFS_NETWORK_DIR) {
+        Ok(itr) => itr
+            // Keep only the items that are symlinks
+            .filter_map(Result::ok)
+            .map(|dir_entry| dir_entry.path())
+            .filter(|path_buf| path_buf.is_symlink())
+            .collect(),
+        Err(e) => {
+            eprintln!("Failed to read directory {SYSFS_NETWORK_DIR}: {e}");
+            Vec::new()
+        }
+    }
 }
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
