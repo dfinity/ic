@@ -42,7 +42,7 @@ fn test(env: TestEnv) {
             &governance,
             app_subnet.subnet_id,
             key_ids.clone(),
-            Some(Duration::from_secs(1)),
+            Some(Duration::from_millis(1)),
             &log,
         )
         .await;

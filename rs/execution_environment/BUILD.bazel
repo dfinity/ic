@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
+    "//rs/utils/thread",
     "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
@@ -52,6 +53,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
@@ -75,13 +77,11 @@ DEV_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
     "@crate_index//:itertools",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:tempfile",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
@@ -188,7 +188,6 @@ BENCH_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
@@ -198,6 +197,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -206,6 +206,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
@@ -214,6 +215,7 @@ rust_ic_bench(
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
+    with_test = True,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 

@@ -3,7 +3,8 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
-    temporarily_disable_active_neurons_in_stable_memory,
+    temporarily_disable_allow_active_neurons_in_stable_memory,
+    temporarily_disable_migrate_active_neurons_to_stable_memory,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -192,7 +193,7 @@ fn test_add_neurons() {
 
     // Step 3.1: verify that the active neuron is in the heap, not in the stable neuron store, and
     // can be read.
-    if is_active_neurons_in_stable_memory_enabled() {
+    if migrate_active_neurons_to_stable_memory() {
         assert!(is_neuron_in_stable(active_neuron.id()));
         assert!(!is_neuron_in_heap(&neuron_store, active_neuron.id()));
     } else {
@@ -361,7 +362,7 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
         neuron_store.batch_validate_neurons_in_stable_store_are_inactive(NeuronId::min_value(), 10);
 
     // Step 3: verifies the results - the active neuron in stable storage should be found as invalid.
-    if is_active_neurons_in_stable_memory_enabled() {
+    if allow_active_neurons_in_stable_memory() {
         assert_eq!(invalid_neuron_ids, vec![]);
     } else {
         assert_eq!(invalid_neuron_ids, vec![neuron.id()]);
@@ -415,7 +416,8 @@ fn assert_neuron_in_neuron_store_eq(neuron_store: &NeuronStore, neuron: &Neuron)
 #[test]
 fn test_from_active_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -444,7 +446,8 @@ fn test_from_active_to_active() {
 #[test]
 fn test_from_active_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron which would be inactive if there
     // is no fund.
@@ -475,7 +478,8 @@ fn test_from_active_to_inactive() {
 #[test]
 fn test_from_inactive_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -506,7 +510,8 @@ fn test_from_inactive_to_active() {
 #[test]
 fn test_from_inactive_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -537,7 +542,8 @@ fn test_from_inactive_to_inactive() {
 #[test]
 fn test_from_stale_inactive_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -565,7 +571,8 @@ fn test_from_stale_inactive_to_inactive() {
 #[test]
 fn test_from_stale_inactive_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -909,7 +916,8 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
 #[test]
 fn test_batch_adjust_neurons_storage() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -967,7 +975,8 @@ fn test_batch_adjust_neurons_storage() {
 #[test]
 fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());

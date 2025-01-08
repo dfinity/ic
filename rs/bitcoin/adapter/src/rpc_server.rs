@@ -6,12 +6,12 @@ use crate::{
     BlockchainManagerRequest, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
+use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};

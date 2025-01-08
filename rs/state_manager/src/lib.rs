@@ -18,7 +18,7 @@ use crate::{
     },
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{unbounded, Sender};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -62,7 +62,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
     SubnetId,
 };
-use ic_utils_thread::JoinOnDrop;
+use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
@@ -794,24 +794,6 @@ impl SharedState {
     }
 }
 
-// We send complex objects to a different thread to free them. This will spread
-// the cost of deallocation over a longer period of time, and avoid long pauses.
-type Deallocation = Box<dyn std::any::Any + Send + 'static>;
-
-struct NotifyWhenDeallocated {
-    channel: Sender<()>,
-}
-
-impl Drop for NotifyWhenDeallocated {
-    fn drop(&mut self) {
-        self.channel.send(()).expect("Failed to notify dellocation");
-    }
-}
-
-// We will not use the deallocation thread when the number of pending
-// deallocation objects goes above the threshold.
-const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
-
 /// The number of archived and diverged states to keep before we start deleting the old ones.
 const MAX_ARCHIVED_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
 
@@ -833,12 +815,11 @@ pub struct StateManagerImpl {
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    deallocation_sender: Sender<Deallocation>,
+    deallocator_thread: DeallocatorThread,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -898,9 +879,6 @@ fn check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
         .filter(|h| h.get() != 0)
         .collect::<Vec<_>>();
     debug_assert_eq!(certification_heights, snapshot_heights);
-    for h in states.states_metadata.keys() {
-        debug_assert!(states.certifications_metadata.contains_key(h));
-    }
 }
 
 fn initialize_tip(
@@ -1721,22 +1699,8 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
-        #[allow(clippy::disallowed_methods)]
-        let (deallocation_sender, deallocation_receiver) = unbounded();
-        let _deallocation_handle = JoinOnDrop::new(
-            std::thread::Builder::new()
-                .name("StateDeallocation".to_string())
-                .spawn({
-                    move || {
-                        while let Ok(object) = deallocation_receiver.recv() {
-                            std::mem::drop(object);
-                            // The sleep below is to spread out the load on memory allocator
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                        }
-                    }
-                })
-                .expect("failed to spawn background deallocation thread"),
-        );
+        let deallocator_thread =
+            DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             tip_channel
@@ -1759,10 +1723,9 @@ impl StateManagerImpl {
             verifier,
             own_subnet_id,
             own_subnet_type,
-            deallocation_sender,
+            deallocator_thread,
             latest_state_height,
             latest_certified_height,
-            _deallocation_handle,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -2155,11 +2118,15 @@ impl StateManagerImpl {
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
         states.disable_state_fetch_below(height);
 
-        if states
+        let is_snapshot_present = states
             .snapshots
             .iter()
-            .any(|snapshot| snapshot.height == height)
-        {
+            .any(|snapshot| snapshot.height == height);
+
+        let is_state_metadata_present = states.states_metadata.contains_key(&height);
+
+        // If both the snapshot and the state metadata are present, we can safely skip it.
+        if is_snapshot_present && is_state_metadata_present {
             info!(
                 self.log,
                 "Completed StateSync for state {} that we already have locally", height
@@ -2167,22 +2134,24 @@ impl StateManagerImpl {
             return;
         }
 
-        states.snapshots.push_back(Snapshot {
-            height,
-            state: Arc::new(state),
-        });
-        states
-            .snapshots
-            .make_contiguous()
-            .sort_by_key(|snapshot| snapshot.height);
+        if !is_snapshot_present {
+            states.snapshots.push_back(Snapshot {
+                height,
+                state: Arc::new(state),
+            });
+            states
+                .snapshots
+                .make_contiguous()
+                .sort_by_key(|snapshot| snapshot.height);
 
-        self.metrics
-            .resident_state_count
-            .set(states.snapshots.len() as i64);
+            self.metrics
+                .resident_state_count
+                .set(states.snapshots.len() as i64);
 
-        states
-            .certifications_metadata
-            .insert(height, certification_metadata);
+            states
+                .certifications_metadata
+                .insert(height, certification_metadata);
+        }
 
         let state_size_bytes: i64 = manifest
             .file_table
@@ -2190,18 +2159,20 @@ impl StateManagerImpl {
             .map(|f| f.size_bytes as i64)
             .sum();
 
-        states.states_metadata.insert(
-            height,
-            StateMetadata {
-                checkpoint_layout: Some(cp_layout),
-                bundled_manifest: Some(BundledManifest {
-                    root_hash,
-                    manifest,
-                    meta_manifest,
-                }),
-                state_sync_file_group: None,
-            },
-        );
+        if !is_state_metadata_present {
+            states.states_metadata.insert(
+                height,
+                StateMetadata {
+                    checkpoint_layout: Some(cp_layout),
+                    bundled_manifest: Some(BundledManifest {
+                        root_hash,
+                        manifest,
+                        meta_manifest,
+                    }),
+                    state_sync_file_group: None,
+                },
+            );
+        }
 
         let latest_height = update_latest_height(&self.latest_state_height, height);
         if latest_height == height.get() {
@@ -2221,12 +2192,7 @@ impl StateManagerImpl {
 
     /// Wait till deallocation queue is empty.
     pub fn flush_deallocation_channel(&self) {
-        let (send, recv) = bounded(1);
-        self.deallocation_sender
-            .send(Box::new(NotifyWhenDeallocated { channel: send }))
-            .expect("Failed to send deallocation request");
-        recv.recv()
-            .expect("Failed to receive deallocation notification");
+        self.deallocator_thread.flush_deallocation_channel();
     }
 
     /// Remove any inmemory state at height h with h < last_height_to_keep
@@ -2253,6 +2219,18 @@ impl StateManagerImpl {
         #[cfg(debug_assertions)]
         let latest_state_height = self.latest_state_height();
 
+        // Practically, Consensus does not ask state manager to keep states which are already removed.
+        // However, in debug builds, we filter `extra_inmemory_heights_to_keep` and store `existing_extra_inmemory_heights_to_keep`
+        // so that we can verify later that they are all retained.
+        #[cfg(debug_assertions)]
+        let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+        #[cfg(debug_assertions)]
+        let existing_extra_inmemory_heights_to_keep: Vec<Height> = extra_inmemory_heights_to_keep
+            .iter()
+            .filter(|h| state_heights.contains(h))
+            .copied()
+            .collect();
+
         let heights_to_remove = std::ops::Range {
             start: Height::new(1),
             end: last_height_to_keep,
@@ -2273,45 +2251,28 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
-        // The `extra_inmemory_heights_to_keep` is used for preserving in-memory states,
-        // but it can safely be included in the `heights_to_keep` set, which retains both
-        // in-memory states and checkpoints. This is safe because:
-        //
-        // 1. When called by `remove_inmemory_states_below`, checkpoints are never removed,
-        //    regardless of the inclusion of `extra_inmemory_heights_to_keep`, so no harm
-        //    or unnecessary preservation occurs.
-        //
-        // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
-        //    an empty set, having no effect on the outcome.
-        //
-        // In the future, separating these sets could clarify their distinct purposes and
-        // simplify reasoning about correctness without relying heavily on input behavior.
-        let heights_to_keep: BTreeSet<Height> = states
+        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
+        let checkpoint_heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
             .copied()
             .filter(|height| {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
-            .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
-            .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect();
 
-        // Send object to deallocation thread if it has capacity.
-        let deallocate = |x| {
-            if self.deallocation_sender.len() < DEALLOCATION_BACKLOG_THRESHOLD {
-                self.deallocation_sender
-                    .send(x)
-                    .expect("failed to send object to deallocation thread");
-            } else {
-                std::mem::drop(x);
-            }
-        };
+        // In addition, we retain the latest certified state and any extra states specified to keep.
+        // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
+        // as decisions to retain a checkpoint or an in-memory state are made independently.
+        let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .collect::<BTreeSet<_>>();
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
-                && !heights_to_keep.contains(&snapshot.height)
+                && !inmemory_heights_to_keep.contains(&snapshot.height)
         });
         states.snapshots = retained;
 
@@ -2332,7 +2293,6 @@ impl StateManagerImpl {
             .iter()
             .map(|s| s.height)
             .filter(|h| h.get() != 0)
-            .chain(states.states_metadata.keys().copied())
             .min();
         if let Some(min_resident_height) = min_resident_height {
             self.metrics
@@ -2345,10 +2305,10 @@ impl StateManagerImpl {
             .set(latest_height.get() as i64);
 
         // Send removed snapshot to deallocator thread
-        deallocate(Box::new(removed));
+        self.deallocator_thread.send(Box::new(removed));
 
         for (height, metadata) in states.states_metadata.range(heights_to_remove) {
-            if heights_to_keep.contains(height) {
+            if checkpoint_heights_to_keep.contains(height) {
                 continue;
             }
             if let Some(ref checkpoint_layout) = metadata.checkpoint_layout {
@@ -2361,7 +2321,7 @@ impl StateManagerImpl {
             .certifications_metadata
             .split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in inmemory_heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
                 certifications_metadata.insert(*h, cert_metadata);
             }
@@ -2372,8 +2332,9 @@ impl StateManagerImpl {
             &mut states.certifications_metadata,
         );
 
-        // Send removed certification metadata to deallocator thread
-        deallocate(Box::new(certifications_metadata));
+        // Send removed certification metadata to deallocator thread.
+        self.deallocator_thread
+            .send(Box::new(certifications_metadata));
 
         let latest_certified_height = states
             .certifications_metadata
@@ -2391,7 +2352,7 @@ impl StateManagerImpl {
 
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in checkpoint_heights_to_keep.iter() {
             if let Some(metadata) = states.states_metadata.remove(h) {
                 metadata_to_keep.insert(*h, metadata);
             }
@@ -2406,7 +2367,10 @@ impl StateManagerImpl {
             //
             // NOTE: we rely on deallocations happening sequentially, adding more
             // deallocation threads might break the desired behavior.
-            deallocate(Box::new(metadata_to_keep));
+            //
+            // FIXME: Objects are not necessarily deleted in order: if the backlog is too
+            // large, we drop them synchronously.
+            self.deallocator_thread.send(Box::new(metadata_to_keep));
         }
 
         if number_of_checkpoints != states.states_metadata.len() {
@@ -2418,7 +2382,6 @@ impl StateManagerImpl {
 
         #[cfg(debug_assertions)]
         {
-            use ic_interfaces_state_manager::CERT_ANY;
             let unfiltered_checkpoint_heights = self
                 .state_layout
                 .unfiltered_checkpoint_heights()
@@ -2430,13 +2393,17 @@ impl StateManagerImpl {
                     )
                 });
 
-            let state_heights = self.list_state_heights(CERT_ANY);
+            let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
 
-            debug_assert!(heights_to_keep
+            // All checkpoints to keep should exist on disk.
+            debug_assert!(checkpoint_heights_to_keep
                 .iter()
-                .all(|h| unfiltered_checkpoint_heights.contains(h)
-                    || extra_inmemory_heights_to_keep.contains(h)
-                    || *h == latest_certified_height));
+                .all(|h| unfiltered_checkpoint_heights.contains(h)));
+
+            // If the in-memory states that Consensus ask to keep exist in the beginning, they should be all retained.
+            debug_assert!(existing_extra_inmemory_heights_to_keep
+                .iter()
+                .all(|h| state_heights.contains(h)));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
@@ -3272,9 +3239,7 @@ impl StateManager for StateManagerImpl {
                 .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
             {
                 if let Some(tree) = certification_metadata.hash_tree.take() {
-                    self.deallocation_sender
-                        .send(Box::new(tree))
-                        .expect("failed to send object to deallocation thread");
+                    self.deallocator_thread.send(Box::new(tree));
                 }
             }
         }
@@ -3566,18 +3531,6 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .insert(height, certification_metadata);
 
-            if let Some((state_metadata, compute_manifest_request)) =
-                state_metadata_and_compute_manifest_request
-            {
-                states.states_metadata.insert(height, state_metadata);
-                debug_assert!(self.tip_channel.len() <= 1);
-                self.tip_channel
-                    .send(compute_manifest_request)
-                    .expect("failed to send ComputeManifestRequest message");
-            } else {
-                debug_assert!(scope != CertificationScope::Full);
-            }
-
             let latest_height = update_latest_height(&self.latest_state_height, height);
             self.metrics.max_resident_height.set(latest_height as i64);
             {
@@ -3591,6 +3544,23 @@ impl StateManager for StateManagerImpl {
                     .observe((now - *last_height_update_time).as_secs_f64());
                 *last_height_update_time = now;
             }
+        }
+
+        if let Some((state_metadata, compute_manifest_request)) =
+            state_metadata_and_compute_manifest_request
+        {
+            let metadata = states
+                .states_metadata
+                .entry(height)
+                .or_insert(state_metadata);
+            debug_assert!(self.tip_channel.len() <= 1);
+            if metadata.bundled_manifest.is_none() {
+                self.tip_channel
+                    .send(compute_manifest_request)
+                    .expect("failed to send ComputeManifestRequest message");
+            }
+        } else {
+            debug_assert!(scope != CertificationScope::Full);
         }
 
         self.metrics
