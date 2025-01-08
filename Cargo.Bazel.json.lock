@@ -1,5 +1,5 @@
 {
-  "checksum": "426018d109eca1845ca4b3d2e5755c16846719bf3f009e6969cf716a8955195a",
+  "checksum": "bcfd580ac2798f1729c8a7a4e6150a3dc800c834e1596ee0e9bf495070ff83e6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -30639,7 +30639,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             },
             {
@@ -30982,7 +30982,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             },
             {
