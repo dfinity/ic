@@ -36,7 +36,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_transient_error: IntCounter,
     pub invalidated_entries_duration: Histogram,
-    pub memory_bytes: IntGauge,
+    pub count_bytes: IntGauge,
     pub len: IntGauge,
     pub push_errors: IntCounter,
     pub validation_errors: IntCounter,
@@ -103,8 +103,8 @@ impl QueryCacheMetrics {
                 "The duration of invalidated cache entries in seconds",
                 metrics_registry,
             ),
-            memory_bytes: metrics_registry.int_gauge(
-                "execution_query_cache_memory_bytes",
+            count_bytes: metrics_registry.int_gauge(
+                "execution_query_cache_count_bytes",
                 "The current replica side query cache size in bytes",
             ),
             len: metrics_registry.int_gauge(
@@ -433,8 +433,8 @@ impl QueryCache {
             } else {
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
-                // Update the `memory_bytes` metric.
-                self.metrics.memory_bytes.set(cache.memory_bytes() as i64);
+                // Update the `count_bytes` metric.
+                self.metrics.count_bytes.set(cache.memory_bytes() as i64);
             }
         }
         None
@@ -483,7 +483,7 @@ impl QueryCache {
             self.metrics.evicted_entries_duration.observe(d);
         }
         let memory_bytes = cache.memory_bytes() as i64;
-        self.metrics.memory_bytes.set(memory_bytes);
+        self.metrics.count_bytes.set(memory_bytes);
         self.metrics.len.set(cache.len() as i64);
     }
 }

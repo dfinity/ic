@@ -157,7 +157,6 @@ impl MemoryDiskBytes for OnDiskSerializedModule {
     }
 
     fn disk_bytes(&self) -> usize {
-        // TODO: cache to avoid repeated syscalls.
         (self.bytes.metadata().unwrap().len() + self.initial_state_data.metadata().unwrap().len())
             as usize
     }
