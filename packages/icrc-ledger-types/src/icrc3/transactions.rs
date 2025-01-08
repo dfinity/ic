@@ -113,6 +113,9 @@ impl Transaction {
     }
 }
 
+/// Deprecated. Use [`GetBlocksResponse`] returned from the
+/// [`icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md)
+/// endpoint instead.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetTransactionsResponse {
     pub log_length: Nat,
@@ -121,6 +124,7 @@ pub struct GetTransactionsResponse {
     pub archived_transactions: Vec<ArchivedRange<QueryTxArchiveFn>>,
 }
 
+/// Deprecated. Use Vec<[`ICRC3GenericBlock`]> instead
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransactionRange {
     pub transactions: Vec<Transaction>,

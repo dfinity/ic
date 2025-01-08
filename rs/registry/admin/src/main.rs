@@ -3693,9 +3693,15 @@ async fn main() {
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                &opts.hsm_slot.unwrap(),
-                &opts.key_id.unwrap(),
-                &opts.pin.unwrap(),
+                &opts.hsm_slot.expect(
+                    "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
+                ),
+                &opts.key_id.expect(
+                    "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
+                ),
+                &opts.pin.expect(
+                    "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
+                ),
             )
         } else {
             Sender::Anonymous
