@@ -40,6 +40,7 @@ use serde_json::Value;
 use std::{collections::HashSet, convert::TryFrom};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
+const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
 
 struct Handlers<'a> {
     subnet_size: usize,
@@ -80,8 +81,6 @@ fn main() -> Result<()> {
                 // .add_test(systest!(test_transform_function_is_executed))
                 // .add_test(systest!(test_composite_transform_function_is_executed))
                 // .add_test(systest!(test_no_cycles_attached))
-                .add_test(systest!(test_max_possible_request_size))
-                .add_test(systest!(test_max_possible_request_size_exceeded))
                 // .add_test(systest!(test_2mb_response_cycle_for_rejection_path))
                 // .add_test(systest!(test_4096_max_response_cycle_case_1))
                 // .add_test(systest!(test_4096_max_response_cycle_case_2))
@@ -97,13 +96,30 @@ fn main() -> Result<()> {
                 // ))
                 // .add_test(systest!(test_that_redirects_are_not_followed))
                 // .add_test(systest!(test_http_calls_to_ic_fails)),
-                .add_test(systest!(test_invalid_domain_name))
-                .add_test(systest!(test_invalid_ip))
+                // .add_test(systest!(test_invalid_domain_name))
+                // .add_test(systest!(test_invalid_ip))
                 .add_test(systest!(test_get_hello_world_call))
                 .add_test(systest!(test_post_call))
                 .add_test(systest!(test_small_maximum_possible_response_size))
                 .add_test(systest!(test_small_maximum_possible_response_size_exceeded))
-                .add_test(systest!(test_head_call)),
+                .add_test(systest!(test_head_call))
+                .add_test(systest!(test_max_possible_request_size))
+                .add_test(systest!(test_max_possible_request_size_exceeded))
+                .add_test(systest!(test_non_ascii_url_is_rejected))
+                .add_test(systest!(test_max_url_length))
+                .add_test(systest!(test_max_url_length_exceeded))
+                .add_test(systest!(
+                    test_small_maximum_possible_response_size_only_headers
+                ))
+                .add_test(systest!(
+                    test_small_maximum_possible_response_size_exceeded_only_headers
+                ))
+                .add_test(systest!(test_large_maximum_response_size))
+                .add_test(systest!(test_maximum_possible_value_of_max_response_bytes))
+                .add_test(systest!(
+                    test_maximum_possible_value_of_max_response_bytes_exceeded
+                ))
+                .add_test(systest!(check_caller_id_on_transform_function)),
         )
         .execute_from_args()?;
 
@@ -142,6 +158,8 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    let transform_context = "transform_context".as_bytes().to_vec();
+
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
         RemoteHttpRequest {
@@ -155,7 +173,7 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
                         principal: get_proxy_canister_id(&env).into(),
                         method: "test_transform".to_string(),
                     }),
-                    context: vec![0, 1, 2],
+                    context: transform_context.clone(),
                 }),
                 max_response_bytes: None,
             },
@@ -170,6 +188,42 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
     assert_eq!(response.headers[0].1, "bonjour");
     assert_eq!(response.headers[1].0, "caller");
     assert_eq!(response.headers[1].1, "aaaaa-aa");
+    assert_eq!(
+        response.body.as_str(),
+        "transform_context",
+        "Transform function did not set the body to the provided context."
+    );
+    assert_eq!(response.status, 202);
+}
+
+pub fn test_non_existent_transform_function(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let transform_context = "transform_context".as_bytes().to_vec();
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: CanisterHttpRequestArgs {
+                url: format!("https://[{webserver_ipv6}]:20443"),
+                headers: BoundedHttpHeaders::new(vec![]),
+                method: HttpMethod::GET,
+                body: Some("".as_bytes().to_vec()),
+                transform: Some(TransformContext {
+                    function: TransformFunc(candid::Func {
+                        principal: get_proxy_canister_id(&env).into(),
+                        method: "non_existent_transform_function".to_string(),
+                    }),
+                    context: transform_context.clone(),
+                }),
+                max_response_bytes: None,
+            },
+            cycles: 500_000_000_000,
+        },
+    ));
+
+    assert_matches!(response, Err((RejectionCode::CanisterError, _)));
 }
 
 pub fn test_composite_transform_function_is_executed(env: TestEnv) {
@@ -743,13 +797,7 @@ fn test_get_hello_world_call(env: TestEnv) {
         headers: BoundedHttpHeaders::new(vec![]),
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: get_proxy_canister_id(&env).into(),
-                method: "transform".to_string(),
-            }),
-            context: vec![0, 1, 2],
-        }),
+        transform: None,
         max_response_bytes: Some(max_response_bytes),
     };
 
@@ -763,7 +811,7 @@ fn test_get_hello_world_call(env: TestEnv) {
     .expect("Request is successful.");
 
     assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body == expected_body);
-    assert_distinct_headers(&response);
+    assert_http_response(&response);
 }
 
 fn test_post_call(env: TestEnv) {
@@ -814,50 +862,51 @@ fn test_post_call(env: TestEnv) {
     assert_http_json_response(&request, &response);
 }
 
+/// Send 6666 repeating `x` to /anything endpoint.
+/// Use HEAD http method. It only asks for the head, not the body.
+/// Set max response size to 666 (order of magnitude smaller)
 fn test_head_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let url = format!("https://[{}]:20443/{}", webserver_ipv6, "anything");
+    let long_x_string = "x".repeat(6666);
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "anything", long_x_string
+    );
+    let body = Some("hello_world".as_bytes().to_vec());
+    let headers = BoundedHttpHeaders::new(vec![
+        HttpHeader {
+            name: "name1".to_string(),
+            value: "value1".to_string(),
+        },
+        HttpHeader {
+            name: "name2".to_string(),
+            value: "value2".to_string(),
+        },
+    ]);
+    let max_response_bytes = Some(666);
 
-    let headers_list = vec![
-        ("name1".to_string(), "value1".to_string()),
-        ("name2".to_string(), "value2".to_string()),
-    ];
-
-    let request_headers: Vec<_> = headers_list
-        .clone()
-        .into_iter()
-        .map(|(name, value)| HttpHeader { name, value })
-        .collect();
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::HEAD,
+        body,
+        transform: None,
+        max_response_bytes,
+    };
 
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
-                url,
-                headers: BoundedHttpHeaders::new(request_headers),
-                method: HttpMethod::HEAD,
-                body: None,
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
+            request: request.clone(),
             cycles: 500_000_000_000,
         },
     ))
-    .expect("Request is successful.");
+    .expect("Request succeeds.");
 
-    assert_eq!(response.status, 200);
-    assert_matches!(
-        response.body,
-        body if headers_list.iter().all(|(name, value)| { body.contains(name) && body.contains(value) })
-    );
+    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
+    assert_distinct_headers(&response);
 }
 
 fn test_small_maximum_possible_response_size(env: TestEnv) {
@@ -869,15 +918,8 @@ fn test_small_maximum_possible_response_size(env: TestEnv) {
         webserver_ipv6, "ascii", "hello_world"
     );
 
-    // Response headers (size: 158):
-    //   date: Jan 1 1970 00:00:00 GMT
-    //   content-type: application/octet-stream
-    //   content-length: 11
-    //   connection: close
-    //   access-control-allow-origin: *
-    //   access-control-allow-credentials: true
-
-    let header_size = 158;
+    let header_size = 143;
+    let max_response_bytes = Some(header_size + "hello_world".len() as u64);
 
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
@@ -887,20 +929,16 @@ fn test_small_maximum_possible_response_size(env: TestEnv) {
                 headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: None,
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: Some(header_size),
+                transform: None,
+                max_response_bytes,
             },
             cycles: 500_000_000_000,
         },
-    ));
+    ))
+    .expect("Request is successful.");
 
-    assert_matches!(response, Ok(response) if response.status == 200);
+    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
+    assert_http_response(&response);
 }
 
 fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
@@ -912,15 +950,16 @@ fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
         webserver_ipv6, "ascii", "hello_world"
     );
 
-    // Response headers (size: 158):
-    //   date: Jan 1 1970 00:00:00 GMT
-    //   content-type: application/octet-stream
-    //   content-length: 11
-    //   connection: close
-    //   access-control-allow-origin: *
-    //   access-control-allow-credentials: true
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
 
-    let header_size = 158;
+    let header_size = 143;
+    let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
 
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
@@ -930,44 +969,391 @@ fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
                 headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: None,
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: Some(header_size - 1),
+                transform: None,
+                max_response_bytes,
             },
             cycles: 500_000_000_000,
         },
-    ));
+    ))
+    .expect_err("Request size exceeds limit and will fail.");
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(response, (RejectionCode::SysFatal, _));
+}
+
+fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let n = 0;
+    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 11
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+
+    let header_size = 142;
+    let max_response_bytes = Some(header_size + n);
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: CanisterHttpRequestArgs {
+                url,
+                headers: BoundedHttpHeaders::new(vec![]),
+                method: HttpMethod::GET,
+                body: None,
+                transform: None,
+                max_response_bytes,
+            },
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect("Request is successful.");
+
+    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
+    assert_http_response(&response);
+}
+
+fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let n = 0;
+    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
+
+    //   { Response headers
+    //       date: Jan 1 1970 00:00:00 GMT
+    //       content-type: application/octet-stream
+    //       content-length: 0
+    //       access-control-allow-origin: *
+    //       access-control-allow-credentials: true
+    //   }
+
+    let header_size = 142;
+    let max_response_bytes = Some(header_size + n - 1);
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: CanisterHttpRequestArgs {
+                url,
+                headers: BoundedHttpHeaders::new(vec![]),
+                method: HttpMethod::GET,
+                body: None,
+                transform: None,
+                max_response_bytes,
+            },
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect_err("Request size exceeds limit and will fail.");
+
+    assert_matches!(response, (RejectionCode::SysFatal, _));
+}
+
+fn test_non_ascii_url_is_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let expected_body = "안녕하세요";
+
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", expected_body
+    );
+
+    let max_response_bytes = 666;
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        transform: None,
+        max_response_bytes: Some(max_response_bytes),
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect_err("Non ASCII url should fail.");
+
+    assert_matches!(response, (RejectionCode::SysFatal, _));
+}
+
+/// Test that the response body returned is the same as the requested path.
+fn test_max_url_length(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let expected_body = "hello_world";
+
+    let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
+    let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
+    let expected_body = "x".repeat(remaining_space);
+
+    let url = format!("{}{}", base_url, expected_body);
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        transform: None,
+        max_response_bytes: None,
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect("Request is successful.");
+
+    assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if *body == expected_body);
+    assert_http_response(&response);
+}
+
+/// Test that the response body returned is the same as the requested path.
+fn test_max_url_length_exceeded(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let expected_body = "hello_world";
+
+    let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
+    let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
+    // Add one more character to exceed the limit.
+    let expected_body = "x".repeat(remaining_space + 1);
+
+    let url = format!("{}{}", base_url, expected_body);
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        transform: None,
+        max_response_bytes: None,
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect_err("Request exceeds url length limit and should fail.");
+
+    assert_matches!(response, (RejectionCode::CanisterReject, _));
+}
+
+/// Test that the response body returned is the same as the requested path.
+fn test_large_maximum_response_size(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let expected_body = "hello_world";
+
+    let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
+    let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
+    // Add one more character to exceed the limit.
+    let expected_body = "x".repeat(remaining_space + 1);
+
+    let url = format!("{}{}", base_url, expected_body);
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        transform: None,
+        max_response_bytes: None,
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect_err("Request exceeds url length limit and should fail.");
+
+    assert_matches!(response, (RejectionCode::CanisterReject, _));
+}
+
+/// Test that the response body returned is the same as the requested path.
+fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let header_size = 143;
+    let max_response_bytes = Some(header_size + "hello_world".len() as u64);
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: CanisterHttpRequestArgs {
+                url,
+                headers: BoundedHttpHeaders::new(vec![]),
+                method: HttpMethod::GET,
+                body: None,
+                transform: None,
+                max_response_bytes: Some(MAX_REQUEST_BYTES_LIMIT as u64),
+            },
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect("Request is successful.");
+
+    assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
+    assert_http_response(&response);
+}
+
+/// Test that the response body returned is the same as the requested path.
+fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let header_size = 143;
+    let max_response_bytes = Some(header_size + "hello_world".len() as u64);
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: CanisterHttpRequestArgs {
+                url,
+                headers: BoundedHttpHeaders::new(vec![]),
+                method: HttpMethod::GET,
+                body: None,
+                transform: None,
+                // Add 1 byte to exceed limit.
+                max_response_bytes: Some(MAX_REQUEST_BYTES_LIMIT as u64 + 1),
+            },
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect_err("Request is successful.");
+
+    assert_matches!(response, (RejectionCode::CanisterReject, _));
+}
+
+fn reference_transform_function_exposed_by_different_canister(env: TesteEnv) {
+    const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
+    const COUNTER_CANISTER_READ_METHOD: &str = "read";
+
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        max_response_bytes: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: get_proxy_canister_id(&env).into(),
+                method: "test_transform".to_string(),
+            }),
+            context: vec![],
+        }),
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect("Request is successful.");
+
+    // Check caller id injected into header.
+    let caller_id = &response
+        .headers
+        .iter()
+        .find(|(name, _)| name.to_lowercase() == "caller")
+        .expect("caller header is present after transformation.")
+        .1;
+
+    assert_eq!(caller_id, "aaaaa-aa");
+}
+// testCase "reference to a transform function exposed by another canister" $ do
+//   let s = "hello_world"
+//   cid <- install ecid noop
+//   cid2 <- install ecid (onTransform (callback (replyData (bytes (Candid.encode dummyResponse)))))
+//   ic_http_get_request' (\fee -> ic00viaWithCyclesRefund fee cid fee) sub httpbin_proto ("ascii/" ++ s) Nothing (Just ("transform", "")) cid2 >>= isReject [4],
+
+fn check_caller_id_on_transform_function(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        max_response_bytes: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: get_proxy_canister_id(&env).into(),
+                method: "test_transform".to_string(),
+            }),
+            context: vec![],
+        }),
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers.proxy_canister(),
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ))
+    .expect("Request is successful.");
+
+    // Check caller id injected into header.
+    let caller_id = &response
+        .headers
+        .iter()
+        .find(|(name, _)| name.to_lowercase() == "caller")
+        .expect("caller header is present after transformation.")
+        .1;
+
+    assert_eq!(caller_id, "aaaaa-aa");
 }
 
 // ---- END SPEC COMPLIANCE TESTS -------
 
 /// Case insensitive header names are distinct.
 fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
-    // let response_body: Value =
-    //     serde_json::from_str(&http_response.body).expect("Response body is JSON");
-
-    // let headers: Vec<_> = response_body["headers"]
-    //     .as_object()
-    //     .expect("Headers are an object")
-    //     .iter()
-    //     .map(|(name, value)| {
-    //         (
-    //             name.to_string(),
-    //             value
-    //                 .as_str()
-    //                 .expect("Header value is a string")
-    //                 .to_string(),
-    //         )
-    //     })
-    //     .collect();
-
     let response_header_set: HashSet<String> = http_response
         .headers
         .clone()
@@ -983,55 +1369,33 @@ fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
     );
 }
 
-// TODO: REMOVE THIS FUNCTION. CONTENT-LENGTH HEADER IS NOT USED IN
-// HTTP/2.0 AND ABOVE.
 /// Assert that content-length header matches the body length, and that the headers are distinct.
-// fn assert_http_response(
-//     // http_request: &CanisterHttpRequestArgs,
-//     http_response: &RemoteHttpResponse,
-// ) {
-//     assert_distinct_header(http_response);
+fn assert_http_response(
+    // http_request: &CanisterHttpRequestArgs,
+    http_response: &RemoteHttpResponse,
+) {
+    assert_distinct_headers(http_response);
 
-//     // let response_body: Value =
-//     //     serde_json::from_str(&http_response.body).expect("Response body is JSON");
+    let content_length_header = http_response
+        .headers
+        .iter()
+        .find(|(name, _)| name.to_lowercase() == "content-length")
+        .map(|(_, value)| value.parse::<usize>())
+        .expect(
+            format!(
+                "HTTP response contains `content-length` header. Headers: {:?}",
+                http_response.headers
+            )
+            .as_str(),
+        )
+        .expect("content-length is a number");
 
-//     // let content_length_header = response_body["headers"]
-//     //     .as_object()
-//     //     .expect("Headers are an object")
-//     //     .iter()
-//     //     .map(|(name, value)| {
-//     //         (
-//     //             name.to_string(),
-//     //             value
-//     //                 .as_str()
-//     //                 .expect("Header value is a string")
-//     //                 .to_string(),
-//     //         )
-//     //     })
-//     //     .find(|(name, _)| name.to_lowercase() == "content-length")
-//     //     .map(|(_, value)| value.parse::<usize>().expect("Content length is a number"))
-//     //     .expect("HTTP response must contain a \"content-length\" header");
-
-//     let content_length_header = http_response
-//         .headers
-//         .iter()
-//         .find(|(name, _)| name.to_lowercase() == "content-length")
-//         .map(|(_, value)| value.parse::<usize>())
-//         .expect(
-//             format!(
-//                 "HTTP response contains `content-length` header. Headers: {:?}",
-//                 http_response.headers
-//             )
-//             .as_str(),
-//         )
-//         .expect("content-length is a number");
-
-//     assert_eq!(
-//         content_length_header,
-//         http_response.body.len(),
-//         "Content length header does not match the body length."
-//     );
-// }
+    assert_eq!(
+        content_length_header,
+        http_response.body.len(),
+        "Content length header does not match the body length."
+    );
+}
 
 /// Checks if two sets of headers match according to specific rules:
 /// 1. All headers in `outcall_headers` must exist in `http_bin_server_received_headers`
