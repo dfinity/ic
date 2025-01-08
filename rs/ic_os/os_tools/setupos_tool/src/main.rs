@@ -3,10 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use config::{
-    deserialize_config, DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
-    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
-};
+use config::{deserialize_config, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
@@ -30,13 +27,6 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct SetupOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH.to_string(), value_name = "FILE")]
-    config: String,
-
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH.to_string(), value_name = "FILE")]
-    /// deployment.json file path
-    deployment_file: String,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
