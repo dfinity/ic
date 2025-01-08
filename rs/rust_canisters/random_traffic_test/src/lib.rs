@@ -5,18 +5,36 @@ use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
+use std::time::Duration;
 
 /// A full config for generating random calls and replies. Ranges are stored as individual u32
 /// because ranges don't implement `CandidType`.
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Hash)]
 pub struct Config {
+    /// A list of canister IDs, i.e. receivers for calls made by this canister.
     pub receivers: Vec<CanisterId>,
-    pub call_bytes_min: u32,
-    pub call_bytes_max: u32,
-    pub reply_bytes_min: u32,
-    pub reply_bytes_max: u32,
-    pub instructions_count_min: u32,
-    pub instructions_count_max: u32,
+    /// `(min, max)` for the payload size in bytes included in a call.
+    pub call_bytes: (u32, u32),
+    /// `(min, max)` for the payload size in bytes included in a reply.
+    pub reply_bytes: (u32, u32),
+    /// `(min, max)` for the simulated number of instructions to generate a reply.
+    pub instructions_count: (u32, u32),
+    /// `(min, max)` for the timeout in seconds used for best-effort calls.
+    pub timeout_secs: (u32, u32),
+    /// The maximum number of calls attempted per heartbeat.
+    pub calls_per_heartbeat: u32,
+    /// The weight for making a reply used in a binominal distribution together with
+    /// `downstream_call_weight`.
+    pub reply_weight: u32,
+    /// The weight for making a downstream call used in a binomial distribution together with
+    /// `downstream_call_weight`.
+    pub downstream_call_weight: u32,
+    /// The weight for making a best-effort call used in a binomial distribution together with
+    /// `guaranteed_response_weight`.
+    pub best_effort_weight: u32,
+    /// The weight for making a guaranteed response call used in a binomial distribution together
+    /// with `best_effort_weight`.
+    pub guaranteed_response_weight: u32,
 }
 
 impl Default for Config {
@@ -24,12 +42,15 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             receivers: vec![],
-            call_bytes_min: 0,
-            call_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
-            reply_bytes_min: 0,
-            reply_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
-            instructions_count_min: 0,
-            instructions_count_max: 0,
+            call_bytes: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
+            reply_bytes: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
+            instructions_count: (0, 0),
+            timeout_secs: (10, 100),
+            calls_per_heartbeat: 3,
+            reply_weight: 1,
+            downstream_call_weight: 0,
+            best_effort_weight: 1,
+            guaranteed_response_weight: 0,
         }
     }
 }
@@ -50,6 +71,12 @@ impl Config {
         call_bytes: RangeInclusive<u32>,
         reply_bytes: RangeInclusive<u32>,
         instructions_count: RangeInclusive<u32>,
+        timeout_secs: RangeInclusive<u32>,
+        calls_per_heartbeat: u32,
+        reply_weight: u32,
+        downstream_call_weight: u32,
+        best_effort_weight: u32,
+        guaranteed_response_weight: u32,
     ) -> Result<Self, String> {
         // Sanity checks. After passing these, the canister should run as intended.
         if call_bytes.is_empty() {
@@ -67,15 +94,27 @@ impl Config {
         if instructions_count.is_empty() {
             return Err("empty instructions_count range".to_string());
         }
+        if timeout_secs.is_empty() {
+            return Err("empty timeout range".to_string());
+        }
+        if reply_weight == 0 && downstream_call_weight == 0 {
+            return Err("bad downstream call weights, both 0".to_string());
+        }
+        if best_effort_weight == 0 && guaranteed_response_weight == 0 {
+            return Err("bad call type weights, both 0".to_string());
+        }
 
         Ok(Self {
             receivers,
-            call_bytes_min: *call_bytes.start(),
-            call_bytes_max: *call_bytes.end(),
-            reply_bytes_min: *reply_bytes.start(),
-            reply_bytes_max: *reply_bytes.end(),
-            instructions_count_min: *instructions_count.start(),
-            instructions_count_max: *instructions_count.end(),
+            call_bytes: (*call_bytes.start(), *call_bytes.end()),
+            reply_bytes: (*reply_bytes.start(), *reply_bytes.end()),
+            instructions_count: (*instructions_count.start(), *instructions_count.end()),
+            timeout_secs: (*timeout_secs.start(), *timeout_secs.end()),
+            calls_per_heartbeat,
+            reply_weight,
+            downstream_call_weight,
+            best_effort_weight,
+            guaranteed_response_weight,
         })
     }
 }
@@ -102,38 +141,54 @@ pub struct Record {
     pub call_depth: u32,
     /// The number of bytes included in the payload.
     pub sent_bytes: u32,
-    /// The kind of reply received, i.e. a payload or a reject response.
-    pub reply: Option<Reply>,
+    /// The timeout in seconds set for a best-effort call; `None` for a guaranteed response call.
+    pub timeout_secs: Option<u32>,
+    /// The kind of reply received, i.e. a payload or a reject response; and the duration after
+    /// which the reply was received (from when the call was made).
+    pub duration_and_reply: Option<(Duration, Reply)>,
 }
 
 /// Human readable printer.
 impl std::fmt::Debug for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match &self.caller {
-            None => write!(
+        write!(
+            f,
+            "{} ({:x}) ",
+            &self.receiver.to_string()[..5],
+            self.call_tree_id
+        )?;
+
+        // A timeout indicates a best-effort message.
+        if let Some(timeout_secs) = self.timeout_secs {
+            write!(f, "to[s]: {} ", timeout_secs)?;
+        }
+
+        // A caller indicates a downstream call.
+        if let Some(caller) = self.caller {
+            write!(
                 f,
-                "{} ({:x}) | ",
-                &self.receiver.to_string()[..5],
-                self.call_tree_id,
-            ),
-            Some(caller) => write!(
-                f,
-                "{} ({:x}) (caller {} @ depth {}) | ",
-                &self.receiver.to_string()[..5],
-                self.call_tree_id,
+                "(caller {} @ depth {}) ",
                 &caller.to_string()[..5],
-                self.call_depth,
-            ),
-        }?;
+                self.call_depth
+            )?;
+        }
 
-        write!(f, "sending {} bytes | ", self.sent_bytes)?;
+        write!(f, "| sending {} bytes | ", self.sent_bytes)?;
 
-        match &self.reply {
+        match &self.duration_and_reply {
             None => write!(f, "..."),
-            Some(Reply::Bytes(bytes)) => write!(f, "received {} bytes", bytes),
-            Some(Reply::Reject(error_code, error_msg)) => write!(
+            Some((call_duration, Reply::Bytes(bytes))) => {
+                write!(
+                    f,
+                    "duration[s]: {}, received {} bytes",
+                    call_duration.as_secs(),
+                    bytes
+                )
+            }
+            Some((call_duration, Reply::Reject(error_code, error_msg))) => write!(
                 f,
-                "reject({}): {error_msg}",
+                "duration[s]: {}, reject({}): {error_msg}",
+                call_duration.as_secs(),
                 RejectCode::try_from(*error_code as u64).unwrap(),
             ),
         }
@@ -164,12 +219,12 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
             metrics.downstream_calls_attempted += 1;
         }
 
-        match &record.reply {
-            Some(Reply::Bytes(received_bytes)) => {
+        match &record.duration_and_reply {
+            Some((_, Reply::Bytes(received_bytes))) => {
                 metrics.calls_replied += 1;
                 metrics.received_bytes += received_bytes;
             }
-            Some(Reply::Reject(_, _)) => {
+            Some((_, Reply::Reject(..))) => {
                 metrics.calls_rejected += 1;
                 metrics.rejected_bytes += record.sent_bytes;
             }
