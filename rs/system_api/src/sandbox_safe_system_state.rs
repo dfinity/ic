@@ -187,7 +187,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
+        let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
