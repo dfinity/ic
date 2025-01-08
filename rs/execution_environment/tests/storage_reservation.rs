@@ -186,19 +186,10 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         SUBNET_MEMORY_CAPACITY,
         Some(300_400_000_000),
     );
-    println!(
-        "canister's balance after installation: {}",
-        env.cycle_balance(canister_id)
-    );
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     // Grow memory in update call, should trigger storage reservation.
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(3000).build());
-    println!(
-        "canister's balance after growing stable memory: {}",
-        env.cycle_balance(canister_id)
-    );
-    assert_eq!(1, 2);
     let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
     assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
 
@@ -210,8 +201,11 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         Err(err) => {
             assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
             println!("error description {}", err.description());
+            // Match on the first part of the error message. Due to a difference in instructions consumed on
+            // Mac vs Linux, we cannot match on the exact number of cycles but we only need to verify it's
+            // a non-zero amount.
             assert!(err.description().contains(
-                "Canister cannot grow memory by 200067930 bytes due to insufficient cycles. At least 339_603_710_662 additional cycles are required."
+                "Canister cannot grow memory by 200067930 bytes due to insufficient cycles. At least 339_603_"
             ));
         }
     }
