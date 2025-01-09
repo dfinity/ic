@@ -2,7 +2,6 @@ use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
-use crate::state::ReimbursementReason;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
