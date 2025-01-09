@@ -4,20 +4,17 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 
-use crate::systemd::{generate_systemd_config_files, generate_systemd_config_files_new_config};
+use crate::systemd::generate_systemd_config_files;
 use config_types::{Ipv6Config, NetworkSettings};
 use deterministic_ips::MacAddr6Ext;
-use info::NetworkInfo;
 use macaddr::MacAddr6;
 
-pub mod info;
 pub mod interfaces;
 pub mod systemd;
 
 /// Write SetupOS or HostOS systemd network configuration.
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
-/// TODO(NODE-1466): Consolidate generate_network_config_new_config and generate_network_config
-pub fn generate_network_config_new_config(
+pub fn generate_network_config(
     network_settings: &NetworkSettings,
     generated_mac: &MacAddr6,
     output_directory: &Path,
@@ -33,7 +30,7 @@ pub fn generate_network_config_new_config(
             let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
             eprintln!("Using IPv6 address: {ipv6_address}");
 
-            generate_systemd_config_files_new_config(
+            generate_systemd_config_files(
                 output_directory,
                 ipv6_config,
                 Some(generated_mac),
@@ -41,25 +38,6 @@ pub fn generate_network_config_new_config(
             )
         }
     }
-}
-
-/// Write SetupOS or HostOS systemd network configuration.
-/// Requires superuser permissions to run `ipmitool` and write to the systemd directory
-pub fn generate_network_config(
-    network_info: &NetworkInfo,
-    generated_mac: &MacAddr6,
-    output_directory: &Path,
-) -> Result<()> {
-    eprintln!("Generating IPv6 address");
-    let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-    eprintln!("Using IPv6 address: {ipv6_address}");
-
-    generate_systemd_config_files(
-        output_directory,
-        network_info,
-        Some(generated_mac),
-        &ipv6_address,
-    )
 }
 
 pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
