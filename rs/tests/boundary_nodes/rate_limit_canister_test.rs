@@ -178,7 +178,7 @@ async fn test_async(env: TestEnv) {
             .expect("Could not create HTTP client.");
         let agent = Agent::builder()
             .with_url(format!("https://{api_bn_domain}"))
-            .with_identity(full_access_identity)
+            .with_identity(full_access_identity.clone())
             .with_arc_http_middleware(Arc::new(HttpServiceNoRetry { client })) // do not use inbuilt retry logic for 429 responses
             .build()
             .unwrap();
@@ -338,8 +338,12 @@ async fn test_async(env: TestEnv) {
         "Step 11. Add a rate-limit rule, which unblocks requests to the counter canister"
     );
 
+    // api_bn_agent can't communicate with canister after blocking, hence we use nns_agent
+    let mut nns_agent = nns_node.build_default_agent_async().await;
+    nns_agent.set_identity(full_access_identity);
+
     set_rate_limit_rules(
-        &api_bn_agent,
+        &nns_agent,
         rate_limit_id,
         vec![InputRule {
             incident_id: "e6a27788-01a5-444a-9035-ab3af3ad84f3".to_string(),
