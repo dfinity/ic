@@ -1598,11 +1598,6 @@ impl Streams {
         )
     }
 
-    /// Returns the guaranteed response sizes by responder canister stat.
-    pub fn guaranteed_responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.guaranteed_responses_size_bytes
-    }
-
     /// Prunes zero-valued guaranteed response sizes entries.
     ///
     /// This is triggered explicitly by `ReplicatedState` after it has updated the

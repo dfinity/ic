@@ -2028,12 +2028,6 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    let streams_guaranteed_response_bytes = state
-        .metadata
-        .streams()
-        .guaranteed_responses_size_bytes()
-        .values()
-        .sum();
 
     metrics
         .current_heap_delta
@@ -2105,7 +2099,6 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
-    metrics.observe_streams_response_bytes(streams_guaranteed_response_bytes);
 
     metrics
         .ingress_history_length

@@ -683,14 +683,7 @@ impl ReplicatedState {
                     .system_state
                     .guaranteed_response_message_memory_usage()
             })
-            .sum::<NumBytes>()
-            + (self
-                .metadata
-                .streams
-                .guaranteed_responses_size_bytes()
-                .values()
-                .sum::<usize>() as u64)
-                .into();
+            .sum();
         let subnet_memory_usage =
             (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 

@@ -311,7 +311,6 @@ fn induct_loopback_stream_reroute_response() {
             // the request @23 is expected to trigger a reject response which is inducted
             // successfully.
             let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22);
-            let inducted_response_count_bytes = inducted_response.count_bytes();
             push_inputs(
                 &mut expected_state,
                 [
@@ -352,7 +351,7 @@ fn induct_loopback_stream_reroute_response() {
             // `available_guaranteed_response_memory` does not keep track of gc'ing
             // the response @22 in the loopback stream after inducting it.
             assert_eq!(
-                available_guaranteed_response_memory + inducted_response_count_bytes as i64,
+                available_guaranteed_response_memory,
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
             );
 
@@ -502,7 +501,6 @@ fn induct_loopback_stream_success() {
                 &mut expected_state,
                 messages_in_stream(loopback_stream, 21..=22),
             );
-            let response_count_bytes = response_in_stream(loopback_stream, 22).count_bytes();
 
             // The loopback stream should be empty with `begin` and `signals_end` advanced.
             let loopback_stream = stream_from_config(StreamConfig {
@@ -522,7 +520,7 @@ fn induct_loopback_stream_success() {
             // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
-                available_guaranteed_response_memory + response_count_bytes as i64,
+                available_guaranteed_response_memory,
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -1286,7 +1284,6 @@ fn garbage_collect_local_state_success() {
             let mut expected_state = state.clone();
             // The expected stream has the first two messages gc'ed and the stream flags set.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
-            let response_count_bytes = response_in_stream(outgoing_stream, 32).count_bytes();
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 33,
                 messages: vec![message_in_stream(outgoing_stream, 33).clone()],
@@ -1308,7 +1305,7 @@ fn garbage_collect_local_state_success() {
             // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&pruned_state),
-                initial_available_guaranteed_response_memory + response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
             );
 
             assert_eq!(
