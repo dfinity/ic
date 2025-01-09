@@ -1,7 +1,8 @@
 #!/bin/bash
 
 CONFIG_DIR="/boot/config"
-CONFIG="/boot/config/config.json"
+CONFIG="/boot/config/config.ini"
+DEPLOYMENT="/boot/config/deployment.json"
 
 log_directory_structure() {
     local dir=$1
@@ -27,6 +28,7 @@ log_file_contents() {
     fi
 }
 
-echo "Logging config partition"
+echo "Logging HostOS config partition"
 log_directory_structure "$CONFIG_DIR"
 log_file_contents "$CONFIG"
+log_file_contents "$DEPLOYMENT"
