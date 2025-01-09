@@ -249,7 +249,6 @@ function build_ic_bootstrap_tar() {
         cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
     fi
 
-    # TODO(NODE-1518): remove parsing for old config
     [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" =~ [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
         echo "Invalid hostname: '$HOSTNAME'" >&2
         exit 1
