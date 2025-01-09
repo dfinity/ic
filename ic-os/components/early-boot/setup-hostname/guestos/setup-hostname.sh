@@ -23,6 +23,7 @@ for argument in "${@}"; do
         -h | --help)
             echo 'Usage:
 Set Transient Or Persistent Hostname
+
 Arguments:
   -c=, --config=        optional: specify the config.ini configuration file (Default: /boot/config/config.ini)
   -f=, --file=          optional: specify the file containing the node-id (Default: /boot/config/node-id)
