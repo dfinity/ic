@@ -286,13 +286,19 @@ impl From<PeerLocation> for &str {
 #[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
-    pub node_id: NodeId,
+    node_id: NodeId,
 
     /// The endpoint URL.
     pub url: Uri,
 
     /// The proximity of the peer.
     proximity: PeerLocation,
+}
+
+impl EndpointLocator {
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
+    }
 }
 
 impl XNetPayloadBuilderImpl {

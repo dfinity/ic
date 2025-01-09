@@ -641,7 +641,7 @@ impl XNetClient for PocketXNetClientImpl {
                 _ => panic!("Unexpected XNet request param: {}", param),
             }
         }
-        let sm = self.subnets.get_from_node(endpoint.node_id).unwrap();
+        let sm = self.subnets.get_from_node(endpoint.node_id()).unwrap();
         match sm.generate_certified_stream_slice(
             subnet_id.into(),
             witness_begin,
