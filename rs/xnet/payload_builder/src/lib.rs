@@ -1206,11 +1206,13 @@ pub struct PoolRefillTask {
     xnet_client: Arc<dyn XNetClient>,
 
     /// tokio runtime to be used for spawning async query tasks.
-    _runtime_handle: runtime::Handle,
+    runtime_handle: runtime::Handle,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
     log: ReplicaLogger,
+
+    block_on_async_tasks: bool,
 }
 
 impl PoolRefillTask {
@@ -1228,9 +1230,10 @@ impl PoolRefillTask {
             pool,
             endpoint_resolver,
             xnet_client,
-            _runtime_handle: runtime_handle.clone(),
+            runtime_handle: runtime_handle.clone(),
             metrics,
             log,
+            block_on_async_tasks: false,
         };
 
         runtime_handle.spawn(async move {
@@ -1259,9 +1262,10 @@ impl PoolRefillTask {
             pool,
             endpoint_resolver,
             xnet_client,
-            _runtime_handle: runtime_handle,
+            runtime_handle,
             metrics,
             log,
+            block_on_async_tasks: true,
         }
     }
 
@@ -1343,60 +1347,67 @@ impl PoolRefillTask {
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
-            let since = Instant::now();
-            metrics.outstanding_queries.inc();
-            let query_result = xnet_client.query(&endpoint_locator).await;
-            metrics.outstanding_queries.dec();
-            let proximity = endpoint_locator.proximity.into();
+            let query = async move {
+                let since = Instant::now();
+                metrics.outstanding_queries.inc();
+                let query_result = xnet_client.query(&endpoint_locator).await;
+                metrics.outstanding_queries.dec();
+                let proximity = endpoint_locator.proximity.into();
 
-            match query_result {
-                Ok(slice) => {
-                    let logger = log.clone();
-                    let res = tokio::task::spawn_blocking(move || {
-                        if witness_begin != msg_begin {
-                            // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
-                        } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
+                match query_result {
+                    Ok(slice) => {
+                        let logger = log.clone();
+                        let res = tokio::task::spawn_blocking(move || {
+                            if witness_begin != msg_begin {
+                                // Pulled a stream suffix, append to pooled slice.
+                                pool.lock()
+                                    .unwrap()
+                                    .append(subnet_id, slice, registry_version, log)
+                            } else {
+                                // Pulled a complete stream, replace pooled slice (if any).
+                                pool.lock()
+                                    .unwrap()
+                                    .put(subnet_id, slice, registry_version, log)
+                            }
+                        })
+                        .await;
+                        match res {
+                            Ok(res) => {
+                                let status = match res {
+                                    Ok(()) => STATUS_SUCCESS,
+                                    Err(e) => e.to_label_value(),
+                                };
+
+                                metrics.observe_query_slice_duration(status, proximity, since);
+                                metrics.observe_pull_attempt(status);
+                            }
+                            Err(err) => warn!(
+                                logger,
+                                "Failed to join pool refill blocking thread: {}", err
+                            ),
+                        };
+                    }
+
+                    Err(e) => {
+                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
+                        metrics.observe_pull_attempt(&e.to_label_value());
+                        if let XNetClientError::NoContent = e {
+                        } else if Self::pass_log_sampling() {
+                            info!(
+                                log,
+                                "Failed to query stream slice for subnet {} from node {}: {}",
+                                subnet_id,
+                                endpoint_locator.node_id,
+                                e
+                            );
                         }
-                    })
-                    .await;
-                    match res {
-                        Ok(res) => {
-                            let status = match res {
-                                Ok(()) => STATUS_SUCCESS,
-                                Err(e) => e.to_label_value(),
-                            };
-
-                            metrics.observe_query_slice_duration(status, proximity, since);
-                            metrics.observe_pull_attempt(status);
-                        }
-                        Err(err) => warn!(
-                            logger,
-                            "Failed to join pool refill blocking thread: {}", err
-                        ),
-                    };
-                }
-
-                Err(e) => {
-                    metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
-                    metrics.observe_pull_attempt(&e.to_label_value());
-                    if let XNetClientError::NoContent = e {
-                    } else if Self::pass_log_sampling() {
-                        info!(
-                            log,
-                            "Failed to query stream slice for subnet {} from node {}: {}",
-                            subnet_id,
-                            endpoint_locator.node_id,
-                            e
-                        );
                     }
                 }
+            };
+            if self.block_on_async_tasks {
+                query.await;
+            } else {
+                self.runtime_handle.spawn(query);
             }
         }
     }
