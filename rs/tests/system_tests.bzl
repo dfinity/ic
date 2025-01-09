@@ -284,7 +284,7 @@ def system_test(
         env = env,
         icos_images = icos_images,
         env_inherit = env_inherit,
-        tags = tags + ["requires-network", "system_test"] +
+        tags = tags + ["no-sandbox", "requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,

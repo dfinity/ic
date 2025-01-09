@@ -31,6 +31,7 @@ spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -47,23 +48,6 @@ spec:
           - name: default
             binding:
               name: passt
-            ports:
-            - port: 22
-            - port: 8100
-            - port: 8101
-            - port: 8102
-            - port: 8103
-            - port: 8104
-            - port: 8105
-            - port: 8106
-            - port: 8107
-            - port: 8108
-            - port: 8109
-            - port: 8110
-            - port: 8111
-            - port: 8332
-            - port: 18444
-            - port: 20443
         resources:
           overcommitGuestOverhead: true
           requests:
@@ -133,6 +117,7 @@ spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -150,23 +135,6 @@ spec:
           - name: default
             binding:
               name: passt
-            ports:
-              - port: 22
-              - port: 80
-              - port: 443
-              - port: 2497
-              - port: 4100
-                protocol: UDP
-              - port: 4444
-              - port: 7070
-              - port: 8080
-              - port: 8332
-              - port: 9090
-              - port: 9091
-              - port: 9100
-              - port: 18444
-              - port: 19100
-              - port: 19531
         resources:
           overcommitGuestOverhead: true
           requests:
@@ -180,8 +148,8 @@ spec:
         - dataVolume:
             name: "{name}-guestos"
           name: disk0
-        - dataVolume:
-            name: "{name}-config"
+        - containerDisk:
+            image: "harbor.ln1-idx1.dfinity.network/tnet/{name}"
           name: disk1
 "#;
 
