@@ -63,6 +63,8 @@ component_files = {
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
     Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
+    Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
+    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
