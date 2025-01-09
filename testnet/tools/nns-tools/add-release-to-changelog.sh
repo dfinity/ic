@@ -21,8 +21,8 @@ Usage: $0 <PROPOSAL_ID>
 
 PROPOSAL_ID="${1}"
 
-cd $(repo_root)
-PWD=$(pwd)
+cd "$(repo_root)"
+PWD="$(pwd)"
 
 # Fetch the proposal.
 print_purple "Fetching proposal ${PROPOSAL_ID}..." >&2
@@ -59,7 +59,7 @@ EXECUTED_ON=$(
 print_purple "Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." >&2
 
 # Extract which canister was upgraded, and to what commit.
-TITLE=$(echo $PROPOSAL_INFO | jq -r '.proposal[0].summary' | head -n 1)
+TITLE=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].summary' | head -n 1)
 CANISTER_NAME=$(
     echo "${TITLE}" \
         | sed 's/# Upgrade the //' | sed 's/ Canister to Commit .*//' \
