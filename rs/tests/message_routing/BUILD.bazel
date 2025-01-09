@@ -40,7 +40,7 @@ system_test(
     ],
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -65,7 +65,7 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -137,8 +137,8 @@ system_test(
     name = "queues_compatibility_test",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
+        "//:mainnet_subnet_revisions",
         "//rs/replicated_state:replicated_state_test_binary",
-        "//testnet:mainnet_revisions",
     ],
     deps = [
         "//rs/recovery",

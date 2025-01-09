@@ -209,9 +209,11 @@ thread_local! {
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -285,20 +287,20 @@ pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
 }
 
-pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
-    ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED.with(|ok| ok.get())
+pub fn allow_active_neurons_in_stable_memory() -> bool {
+    ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY.with(|ok| ok.get())
 }
 
 /// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
+pub fn temporarily_enable_allow_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, true)
 }
 
 /// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+pub fn temporarily_disable_allow_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, false)
 }
 
 pub fn use_stable_memory_following_index() -> bool {
@@ -315,6 +317,22 @@ pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
     Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
+}
+
+pub fn migrate_active_neurons_to_stable_memory() -> bool {
+    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_migrate_active_neurons_to_stable_memory() -> Temporary {
+    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_migrate_active_neurons_to_stable_memory() -> Temporary {
+    Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

@@ -1,5 +1,6 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
+use ic_management_canister_types::TakeCanisterSnapshotArgs;
 use ic_management_canister_types::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -17,7 +18,11 @@ const SUBNET_MEMORY_CAPACITY: u64 = 20 * GIB;
 
 const PAGE_SIZE: usize = 64 * KIB as usize;
 
-fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMachine, CanisterId) {
+fn setup(
+    subnet_memory_threshold: u64,
+    subnet_memory_capacity: u64,
+    initial_cycles: Option<u128>,
+) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
     let execution_config = ExecutionConfig {
         subnet_memory_threshold: NumBytes::new(subnet_memory_threshold),
@@ -30,7 +35,11 @@ fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMac
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
         .build();
-    let canister_id = env.create_canister_with_cycles(None, Cycles::from(100 * T), None);
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        Cycles::from(initial_cycles.unwrap_or(100 * T)),
+        None,
+    );
 
     env.install_wasm_in_mode(
         canister_id,
@@ -55,7 +64,7 @@ fn test_storage_reservation_not_triggered() {
     // Baseline test: ensures that calling an update method alone does not trigger storage reservation.
     // This test is used as a reference for other tests that involve additional operations
     // causing storage reservation.
-    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
     let initial_balance = env.cycle_balance(canister_id);
 
@@ -68,7 +77,7 @@ fn test_storage_reservation_not_triggered() {
 #[test]
 fn test_storage_reservation_triggered_in_update_by_stable_grow() {
     // Verifies that growing stable memory within the update method triggers storage reservation.
-    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
@@ -79,7 +88,7 @@ fn test_storage_reservation_triggered_in_update_by_stable_grow() {
 #[test]
 fn test_storage_reservation_triggered_in_update_by_growing_wasm_memory() {
     // Verifies that growing Wasm memory within the update method triggers storage reservation.
-    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     let _ = env.execute_ingress(
@@ -94,7 +103,7 @@ fn test_storage_reservation_triggered_in_update_by_growing_wasm_memory() {
 #[test]
 fn test_storage_reservation_triggered_in_response() {
     // Verifies that growing stable memory during the response callback triggers storage reservation.
-    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     let _ = env.execute_ingress(
@@ -118,7 +127,7 @@ fn test_storage_reservation_triggered_in_response() {
 #[test]
 fn test_storage_reservation_triggered_in_cleanup() {
     // Verifies that growing stable memory during the cleanup callback triggers storage reservation.
-    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
     let _ = env.execute_ingress(
@@ -138,4 +147,24 @@ fn test_storage_reservation_triggered_in_cleanup() {
     );
 
     assert_gt!(reserved_balance(&env, canister_id), 0); // Storage reservation is triggered.
+}
+
+#[test]
+fn test_storage_reservation_triggered_in_canister_snapshot_with_enough_cycles_available() {
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY, None);
+    assert_eq!(reserved_balance(&env, canister_id), 0);
+
+    // Grow memory in update call, should trigger storage reservation.
+    let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
+    let reserved_balance_before_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(reserved_balance_before_snapshot, 0); // Storage reservation is triggered.
+
+    // Take a snapshot to trigger more storage reservation.
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+    let reserved_balance_after_snapshot = reserved_balance(&env, canister_id);
+    assert_gt!(
+        reserved_balance_after_snapshot,
+        reserved_balance_before_snapshot
+    );
 }
