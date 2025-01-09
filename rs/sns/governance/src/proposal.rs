@@ -2566,7 +2566,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
-    use ic_management_canister_types::{CanisterIdRecord, StoredChunksReply};
+    use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -3303,11 +3303,14 @@ mod tests {
             chunk_hashes_list,
         }) = chunked_canister_wasm
         {
+            let canister_id = CanisterId::unchecked_from_principal(store_canister_id.clone().unwrap());
             env.set_call_canister_response(
                 CanisterId::ic_00(),
                 "stored_chunks",
-                Encode!(&CanisterIdRecord::from(store_canister_id.clone().unwrap())).unwrap(),
-                Ok(Encode!(&StoredChunksReply(chunk_hashes_list.clone())).unwrap()),
+                Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+                Ok(Encode!(&StoredChunksReply(chunk_hashes_list.iter().map(|hash| {
+                    ChunkHash { hash: hash.clone() }
+                }).collect())).unwrap()),
             );
         };
 
