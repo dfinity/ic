@@ -1371,8 +1371,6 @@ impl StateMachine {
             membership_version: subnet_record.clone(),
             context_version: subnet_record,
         };
-        let payload_builder = self.payload_builder.read().unwrap();
-        let payload_builder = payload_builder.as_ref().unwrap();
         let pool_refill_task = self.pool_refill_task.read().unwrap();
         let pool_refill_task = pool_refill_task.as_ref().unwrap();
         self.runtime.block_on(async move {
@@ -1384,6 +1382,8 @@ impl StateMachine {
                 )
                 .await;
         });
+        let payload_builder = self.payload_builder.read().unwrap();
+        let payload_builder = payload_builder.as_ref().unwrap();
         let batch_payload = payload_builder.get_payload(
             certified_height,
             &[], // Because the latest state is certified, we do not need to provide any `past_payloads`.
