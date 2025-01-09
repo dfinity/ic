@@ -40,9 +40,7 @@ use ic_interfaces::{
     p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
-use ic_interfaces_certified_stream_store::{
-    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
-};
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
@@ -104,7 +102,7 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
-use ic_state_manager::{stream_encoding, StateManagerImpl};
+use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::FakeConsensusPoolCache;
 use ic_test_utilities_metrics::{
@@ -141,7 +139,7 @@ use ic_types::{
     },
     signature::ThresholdSignature,
     time::GENESIS,
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
+    xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
     ReplicaVersion,
 };
@@ -603,20 +601,15 @@ pub trait Subnets: Send + Sync {
     fn get_from_node(&self, node_id: NodeId) -> Option<Arc<StateMachine>>;
 }
 
-/// Struct mocking the xnet layer for one `StateMachine`.
+/// Struct mocking the xnet layer.
 struct PocketXNetImpl {
     /// Pool of `StateMachine`s from which the XNet messages are fetched.
     subnets: Arc<dyn Subnets>,
-    /// Subnet ID of the `StateMachine` for which the xnet layer is mocked.
-    own_subnet_id: SubnetId,
 }
 
 impl PocketXNetImpl {
-    fn new(subnets: Arc<dyn Subnets>, own_subnet_id: SubnetId) -> Self {
-        Self {
-            subnets,
-            own_subnet_id,
-        }
+    fn new(subnets: Arc<dyn Subnets>) -> Self {
+        Self { subnets }
     }
 }
 
@@ -659,47 +652,6 @@ impl XNetClient for PocketXNetImpl {
             Err(EncodeStreamError::NoStreamForSubnet(_)) => Err(XNetClientError::NoContent),
             Err(err) => panic!("Unexpected XNetClient error: {}", err),
         }
-    }
-}
-
-impl CertifiedStreamStore for PocketXNetImpl {
-    fn encode_certified_stream_slice(
-        &self,
-        remote_subnet: SubnetId,
-        witness_begin: Option<StreamIndex>,
-        msg_begin: Option<StreamIndex>,
-        msg_limit: Option<usize>,
-        byte_limit: Option<usize>,
-    ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
-        let sm = self.subnets.get(remote_subnet).unwrap();
-        sm.generate_certified_stream_slice(
-            self.own_subnet_id,
-            witness_begin,
-            msg_begin,
-            msg_limit,
-            byte_limit,
-        )
-    }
-
-    fn decode_certified_stream_slice(
-        &self,
-        _remote_subnet: SubnetId,
-        _registry_version: RegistryVersion,
-        certified_slice: &CertifiedStreamSlice,
-    ) -> Result<StreamSlice, DecodeStreamError> {
-        self.decode_valid_certified_stream_slice(certified_slice)
-    }
-
-    fn decode_valid_certified_stream_slice(
-        &self,
-        certified_slice: &CertifiedStreamSlice,
-    ) -> Result<StreamSlice, DecodeStreamError> {
-        let (_subnet, slice) = stream_encoding::decode_stream_slice(&certified_slice.payload)?;
-        Ok(slice)
-    }
-
-    fn subnets_with_certified_streams(&self) -> Vec<SubnetId> {
-        unreachable!()
     }
 }
 
@@ -1254,8 +1206,8 @@ impl StateMachineBuilder {
         // Instantiate a `XNetPayloadBuilderImpl`.
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let pocket_xnet_impl = Arc::new(PocketXNetImpl::new(subnets, subnet_id));
-        let certified_stream_store: Arc<dyn CertifiedStreamStore> = pocket_xnet_impl.clone();
+        let pocket_xnet_impl = Arc::new(PocketXNetImpl::new(subnets));
+        let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             certified_stream_store,
             &sm.metrics_registry,
