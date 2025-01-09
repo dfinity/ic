@@ -4417,11 +4417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-pki-types",
 ]
 
@@ -5035,11 +5031,7 @@ dependencies = [
  "clap 4.5.23",
  "hyper 1.5.2",
  "hyper-util",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-pemfile 2.2.0",
  "serde_json",
  "tokio",
@@ -5168,13 +5160,8 @@ dependencies = [
  "hyper 1.5.2",
  "hyper-util",
  "log",
-<<<<<<< HEAD
  "rustls 0.23.18",
- "rustls-native-certs 0.8.0",
-=======
- "rustls 0.23.20",
  "rustls-native-certs 0.8.1",
->>>>>>> master
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.1",
@@ -5637,11 +5624,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "reqwest 0.12.9",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-acme",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier",
@@ -5734,11 +5717,7 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest 0.12.9",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_bytes",
@@ -6070,11 +6049,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "serde",
  "serde_cbor",
  "tokio",
@@ -6995,11 +6970,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rsa",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "serde",
  "sha2 0.10.8",
  "simple_asn1",
@@ -7760,11 +7731,7 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "tempfile",
  "tokio",
 ]
@@ -7964,11 +7931,7 @@ dependencies = [
  "ic-types",
  "pkcs8",
  "rand 0.8.5",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "signature",
  "time",
  "tokio",
@@ -8004,11 +7967,7 @@ dependencies = [
  "ic-types",
  "json5",
  "maplit",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "serde",
  "thiserror 2.0.8",
  "x509-parser",
@@ -8021,11 +7980,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
  "mockall",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
 ]
 
 [[package]]
@@ -8561,11 +8516,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.9",
  "rstest",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -8686,11 +8637,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rstest",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
@@ -10755,11 +10702,7 @@ dependencies = [
  "quinn",
  "quinn-udp",
  "rcgen",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "serde",
  "slog",
  "tempfile",
@@ -10923,11 +10866,7 @@ dependencies = [
  "prost 0.13.4",
  "quinn",
  "rstest",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "slog",
  "socket2 0.5.8",
  "static_assertions",
@@ -14776,11 +14715,7 @@ dependencies = [
  "k8s-openapi",
  "kube-core",
  "pem 3.0.4",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-pemfile 2.2.0",
  "secrecy",
  "serde",
@@ -17902,17 +17837,10 @@ dependencies = [
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
-<<<<<<< HEAD
- "rustc-hash 2.0.0",
- "rustls 0.23.18",
- "socket2 0.5.7",
- "thiserror 1.0.68",
-=======
  "rustc-hash 2.1.0",
- "rustls 0.23.20",
+ "rustls 0.23.18",
  "socket2 0.5.8",
  "thiserror 2.0.8",
->>>>>>> master
  "tokio",
  "tracing",
 ]
@@ -17927,14 +17855,9 @@ dependencies = [
  "getrandom",
  "rand 0.8.5",
  "ring 0.17.8",
-<<<<<<< HEAD
- "rustc-hash 2.0.0",
- "rustls 0.23.18",
-=======
  "rustc-hash 2.1.0",
- "rustls 0.23.20",
+ "rustls 0.23.18",
  "rustls-pki-types",
->>>>>>> master
  "slab",
  "thiserror 2.0.8",
  "tinyvec",
@@ -18584,13 +18507,8 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
-<<<<<<< HEAD
  "rustls 0.23.18",
- "rustls-native-certs 0.8.0",
-=======
- "rustls 0.23.20",
  "rustls-native-certs 0.8.1",
->>>>>>> master
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
  "serde",
@@ -19075,15 +18993,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-<<<<<<< HEAD
 version = "0.23.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c9cc1d47e243d655ace55ed38201c19ae02c148ae56412ab8750e8f0166ab7f"
-=======
-version = "0.23.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5065c3f250cbd332cd894be57c40fa52387247659b14a2d6041d121547903b1b"
->>>>>>> master
 dependencies = [
  "brotli 7.0.0",
  "brotli-decompressor",
@@ -19185,11 +19097,7 @@ dependencies = [
  "jni",
  "log",
  "once_cell",
-<<<<<<< HEAD
  "rustls 0.23.18",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "rustls-native-certs 0.7.3",
  "rustls-platform-verifier-android",
  "rustls-webpki 0.102.8",
@@ -21122,12 +21030,7 @@ version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f6d0975eaace0cf0fcadee4e4aaa5da15b5c079146f2cffb67c113be122bf37"
 dependencies = [
-<<<<<<< HEAD
  "rustls 0.23.18",
- "rustls-pki-types",
-=======
- "rustls 0.23.20",
->>>>>>> master
  "tokio",
 ]
 
