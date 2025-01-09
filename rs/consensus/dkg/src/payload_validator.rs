@@ -31,7 +31,7 @@ use prometheus::IntCounterVec;
 // enum. See https://github.com/rust-lang/rust/issues/88900
 #[allow(dead_code)]
 #[derive(PartialEq, Debug)]
-pub(crate) enum InvalidDkgPayloadReason {
+pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
     MismatchedDkgSummary(dkg::Summary, dkg::Summary),
@@ -54,7 +54,7 @@ pub(crate) enum InvalidDkgPayloadReason {
 /// payload is invalid.
 #[allow(dead_code)]
 #[derive(PartialEq, Debug)]
-pub(crate) enum DkgPayloadValidationFailure {
+pub enum DkgPayloadValidationFailure {
     PayloadCreationFailed(PayloadCreationError),
     /// Crypto related errors.
     CryptoError(CryptoError),
@@ -113,7 +113,7 @@ impl From<PayloadCreationError> for PayloadValidationError {
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn validate_payload(
+pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,

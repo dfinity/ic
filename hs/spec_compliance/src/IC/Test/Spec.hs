@@ -754,7 +754,7 @@ icTests my_sub other_sub conf =
                                                                                                                    ic_canister_status'' anonymousUser cid >>= isErrOrReject [3, 5]
                                                                                                                    ic_canister_status'' secp256k1User cid >>= isErrOrReject [3, 5],
                                                                                                                  simpleTestCase "> 10 controllers" ecid $ \cid -> do
-                                                                                                                   ic_create_with_controllers' (ic00viaWithCycles cid 20_000_000_000_000) ecid (replicate 11 cid) >>= isReject [3, 5]
+                                                                                                                   ic_create_with_controllers' (ic00viaWithCycles cid 20_000_000_000_000) ecid (replicate 11 cid) >>= isReject [4]
                                                                                                                    ic_set_controllers' ic00 cid (replicate 11 cid) >>= isReject [4],
                                                                                                                  simpleTestCase "No controller" ecid $ \cid -> do
                                                                                                                    cid2 <- ic_create_with_controllers (ic00viaWithCycles cid 20_000_000_000_000) ecid []

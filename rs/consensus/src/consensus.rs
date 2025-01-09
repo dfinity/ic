@@ -22,16 +22,13 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::{
-    consensus::{
-        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
-        metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
-        priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
-        random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator,
-        validator::Validator,
-    },
-    dkg::DkgKeyManager,
+use crate::consensus::{
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
+    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
+    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
+    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
     membership::Membership, pool_reader::PoolReader, RoundRobin,
