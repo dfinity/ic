@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Wrapper around unshare and chroot that does some extra setup e.g. mounts
 # /dev, /proc. and other API filesystems.
 #
@@ -117,8 +119,8 @@ MOUNT=false
 CHROOT_DIR=""
 COMMAND=""
 
-pid_unshare="unshare --fork --pid"
-mount_unshare="$pid_unshare --mount --map-auto --map-root-user --setuid 0 --setgid 0"
+PID_UNSHARE="unshare --fork --pid"
+MOUNT_UNSHARE="$PID_UNSHARE --mount --map-root-user"
 
 run_with_chroot() {
     ((EUID == 0)) || die "This script must be run with root privileges"
@@ -131,12 +133,17 @@ run_with_chroot() {
         warning "$CHROOT_DIR is not a mountpoint. This may have undesirable side effects."
     fi
 
-    $pid_unshare /usr/sbin/chroot "$CHROOT_DIR" "${COMMAND[@]}"
+    $PID_UNSHARE /usr/sbin/chroot "$CHROOT_DIR" "${COMMAND[@]}"
+}
+
+run_without_chroot() {
+    "${COMMAND[@]}"
 }
 
 usage() {
     echo "Usage: $0 [--mount] [--chroot <directory>] <command>"
     echo "Runs <command> in a separate namespace optionally under chroot."
+    echo "This tool is only supported within the build container."
     echo "  --mount                Set up system mount points (eg. /dev and /proc). Requires --chroot"
     echo "  --chroot <directory>   Specify the directory to chroot into."
     echo "  <command>              Command to run."
@@ -174,13 +181,13 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 if [[ $MOUNT = true && -z $CHROOT_DIR ]]; then
-    echo "Error: Cannot use mount option without a chroot dir."
+    echo "Error: Cannot use --mount option without specifying --chroot dir."
     usage
 fi
 
 if [[ -n "$CHROOT_DIR" ]]; then
     [[ -d "$CHROOT_DIR" ]] || die "Error: $CHROOT_DIR is not a valid directory."
-    $mount_unshare bash -c "$(declare_all); run_with_chroot"
+    $MOUNT_UNSHARE /bin/bash -c "$(declare_all); run_with_chroot"
 else
-    $mount_unshare bash -c "$(declare_all);" "${COMMAND[@]}"
+    $MOUNT_UNSHARE /bin/bash -c "$(declare_all); run_without_chroot"
 fi
