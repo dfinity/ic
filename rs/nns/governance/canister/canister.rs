@@ -81,12 +81,13 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-// https://dfinity.atlassian.net/browse/NNS1-1050: We are not following
-// standard/best practices for canister globals here.
-//
-// Do not access these global variables directly. Instead, use accessor
-// functions, which are defined immediately after.
-static mut GOVERNANCE: Option<Governance> = None;
+thread_local! {
+    static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<CdkRuntime>::new()),
+    ));
+}
 
 /*
 Recommendations for Using `unsafe` in the Governance canister:
@@ -135,7 +136,7 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
+    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 /// Returns a mutable reference to the global state.
@@ -143,19 +144,12 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
+    unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(gov);
-    }
+    GOVERNANCE.set(gov);
 
     governance()
         .validate()
@@ -164,14 +158,18 @@ fn set_governance(gov: Governance) {
 
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
+    schedule_neuron_data_validation();
     schedule_vote_processing();
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
+
+    // Schedule the fix for the locked neuron
+    schedule_locked_spawning_neuron_fix();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -282,19 +280,15 @@ const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
 // id.
 const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
 
-fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdProto) {
+fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
     ic_cdk_timers::set_timer(delay, move || {
-        let next_neuron_id = governance_mut().batch_adjust_neurons_storage(start_neuron_id);
-        match next_neuron_id {
-            Some(next_neuron_id) => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_BATCH_INTERVAL,
-                next_neuron_id,
-            ),
-            None => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_ROUND_INTERVAL,
-                NeuronIdProto { id: 0 },
-            ),
+        let next = governance_mut().batch_adjust_neurons_storage(next);
+        let next_delay = if next == Bound::Unbounded {
+            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
+        } else {
+            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
         };
+        schedule_adjust_neurons_storage(next_delay, next);
     });
 }
 
@@ -314,12 +308,31 @@ fn schedule_unstake_maturity_of_dissolved_neurons() {
     });
 }
 
+const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
+fn schedule_neuron_data_validation() {
+    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
+        governance_mut().maybe_run_validations();
+    });
+}
+
 /// The interval at which the voting state machines are processed.
 const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
         spawn(governance_mut().process_voting_state_machines());
+    });
+}
+
+// TODO(NNS1-3526): Remove this method once it is released.
+fn schedule_locked_spawning_neuron_fix() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        spawn(async {
+            governance_mut()
+                .fix_locked_spawn_neuron()
+                .await
+                .expect("Failed to fix locked neuron");
+        });
     });
 }
 

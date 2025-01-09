@@ -2,7 +2,7 @@
 use std::{
     error::Error as StdError,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -50,7 +50,6 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rand::rngs::OsRng;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -283,14 +282,29 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Generic Ratelimiter
+    let generic_limiter_opts = generic::Options {
+        tti: cli.rate_limiting.rate_limit_generic_tti,
+        max_shards: cli.rate_limiting.rate_limit_generic_max_shards,
+    };
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
-        Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
+        Some(Arc::new(generic::GenericLimiter::new_from_file(
+            v.clone(),
+            generic_limiter_opts,
+        )))
     } else {
         cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
             Arc::new(if cli.misc.crypto_config.is_some() {
-                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
+                generic::GenericLimiter::new_from_canister_update(
+                    x,
+                    agent.clone().unwrap(),
+                    generic_limiter_opts,
+                )
             } else {
-                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
+                generic::GenericLimiter::new_from_canister_query(
+                    x,
+                    agent.clone().unwrap(),
+                    generic_limiter_opts,
+                )
             })
         })
     };
@@ -818,7 +832,7 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
-    generic_limiter: Option<Arc<generic::Limiter>>,
+    generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,

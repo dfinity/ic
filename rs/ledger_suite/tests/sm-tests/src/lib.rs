@@ -2413,6 +2413,7 @@ pub fn test_upgrade_serialization<Tokens>(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
+    mainnet_on_prev_version: bool,
 ) where
     Tokens: TokensType + Default + std::fmt::Display + From<u64>,
 {
@@ -2470,24 +2471,31 @@ pub fn test_upgrade_serialization<Tokens>(
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
-                test_upgrade(ledger_wasm_current.clone(), 1);
+                let expected_steps = if mainnet_on_prev_version { 1 } else { 0 };
+                test_upgrade(ledger_wasm_current.clone(), expected_steps);
                 // Test the new wasm serialization
                 test_upgrade(ledger_wasm_current.clone(), 0);
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone(), 0);
-                // Downgrade from stable structures to mainnet not possible.
+                // Downgrade to mainnet if possible.
                 match env.upgrade_canister(
                     ledger_id,
                     ledger_wasm_mainnet.clone(),
                     Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
                 ) {
                     Ok(_) => {
-                        panic!("Upgrade from future ledger version should fail!")
+                        if mainnet_on_prev_version {
+                            panic!("Upgrade from future ledger version should fail!")
+                        }
                     }
                     Err(e) => {
-                        assert!(e
-                            .description()
-                            .contains("Trying to downgrade from incompatible version"))
+                        if mainnet_on_prev_version {
+                            assert!(e
+                                .description()
+                                .contains("Trying to downgrade from incompatible version"))
+                        } else {
+                            panic!("Upgrade to mainnet should succeed!")
+                        }
                     }
                 };
                 if verify_blocks {
@@ -2530,7 +2538,7 @@ pub fn icrc1_test_multi_step_migration<T>(
         },
     ];
     let mut initial_balances = vec![];
-    let all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
+    let mut all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
     for (index, account) in all_accounts.iter().enumerate() {
         initial_balances.push((*account, 10_000_000u64 + index as u64));
     }
@@ -2570,6 +2578,11 @@ pub fn icrc1_test_multi_step_migration<T>(
             ));
         }
     }
+    for i in 7..7 + 30 {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, accounts[0], to, 100).expect("failed to transfer funds");
+        all_accounts.push(to);
+    }
     let mut balances = BTreeMap::new();
     for account in &all_accounts {
         balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
@@ -2585,7 +2598,7 @@ pub fn icrc1_test_multi_step_migration<T>(
         )
         .unwrap();
 
-        wait_ledger_ready(&env, canister_id, 10);
+        wait_ledger_ready(&env, canister_id, 20);
 
         let stable_upgrade_migration_steps =
             parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
@@ -2754,6 +2767,11 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
+    for i in 2..30 {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
+    }
+
     env.upgrade_canister(
         canister_id,
         ledger_wasm_current_lowinstructionlimits,
@@ -2813,7 +2831,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         test_endpoint(endpoint_name, args, true);
     }
 
-    wait_ledger_ready(&env, canister_id, 10);
+    wait_ledger_ready(&env, canister_id, 20);
 
     test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), false);
     test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), false);
@@ -2848,8 +2866,10 @@ pub fn test_incomplete_migration<T>(
     );
 
     const APPROVE_AMOUNT: u64 = 150_000;
+    const TRANSFER_AMOUNT: u64 = 100;
 
     const NUM_APPROVALS: u64 = 20;
+    const NUM_TRANSFERS: u64 = 30;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
@@ -2861,6 +2881,12 @@ pub fn test_incomplete_migration<T>(
     };
 
     send_approvals();
+
+    for i in 2..2 + NUM_TRANSFERS {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + FEE)
+            .expect("failed to transfer funds");
+    }
 
     let check_approvals = |non_zero_from: u64| {
         for i in 2..2 + NUM_APPROVALS {
@@ -2878,8 +2904,23 @@ pub fn test_incomplete_migration<T>(
             assert_eq!(allowance.allowance, expected_allowance);
         }
     };
-
+    let check_balances = |non_zero_from: u64| {
+        for i in 2..2 + NUM_TRANSFERS {
+            let balance = balance_of(
+                &env,
+                canister_id,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            let expected_balance = if i < non_zero_from {
+                Nat::from(0u64)
+            } else {
+                Nat::from(TRANSFER_AMOUNT + FEE)
+            };
+            assert_eq!(balance, expected_balance);
+        }
+    };
     check_approvals(2);
+    check_balances(2);
 
     env.upgrade_canister(
         canister_id,
@@ -2912,9 +2953,12 @@ pub fn test_incomplete_migration<T>(
         let spender = Account::from(PrincipalId::new_user_test_id(i).0);
         let approve_args = default_approve_args(spender, 0);
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+        transfer(&env, canister_id, spender, account, TRANSFER_AMOUNT)
+            .expect("failed to transfer funds");
     }
 
     check_approvals(5);
+    check_balances(5);
 
     env.upgrade_canister(
         canister_id,
@@ -2925,6 +2969,7 @@ pub fn test_incomplete_migration<T>(
     wait_ledger_ready(&env, canister_id, 20);
 
     check_approvals(5);
+    check_balances(5);
 }
 
 pub fn test_incomplete_migration_to_current<T>(
@@ -2945,8 +2990,10 @@ pub fn test_incomplete_migration_to_current<T>(
     );
 
     const APPROVE_AMOUNT: u64 = 150_000;
+    const TRANSFER_AMOUNT: u64 = 100;
 
     const NUM_APPROVALS: u64 = 20;
+    const NUM_TRANSFERS: u64 = 30;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
@@ -2959,7 +3006,13 @@ pub fn test_incomplete_migration_to_current<T>(
 
     send_approvals();
 
-    let check_approvals = |non_zero_from: u64| {
+    for i in 2..2 + NUM_TRANSFERS {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
+            .expect("failed to transfer funds");
+    }
+
+    let check_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = Account::get_allowance(
                 &env,
@@ -2967,16 +3020,22 @@ pub fn test_incomplete_migration_to_current<T>(
                 account,
                 Account::from(PrincipalId::new_user_test_id(i).0),
             );
-            let expected_allowance = if i < non_zero_from {
-                Nat::from(0u64)
-            } else {
-                Nat::from(APPROVE_AMOUNT)
-            };
-            assert_eq!(allowance.allowance, expected_allowance);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+        }
+    };
+    let check_balances = || {
+        for i in 2..2 + NUM_TRANSFERS {
+            let balance = balance_of(
+                &env,
+                canister_id,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT + i));
         }
     };
 
-    check_approvals(2);
+    check_approvals();
+    check_balances();
 
     env.upgrade_canister(
         canister_id,
@@ -3003,7 +3062,8 @@ pub fn test_incomplete_migration_to_current<T>(
     .unwrap();
 
     wait_ledger_ready(&env, canister_id, 20);
-    check_approvals(2);
+    check_approvals();
+    check_balances();
 }
 
 pub fn test_migration_resumes_from_frozen<T>(
@@ -3034,7 +3094,10 @@ pub fn test_migration_resumes_from_frozen<T>(
         .unwrap();
 
     const APPROVE_AMOUNT: u64 = 150_000;
+    const TRANSFER_AMOUNT: u64 = 100;
+
     const NUM_APPROVALS: u64 = 20;
+    const NUM_TRANSFERS: u64 = 30;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
@@ -3047,6 +3110,12 @@ pub fn test_migration_resumes_from_frozen<T>(
 
     send_approvals();
 
+    for i in 2..2 + NUM_TRANSFERS {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
+            .expect("failed to transfer funds");
+    }
+
     let check_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = Account::get_allowance(
@@ -3058,8 +3127,19 @@ pub fn test_migration_resumes_from_frozen<T>(
             assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
         }
     };
+    let check_balances = || {
+        for i in 2..2 + NUM_TRANSFERS {
+            let balance = balance_of(
+                &env,
+                canister_id,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT + i));
+        }
+    };
 
     check_approvals();
+    check_balances();
 
     env.upgrade_canister(
         canister_id,
@@ -3105,6 +3185,7 @@ pub fn test_migration_resumes_from_frozen<T>(
     assert!(!is_ledger_ready());
     wait_ledger_ready(&env, canister_id, 20);
     check_approvals();
+    check_balances();
 }
 
 pub fn test_metrics_while_migrating<T>(
@@ -3128,6 +3209,11 @@ pub fn test_metrics_while_migrating<T>(
         let spender = Account::from(PrincipalId::new_user_test_id(i).0);
         let approve_args = default_approve_args(spender, 150_000);
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+    }
+
+    for i in 2..30 {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
 
     env.upgrade_canister(
@@ -3160,7 +3246,7 @@ pub fn test_metrics_while_migrating<T>(
     .expect("failed to decode is_ledger_ready response");
     assert!(!is_ledger_ready);
 
-    wait_ledger_ready(&env, canister_id, 10);
+    wait_ledger_ready(&env, canister_id, 20);
 
     let metrics = retrieve_metrics(&env, canister_id);
     assert!(
@@ -3175,6 +3261,32 @@ pub fn test_metrics_while_migrating<T>(
             .any(|line| line.contains("ledger_num_approvals")),
         "Did not find ledger_num_approvals metric"
     );
+}
+
+pub fn test_upgrade_from_v1_not_possible<T>(
+    ledger_wasm_mainnet_v1: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with v1 state that does not use UPGRADES_MEMORY.
+    let (env, canister_id) = setup(ledger_wasm_mainnet_v1, encode_init_args, vec![]);
+
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from V1 should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Cannot upgrade from scratch stable memory, please upgrade to memory manager first."));
+        }
+    };
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {

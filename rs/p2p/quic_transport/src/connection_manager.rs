@@ -34,10 +34,10 @@ use axum::{
     middleware::Next, Router,
 };
 use futures::StreamExt;
-use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
@@ -313,14 +313,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     }
     let client = builder.build().unwrap();
 
-    // create agent with custom transport
-    let transport = ReqwestTransport::create_with_client(
-        format!("{}://{}:{}", proto, localhost, port),
-        client.clone(),
-    )
-    .unwrap();
+    // create agent
     let agent = ic_agent::Agent::builder()
-        .with_transport(transport)
+        .with_url(format!("{}://{}:{}", proto, localhost, port))
+        .with_http_client(client.clone())
         .build()
         .unwrap();
     agent.fetch_root_key().await.unwrap();
@@ -897,12 +893,9 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let transport = ReqwestTransport::create(endpoint.clone())
-            .unwrap()
-            .with_use_call_v3_endpoint();
-
         let agent = ic_agent::Agent::builder()
-            .with_transport(transport)
+            .with_url(endpoint)
+            .with_http_client(reqwest::Client::new())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -1233,7 +1226,8 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url))
+            || message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
         }
     };
 }
@@ -1307,9 +1301,6 @@ fn registry_canister() {
 }
 
 #[test]
-#[should_panic(
-    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
-)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()

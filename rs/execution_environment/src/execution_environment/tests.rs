@@ -713,7 +713,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let memory_allocation = NumBytes::from(158);
+    let memory_allocation = NumBytes::from(300);
     test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -2282,9 +2282,16 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
-fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
+fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
+        name: name.to_string(),
+    })
+}
+
+fn make_bip340_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
         name: name.to_string(),
     })
 }
@@ -3111,60 +3118,66 @@ fn test_sign_with_schnorr_api_is_enabled() {
     // TODO(EXC-1629): upgrade to more of e2e test with mocking the response
     // from consensus and producing the response to the canister.
 
-    // Arrange.
-    let key_id = make_schnorr_key("correct_key");
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_chain_key(key_id.clone())
-        .build();
-    let canister_id = test.universal_canister().unwrap();
-    // Check that the SubnetCallContextManager is empty.
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_count(&key_id),
-        0
-    );
+    let test_cases = [
+        make_ed25519_key("correct_ed25519_key"),
+        make_bip340_key("correct_bip340_key"),
+    ];
 
-    // Act.
-    let method = Method::SignWithSchnorr;
-    let run = wasm()
-        .call_with_cycles(
-            ic00::IC_00,
-            method,
-            call_args()
-                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::from(100_000_000_000u128),
-        )
-        .build();
-    let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+    for key_id in &test_cases {
+        // Arrange.
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_chain_key(key_id.clone())
+            .build();
+        let canister_id = test.universal_canister().unwrap();
+        // Check that the SubnetCallContextManager is empty.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_threshold_contexts_count(key_id),
+            0
+        );
 
-    // Assert.
-    // Check that the request is accepted and processing.
-    assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: canister_id.get(),
-            user_id: test.user_id(),
-            time: test.time(),
-            state: IngressState::Processing,
-        }
-    );
-    // Check that the SubnetCallContextManager contains the request.
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts_count(&key_id),
-        1
-    );
+        // Act.
+        let method = Method::SignWithSchnorr;
+        let run = wasm()
+            .call_with_cycles(
+                ic00::IC_00,
+                method,
+                call_args()
+                    .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::from(100_000_000_000u128),
+            )
+            .build();
+        let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+
+        // Assert.
+        // Check that the request is accepted and processing.
+        assert_eq!(
+            ingress_status,
+            IngressStatus::Known {
+                receiver: canister_id.get(),
+                user_id: test.user_id(),
+                time: test.time(),
+                state: IngressState::Processing,
+            }
+        );
+        // Check that the SubnetCallContextManager contains the request.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_threshold_contexts_count(key_id),
+            1
+        );
+    }
 }
 
 #[test]

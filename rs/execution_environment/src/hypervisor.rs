@@ -26,7 +26,10 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -277,6 +280,9 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        // TODO(EXC-1821): Create a temp dir in this directory for use in the
+        // compilation cache.
+        _temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -290,6 +296,7 @@ impl Hypervisor {
                     &embedder_config,
                     Arc::clone(&fd_factory),
                     Arc::clone(&state_reader),
+                    true,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -304,7 +311,6 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -312,7 +318,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
+            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -413,6 +419,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)
     }

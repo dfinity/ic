@@ -16,7 +16,9 @@ use ic_management_canister_types::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::canister_state::system_state::{
+    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+};
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
 use ic_types::{
@@ -187,7 +189,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
+        let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -881,7 +883,7 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
+    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
         let mut new_balance = self.cycles_balance();
         let result = self
             .cycles_account_manager
@@ -1265,47 +1267,26 @@ impl SandboxSafeSystemState {
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn check_on_low_wasm_memory_hook_condition(
+    pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
         memory_allocation: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        used_stable_memory: NumBytes,
-        used_wasm_memory: NumBytes,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
     ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit =
-            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = memory_allocation.map_or_else(
-            || wasm_memory_limit,
-            |memory_allocation| {
-                debug_assert!(
-                    used_stable_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
-                    used_stable_memory,
-                    memory_allocation
-                );
-                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-            },
+        let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
+            memory_usage,
+            wasm_memory_usage,
+            memory_allocation,
+            wasm_memory_limit,
+            self.wasm_memory_threshold,
         );
 
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity < used_wasm_memory + self.wasm_memory_threshold;
         self.system_state_changes
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
@@ -1553,16 +1534,19 @@ mod tests {
         wasm_memory_threshold: u64,
         memory_allocation: Option<u64>,
         wasm_memory_limit: Option<u64>,
-        used_stable_memory: u64,
-        used_wasm_memory: u64,
+        memory_usage: u64,
+        wasm_memory_usage: u64,
     ) -> bool {
         let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
-
+        let memory_usage_without_wasm_memory = memory_usage - wasm_memory_usage;
         let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            std::cmp::min(
+                memory_allocation - memory_usage_without_wasm_memory,
+                wasm_memory_limit,
+            )
         });
 
-        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+        wasm_capacity < wasm_memory_usage + wasm_memory_threshold
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
@@ -1572,8 +1556,8 @@ mod tests {
                 for wasm_memory_limit in
                     [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
                 {
-                    for used_stable_memory in [0, GIB] {
-                        for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                    for memory_usage_without_wasm_memory in [0, GIB] {
+                        for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
                             let mut state =
                                 helper_create_state_for_hook_status(wasm_memory_threshold);
 
@@ -1584,11 +1568,13 @@ mod tests {
                                 None
                             );
 
-                            state.check_on_low_wasm_memory_hook_condition(
+                            let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
+
+                            state.update_status_of_low_wasm_memory_hook_condition(
                                 memory_allocation.map(|m| m.into()),
                                 wasm_memory_limit.map(|m| m.into()),
-                                used_stable_memory.into(),
-                                used_wasm_memory.into(),
+                                memory_usage.into(),
+                                wasm_memory_usage.into(),
                             );
 
                             assert_eq!(
@@ -1600,8 +1586,8 @@ mod tests {
                                     wasm_memory_threshold,
                                     memory_allocation,
                                     wasm_memory_limit,
-                                    used_stable_memory,
-                                    used_wasm_memory
+                                    memory_usage,
+                                    wasm_memory_usage
                                 )
                             );
                         }

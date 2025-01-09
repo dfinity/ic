@@ -13,7 +13,7 @@ use helpers::{
     get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
     shortened_pid_string, shortened_subnet_string,
 };
-use ic_btc_interface::{Flag, SetConfigRequest};
+use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
@@ -76,7 +76,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
-    node::v1::NodeRecord,
+    node::v1::{NodeRecord, NodeRewardType},
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -99,8 +99,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -1022,6 +1022,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
+            chunked_canister_wasm: None,
         }
     }
 }
@@ -1198,11 +1199,14 @@ struct ProposeToUpdateCanisterSettingsCmd {
     /// If set, it will update the canister's freezing threshold to this value.
     freezing_threshold: Option<u64>,
     #[clap(long)]
-    /// If set, it will update the canister's log wasm memory limit to this value.
+    /// If set, it will update the canister's wasm memory limit to this value.
     wasm_memory_limit: Option<u64>,
     #[clap(long)]
     /// If set, it will update the canister's log visibility to this value.
     log_visibility: Option<LogVisibility>,
+    #[clap(long)]
+    /// If set, it will update the canister's wasm memory threshold to this value.
+    wasm_memory_threshold: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1232,6 +1236,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         let memory_allocation = self.memory_allocation;
         let freezing_threshold = self.freezing_threshold;
         let wasm_memory_limit = self.wasm_memory_limit;
+        let wasm_memory_threshold = self.wasm_memory_threshold;
         let log_visibility = match self.log_visibility {
             Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
@@ -1247,6 +1252,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 freezing_threshold,
                 wasm_memory_limit,
                 log_visibility,
+                wasm_memory_threshold,
             }),
         };
 
@@ -2618,6 +2624,78 @@ struct ProposeToSetBitcoinConfig {
         help = "Whether or not to disable the API if canister isn't fully synced."
     )]
     pub disable_api_if_not_fully_synced: Option<bool>,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `get_utxos` requests."
+    )]
+    pub get_utxos_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_utxos` request."
+    )]
+    pub get_utxos_cycles_per_ten_instructions: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_utxos` request."
+    )]
+    pub get_utxos_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the flat fee to charge for a `get_balance` request."
+    )]
+    pub get_balance: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_balance` request."
+    )]
+    pub get_balance_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the flat fee to charge for a `get_current_fee_percentiles` request."
+    )]
+    pub get_current_fee_percentiles: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_current_fee_percentiles` request."
+    )]
+    pub get_current_fee_percentiles_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `send_transaction` requests."
+    )]
+    pub send_transaction_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge for each byte in the transaction."
+    )]
+    pub send_transaction_per_byte: u128,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `get_block_headers` requests."
+    )]
+    pub get_block_headers_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_block_headers` request."
+    )]
+    pub get_block_headers_cycles_per_ten_instructions: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_block_headers` request."
+    )]
+    pub get_block_headers_maximum: u128,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -2638,7 +2716,7 @@ impl ProposalTitle for ProposeToSetBitcoinConfig {
 #[async_trait]
 impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
     async fn payload(&self, _: &Agent) -> BitcoinSetConfigProposal {
-        let request = SetConfigRequest {
+        let request: SetConfigRequest = SetConfigRequest {
             stability_threshold: self.stability_threshold,
             api_access: self
                 .api_access
@@ -2652,6 +2730,21 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
                 } else {
                     Flag::Disabled
                 }
+            }),
+            fees: Some(Fees {
+                get_utxos_base: self.get_utxos_base,
+                get_utxos_cycles_per_ten_instructions: self.get_utxos_cycles_per_ten_instructions,
+                get_utxos_maximum: self.get_utxos_maximum,
+                get_balance: self.get_balance,
+                get_balance_maximum: self.get_balance_maximum,
+                get_current_fee_percentiles: self.get_current_fee_percentiles,
+                get_current_fee_percentiles_maximum: self.get_current_fee_percentiles_maximum,
+                send_transaction_base: self.send_transaction_base,
+                send_transaction_per_byte: self.send_transaction_per_byte,
+                get_block_headers_base: self.get_block_headers_base,
+                get_block_headers_cycles_per_ten_instructions: self
+                    .get_block_headers_cycles_per_ten_instructions,
+                get_block_headers_maximum: self.get_block_headers_maximum,
             }),
             ..Default::default()
         };
@@ -3601,9 +3694,15 @@ async fn main() {
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                &opts.hsm_slot.unwrap(),
-                &opts.key_id.unwrap(),
-                &opts.pin.unwrap(),
+                &opts.hsm_slot.expect(
+                    "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
+                ),
+                &opts.key_id.expect(
+                    "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
+                ),
+                &opts.pin.expect(
+                    "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
+                ),
             )
         } else {
             Sender::Anonymous
@@ -4989,6 +5088,48 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     dc_id: record.dc_id,
                     rewardable_nodes: record.rewardable_nodes,
                     ipv6: record.ipv6,
+                };
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    record,
+                    as_json,
+                );
+            } else if key.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
+                #[derive(Debug, Serialize)]
+                pub struct Node {
+                    pub xnet: Option<String>,
+                    pub http: Option<String>,
+                    pub node_operator_id: PrincipalId,
+                    pub chip_id: Option<String>,
+                    pub hostos_version_id: Option<String>,
+                    pub public_ipv4_config: Option<String>,
+                    pub domain: Option<String>,
+                    pub node_reward_type: Option<String>,
+                }
+                let record =
+                    NodeRecord::decode(&bytes[..]).expect("Error decoding value from registry.");
+                let record = Node {
+                    xnet: record.xnet.map(|v| format!("[{}]:{}", v.ip_addr, v.port)),
+                    http: record.http.map(|v| format!("[{}]:{}", v.ip_addr, v.port)),
+                    node_operator_id: PrincipalId::try_from(record.node_operator_id)
+                        .expect("Error decoding principal"),
+                    chip_id: record.chip_id.map(hex::encode),
+                    hostos_version_id: record.hostos_version_id,
+                    public_ipv4_config: record.public_ipv4_config.map(|v| {
+                        format!(
+                            "ip_addr {} gw {:#?} prefix_length {}",
+                            v.ip_addr, v.gateway_ip_addr, v.prefix_length
+                        )
+                    }),
+                    domain: record.domain,
+                    node_reward_type: record.node_reward_type.map(|t: i32| {
+                        NodeRewardType::try_from(t)
+                            .expect("Invalid node_reward_type value")
+                            .to_string()
+                    }),
                 };
                 print_value(
                     &std::str::from_utf8(&key)

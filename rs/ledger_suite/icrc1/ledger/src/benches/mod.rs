@@ -1,10 +1,8 @@
-use crate::{execute_transfer_not_async, post_upgrade, pre_upgrade, Access, Tokens};
+use crate::{balances_len, execute_transfer_not_async, post_upgrade, pre_upgrade, Tokens};
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_canister_log::Sink;
-use ic_ledger_canister_core::ledger::{
-    blocks_to_archive, remove_archived_blocks, LedgerAccess, LedgerContext,
-};
+use ic_ledger_canister_core::ledger::{blocks_to_archive, remove_archived_blocks, LedgerAccess};
 use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -42,9 +40,7 @@ pub fn icrc1_transfer(
 }
 
 fn assert_has_num_balances(num_balances: u32) {
-    Access::with_ledger(|ledger| {
-        assert_eq!(ledger.balances().store.len() as u32, num_balances);
-    });
+    assert_eq!(balances_len() as u32, num_balances);
 }
 
 pub fn max_length_principal(index: u32) -> Principal {

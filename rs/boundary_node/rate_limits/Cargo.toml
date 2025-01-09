@@ -10,8 +10,8 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 getrandom = { version = "0.2", features = ["custom"] }
-hex = { workspace = true }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
@@ -29,6 +29,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true, features = ['serde', 'v4'] }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 rate-limit-canister-integration-tests = { path = "./integration_tests" }
 
 [lib]
