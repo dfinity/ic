@@ -27,6 +27,7 @@ ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }

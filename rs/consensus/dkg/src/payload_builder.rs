@@ -15,12 +15,16 @@ use ic_registry_client_helpers::{
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
+    consensus::{
+        dkg::{self, Summary},
+        get_faults_tolerated, Block,
+    },
     crypto::{
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
             errors::create_transcript_error::DkgCreateTranscriptError,
-            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId,
+            NiDkgTargetSubnet, NiDkgTranscript,
         },
         CryptoError,
     },
@@ -233,11 +237,15 @@ pub(super) fn create_summary_payload(
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = last_summary.clone().into_next_transcripts();
 
+    let vet_kd_ids = get_enabled_vet_keys(subnet_id, registry_client, registry_version)
+        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?;
+
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
     // the next transcripts, as they are the newest ones.
     // If `next_transcripts` does not contain the required transcripts (due to
     // failed DKGs in the past interval) we reshare the current transcripts.
+    // TODO: Likely, we should do this on a per tag basis
     let reshared_transcripts = if next_transcripts.contains_key(&NiDkgTag::LowThreshold)
         && next_transcripts.contains_key(&NiDkgTag::HighThreshold)
     {
@@ -250,7 +258,6 @@ pub(super) fn create_summary_payload(
     // block, which determines receivers of the dealings.
     configs.append(&mut get_configs_for_local_transcripts(
         subnet_id,
-        registry_client,
         get_node_list(
             subnet_id,
             registry_client,
@@ -259,6 +266,7 @@ pub(super) fn create_summary_payload(
         height,
         reshared_transcripts,
         validation_context.registry_version,
+        &vet_kd_ids,
     )?);
 
     Ok(Summary::new(
@@ -374,8 +382,6 @@ fn compute_remote_dkg_data(
 
     // Add errors into 'new_transcripts' for repeatedly failed configs and do not
     // attempt to create transcripts for them any more.
-    //
-    // TODO: use drain_filter once it's stable.
     config_groups.retain(|config_group| {
         let target = config_group
             .first()
@@ -471,7 +477,6 @@ pub fn get_dkg_summary_from_cup_contents(
     let height = Height::from(cup_contents.height);
     let configs = get_configs_for_local_transcripts(
         subnet_id,
-        registry,
         committee,
         height,
         &transcripts,
@@ -479,6 +484,7 @@ pub fn get_dkg_summary_from_cup_contents(
         // the recovered NNS so that the DKG configs point to the correct registry version and new
         // dealings can be created in the first DKG interval.
         registry_version_of_original_registry.unwrap_or(registry_version),
+        &[],
     )
     .expect("Couldn't generate configs for the genesis summary");
     // For the first 2 intervals we use the length value contained in the
@@ -504,16 +510,16 @@ pub fn get_dkg_summary_from_cup_contents(
 /// Creates DKG configs for the local subnet for the next DKG intervals.
 pub(crate) fn get_configs_for_local_transcripts(
     subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
     node_ids: BTreeSet<NodeId>,
     start_block_height: Height,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
+    vet_kd_ids: &[NiDkgMasterPublicKeyId],
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
-    let vet_kd_ids = get_enabled_vet_keys(subnet_id, registry_client, registry_version)
-        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?
-        .into_iter()
+    let vet_kd_ids = vet_kd_ids
+        .iter()
+        .cloned()
         .map(|key| NiDkgTag::HighThresholdForKey(key))
         .collect::<Vec<_>>();
 
@@ -827,10 +833,7 @@ mod tests {
         Dependencies,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
-    use ic_interfaces_registry::RegistryValue;
-    use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -856,20 +859,19 @@ mod tests {
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
 
-        let mut registry = MockRegistryClient::new();
-        registry.expect_get_value().return_const({
-            let pk = SubnetRecord {
-                ..Default::default()
-            };
-            let mut v = Vec::new();
-            pk.encode(&mut v).unwrap();
-            Ok(Some(v))
-        });
+        // let mut registry = MockRegistryClient::new();
+        // registry.expect_get_value().return_const({
+        //     let pk = SubnetRecord {
+        //         ..Default::default()
+        //     };
+        //     let mut v = Vec::new();
+        //     pk.encode(&mut v).unwrap();
+        //     Ok(Some(v))
+        // });
 
         // Tests the happy path.
         let configs = get_configs_for_local_transcripts(
             subnet_id,
-            &registry,
             receivers.clone(),
             start_block_height,
             &vec![(
@@ -879,6 +881,7 @@ mod tests {
             .into_iter()
             .collect(),
             registry_version,
+            &[],
         )
         .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
 

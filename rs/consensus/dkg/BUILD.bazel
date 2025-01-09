@@ -26,6 +26,7 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/mocks",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/interfaces/registry/mocks",
+     "//rs/registry/subnet_features",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/consensus",

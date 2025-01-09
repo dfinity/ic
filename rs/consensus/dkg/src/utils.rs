@@ -75,3 +75,78 @@ pub(crate) fn get_enabled_vet_keys(
 
     Ok(keys)
 }
+
+#[cfg(test)]
+mod tests {
+    use ic_interfaces_registry::RegistryValue;
+    use ic_interfaces_registry_mocks::MockRegistryClient;
+    use ic_management_canister_types::{
+        MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    };
+    use ic_protobuf::registry::subnet::v1::SubnetRecord as PbSubnetRecord;
+    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId, RegistryVersion};
+
+    use crate::utils::get_enabled_vet_keys;
+
+    /// Test that `get_enabled_vet_keys` correctly extracts the vet keys that are in the [`SubnetRecord`] of the
+    /// subnet.
+    #[test]
+    fn test_get_enabled_vet_keys() {
+        let mut registry = MockRegistryClient::new();
+
+        // Create a [`SubnetRecord`] with two VetKeys and a Schnorr key (which should be ignored)
+        let subnet_record = SubnetRecordBuilder::new()
+            .with_chain_key_config(ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                            algorithm: SchnorrAlgorithm::Ed25519,
+                            name: String::from("schnorr_key_to_ignore"),
+                        }),
+                        pre_signatures_to_create_in_advance: 50,
+                        max_queue_size: 50,
+                    },
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                            curve: VetKdCurve::Bls12_381_G2,
+                            name: String::from("first_vet_kd_key"),
+                        }),
+                        pre_signatures_to_create_in_advance: 50,
+                        max_queue_size: 50,
+                    },
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                            curve: VetKdCurve::Bls12_381_G2,
+                            name: String::from("second_vet_kd_key"),
+                        }),
+                        pre_signatures_to_create_in_advance: 50,
+                        max_queue_size: 50,
+                    },
+                ],
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+            })
+            .build();
+
+        registry.expect_get_value().return_const({
+            let pk = PbSubnetRecord::from(subnet_record);
+            let mut v = Vec::new();
+            pk.encode(&mut v).unwrap();
+            Ok(Some(v))
+        });
+
+        // Check that the two expected keys are contained in the output and no unexpected other keys
+        let vetkeys =
+            get_enabled_vet_keys(subnet_test_id(1), &registry, RegistryVersion::default()).unwrap();
+        assert_eq!(vetkeys.len(), 2);
+        assert!(
+            matches!(&vetkeys[0], NiDkgMasterPublicKeyId::VetKd(key) if key.name == "first_vet_kd_key")
+        );
+        assert!(
+            matches!(&vetkeys[1], NiDkgMasterPublicKeyId::VetKd(key) if key.name == "second_vet_kd_key")
+        );
+    }
+}
