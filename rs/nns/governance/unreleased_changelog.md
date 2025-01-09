@@ -59,8 +59,12 @@ the neuron. More precisely,
 1. If a neuron has not refreshed in 6 months, then votes have less influence on
    the outcome of proposals.
 
-2. If a neuron has not refreshed in 7 months, it stops following other neurons
-   (except on the NeuronManagement topic; those followees are retained).
+2. If a neuron has not refreshed in 7 months,
+
+    a. It stops following other neurons (except on the NeuronManagement topic;
+       those followees are retained).
+
+    b. Its influence on proposals goes to 0.
 
 ## Changed
 
