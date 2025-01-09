@@ -1,6 +1,6 @@
 use crate::{
-    utils::{self, get_enabled_vet_keys},
-    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
+    utils::{self, get_enabled_vet_keys, tags_iter},
+    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
@@ -517,13 +517,8 @@ pub(crate) fn get_configs_for_local_transcripts(
     vet_kd_ids: &[NiDkgMasterPublicKeyId],
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
-    let vet_kd_ids = vet_kd_ids
-        .iter()
-        .cloned()
-        .map(|key| NiDkgTag::HighThresholdForKey(key))
-        .collect::<Vec<_>>();
 
-    for tag in TAGS.iter().chain(vet_kd_ids.iter()) {
+    for tag in tags_iter(&vet_kd_ids) {
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
@@ -533,7 +528,7 @@ pub(crate) fn get_configs_for_local_transcripts(
         let (dealers, resharing_transcript) = match tag {
             NiDkgTag::LowThreshold => (node_ids.clone(), None),
             NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
-                let resharing_transcript = reshared_transcripts.get(tag);
+                let resharing_transcript = reshared_transcripts.get(&tag);
                 (
                     resharing_transcript
                         .map(|transcript| transcript.committee.get().clone())
@@ -887,7 +882,7 @@ mod tests {
 
         // We produced exactly two configs, and with expected ids.
         assert_eq!(configs.len(), 2);
-        for (index, tag) in TAGS.iter().enumerate() {
+        for (index, tag) in tags_iter(&[]).enumerate() {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
@@ -1216,12 +1211,13 @@ mod tests {
             assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
             assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
+            assert_eq!(summary.configs.len(), 2);
 
-            for tag in TAGS.iter() {
+            for tag in tags_iter(&[]) {
                 let (id, conf) = summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
 
                 assert_eq!(
@@ -1325,12 +1321,13 @@ mod tests {
                     dkg_summary.next_interval_length,
                     Height::from(dkg_interval_len)
                 );
+                assert_eq!(dkg_summary.configs.len(), 2);
 
-                for tag in TAGS.iter() {
+                for tag in tags_iter(&[]) {
                     let (id, conf) = dkg_summary
                         .configs
                         .iter()
-                        .find(|(id, _)| id.dkg_tag == *tag)
+                        .find(|(id, _)| id.dkg_tag == tag)
                         .unwrap();
 
                     assert_eq!(
@@ -1373,7 +1370,7 @@ mod tests {
                     // In later intervals we can also check that the resharing transcript matches
                     // the expected value.
                     if interval > 0 {
-                        if tag == &NiDkgTag::HighThreshold {
+                        if tag == NiDkgTag::HighThreshold {
                             assert_eq!(
                                 dkg_summary
                                     .clone()

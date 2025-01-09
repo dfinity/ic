@@ -3,11 +3,13 @@ use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::Block,
-    crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId},
+    crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
     registry::RegistryClientError,
     NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
+
+use crate::TAGS;
 
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
@@ -74,6 +76,18 @@ pub(crate) fn get_enabled_vet_keys(
         .collect::<Vec<_>>();
 
     Ok(keys)
+}
+
+/// Iterate over all [`NiDkgTag`]s, i.e. high and low threshold as well as all key ids
+pub(crate) fn tags_iter(
+    vet_keys: &[NiDkgMasterPublicKeyId],
+) -> impl Iterator<Item = NiDkgTag> + use<'_> {
+    TAGS.iter().cloned().chain(
+        vet_keys
+            .iter()
+            .cloned()
+            .map(|key| NiDkgTag::HighThresholdForKey(key)),
+    )
 }
 
 #[cfg(test)]
