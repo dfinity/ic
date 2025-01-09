@@ -6798,12 +6798,15 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "prometheus",
- "prost 0.13.3",
+ "prost 0.13.4",
  "rayon",
  "slog",
 ]
 
+[[package]]
 name = "ic-consensus-manager"
+version = "0.9.0"
+dependencies = [
  "anyhow",
  "axum",
  "backoff",
