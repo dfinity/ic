@@ -5690,11 +5690,13 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
+ "base64ct",
  "bytes",
  "candid",
  "clap 4.5.20",
  "criterion",
  "dashmap 6.1.0",
+ "der",
  "ethnum",
  "futures",
  "futures-util",
@@ -5707,6 +5709,7 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-ed25519",
+ "ic-crypto-test-utils-tls",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
@@ -5739,6 +5742,7 @@ dependencies = [
  "reqwest 0.12.9",
  "rustls 0.23.18",
  "rustls-pemfile 2.2.0",
+ "sec1",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -7909,6 +7913,7 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.9.0"
 dependencies = [
+ "der",
  "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-temp-crypto",

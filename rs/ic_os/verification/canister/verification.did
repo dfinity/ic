@@ -1,0 +1,8 @@
+type AttestationTokenRequest = record { node_id : principal };
+type AttestationTokenResponse = record { attestation_token : Result };
+type Result = variant { Ok : blob; Err };
+service : {
+  attestation_token : (AttestationTokenRequest) -> (
+      AttestationTokenResponse,
+    ) query;
+}

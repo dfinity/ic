@@ -1,12 +1,17 @@
 use x509_cert::der; // re-export of der create
 use x509_cert::spki; // re-export of spki create
 
+use der::Sequence;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use pkcs8::der::{Encode, Error, Length, ValueOrd, Writer};
+use pkcs8::{AssociatedOid, ObjectIdentifier};
 use rand::{CryptoRng, Rng};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
+use x509_cert::der::asn1::OctetString;
+use x509_cert::ext::{AsExtension, Extension};
 use x509_cert::{
     builder::{Builder, CertificateBuilder, Profile},
     ext::pkix::BasicConstraints,
@@ -188,6 +193,7 @@ pub struct CertBuilder {
     duplicate_subject_cn: bool,
     duplicate_issuer_cn: bool,
     self_sign_with_wrong_secret_key: Option<ReproducibleRng>,
+    attestation_token_extension: Option<AttestationTokenExtension>,
 }
 
 impl CertBuilder {
@@ -272,17 +278,21 @@ impl CertBuilder {
         self.build(prime256v1_key_pair(rng))
     }
 
+    pub fn add_attestation_token_extension(&mut self, extension: AttestationTokenExtension) {
+        self.attestation_token_extension = Some(extension);
+    }
+
     pub fn build(self, key_pair: KeyPair) -> CertWithPrivateKey {
         if self.self_sign_with_wrong_secret_key.is_some() && self.ca_signing_data.is_some() {
             panic!(
-                "unsupported CertBuilder usage: self_sign_with_wrong_secret_key 
+                "unsupported CertBuilder usage: self_sign_with_wrong_secret_key
                     and ca_signing_data cannot be used in combination. Choose either."
             )
         }
         if self.set_ca_key_usage_extension && self.version_1 {
-            panic!("unsupported CertBuilder usage: x509-cert crate doesn't allow to manually set the version; it 
-                    sets version to 1 if there are no extensions (and no unique IDs); by default the version is 3; 
-                    this means that version_1 and the CA-flag (which is expressed via a BasicConstraints 
+            panic!("unsupported CertBuilder usage: x509-cert crate doesn't allow to manually set the version; it
+                    sets version to 1 if there are no extensions (and no unique IDs); by default the version is 3;
+                    this means that version_1 and the CA-flag (which is expressed via a BasicConstraints
                     extension) together are not supported.")
         }
         CertWithPrivateKey {
@@ -342,6 +352,12 @@ impl CertBuilder {
                     path_len_constraint: None,
                 })
                 .expect("failed to add extension");
+
+            if let Some(extension) = self.attestation_token_extension {
+                builder
+                    .add_extension(&extension)
+                    .expect("failed to add extension");
+            }
         }
 
         builder.build().expect("failed to build certificate")
@@ -437,6 +453,7 @@ impl CertWithPrivateKey {
             duplicate_subject_cn: false,
             duplicate_issuer_cn: false,
             self_sign_with_wrong_secret_key: None,
+            attestation_token_extension: None,
         }
     }
 
@@ -491,3 +508,41 @@ fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, String> {
         .map_err(|_e| format!("invalid asn1 time={time_asn1}: failed to convert to u64"))?;
     Ok(time_u64)
 }
+
+pub struct AttestationTokenExtension(pub OctetString);
+
+impl TryFrom<Vec<u8>> for AttestationTokenExtension {
+    type Error = Box<Error>;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Ok(Self(OctetString::new(value)?))
+    }
+}
+
+impl AssociatedOid for AttestationTokenExtension {
+    const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.4.1.56387.42.1");
+}
+
+impl Encode for AttestationTokenExtension {
+    fn encoded_len(&self) -> der::Result<Length> {
+        self.0.encoded_len()
+    }
+
+    fn encode(&self, encoder: &mut impl Writer) -> der::Result<()> {
+        self.0.encode(encoder)
+    }
+}
+
+impl AsExtension for AttestationTokenExtension {
+    fn critical(&self, _subject: &Name, _extensions: &[Extension]) -> bool {
+        false
+    }
+}
+
+// #[derive(Sequence)]
+// #[asn1(tag_mode = "EXPLICIT")]
+// pub struct AttestationToken {
+//     pub node_id: OctetString,
+//     pub hash_tree: OctetString,
+//     pub certificate: OctetString,
+// }

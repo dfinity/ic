@@ -6,44 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Error};
-use arc_swap::ArcSwapOption;
-use async_scoped::TokioScope;
-use async_trait::async_trait;
-use axum::extract::Request;
-use axum::{
-    middleware,
-    response::IntoResponse,
-    routing::method_routing::{get, post},
-    Router,
-};
-use axum_extra::middleware::option_layer;
-use candid::DecoderConfig;
-use futures::TryFutureExt;
-use ic_bn_lib::{
-    http::{
-        self,
-        shed::{
-            sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
-            system::{SystemInfo, SystemLoadShedderLayer},
-            ShedResponse,
-        },
-    },
-    types::RequestType,
-};
-use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
-use ic_registry_replicator::RegistryReplicator;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use nix::unistd::{getpgid, setpgid, Pid};
-use prometheus::Registry;
-use tokio::sync::RwLock;
-use tokio_util::sync::CancellationToken;
-use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
-use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::{debug, error, warn};
-
 use crate::{
     bouncer,
     cache::{cache_middleware, Cache},
@@ -67,7 +29,52 @@ use crate::{
     },
     tls_verify::TlsVerifier,
 };
+use anyhow::{anyhow, bail, Context, Error};
+use arc_swap::ArcSwapOption;
+use async_scoped::TokioScope;
+use async_trait::async_trait;
+use axum::extract::Request;
+use axum::{
+    middleware,
+    response::IntoResponse,
+    routing::method_routing::{get, post},
+    Router,
+};
+use axum_extra::middleware::option_layer;
+use candid::{DecoderConfig, Principal};
+use der::asn1::{ObjectIdentifier, OctetString, OctetStringRef};
+use der::{Encode, EncodePem, Sequence, ValueOrd};
+use futures::TryFutureExt;
+use ic_bn_lib::{
+    http::{
+        self,
+        shed::{
+            sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
+            system::{SystemInfo, SystemLoadShedderLayer},
+            ShedResponse,
+        },
+    },
+    types::RequestType,
+};
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
+use ic_registry_replicator::RegistryReplicator;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use nix::unistd::{getpgid, setpgid, Pid};
+use prometheus::Registry;
+use sec1::pkcs8::spki::AlgorithmIdentifier;
+use sec1::pkcs8::PrivateKeyInfo;
+use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
+use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
+use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
+use tracing::{debug, error, warn};
+use x509_parser::pem;
 
+use ic_crypto_test_utils_tls::x509_certificates::{
+    AttestationToken, AttestationTokenExtension, CertWithPrivateKey, KeyPair,
+};
 #[cfg(feature = "tls")]
 use {crate::cli, rustls::server::ResolvesServerCert};
 
@@ -531,17 +538,48 @@ fn setup_registry(
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
 
-    let cert = cli
-        .tls_cert_path
-        .clone()
-        .ok_or(anyhow!("TLS cert not specified"))?;
-    let key = cli
-        .tls_pkey_path
-        .clone()
-        .ok_or(anyhow!("TLS key not specified"))?;
+    // let cert = cli
+    //     .tls_cert_path
+    //     .clone()
+    //     .ok_or(anyhow!("TLS cert not specified"))?;
+    // let key = cli
+    //     .tls_pkey_path
+    //     .clone()
+    //     .ok_or(anyhow!("TLS key not specified"))?;
 
-    let cert = std::fs::read(cert).context("unable to read TLS cert")?;
-    let key = std::fs::read(key).context("unable to read TLS key")?;
+    let mut builder = CertWithPrivateKey::builder();
+    builder.add_attestation_token_extension(AttestationTokenExtension(AttestationToken {
+        node_id: OctetString::new(vec![1, 2, 3]).unwrap(),
+        hash_tree: OctetString::new(vec![4, 5, 6]).unwrap(),
+        certificate: OctetString::new(vec![7, 8, 9]).unwrap(),
+    }));
+
+    let cert_with_private_key = builder.build_ed25519(&mut rand::thread_rng());
+
+    let cert = cert_with_private_key.cert_pem();
+    let KeyPair::Ed25519 { secret_key, .. } = cert_with_private_key.key_pair() else {
+        bail!("Unexpected key");
+    };
+
+    let mut ccc = vec![];
+    OctetStringRef::new(secret_key.0.expose_secret())
+        .unwrap()
+        .encode(&mut ccc)
+        .unwrap();
+    let key = PrivateKeyInfo {
+        private_key: &ccc[..],
+        public_key: None,
+        algorithm: AlgorithmIdentifier {
+            oid: ObjectIdentifier::new_unwrap("1.3.101.112"),
+            parameters: None,
+        },
+    }
+    .to_pem(base64ct::LineEnding::default())
+    .expect("unable to PEM encode cert")
+    .into_bytes();
+
+    // let cert = std::fs::read(cert).context("unable to read TLS cert")?;
+    // let key = std::fs::read(key).context("unable to read TLS key")?;
 
     let resolver = tls::StubResolver::new(&cert, &key)?;
     Ok(Arc::new(resolver))
@@ -580,29 +618,30 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
 #[cfg(feature = "tls")]
 fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
-    match setup_tls_resolver_stub(cli) {
-        Ok(v) => {
-            warn!("TLS: static resolver loaded");
-            return Ok(v);
-        }
-
-        Err(e) => warn!("TLS: unable to load static resolver: {e}"),
-    }
-
-    warn!(
-        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
-        cli.tls_acme_staging
-    );
-    match setup_tls_resolver_acme(cli) {
-        Ok(v) => {
-            warn!("TLS: ACME resolver loaded");
-            return Ok(v);
-        }
-
-        Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
-    }
-
-    Err(anyhow!("TLS: no resolvers were able to load"))
+    setup_tls_resolver_stub(cli)
+    // match setup_tls_resolver_stub(cli) {
+    //     Ok(v) => {
+    //         warn!("TLS: static resolver loaded");
+    //         return Ok(v);
+    //     }
+    //
+    //     Err(e) => warn!("TLS: unable to load static resolver: {e}"),
+    // }
+    //
+    // warn!(
+    //     "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
+    //     cli.tls_acme_staging
+    // );
+    // match setup_tls_resolver_acme(cli) {
+    //     Ok(v) => {
+    //         warn!("TLS: ACME resolver loaded");
+    //         return Ok(v);
+    //     }
+    //
+    //     Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
+    // }
+    //
+    // Err(anyhow!("TLS: no resolvers were able to load"))
 }
 
 #[cfg(feature = "tls")]

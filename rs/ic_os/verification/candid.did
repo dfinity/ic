@@ -1,0 +1,8 @@
+type initiate_attestation_args = record {
+    canisters_number : nat64;
+    wasm_module : blob;
+};
+
+service : {
+    "initiate_attestation" : (spinup_canisters_args) -> ();
+};

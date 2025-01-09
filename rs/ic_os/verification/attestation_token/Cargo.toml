@@ -1,26 +1,22 @@
 [package]
-name = "verification-canister"
-description = "Remote attestation TODO."
+name = "attestation-token"
+description = "Attestation token."
 license = "Apache-2.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
-candid = "0.10.11"
+#candid = "0.10.11"
 #ic-agent = "0.39.1"
 #sev = "5.0.0"
-anyhow = "1.0.93"
+#anyhow = "1.0.93"
 #sha2 = "0.11.0-pre.4"
 #der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
 #mockall = "0.13.1"
 #tokio = { version = "1.42.0", features = ["macros"] }
-ic-certification = "3.0"
-serde_cbor = "0.11"
-attestation-token = { path = "../attestation_token"}
-ic-cdk = "0.17"
 #ic-certified-map = "0.4"
+serde_cbor = "0.11"
+ic_principal = "0.1.1"
 ic-cbor = "3.0"
+ic-certification = "3.0"
+ic-certificate-verification = "3.0"
 serde = { version = "1.0.215", features = ["derive"] }
-attestation = { path = "../attestation" }
