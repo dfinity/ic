@@ -126,8 +126,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
             .await
             .unwrap();
 
-        let node_operator_id_1: Vec<u8> = (*TEST_NEURON_1_OWNER_PRINCIPAL.into_vec()).to_vec();
-        let node_operator_id_2: Vec<u8> = (*TEST_NEURON_2_OWNER_PRINCIPAL.into_vec()).to_vec();
+        let node_operator_id_1 = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let node_operator_id_2 = *TEST_NEURON_2_OWNER_PRINCIPAL;
         let proposal_payload = RemoveNodeOperatorsPayload {
             node_operators_to_remove: vec![node_operator_id_1, node_operator_id_2],
         };
