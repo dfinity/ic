@@ -5,9 +5,9 @@ use crate::{
         status::{self, Status},
         ConsensusCrypto,
     },
-    dkg::payload_builder::create_payload as create_dkg_payload,
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
+use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     get_subnet_record, membership::Membership, pool_reader::PoolReader,

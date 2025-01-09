@@ -107,6 +107,7 @@ pub struct RecoveryArgs {
     pub key_file: Option<PathBuf>,
     pub test_mode: bool,
     pub skip_prompts: bool,
+    pub use_local_binaries: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -145,13 +146,22 @@ impl Recovery {
     ) -> RecoveryResult<Self> {
         let ssh_confirmation = !args.test_mode;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
-        let binary_dir = recovery_dir.join("binaries");
+        let binary_dir = if args.use_local_binaries {
+            PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
+        } else {
+            recovery_dir.join("binaries")
+        };
         let data_dir = recovery_dir.join("original_data");
         let work_dir = recovery_dir.join("working_dir");
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        match Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path]) {
+        let mut to_create: Vec<&Path> = vec![&data_dir, &work_dir, &local_store_path];
+        if !args.use_local_binaries {
+            to_create.push(&binary_dir);
+        }
+
+        match Recovery::create_dirs(&to_create) {
             Err(RecoveryError::IoError(s, err)) => match err.kind() {
                 ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
                     format!(
@@ -180,7 +190,7 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !binary_dir.join("ic-admin").exists() {
+        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
             if let Some(version) = args.replica_version {
                 block_on(download_binary(
                     &logger,

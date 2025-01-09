@@ -195,12 +195,9 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     registry_client.reload();
     registry_client.update_to_latest_version();
 
-    let summary = ic_consensus::dkg::make_genesis_summary(
-        &*registry_client,
-        subnet_id,
-        Option::from(version),
-    )
-    .with_current_transcripts(ni_transcripts);
+    let summary =
+        ic_consensus_dkg::make_genesis_summary(&*registry_client, subnet_id, Option::from(version))
+            .with_current_transcripts(ni_transcripts);
     let cup = make_genesis(summary);
     (registry_client, cup, cryptos)
 }

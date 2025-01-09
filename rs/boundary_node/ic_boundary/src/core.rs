@@ -2,7 +2,7 @@
 use std::{
     error::Error as StdError,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -50,7 +50,6 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rand::rngs::OsRng;
-use tokio::sync::{watch, RwLock};
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
