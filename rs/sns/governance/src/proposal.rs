@@ -1,5 +1,6 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
 use crate::pb::v1::AdvanceSnsTargetVersion;
+use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -1042,13 +1043,22 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 ) -> Result<String, String> {
     let mut defects = vec![];
 
+    let generate_final_report = |defects: Vec<String>| -> Result<String, String> {
+        Err(format!(
+            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ))
+    };
+
     let UpgradeSnsControlledCanister {
         canister_id: _,
-        new_canister_wasm,
         canister_upgrade_arg,
         mode,
-        chunked_canister_wasm,
+        // The WASM-related fields are extracted separately.
+        chunked_canister_wasm: _chunked_canister_wasm,
+        new_canister_wasm: _new_canister_wasm,
     } = upgrade;
+
     // Make sure `mode` is not None, and not an invalid/unknown value.
     if let Some(mode) = mode {
         if let Err(err) = CanisterInstallMode::try_from(*mode) {
@@ -1074,54 +1084,63 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     // see https://ic-interface-spec.netlify.app/#canister-module-format
     const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 
-    match (new_canister_wasm.is_empty(), chunked_canister_wasm) {
-        (true, Some(_)) => {
-            defects.push("Cannot specify both new_canister_wasm and chunked_canister_wasm.".into());
+    let wasm = match Wasm::try_from(upgrade) {
+        Err(err) => {
+            defects.push(err);
+            return generate_final_report(defects);
         }
-        (false, None) => {
-            defects.push("Either new_canister_wasm or chunked_canister_wasm must be specified.".into());
-        }
-        _ => (),
-    }
+        Ok(wasm) => wasm,
+    };
 
-    // TODO: Add validation for `chunked_canister_wasm`.
-    if chunked_canister_wasm.is_none() {
-        if new_canister_wasm.len() < 4
-            || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-                && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
-        {
-            defects.push("new_canister_wasm lacks the magic value in its header.".into());
-        }
+    let canister_wasm_sha256 = match wasm {
+        Wasm::Bytes(new_canister_wasm) => {
+            if new_canister_wasm.len() < 4
+                || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+                    && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+            {
+                defects.push("new_canister_wasm lacks the magic value in its header.".into());
+            }
 
-        if new_canister_wasm.len().saturating_add(
-            canister_upgrade_arg
-                .as_ref()
-                .map(|arg| arg.len())
-                .unwrap_or_default(),
-        ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-        {
-            defects.push(format!(
-                "the maximum canister WASM and argument size \
-                for UpgradeSnsControlledCanister is {} bytes.",
-                MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-            ));
+            if new_canister_wasm.len().saturating_add(
+                canister_upgrade_arg
+                    .as_ref()
+                    .map(|arg| arg.len())
+                    .unwrap_or_default(),
+            ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+            {
+                defects.push(format!(
+                    "the maximum canister WASM and argument size \
+                    for UpgradeSnsControlledCanister is {} bytes.",
+                    MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+                ));
+            }
+
+            let canister_wasm_sha256 = {
+                let mut state = Sha256::new();
+                state.write(&new_canister_wasm[..]);
+                let sha = state.finish();
+                hex::encode(sha)
+            };
+            canister_wasm_sha256
         }
-    }
+        Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } => {
+            // TODO: check that chunk_hashes_list.len() > 0
+            // TODO: check that chunk_hashes_list.len() == 1 ==> chunk_hashes_list[0] == wasm_module_hash
+            // TODO: call store.list_chunks() and check it returns a superset of chunk_hashes_list.
+            todo!();
+
+            wasm_module_hash
+        }
+    };
 
     // Generate final report.
     if !defects.is_empty() {
-        return Err(format!(
-            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
-            defects.join("\n"),
-        ));
+        return generate_final_report(defects);
     }
-
-    let canister_wasm_sha256 = {
-        let mut state = Sha256::new();
-        state.write(new_canister_wasm);
-        let sha = state.finish();
-        hex::encode(sha)
-    };
 
     let upgrade_args_sha_256 = canister_upgrade_arg
         .as_ref()

@@ -252,7 +252,7 @@ async fn run_test(store_same_as_target: bool) {
             // This is the new field we want to test.
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
                 wasm_module_hash: new_wasm_hash.clone().to_vec(),
-                store_canister_id,
+                store_canister_id: Some(store_canister_id),
                 chunk_hashes_list,
             }),
             arg: vec![],

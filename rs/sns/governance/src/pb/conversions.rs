@@ -291,7 +291,9 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
-            chunked_canister_wasm: item.chunked_canister_wasm.map(pb_api::ChunkedCanisterWasm::from),
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb_api::ChunkedCanisterWasm::from),
         }
     }
 }
@@ -323,7 +325,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
-            chunked_canister_wasm: item.chunked_canister_wasm.map(pb::ChunkedCanisterWasm::from),
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb::ChunkedCanisterWasm::from),
         }
     }
 }

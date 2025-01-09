@@ -26,14 +26,14 @@ use crate::{
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
-            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
-            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
+            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
+            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
+            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
+            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -2526,6 +2526,57 @@ impl From<DeregisterDappCanisters> for Action {
 impl From<MintSnsTokens> for Action {
     fn from(mint_sns_tokens: MintSnsTokens) -> Action {
         Action::MintSnsTokens(mint_sns_tokens)
+    }
+}
+
+pub enum Wasm {
+    Bytes(Vec<u8>),
+    Chunked {
+        wasm_module_hash: Vec<u8>,
+        store_canister_id: Option<CanisterId>,
+        chunk_hashes_list: Vec<Vec<u8>>,
+    },
+}
+
+impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
+    type Error = String;
+
+    fn try_from(upgrade: &UpgradeSnsControlledCanister) -> Result<Self, Self::Error> {
+        const ERR_PREFIX: &str = "Invalid UpgradeSnsControlledCanister";
+
+        match (
+            &upgrade.new_canister_wasm[..],
+            &upgrade.chunked_canister_wasm,
+        ) {
+            (
+                [],
+                Some(ChunkedCanisterWasm {
+                    wasm_module_hash,
+                    store_canister_id,
+                    chunk_hashes_list,
+                }),
+            ) => {
+                let store_canister_id = if let Some(store_canister_id) = store_canister_id {
+                    let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                        .map_err(|err| {
+                        format!("{ERR_PREFIX}.chunked_canister_wasm.store_canister_id: {err}")
+                    })?;
+                    Some(store_canister_id)
+                } else {
+                    None
+                };
+                Ok(Self::Chunked {
+                    wasm_module_hash: wasm_module_hash.clone(),
+                    store_canister_id,
+                    chunk_hashes_list: chunk_hashes_list.clone(),
+                })
+            }
+            (bytes, None) => Ok(Self::Bytes(bytes.to_vec())),
+            _ => Err(format!(
+                "{ERR_PREFIX}: Either .new_canister_wasm or \
+                     .chunked_canister_wasm (but not both) must be specified."
+            )),
+        }
     }
 }
 
