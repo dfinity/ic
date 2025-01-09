@@ -30,7 +30,7 @@ fn normalize_duration_line(input: &str) -> String {
 }
 
 #[test]
-fn test_initialize_metrics_if_flag_is_set() {
+fn initialize_metrics() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -76,7 +76,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn test_fails_but_writes_metrics_if_target_not_a_directory() {
+fn should_fail_but_write_metrics_if_target_not_a_directory() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -120,7 +120,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn test_fails_but_writes_metrics_when_discard_not_supported() {
+fn should_fail_but_writes_metrics_when_discard_not_supported() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
@@ -172,7 +172,7 @@ fstrim_datadir_runs_total 0
 }
 
 #[test]
-fn test_fails_if_arguments_missing() {
+fn should_fail_if_arguments_missing() {
     new_fstrim_tool_command()
         .assert()
         .stdout(predicate::str::is_empty())
