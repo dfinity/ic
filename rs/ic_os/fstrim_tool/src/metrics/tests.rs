@@ -277,3 +277,39 @@ fn update_datadir_metrics() {
     assert_eq!(metrics.last_duration_milliseconds, 0.0);
     assert!(metrics.last_run_success);
 }
+
+#[test]
+fn format_metrics_output() {
+    let metrics = FsTrimMetrics {
+        last_duration_milliseconds: 123.45,
+        last_run_success: true,
+        total_runs: 6.0,
+        last_duration_milliseconds_datadir: 678.9,
+        last_run_success_datadir: false,
+        total_runs_datadir: 4.0,
+    };
+
+    let metrics_str = metrics.to_p8s_metrics_string();
+    let expected_str = "\
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 123.45
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 6
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 678.9
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 0
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 4
+";
+
+    assert_eq!(metrics_str, expected_str);
+}
