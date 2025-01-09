@@ -9,6 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true}
@@ -75,6 +76,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
+url = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]

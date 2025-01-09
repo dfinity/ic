@@ -8,7 +8,7 @@ use ic_state_machine_tests::{
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
-    CanisterId, Cycles, SubnetId,
+    CanisterId, Cycles, NodeId, SubnetId,
 };
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use std::collections::BTreeMap;
@@ -37,6 +37,14 @@ impl Subnets for SubnetsImpl {
     }
     fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
         self.subnets.read().unwrap().get(&subnet_id).cloned()
+    }
+    fn get_from_node(&self, node_id: NodeId) -> Option<Arc<StateMachine>> {
+        self.subnets
+            .read()
+            .unwrap()
+            .iter()
+            .find(|(_, subnet)| subnet.nodes.iter().any(|n| n.node_id == node_id))
+            .map(|(_, subnet)| subnet.clone())
     }
 }
 

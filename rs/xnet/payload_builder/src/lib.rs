@@ -286,7 +286,7 @@ impl From<PeerLocation> for &str {
 #[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
-    node_id: NodeId,
+    pub node_id: NodeId,
 
     /// The endpoint URL.
     pub url: Uri,
