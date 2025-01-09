@@ -3,10 +3,11 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
 use ic_registry_keys::{make_node_operator_record_key, NODE_RECORD_KEY_PREFIX};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use serde::{Deserialize, Serialize};
 
 use std::convert::TryFrom;
 
@@ -72,4 +73,11 @@ impl Registry {
             }
         }
     }
+}
+
+/// The payload of a request to remove Node Operator records from the Registry
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize, Hash)]
+pub struct RemoveNodeOperatorsPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub node_operators_to_remove: Vec<PrincipalId>,
 }

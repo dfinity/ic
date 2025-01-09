@@ -20,14 +20,17 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
-use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::{
+    do_add_node_operator::AddNodeOperatorPayload,
+    do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
 use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the

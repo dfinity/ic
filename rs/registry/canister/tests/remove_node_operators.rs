@@ -8,8 +8,10 @@ use ic_nns_test_utils::{
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::{
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_node_operators() {

@@ -77,7 +77,7 @@ use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
     node::v1::{NodeRecord, NodeRewardType},
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -134,6 +134,7 @@ use registry_canister::mutations::{
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
+    do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
@@ -635,12 +636,7 @@ impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
 impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
     async fn payload(&self, _: &Agent) -> RemoveNodeOperatorsPayload {
         RemoveNodeOperatorsPayload {
-            node_operators_to_remove: self
-                .node_operators_to_remove
-                .clone()
-                .iter()
-                .map(|x| x.to_vec())
-                .collect(),
+            node_operators_to_remove: self.node_operators_to_remove.clone(),
         }
     }
 }
