@@ -9,3 +9,4 @@ documentation.workspace = true
 [dependencies]
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
+regex = "1.11.0"

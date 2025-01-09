@@ -1,5 +1,4 @@
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
-use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -17,13 +16,13 @@ use ic_management_canister_types::{
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
 use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
 pub mod flow;
-pub mod metrics;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;
@@ -305,9 +304,8 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+    pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
+        MetricsAssert::from(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
@@ -346,6 +344,38 @@ impl LedgerSuiteOrchestrator {
                 ))
             }
         });
+    }
+}
+
+impl QueryMetrics for LedgerSuiteOrchestrator {
+    fn query_metrics(&self) -> Vec<String> {
+        use ic_canisters_http_types::{HttpRequest, HttpResponse};
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/metrics".to_string(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+        let response = Decode!(
+            &assert_reply(
+                self.env
+                    .as_ref()
+                    .query(
+                        self.ledger_suite_orchestrator_id,
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to get metrics")
+            ),
+            HttpResponse
+        )
+        .unwrap();
+        assert_eq!(response.status_code, 200_u16);
+        String::from_utf8_lossy(response.body.as_slice())
+            .trim()
+            .split('\n')
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
     }
 }
 

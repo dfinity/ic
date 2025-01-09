@@ -5927,11 +5927,11 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
+ "ic-test-utilities-metrics",
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
  "proptest",
- "regex",
  "scraper",
  "serde",
  "serde_json",
@@ -6562,6 +6562,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-test-utilities-metrics",
  "ic-types",
  "ic-utils-ensure",
  "ic0 0.18.11",
@@ -6574,7 +6575,6 @@ dependencies = [
  "mockall",
  "num-traits",
  "proptest",
- "regex",
  "ripemd",
  "scopeguard",
  "serde",
@@ -9352,6 +9352,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-test-utilities-metrics",
  "ic-types",
  "ic-universal-canister",
  "icrc-ledger-types",
@@ -12950,6 +12951,7 @@ version = "0.9.0"
 dependencies = [
  "ic-metrics",
  "prometheus",
+ "regex",
 ]
 
 [[package]]

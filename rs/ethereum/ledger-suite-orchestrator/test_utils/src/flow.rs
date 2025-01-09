@@ -1,4 +1,3 @@
-use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
     assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
@@ -14,6 +13,7 @@ use ic_management_canister_types::{
     Payload,
 };
 use ic_state_machine_tests::StateMachine;
+use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -89,8 +89,7 @@ impl ManagedCanistersAssert {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.setup.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+        MetricsAssert::from(self)
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
@@ -423,6 +422,12 @@ impl ManagedCanistersAssert {
             .into_iter()
             .chain(self.archive_canister_ids())
             .collect()
+    }
+}
+
+impl QueryMetrics for ManagedCanistersAssert {
+    fn query_metrics(&self) -> Vec<String> {
+        self.setup.query_metrics()
     }
 }
 

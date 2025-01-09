@@ -10,6 +10,7 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
@@ -19,7 +20,6 @@ use pocket_ic::{
     },
     query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
 };
-use regex::Regex;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
@@ -376,7 +376,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        MetricsAssert::from(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -421,7 +421,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -465,7 +465,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -753,7 +753,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from_querying_metrics(&setup)
+    MetricsAssert::from(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -833,37 +833,13 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-pub struct MetricsAssert {
-    metrics: Vec<String>,
-}
-
-impl MetricsAssert {
-    fn from_querying_metrics(setup: &Setup) -> Self {
-        let response = make_http_query(setup, "/metrics");
-        let metrics = String::from_utf8_lossy(&response)
+impl QueryMetrics for &Setup {
+    fn query_metrics(&self) -> Vec<String> {
+        let response = make_http_query(self, "/metrics");
+        String::from_utf8_lossy(&response)
             .trim()
             .split('\n')
             .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics }
-    }
-
-    fn assert_contains_metric_matching(self, pattern: &str) -> Self {
-        assert!(
-            !self.find_metrics_matching(pattern).is_empty(),
-            "Expected to find metric matching '{}', but none matched in:\n{:?}",
-            pattern,
-            self.metrics
-        );
-        self
-    }
-
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
-        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
-        self.metrics
-            .iter()
-            .filter(|line| regex.is_match(line))
-            .cloned()
-            .collect()
+            .collect::<Vec<_>>()
     }
 }

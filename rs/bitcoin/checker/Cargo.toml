@@ -25,7 +25,7 @@ ic-cdk = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
-serde_json = {workspace = true }
+serde_json = { workspace = true }
 time = { workspace = true }
 url = { workspace = true }
 
@@ -34,9 +34,9 @@ candid_parser = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 tokio = { workspace = true }
-regex = { workspace = true }
 scraper = "0.17.1"

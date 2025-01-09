@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/monitoring/metrics",
     "@crate_index//:prometheus",
+    "@crate_index//:regex",
 ]
 
 rust_library(
