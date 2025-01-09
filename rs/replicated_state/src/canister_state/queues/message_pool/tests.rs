@@ -1034,10 +1034,10 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T, I>(
-    messages: BTreeSet<Id>,
-    queue: &MutableIntMap<(T, Id), (), I>,
-) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &MutableIntMap<(T, Id), ()>)
+where
+    (T, Id): AsInt,
+{
     assert_eq!(messages.len(), queue.len());
     assert_eq!(messages, queue.iter().map(|((_, id), ())| *id).collect())
 }
