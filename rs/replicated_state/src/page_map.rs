@@ -167,7 +167,6 @@ impl<'a> WriteBuffer<'a> {
 /// operation. This allows us to simplify canister state management: we can
 /// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Debug, Default)]
-// pub(crate) struct PageDelta(IntMap<u64, Page>);
 pub(crate) struct PageDelta(IntMap<PageIndex, Page>);
 
 impl PageDelta {
