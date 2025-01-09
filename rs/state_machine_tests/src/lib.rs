@@ -602,19 +602,19 @@ pub trait Subnets: Send + Sync {
 }
 
 /// Struct mocking the xnet layer.
-struct PocketXNetImpl {
+struct PocketXNetClientImpl {
     /// Pool of `StateMachine`s from which the XNet messages are fetched.
     subnets: Arc<dyn Subnets>,
 }
 
-impl PocketXNetImpl {
+impl PocketXNetClientImpl {
     fn new(subnets: Arc<dyn Subnets>) -> Self {
         Self { subnets }
     }
 }
 
 #[async_trait]
-impl XNetClient for PocketXNetImpl {
+impl XNetClient for PocketXNetClientImpl {
     async fn query(
         &self,
         endpoint: &EndpointLocator,
@@ -1206,12 +1206,12 @@ impl StateMachineBuilder {
         // Instantiate a `XNetPayloadBuilderImpl`.
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let pocket_xnet_impl = Arc::new(PocketXNetImpl::new(subnets));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             certified_stream_store,
             &sm.metrics_registry,
         )));
+        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let node_id = sm.nodes[0].node_id;
         let proximity_map = Arc::new(ProximityMap::new(
             node_id,
@@ -1226,8 +1226,7 @@ impl StateMachineBuilder {
             proximity_map,
             sm.replica_logger.clone(),
         );
-        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
-        let xnet_client: Arc<dyn XNetClient> = pocket_xnet_impl;
+        let xnet_client: Arc<dyn XNetClient> = Arc::new(PocketXNetClientImpl::new(subnets));
         let xnet_metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let refill_task_handle = PoolRefillTask::start(
             certified_slice_pool.clone(),
