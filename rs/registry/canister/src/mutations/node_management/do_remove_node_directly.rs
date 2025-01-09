@@ -9,6 +9,9 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_registry_keys::{make_api_boundary_node_record_key, make_subnet_record_key};
+use ic_registry_transport::pb::v1::RegistryMutation;
+use ic_registry_transport::upsert;
+use prost::Message;
 
 impl Registry {
     /// Removes an existing node from the registry.
@@ -20,10 +23,42 @@ impl Registry {
             "{}do_remove_node_directly started: {:?} caller: {:?}",
             LOG_PREFIX, payload, caller_id
         );
-        self.do_remove_node(payload, caller_id);
+        self.do_remove_node(payload.clone(), caller_id);
+
+        println!(
+            "{}do_remove_node_directly finished: {:?}",
+            LOG_PREFIX, payload
+        );
+    }
+
+    pub fn do_replace_node_with_another(
+        &mut self,
+        payload: RemoveNodeDirectlyPayload,
+        caller_id: PrincipalId,
+        new_node_id: NodeId,
+    ) {
+        let mutations =
+            self.make_remove_or_replace_node_mutations(payload, caller_id, Some(new_node_id));
+
+        // Check invariants and apply mutations
+        self.maybe_apply_mutation_internal(mutations);
     }
 
     pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
+        let mutations = self.make_remove_or_replace_node_mutations(payload, caller_id, None);
+        // Check invariants and apply mutations
+        self.maybe_apply_mutation_internal(mutations);
+    }
+
+    // Prepare mutations for removing or replacing a node in the registry.
+    // If new_node_id is Some, the old node is in-place replaced with the new node, even if the old node is in a subnet.
+    // If new_node_id is None, the old node is only removed from the registry and is not allowed to be in a subnet.
+    pub fn make_remove_or_replace_node_mutations(
+        &mut self,
+        payload: RemoveNodeDirectlyPayload,
+        caller_id: PrincipalId,
+        new_node_id: Option<NodeId>,
+    ) -> Vec<RegistryMutation> {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
@@ -86,25 +121,52 @@ impl Registry {
                 );
         }
 
-        // 3. Ensure node is not in a subnet
-        let subnet_list_record = get_subnet_list_record(self);
-        let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
-        if let Some(subnet_id) = is_node_in_subnet {
-            panic!("{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
-                LOG_PREFIX,
-                make_subnet_record_key(subnet_id)
-            );
-        }
-
-        // 4. Ensure the node is not an API Boundary Node.
+        // 3. Ensure the node is not an API Boundary Node.
         // In order to succeed, a corresponding ApiBoundaryNodeRecord should be removed first via proposal.
         let api_bn_id = self.get_api_boundary_node_record(payload.node_id);
         if api_bn_id.is_some() {
             panic!(
-                "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
-                LOG_PREFIX,
-                make_api_boundary_node_record_key(payload.node_id)
-            );
+                        "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
+                        LOG_PREFIX,
+                        make_api_boundary_node_record_key(payload.node_id)
+                    );
+        }
+
+        // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
+        let subnet_list_record = get_subnet_list_record(self);
+        let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
+        let mut mutations1 = vec![];
+        if let Some(subnet_id) = is_node_in_subnet {
+            if new_node_id.is_some() {
+                // The node is in a subnet and is being replaced with a new node.
+                // Update the subnet record with the new node membership.
+                let mut subnet_record = self.get_subnet_or_panic(subnet_id);
+
+                let mut subnet_membership: Vec<NodeId> = subnet_record
+                    .membership
+                    .iter()
+                    .map(|bytes| NodeId::from(PrincipalId::try_from(bytes).unwrap()))
+                    .collect();
+
+                subnet_membership.retain(|&id| id != payload.node_id);
+                subnet_membership.push(new_node_id.unwrap());
+
+                // Update the subnet record with the new membership (and double check that the new node is not in a subnet)
+                self.replace_subnet_record_membership(
+                    subnet_id,
+                    &mut subnet_record,
+                    subnet_membership,
+                );
+                mutations1 = vec![upsert(
+                    make_subnet_record_key(subnet_id),
+                    subnet_record.encode_to_vec(),
+                )];
+            } else {
+                panic!("{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
+                    LOG_PREFIX,
+                    make_subnet_record_key(subnet_id)
+                );
+            }
         }
 
         // 5. Retrieve the NO record and increment its node allowance by 1
@@ -119,23 +181,17 @@ impl Registry {
         new_node_operator_record.node_allowance += 1;
 
         // 6. Finally, generate the following mutations:
-        //   * Delete the node
+        //   * Delete the node record
         //   * Delete entries for node encryption keys
         //   * Increment NO's allowance by 1
-        let mut mutations = make_remove_node_registry_mutations(self, payload.node_id);
+        let mut mutations2 = make_remove_node_registry_mutations(self, payload.node_id);
         // mutation to update node operator value
-        mutations.push(make_update_node_operator_mutation(
+        mutations2.push(make_update_node_operator_mutation(
             node_operator_id,
             &new_node_operator_record,
         ));
 
-        // 7. Apply mutations after checking invariants
-        self.maybe_apply_mutation_internal(mutations);
-
-        println!(
-            "{}do_remove_node_directly finished: {:?}",
-            LOG_PREFIX, payload
-        );
+        [mutations1, mutations2].concat()
     }
 }
 
@@ -147,26 +203,25 @@ pub struct RemoveNodeDirectlyPayload {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use ic_base_types::PrincipalId;
-    use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
-    };
-    use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::insert;
-    use ic_types::ReplicaVersion;
-    use prost::Message;
-
+    use super::*;
     use crate::{
         common::test_helpers::{
-            invariant_compliant_registry, prepare_registry_with_nodes,
-            prepare_registry_with_nodes_and_node_operator_id,
+            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes, prepare_registry_with_nodes_and_node_operator_id,
         },
         mutations::common::test::TEST_NODE_ID,
     };
-
-    use super::*;
+    use ic_base_types::{NodeId, PrincipalId};
+    use ic_protobuf::registry::subnet::v1::SubnetRecord;
+    use ic_protobuf::registry::{
+        api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
+    };
+    use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
+    use ic_registry_transport::insert;
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::ReplicaVersion;
+    use prost::Message;
+    use std::str::FromStr;
 
     #[test]
     #[should_panic(expected = "Node Id 2vxsx-fae not found in the registry")]
@@ -386,5 +441,188 @@ mod tests {
 
         // Should fail because the DC of operator1 and operator2 does not match
         registry.do_remove_node(payload, operator2_id);
+    }
+
+    #[test]
+    fn should_replace_node_in_subnet() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add nodes to the registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
+                .unwrap();
+
+        // Add node operator record
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1,
+            ..Default::default()
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Create a subnet with the first node
+        let subnet_id = subnet_test_id(1000);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        ));
+
+        // Replace the first node with the second node in the subnet
+        let payload = RemoveNodeDirectlyPayload {
+            node_id: node_ids[0],
+        };
+
+        registry.do_replace_node_with_another(payload, node_operator_id, node_ids[1]);
+
+        // Verify the subnet record is updated with the new node
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let expected_membership: Vec<NodeId> = vec![node_ids[1]];
+        let actual_membership: Vec<NodeId> = subnet_record
+            .membership
+            .iter()
+            .map(|bytes| NodeId::from(PrincipalId::try_from(bytes).unwrap()))
+            .collect();
+        assert_eq!(actual_membership, expected_membership);
+
+        // Verify the old node is removed from the registry
+        assert!(registry
+            .get(
+                make_node_record_key(node_ids[0]).as_bytes(),
+                registry.latest_version()
+            )
+            .is_none());
+
+        // Verify the new node is present in the registry
+        assert!(registry.get_node(node_ids[1]).is_some());
+
+        // Verify node operator allowance increased by 1
+        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(updated_operator.node_allowance, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot remove a node that is a member of a subnet")]
+    fn should_panic_if_removing_node_in_subnet_without_replacement() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add nodes to the registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
+                .unwrap();
+
+        // Add node operator record
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1,
+            ..Default::default()
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Create a subnet with the first node
+        let subnet_id = subnet_test_id(1000);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        ));
+
+        // Attempt to remove the node without replacement
+        let payload = RemoveNodeDirectlyPayload {
+            node_id: node_ids[0],
+        };
+
+        registry.do_remove_node(payload, node_operator_id);
+    }
+
+    #[test]
+    fn should_replace_node_in_subnet_and_update_allowance() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add nodes to the registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
+                .unwrap();
+
+        // Add node operator record
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 0,
+            ..Default::default()
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Create a subnet with the first node
+        let subnet_id = subnet_test_id(1000);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        ));
+
+        // Replace the first node with the second node in the subnet
+        let payload = RemoveNodeDirectlyPayload {
+            node_id: node_ids[0],
+        };
+
+        registry.do_replace_node_with_another(payload, node_operator_id, node_ids[1]);
+
+        // Verify the subnet record is updated with the new node
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let expected_membership: Vec<NodeId> = vec![node_ids[1]];
+        let actual_membership: Vec<NodeId> = subnet_record
+            .membership
+            .iter()
+            .map(|bytes| NodeId::from(PrincipalId::try_from(bytes).unwrap()))
+            .collect();
+        assert_eq!(actual_membership, expected_membership);
+
+        // Verify the old node is removed from the registry
+        assert!(registry
+            .get(
+                make_node_record_key(node_ids[0]).as_bytes(),
+                registry.latest_version()
+            )
+            .is_none());
+
+        // Verify the new node is present in the registry
+        assert!(registry.get_node(node_ids[1]).is_some());
+
+        // Verify node operator allowance increased by 1
+        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(updated_operator.node_allowance, 1);
     }
 }
