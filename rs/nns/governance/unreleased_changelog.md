@@ -15,13 +15,14 @@ because this new function has no user-visible behavior change yet. Wait until it
 is active (e.g. the feature flag is flipped to "enable") before adding an entry
 to this file.
 
-TODO: Automate moving content from unreleased_changelog.md to CHANGELOG.md.
-
 
 # How to Write a Good Entry
 
 The intended audience here is people who vote (with their neurons) in NNS, not
 necessarily engineers who develop this canister.
+
+If there is a motion proposal and/or forum thread where a feature (or bug fix)
+was proposed, link to it.
 
 
 # The Origin of This Process
