@@ -82,9 +82,9 @@ rust_library(
         "src/tests.rs",
     ],
     crate_name = "ic_state_machine_tests",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
 )
 
 BIN_DEPENDENCIES = [
