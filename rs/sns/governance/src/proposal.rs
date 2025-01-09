@@ -1039,13 +1039,6 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 ) -> Result<String, String> {
     let mut defects = vec![];
 
-    let generate_final_report = |defects: Vec<String>| -> Result<String, String> {
-        Err(format!(
-            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
-            defects.join("\n"),
-        ))
-    };
-
     let UpgradeSnsControlledCanister {
         canister_id,
         canister_upgrade_arg,
@@ -1100,11 +1093,14 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
     // Generate final report.
     if !defects.is_empty() {
-        return generate_final_report(defects);
+        return Err(format!(
+            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
+            defects.join("\n"),
+        ));
     }
 
     // It is now safe to unwrap the values required for rendering the proposal.
-    let canister_id = canister_id.unwrap();
+    let canister_id = canister_id.unwrap().get();
     let canister_wasm_sha256 = canister_wasm_sha256.unwrap();
 
     let upgrade_args_sha_256 = canister_upgrade_arg
@@ -2650,6 +2646,10 @@ mod tests {
         PrincipalId::try_from(vec![42_u8]).unwrap()
     }
 
+    fn basic_canister_id() -> PrincipalId {
+        canister_test_id(42).get()
+    }
+
     fn basic_motion_proposal() -> Proposal {
         let result = Proposal {
             title: "title".into(),
@@ -2772,7 +2772,7 @@ mod tests {
     #[tokio::test]
     async fn render_upgrade_sns_controlled_canister_proposal() {
         let upgrade = UpgradeSnsControlledCanister {
-            canister_id: Some(basic_principal_id()),
+            canister_id: Some(basic_canister_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
@@ -2787,7 +2787,7 @@ mod tests {
             text,
             r#"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: bg4sm-wzk
+## Canister id: xbgkv-fyaaa-aaaaa-aaava-cai
 
 ## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 
@@ -2801,7 +2801,7 @@ mod tests {
     #[tokio::test]
     async fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
         let upgrade = UpgradeSnsControlledCanister {
-            canister_id: Some(basic_principal_id()),
+            canister_id: Some(basic_canister_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
@@ -2816,7 +2816,7 @@ mod tests {
             text,
             r#"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: bg4sm-wzk
+## Canister id: xbgkv-fyaaa-aaaaa-aaava-cai
 
 ## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 
@@ -2830,7 +2830,7 @@ mod tests {
     #[tokio::test]
     async fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
         let upgrade = UpgradeSnsControlledCanister {
-            canister_id: Some(basic_principal_id()),
+            canister_id: Some(basic_canister_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(100), // 100 is not a valid mode
@@ -2845,7 +2845,7 @@ mod tests {
 
     async fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
         let upgrade = UpgradeSnsControlledCanister {
-            canister_id: Some(basic_principal_id()),
+            canister_id: Some(basic_canister_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
@@ -2923,7 +2923,7 @@ mod tests {
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         };
 
-        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env);
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env).await;
     }
 
     #[tokio::test]
@@ -2947,7 +2947,7 @@ mod tests {
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         };
 
-        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env);
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env).await;
     }
 
     #[tokio::test]
@@ -3284,11 +3284,8 @@ mod tests {
         upgrade: &UpgradeSnsControlledCanister,
     ) -> NativeEnvironment {
         let UpgradeSnsControlledCanister {
-            canister_id,
-            new_canister_wasm,
-            canister_upgrade_arg,
-            mode,
             chunked_canister_wasm,
+            ..
         } = upgrade;
 
         let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
@@ -3298,19 +3295,24 @@ mod tests {
             Err((Some(1), "Oh no something was not covered!".to_string()));
 
         if let Some(ChunkedCanisterWasm {
-            wasm_module_hash,
+            wasm_module_hash: _,
             store_canister_id,
             chunk_hashes_list,
         }) = chunked_canister_wasm
         {
-            let canister_id = CanisterId::unchecked_from_principal(store_canister_id.clone().unwrap());
+            let canister_id =
+                CanisterId::unchecked_from_principal(store_canister_id.clone().unwrap());
             env.set_call_canister_response(
                 CanisterId::ic_00(),
                 "stored_chunks",
                 Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
-                Ok(Encode!(&StoredChunksReply(chunk_hashes_list.iter().map(|hash| {
-                    ChunkHash { hash: hash.clone() }
-                }).collect())).unwrap()),
+                Ok(Encode!(&StoredChunksReply(
+                    chunk_hashes_list
+                        .iter()
+                        .map(|hash| { ChunkHash { hash: hash.clone() } })
+                        .collect()
+                ))
+                .unwrap()),
             );
         };
 
