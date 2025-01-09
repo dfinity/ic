@@ -827,8 +827,10 @@ mod tests {
         Dependencies,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+    use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -854,7 +856,15 @@ mod tests {
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
 
-        let registry = MockRegistryClient::new();
+        let mut registry = MockRegistryClient::new();
+        registry.expect_get_value().return_const({
+            let pk = SubnetRecord {
+                ..Default::default()
+            };
+            let mut v = Vec::new();
+            pk.encode(&mut v).unwrap();
+            Ok(Some(v))
+        });
 
         // Tests the happy path.
         let configs = get_configs_for_local_transcripts(

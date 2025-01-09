@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",
+    "@crate_index//:prost",
 ]
 
 rust_library(
