@@ -155,8 +155,9 @@ use ic_types::{
 };
 use ic_xnet_payload_builder::{
     certified_slice_pool::CertifiedSlicePool, EndpointLocator, PoolRefillTask, ProximityMap,
-    XNetClient, XNetClientError, XNetEndpointResolver, XNetPayloadBuilderImpl,
-    XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    RefillTaskHandle, XNetClient, XNetClientError, XNetEndpointResolver, XNetPayloadBuilderImpl,
+    XNetPayloadBuilderMetrics, XNetSlicePoolImpl, POOL_BYTE_SIZE_SOFT_CAP,
+    POOL_SLICE_BYTE_SIZE_MAX,
 };
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
@@ -813,6 +814,7 @@ pub struct StateMachine {
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
     pub ingress_filter: Arc<Mutex<IngressFilterService>>,
+    pool_refill_task: Arc<RwLock<Option<PoolRefillTask>>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
@@ -1203,6 +1205,12 @@ impl StateMachineBuilder {
         // Register this new `StateMachine` in the *shared* pool of `StateMachine`s.
         subnets.insert(sm.clone());
 
+        // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
+        // It is fine that we do not pop any messages from the (bounded) channel
+        // since errors are ignored in `RefillTaskHandle::trigger_refill()`.
+        let (refill_trigger, _refill_receiver) = mpsc::channel(1);
+        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+
         // Instantiate a `XNetPayloadBuilderImpl`.
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
@@ -1228,7 +1236,7 @@ impl StateMachineBuilder {
         );
         let xnet_client: Arc<dyn XNetClient> = Arc::new(PocketXNetClientImpl::new(subnets));
         let xnet_metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let refill_task_handle = PoolRefillTask::start(
+        let pool_refill_task = PoolRefillTask::new_for_testing(
             certified_slice_pool.clone(),
             endpoint_resolver,
             xnet_client,
@@ -1272,6 +1280,9 @@ impl StateMachineBuilder {
             sm.replica_logger.clone(),
         ));
 
+        // Put pool refill task into `StateMachine`
+        // which contains no `PoolRefillTask` after creation.
+        *sm.pool_refill_task.write().unwrap() = Some(pool_refill_task);
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
         *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new(
@@ -1315,6 +1326,7 @@ impl StateMachine {
     /// because the payload builder contains an `Arc` of this `StateMachine`
     /// which creates a circular dependency preventing this `StateMachine`s from being dropped.
     pub fn drop_payload_builder(&self) {
+        self.pool_refill_task.write().unwrap().take();
         self.payload_builder.write().unwrap().take();
     }
 
@@ -1361,6 +1373,17 @@ impl StateMachine {
         };
         let payload_builder = self.payload_builder.read().unwrap();
         let payload_builder = payload_builder.as_ref().unwrap();
+        let pool_refill_task = self.pool_refill_task.read().unwrap();
+        let pool_refill_task = pool_refill_task.as_ref().unwrap();
+        self.runtime.block_on(async move {
+            pool_refill_task
+                .refill_pool(
+                    POOL_BYTE_SIZE_SOFT_CAP,
+                    POOL_SLICE_BYTE_SIZE_MAX,
+                    registry_version,
+                )
+                .await;
+        });
         let batch_payload = payload_builder.get_payload(
             certified_height,
             &[], // Because the latest state is certified, we do not need to provide any `past_payloads`.
@@ -1785,6 +1808,7 @@ impl StateMachine {
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
             ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
+            pool_refill_task: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
