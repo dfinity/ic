@@ -603,16 +603,15 @@ pub trait Subnets: Send + Sync {
     fn get_from_node(&self, node_id: NodeId) -> Option<Arc<StateMachine>>;
 }
 
-/// Struct mocking the certified stream pool required for
-/// instantiating `XNetPayloadBuilderImpl` in `StateMachine`.
-struct PocketCertifiedStreamStore {
+/// Struct mocking the xnet layer for one `StateMachine`.
+struct PocketXNetImpl {
     /// Pool of `StateMachine`s from which the XNet messages are fetched.
     subnets: Arc<dyn Subnets>,
-    /// Subnet ID of the `StateMachine` containing the pool.
+    /// Subnet ID of the `StateMachine` for which the xnet layer is mocked.
     own_subnet_id: SubnetId,
 }
 
-impl PocketCertifiedStreamStore {
+impl PocketXNetImpl {
     fn new(subnets: Arc<dyn Subnets>, own_subnet_id: SubnetId) -> Self {
         Self {
             subnets,
@@ -622,10 +621,7 @@ impl PocketCertifiedStreamStore {
 }
 
 #[async_trait]
-impl XNetClient for PocketCertifiedStreamStore {
-    /// Queries the given `XNetEndpoint` for a `CertifiedStreamSlice`.
-    ///
-    /// On success, returns the deserialized slice.
+impl XNetClient for PocketXNetImpl {
     async fn query(
         &self,
         endpoint: &EndpointLocator,
@@ -666,14 +662,7 @@ impl XNetClient for PocketCertifiedStreamStore {
     }
 }
 
-impl CertifiedStreamStore for PocketCertifiedStreamStore {
-    /// Produces a certified slice of the stream for `remote_subnet` from the
-    /// latest certified state, with a witness beginning at `witness_begin`;
-    /// and messages beginning at `msg_begin` and containing at most `msg_limit`
-    /// messages totaling at most `byte_limit` bytes.
-    ///
-    /// Precondition: `witness_begin.is_none() && msg_begin.is_none() ||
-    /// witness_begin.unwrap() <= msg_begin.unwrap()`.
+impl CertifiedStreamStore for PocketXNetImpl {
     fn encode_certified_stream_slice(
         &self,
         remote_subnet: SubnetId,
@@ -701,9 +690,6 @@ impl CertifiedStreamStore for PocketCertifiedStreamStore {
         self.decode_valid_certified_stream_slice(certified_slice)
     }
 
-    /// Decodes the certified stream slice without performing any validation.
-    /// This method should only be used for decoding streams that have
-    /// already been validated (e.g., payloads from previous blocks).
     fn decode_valid_certified_stream_slice(
         &self,
         certified_slice: &CertifiedStreamSlice,
@@ -712,14 +698,8 @@ impl CertifiedStreamStore for PocketCertifiedStreamStore {
         Ok(slice)
     }
 
-    /// Returns the list of subnet ids for which we have outgoing certified
-    /// streams.
     fn subnets_with_certified_streams(&self) -> Vec<SubnetId> {
-        let sm = self.subnets.get(self.own_subnet_id).unwrap();
-        sm.state_manager
-            .get_latest_state()
-            .get_ref()
-            .subnets_with_available_streams()
+        unreachable!()
     }
 }
 
@@ -1274,9 +1254,10 @@ impl StateMachineBuilder {
         // Instantiate a `XNetPayloadBuilderImpl`.
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let certified_stream_store = Arc::new(PocketCertifiedStreamStore::new(subnets, subnet_id));
+        let pocket_xnet_impl = Arc::new(PocketXNetImpl::new(subnets, subnet_id));
+        let certified_stream_store: Arc<dyn CertifiedStreamStore> = pocket_xnet_impl.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            certified_stream_store.clone(),
+            certified_stream_store,
             &sm.metrics_registry,
         )));
         let node_id = sm.nodes[0].node_id;
@@ -1293,17 +1274,17 @@ impl StateMachineBuilder {
             proximity_map,
             sm.replica_logger.clone(),
         );
-        let xnet_client: Arc<dyn XNetClient> = certified_stream_store;
-        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
+        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
+        let xnet_client: Arc<dyn XNetClient> = pocket_xnet_impl;
+        let xnet_metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let refill_task_handle = PoolRefillTask::start(
             certified_slice_pool.clone(),
             endpoint_resolver,
             xnet_client,
             sm.runtime.handle().clone(),
-            metrics.clone(),
+            xnet_metrics.clone(),
             sm.replica_logger.clone(),
         );
-        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
             sm.state_manager.clone(),
             sm.state_manager.clone(),
@@ -1311,7 +1292,7 @@ impl StateMachineBuilder {
             rng,
             xnet_slice_pool_impl,
             refill_task_handle,
-            metrics,
+            xnet_metrics,
             sm.replica_logger.clone(),
         ));
 
