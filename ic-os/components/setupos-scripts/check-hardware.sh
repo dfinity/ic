@@ -32,8 +32,6 @@ GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
-CONFIG_DIR="/var/ic/config"
-
 function check_generation() {
     echo "* Checking Generation..."
 
@@ -249,6 +247,7 @@ function verify_disks() {
 
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
+
     if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
@@ -261,33 +260,6 @@ function verify_deployment_path() {
     fi
 }
 
-# TODO(NODE-1477): delete in configuration revamp integration
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "node_reward_type") node_reward_type="${value}" ;;
-        esac
-    done <"${CONFIG}"
-}
-
-function validate_node_reward() {
-    read_variables
-    if [[ -z "$node_reward_type" ]]; then
-        echo "Node reward type is not set. Skipping validation."
-        return 0
-    fi
-
-    if [[ ! "$node_reward_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is invalid: ${node_reward_type}"
-    fi
-
-    echo "Valid node reward type: ${node_reward_type}"
-}
-
 # Establish run order
 main() {
     log_start "$(basename $0)"
@@ -297,7 +269,6 @@ main() {
         verify_memory
         verify_disks
         verify_deployment_path
-        validate_node_reward
     else
         echo "* Hardware checks skipped by request via kernel command line"
         GENERATION=2

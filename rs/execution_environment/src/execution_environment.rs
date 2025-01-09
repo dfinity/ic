@@ -3091,7 +3091,7 @@ impl ExecutionEnvironment {
         let execution_duration = since.elapsed().as_secs_f64();
         match dts_result {
             DtsInstallCodeResult::Finished {
-                canister,
+                mut canister,
                 mut message,
                 call_id,
                 instructions_used,
@@ -3129,6 +3129,7 @@ impl ExecutionEnvironment {
                         Err(err.into())
                     }
                 };
+                canister.update_on_low_wasm_memory_hook_condition();
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
                 // The message can be removed because a response was produced.
