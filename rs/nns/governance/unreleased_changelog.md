@@ -36,6 +36,13 @@ links to keepachangelog.com as its source of inspiration.
 
 ## Changed
 
+- Registry canister (PR #3377): During node redeployments support for replacing an existing
+  node with the same IP address even if the existing node is currently in a subnet.
+  Previously, a proposal for removing and replacing the old node in the subnet was
+  required to enable redeployments for such nodes, but that's not strictly necessary
+  since the subnet decentralization is not affected if the new node has all properties
+  identical as the old node.
+
 ## Deprecated
 
 ## Removed
