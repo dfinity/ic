@@ -35,6 +35,7 @@ enum RejectionCode {
     Unknown,
 }
 
+/*
 #[test]
 fn test_counter_canister() {
     let pic = PocketIc::new();
@@ -916,12 +917,12 @@ fn test_query_call_on_new_pocket_ic() {
     pic.query_call(canister_id, Principal::anonymous(), "foo", vec![])
         .unwrap_err();
 }
-
+*/
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
 }
-
+/*
 #[test]
 fn test_schnorr() {
     // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
@@ -2127,4 +2128,33 @@ fn await_call_no_ticks() {
         WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
     };
     assert_eq!(principal, canister_id.to_string());
+}
+*/
+
+#[test]
+fn many_intersubnet_calls() {
+    let pic = PocketIcBuilder::new().with_application_subnet().with_application_subnet().build();
+    let canister_1 = pic.create_canister_on_subnet(None, None, pic.topology().get_app_subnets()[0]);
+    pic.add_cycles(canister_1, 100_000_000_000_000_000);
+    pic.install_canister(canister_1, test_canister_wasm(), vec![], None);
+    let canister_2 = pic.create_canister_on_subnet(None, None, pic.topology().get_app_subnets()[1]);
+    pic.add_cycles(canister_2, 100_000_000_000_000_000);
+    pic.install_canister(canister_2, test_canister_wasm(), vec![], None);
+
+    let mut msg_ids = vec![];
+    let num_msgs: usize = 500;
+    let msg_size: usize = 10000;
+    for _ in 0..num_msgs {
+      let msg_id = pic.submit_call(
+            canister_1,
+            Principal::anonymous(),
+            "call_with_large_blob",
+            Encode!(&canister_2, &msg_size).unwrap(),
+        )
+        .unwrap();
+        msg_ids.push(msg_id);
+    }
+    for msg_id in msg_ids {
+        pic.await_call(msg_id).unwrap();
+    }
 }

@@ -39,7 +39,7 @@ use ic_interfaces::{
     p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError, DecodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
@@ -101,7 +101,7 @@ use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
-use ic_state_manager::StateManagerImpl;
+use ic_state_manager::{stream_encoding, StateManagerImpl};
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::FakeConsensusPoolCache;
 use ic_test_utilities_metrics::{
@@ -138,7 +138,7 @@ use ic_types::{
     },
     signature::ThresholdSignature,
     time::GENESIS,
-    xnet::{CertifiedStreamSlice, StreamIndex},
+    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
     ReplicaVersion,
 };
@@ -153,9 +153,9 @@ use ic_types::{
     CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
-    certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
+    certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool},
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
-    XNetSlicePool,
+    XNetSlicePool, XNetSlicePoolImpl,
 };
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
@@ -599,16 +599,16 @@ pub trait Subnets: Send + Sync {
     fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>>;
 }
 
-/// Struct mocking the pool of XNet messages required for
+/// Struct mocking the certified stream pool required for
 /// instantiating `XNetPayloadBuilderImpl` in `StateMachine`.
-struct PocketXNetSlicePoolImpl {
+struct PocketCertifiedStreamStore {
     /// Pool of `StateMachine`s from which the XNet messages are fetched.
     subnets: Arc<dyn Subnets>,
     /// Subnet ID of the `StateMachine` containing the pool.
     own_subnet_id: SubnetId,
 }
 
-impl PocketXNetSlicePoolImpl {
+impl PocketCertifiedStreamStore {
     fn new(subnets: Arc<dyn Subnets>, own_subnet_id: SubnetId) -> Self {
         Self {
             subnets,
@@ -617,54 +617,60 @@ impl PocketXNetSlicePoolImpl {
     }
 }
 
-impl XNetSlicePool for PocketXNetSlicePoolImpl {
-    /// Obtains a certified slice of a stream from a `StateMachine`
-    /// corresponding to a given subnet ID.
-    fn take_slice(
+impl CertifiedStreamStore for PocketCertifiedStreamStore {
+    /// Produces a certified slice of the stream for `remote_subnet` from the
+    /// latest certified state, with a witness beginning at `witness_begin`;
+    /// and messages beginning at `msg_begin` and containing at most `msg_limit`
+    /// messages totaling at most `byte_limit` bytes.
+    ///
+    /// Precondition: `witness_begin.is_none() && msg_begin.is_none() ||
+    /// witness_begin.unwrap() <= msg_begin.unwrap()`.
+    fn encode_certified_stream_slice(
         &self,
-        subnet_id: SubnetId,
-        begin: Option<&ExpectedIndices>,
+        remote_subnet: SubnetId,
+        witness_begin: Option<StreamIndex>,
+        msg_begin: Option<StreamIndex>,
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
-    ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
-        let sm = self.subnets.get(subnet_id).unwrap();
-        let msg_begin = begin.map(|idx| idx.message_index);
-        // We set `witness_begin` equal to `msg_begin` since all states are certified.
-        let certified_stream = sm.generate_certified_stream_slice(
+    ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
+        let sm = self.subnets.get(remote_subnet).unwrap();
+        sm.generate_certified_stream_slice(
             self.own_subnet_id,
-            msg_begin,
+            witness_begin,
             msg_begin,
             msg_limit,
             byte_limit,
-        );
-        Ok(certified_stream
-            .map(|certified_stream| {
-                let mut num_bytes = certified_slice_count_bytes(&certified_stream).unwrap();
-                // Because `StateMachine::generate_certified_stream_slice` only uses a size estimate
-                // when constructing a slice (this estimate can be off by at most a few KB),
-                // we fake the reported slice size if it exceeds the specified size limit to make sure the payload builder will accept the slice as valid and include it into the block.
-                // This is fine since we don't actually validate the payload in the context of Pocket IC, and so blocks containing
-                // a XNet slice exceeding the byte limit won't be rejected as invalid.
-                if let Some(byte_limit) = byte_limit {
-                    if num_bytes > byte_limit {
-                        num_bytes = byte_limit;
-                    }
-                }
-                (certified_stream, num_bytes)
-            })
-            .ok())
+        )
     }
 
-    /// We do not collect any metrics here.
-    fn observe_pool_size_bytes(&self) {}
+    fn decode_certified_stream_slice(
+        &self,
+        remote_subnet: SubnetId,
+        registry_version: RegistryVersion,
+        certified_slice: &CertifiedStreamSlice,
+    ) -> Result<StreamSlice, DecodeStreamError> {
+      self.decode_valid_certified_stream_slice(certified_slice)
+    }
+    
+    /// Decodes the certified stream slice without performing any validation.
+    /// This method should only be used for decoding streams that have
+    /// already been validated (e.g., payloads from previous blocks).
+    fn decode_valid_certified_stream_slice(
+        &self,
+        certified_slice: &CertifiedStreamSlice,
+    ) -> Result<StreamSlice, DecodeStreamError> {
+        let (_subnet, slice) = stream_encoding::decode_stream_slice(&certified_slice.payload)?;
+        Ok(slice)
+    }
 
-    /// We do not cache XNet messages in this mock implementation
-    /// and thus there is no need for garbage collection.
-    fn garbage_collect(&self, _new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>) {}
-
-    /// We do not cache XNet messages in this mock implementation
-    /// and thus there is no need for garbage collection.
-    fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
+    /// Returns the list of subnet ids for which we have outgoing certified
+    /// streams.
+    fn subnets_with_certified_streams(&self) -> Vec<SubnetId> {
+      let sm = self.subnets.get(self.own_subnet_id).unwrap();
+      sm.state_manager.get_latest_state()
+          .get_ref()
+          .subnets_with_available_streams()
+    }
 }
 
 /// A custom `QueryStatsPayloadBuilderImpl` that uses a single
@@ -1224,7 +1230,12 @@ impl StateMachineBuilder {
         // Instantiate a `XNetPayloadBuilderImpl`.
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let xnet_slice_pool_impl = Box::new(PocketXNetSlicePoolImpl::new(subnets, subnet_id));
+        let certified_stream_store = PocketCertifiedStreamStore::new(subnets, subnet_id);
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            Arc::new(certified_stream_store),
+            &sm.metrics_registry,
+        )));
+        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
             sm.state_manager.clone(),
