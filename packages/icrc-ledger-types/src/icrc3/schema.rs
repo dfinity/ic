@@ -8,6 +8,7 @@ use crate::icrc::{
     },
 };
 
+/// Validate if a block is compatible with the ICRC-3 schema.
 // TODO(FI-1241): make it compatible with the final ICRC-3 schema
 pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     use ItemRequirement::*;

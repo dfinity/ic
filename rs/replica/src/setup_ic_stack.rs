@@ -106,7 +106,7 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup = ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, log)
+                let registry_cup = ic_consensus::make_registry_cup(&*registry, subnet_id, log)
                     .expect("Couldn't create a registry CUP");
 
                 info!(
@@ -204,6 +204,7 @@ pub fn construct_ic_stack(
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,
+        &state_manager.state_layout().tmp(),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =

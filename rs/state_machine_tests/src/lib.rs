@@ -10,8 +10,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl,
-    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
+    make_registry_cup_from_cup_contents,
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
@@ -1596,6 +1596,7 @@ impl StateMachine {
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
+                &state_manager.state_layout().tmp(),
             )
         });
 
@@ -2151,8 +2152,22 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
-                    .to_vec()
+                if let Some(ref aux) = context.schnorr_args().taproot_tree_root {
+                    dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
+                        .map(|v| v.to_vec())
+                        .map_err(|_| {
+                            UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                format!(
+                                    "Invalid inputs for BIP341 signature with key {}",
+                                    context.key_id()
+                                ),
+                            )
+                        })?
+                } else {
+                    dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                        .to_vec()
+                }
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2160,6 +2175,13 @@ impl StateMachine {
                     &context.derivation_path[..],
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
+
+                if context.schnorr_args().taproot_tree_root.is_some() {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "Ed25519 does not use BIP341 aux parameter".to_string(),
+                    ));
+                }
 
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
@@ -3220,6 +3242,11 @@ impl StateMachine {
     /// Returns the status of the ingress message with the specified ID.
     pub fn ingress_status(&self, msg_id: &MessageId) -> IngressStatus {
         (self.ingress_history_reader.get_latest_status())(msg_id)
+    }
+
+    /// Returns the caller of the ingress message with the specified ID if available.
+    pub fn ingress_caller(&self, msg_id: &MessageId) -> Option<UserId> {
+        self.get_latest_state().get_ingress_status(msg_id).user_id()
     }
 
     /// Starts the canister with the specified ID.
