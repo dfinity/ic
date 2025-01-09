@@ -2145,7 +2145,6 @@ impl SystemState {
     ///
     /// See [`CanisterQueues::split_input_schedules`] for further details.
     pub fn split_input_schedules(
-        //pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
