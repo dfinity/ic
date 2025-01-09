@@ -2569,6 +2569,8 @@ impl StateMachine {
     /// After you import the canister, you can execute methods on it and upgrade it.
     /// The original directory is not modified.
     ///
+    /// This function is useful for local testing and debugging. Do not remove it.
+    ///
     /// # Panics
     ///
     /// This function panics if loading the canister snapshot fails.
