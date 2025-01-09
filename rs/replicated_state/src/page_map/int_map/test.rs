@@ -1,4 +1,4 @@
-use super::{AsInt, IntMap, MutableIntMap};
+use super::*;
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -107,10 +107,12 @@ fn test_insert(#[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec
 
         let previous;
         (int_map, previous) = int_map.insert(key, value);
+        prop_assert!(is_well_formed(&int_map.0));
         prop_assert_eq!(expected, previous);
         prop_assert_eq!(btree_map.len(), int_map.len());
         prop_assert!(btree_map.iter().eq(int_map.iter()));
 
+        prop_assert!(is_well_formed(&mutable_int_map.tree));
         prop_assert_eq!(expected, mutable_int_map.insert(key, value));
         prop_assert_eq!(btree_map.len(), mutable_int_map.len());
         prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
@@ -134,6 +136,8 @@ fn make_maps(
         int_map = int_map.insert(key, value).0;
         mutable_int_map.insert(key, value);
     }
+    assert!(is_well_formed(&int_map.0));
+    assert!(is_well_formed(&mutable_int_map.tree));
     (btree_map, int_map, mutable_int_map)
 }
 
@@ -209,10 +213,12 @@ fn test_remove(
 
         let removed;
         (int_map, removed) = int_map.remove(&key);
+        prop_assert!(is_well_formed(&int_map.0));
         prop_assert_eq!(expected, removed);
         prop_assert_eq!(btree_map.len(), int_map.len());
         prop_assert!(btree_map.iter().eq(int_map.iter()));
 
+        prop_assert!(is_well_formed(&mutable_int_map.tree));
         prop_assert_eq!(expected, mutable_int_map.remove(&key));
         prop_assert_eq!(btree_map.len(), mutable_int_map.len());
         prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
@@ -231,9 +237,11 @@ fn test_union(
     let int_map = first_int_map.union(second_int_map);
     mutable_int_map.union(second_mutable_int_map);
 
+    prop_assert!(is_well_formed(&int_map.0));
     prop_assert_eq!(btree_map.len(), int_map.len());
     prop_assert!(btree_map.iter().eq(int_map.iter()));
 
+    prop_assert!(is_well_formed(&mutable_int_map.tree));
     prop_assert_eq!(btree_map.len(), mutable_int_map.len());
     prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
 }
@@ -248,9 +256,11 @@ fn test_split_off(
     let btree_right = btree_map.split_off(&split_key);
     let mutable_int_right = mutable_int_map.split_off(&split_key);
 
+    prop_assert!(is_well_formed(&mutable_int_map.tree));
     prop_assert_eq!(btree_map.len(), mutable_int_map.len());
     prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
 
+    prop_assert!(is_well_formed(&mutable_int_right.tree));
     prop_assert_eq!(btree_right.len(), mutable_int_right.len());
     prop_assert!(btree_right.iter().eq(mutable_int_right.iter()));
 }
@@ -286,12 +296,14 @@ fn test_from_iter(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] key
     let (btree_map, _, mutable_int_map) = make_maps(keys);
 
     let int_map = btree_map.clone().into_iter().collect::<IntMap<_, _, _>>();
+    prop_assert!(is_well_formed(&int_map.0));
     prop_assert_eq!(btree_map.len(), int_map.len());
     prop_assert!(btree_map.iter().eq(int_map.iter()));
 
     let mutable_int_map = mutable_int_map
         .into_iter()
         .collect::<MutableIntMap<_, _, _>>();
+    prop_assert!(is_well_formed(&mutable_int_map.tree));
     prop_assert_eq!(btree_map.len(), mutable_int_map.len());
     prop_assert!(btree_map.iter().eq(mutable_int_map.iter()));
 }
@@ -401,6 +413,8 @@ fn test_u128_values(
         int_map = int_map.insert(key, value).0;
         mutable_int_map.insert(key, value);
     }
+    prop_assert!(is_well_formed(&int_map.0));
+    prop_assert!(is_well_formed(&mutable_int_map.tree));
 
     for key in lookups {
         let key = Key128::new(key);
@@ -450,4 +464,61 @@ fn test_validate_eq() {
         Err("Value divergence @7: 8 != 7".to_string()),
         do_validate_eq(&[(1, 2), (7, 8)], &[(1, 2), (7, 7)])
     );
+}
+
+/// Returns `true` iff the tree is well formed.
+fn is_well_formed<K, V, I>(tree: &Tree<K, V, I>) -> bool
+where
+    K: AsInt<I>,
+    I: IntKey,
+    V: Clone,
+{
+    match tree {
+        Tree::Empty => true,
+
+        Tree::Leaf(_, _) => true,
+
+        Tree::Branch {
+            prefix,
+            branching_bit,
+            left,
+            right,
+        } => {
+            let valid_left = match left.as_ref() {
+                Tree::Leaf(k, _) => {
+                    matches_prefix(k.as_int(), *prefix, *branching_bit)
+                        && k.as_int() & (I::one() << *branching_bit) == I::zero()
+                }
+                Tree::Branch {
+                    prefix: p,
+                    branching_bit: b,
+                    ..
+                } => {
+                    b < branching_bit
+                        && matches_prefix(*p, *prefix, *branching_bit)
+                        && *p & (I::one() << *branching_bit) == I::zero()
+                        && is_well_formed(left.as_ref())
+                }
+                Tree::Empty => false,
+            };
+            let valid_right = match right.as_ref() {
+                Tree::Leaf(k, _) => {
+                    matches_prefix(k.as_int(), *prefix, *branching_bit)
+                        && k.as_int() & (I::one() << *branching_bit) != I::zero()
+                }
+                Tree::Branch {
+                    prefix: p,
+                    branching_bit: b,
+                    ..
+                } => {
+                    b < branching_bit
+                        && matches_prefix(*p, *prefix, *branching_bit)
+                        && *p & (I::one() << *branching_bit) != I::zero()
+                        && is_well_formed(right.as_ref())
+                }
+                Tree::Empty => false,
+            };
+            valid_left && valid_right
+        }
+    }
 }

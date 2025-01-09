@@ -47,7 +47,7 @@ enum Tree<K, V, I> {
     ///
     ///   * For each leaf `L` in the right subtree:
     ///     ```
-    ///     L.key & (1 << branching_bit) == 1
+    ///     L.key & (1 << branching_bit) != 0
     ///     ```
     ///
     ///   * ```
@@ -275,15 +275,6 @@ where
                 left,
                 right,
             } => {
-                // Neither `left` nor `right` must be `Tree::Empty`.
-                #[cfg(debug_assertions)]
-                match (left.as_ref(), right.as_ref()) {
-                    (Tree::Empty, _) | (_, Tree::Empty) => {
-                        panic!("Unexpected empty branch")
-                    }
-                    _ => {}
-                }
-
                 if !matches_prefix(key, *prefix, *branching_bit) {
                     None
                 } else if key & (I::one() << *branching_bit) == I::zero() {
@@ -606,8 +597,8 @@ impl<K, V, I> Tree<K, V, I> {
         }
     }
 
-    // Returns the smallest key/value pair in this tree.
-    // If the tree is empty, then it returns `None`.
+    /// Returns the smallest key/value pair in this tree.
+    /// If the tree is empty, then it returns `None`.
     fn min(&self) -> Option<(&K, &V)> {
         let mut node = self;
         loop {
@@ -632,8 +623,8 @@ impl<K, V, I> Tree<K, V, I> {
         }
     }
 
-    // Returns the largest key/value pair in this tree.
-    // If the tree is empty, then it returns `None`.
+    /// Returns the largest key/value pair in this tree.
+    /// If the tree is empty, then it returns `None`.
     fn max(&self) -> Option<(&K, &V)> {
         let mut node = self;
         loop {
