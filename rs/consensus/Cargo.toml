@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
+ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
@@ -33,7 +34,6 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }

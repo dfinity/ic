@@ -1022,6 +1022,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
+            chunked_canister_wasm: None,
         }
     }
 }
