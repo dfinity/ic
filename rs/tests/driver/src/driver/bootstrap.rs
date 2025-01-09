@@ -17,8 +17,6 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
