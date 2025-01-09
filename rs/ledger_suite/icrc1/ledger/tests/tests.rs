@@ -1434,8 +1434,97 @@ fn test_get_archiveless_blocks() {
         let new_blocks = Decode!(&res, GetBlocksResponse).unwrap();
         assert_eq!(old_blocks.blocks, new_blocks.blocks);
         assert_eq!(old_blocks.blocks.len(), num_blocks as usize);
+        let increase = new_blocks.chain_length as f64 / old_blocks.chain_length as f64 - 1f64;
+        println!(
+            "{}, {},  {}, {}",
+            num_blocks, old_blocks.chain_length, new_blocks.chain_length, increase
+        );
         num_blocks += 100;
     }
+}
+
+#[test]
+fn test_bench_block_removal() {
+    let env = StateMachine::new();
+    let minting_account = account(1_000_000);
+
+    let trigger_threshold = 10_000_000;
+    let num_blocks_to_archive = 10;
+
+    let initial_balances = vec![(account(1), Nat::from(1_000_000_000_000u64))];
+
+    let args = LedgerArgument::Init(InitArgs {
+        minting_account,
+        fee_collector_account: None,
+        initial_balances,
+        transfer_fee: Nat::from(FEE),
+        decimals: None,
+        token_name: "Not a Token".to_string(),
+        token_symbol: "NAT".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold,
+            num_blocks_to_archive,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId(minting_account.owner),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: None,
+    });
+    let args = Encode!(&args).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), args, None)
+        .expect("Unable to install the ledger");
+
+    let get_blocks_old = |start: u64, length: u64| {
+        let arg = GetBlocksRequest {
+            start: Nat::from(start),
+            length: Nat::from(length),
+        };
+        get_blocks(&env, ledger_id, arg)
+    };
+
+    let now = env.time();
+
+    let approval_result = send_approval(
+        &env,
+        ledger_id,
+        account(1).owner,
+        &ApproveArgs {
+            from_subaccount: None,
+            spender: account_sub(2),
+            amount: (2 * FEE).into(),
+            expected_allowance: None,
+            expires_at: Some(u64::MAX),
+            fee: Some(FEE.into()),
+            memo: Some(Memo(ByteBuf::from([10u8; 32]))),
+            created_at_time: Some(system_time_to_nanos(now)),
+        },
+    )
+    .expect("approval failed");
+
+    let tf_result = transfer_from(
+        &env,
+        ledger_id,
+        account_sub(2),
+        account(1),
+        account(2 + 10_000),
+        1,
+        system_time_to_nanos(now),
+    );
+
+    let args = Encode!().unwrap();
+    env.execute_ingress_as(
+        account(1).owner.into(),
+        ledger_id,
+        "bench_block_removal",
+        args,
+    )
+    .expect("Unable to perform bench_block_removal");
 }
 
 #[cfg(not(feature = "u256-tokens"))]

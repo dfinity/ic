@@ -808,6 +808,12 @@ fn get_archiveless_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     Access::with_ledger(|ledger| ledger.get_archiveless_blocks(start, length as usize))
 }
 
+#[update]
+#[candid_method(update)]
+fn bench_block_removal() {
+    Access::with_ledger_mut(|ledger| ledger.bench_block_removal());
+}
+
 #[query]
 #[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {

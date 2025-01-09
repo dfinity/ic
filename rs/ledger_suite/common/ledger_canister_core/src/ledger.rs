@@ -135,10 +135,12 @@ pub trait LedgerAccess {
 }
 
 pub trait ArchivelessBlockchain {
-    fn add_block(&mut self, block: EncodedBlock) -> Result<u64, String>;
+    fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<u64, String>;
     fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock>;
+    fn get_block(&self, index: u64) -> Option<EncodedBlock>;
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
+    fn remove_blocks(&mut self, num_blocks: u64) -> Vec<EncodedBlock>;
 }
 
 pub trait LedgerData: LedgerContext {
@@ -312,7 +314,7 @@ where
         .expect("failed to add block");
     let height_stable = ledger
         .archiveless_blockchain_mut()
-        .add_block(block.encode())
+        .add_block(height, block.encode())
         .expect("failed to add block to stable blockchain");
     assert_eq!(height, height_stable);
     if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
