@@ -2113,6 +2113,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_wasm64_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_wasm64_memory_size = wasm_memory_size;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self

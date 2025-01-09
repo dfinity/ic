@@ -14,7 +14,9 @@ use ic_types::{methods::WasmMethod, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
-use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use self::{
+    instrumentation::instrument, validation::has_wasm64_memory, validation::validate_wasm_binary,
+};
 use crate::wasmtime_embedder::StoreData;
 use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 use wasmtime::InstancePre;
@@ -201,6 +203,13 @@ fn validate_and_instrument(
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
     let (wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
+    // Instrumentation bytemap depends on the Wasm memory size, so for larger heaps we need
+    // to pass in the corresponding Wasm64 heap memory size.
+    let max_wasm_memory_size = if has_wasm64_memory(&module) {
+        config.max_wasm64_memory_size
+    } else {
+        config.max_wasm_memory_size
+    };
     let instrumentation_output = instrument(
         module,
         config.cost_to_compile_wasm_instruction,
@@ -209,7 +218,7 @@ fn validate_and_instrument(
         config.metering_type,
         config.subnet_type,
         config.dirty_page_overhead,
-        config.max_wasm_memory_size,
+        max_wasm_memory_size,
         config.max_stable_memory_size,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
