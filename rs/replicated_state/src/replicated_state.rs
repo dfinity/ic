@@ -438,16 +438,14 @@ impl ReplicatedState {
         epoch_query_stats: RawQueryStats,
         canister_snapshots: CanisterSnapshots,
     ) -> Self {
-        let mut res = Self {
+        Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
-        };
-        res.update_stream_guaranteed_responses_size_bytes();
-        res
+        }
     }
 
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
@@ -685,7 +683,14 @@ impl ReplicatedState {
                     .system_state
                     .guaranteed_response_message_memory_usage()
             })
-            .sum();
+            .sum::<NumBytes>()
+            + (self
+                .metadata
+                .streams
+                .guaranteed_responses_size_bytes()
+                .values()
+                .sum::<usize>() as u64)
+                .into();
         let subnet_memory_usage =
             (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
@@ -912,11 +917,6 @@ impl ReplicatedState {
 
     /// Updates the byte size of guaranteed responses in streams for each canister.
     fn update_stream_guaranteed_responses_size_bytes(&mut self) {
-        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
-            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
-            }
-        }
         Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
     }
 
@@ -1253,7 +1253,7 @@ impl ReplicatedState {
             subnet_queues,
         );
 
-        self.update_stream_guaranteed_responses_size_bytes();
+        //self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 

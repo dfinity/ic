@@ -1333,13 +1333,6 @@ impl CanisterQueues {
             .oversized_guaranteed_requests_extra_bytes
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses routed from
-    /// output queues into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queue_stats
-            .transient_stream_guaranteed_responses_size_bytes = size_bytes;
-    }
-
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1638,8 +1631,6 @@ impl CanisterQueues {
         let calculated_stats = Self::calculate_queue_stats(
             &self.canister_queues,
             self.queue_stats.guaranteed_response_memory_reservations,
-            self.queue_stats
-                .transient_stream_guaranteed_responses_size_bytes,
         );
         if self.queue_stats != calculated_stats {
             return Err(format!(
@@ -1672,7 +1663,6 @@ impl CanisterQueues {
     fn calculate_queue_stats(
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
         guaranteed_response_memory_reservations: usize,
-        transient_stream_guaranteed_responses_size_bytes: usize,
     ) -> QueueStats {
         let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
@@ -1684,7 +1674,6 @@ impl CanisterQueues {
             guaranteed_response_memory_reservations,
             input_queues_reserved_slots,
             output_queues_reserved_slots,
-            transient_stream_guaranteed_responses_size_bytes,
         }
     }
 }
@@ -1852,7 +1841,6 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
-            0,
         );
 
         let input_schedule = InputSchedule::try_from((
@@ -1920,14 +1908,6 @@ struct QueueStats {
     /// Count of slots reserved in output queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     output_queues_reserved_slots: usize,
-
-    /// Transient: size in bytes of guaranteed responses routed from `output_queues`
-    /// into streams and not yet garbage collected.
-    ///
-    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
-    /// every streams mutation (induction, routing, GC). And is (re)populated during
-    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
-    transient_stream_guaranteed_responses_size_bytes: usize,
 }
 
 impl QueueStats {
@@ -1935,7 +1915,6 @@ impl QueueStats {
     /// guaranteed responses in streans.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
-            + self.transient_stream_guaranteed_responses_size_bytes
     }
 
     /// Updates the stats to reflect the enqueueing of the given message in the given

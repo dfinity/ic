@@ -1935,13 +1935,6 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses from this
-    /// canister routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues
-            .set_stream_guaranteed_responses_size_bytes(size_bytes);
-    }
-
     /// Method used only by the dashboard.
     pub fn collect_controllers_as_string(&self) -> String {
         self.controllers

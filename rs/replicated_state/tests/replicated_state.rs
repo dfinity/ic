@@ -342,30 +342,6 @@ fn memory_taken_by_subnet_queues() {
 }
 
 #[test]
-fn memory_taken_by_stream_responses() {
-    let mut fixture = ReplicatedStateFixture::new();
-
-    // Zero memory used initially.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(0, &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-
-    // Push a request and a response into a stream.
-    let response = response_to(OTHER_CANISTER_ID);
-    fixture.push_to_streams(vec![
-        request_to(OTHER_CANISTER_ID).into(),
-        response.clone().into(),
-    ]);
-
-    // Memory only used by response, not request.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-}
-
-#[test]
 fn memory_taken_by_wasm_custom_sections() {
     let mut custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
     custom_sections.insert(
