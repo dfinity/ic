@@ -280,8 +280,8 @@ impl CallContextManagerStats {
     ///
     /// Time complexity: `O(n)`.
     pub(crate) fn calculate_stats(
-        call_contexts: &MutableIntMap<CallContextId, CallContext, u64>,
-        callbacks: &MutableIntMap<CallbackId, Arc<Callback>, u64>,
+        call_contexts: &MutableIntMap<CallContextId, CallContext>,
+        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
     ) -> CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
@@ -325,7 +325,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(n)`.
     #[cfg(test)]
     pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &MutableIntMap<CallbackId, Arc<Callback>, u64>,
+        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
         aborted_or_paused_response: Option<&Response>,
     ) -> BTreeMap<CanisterId, usize> {
         use std::collections::btree_map::Entry;
@@ -372,7 +372,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(n)`.
     #[cfg(test)]
     pub(crate) fn calculate_unresponded_call_contexts_per_originator(
-        call_contexts: &MutableIntMap<CallContextId, CallContext, u64>,
+        call_contexts: &MutableIntMap<CallContextId, CallContext>,
         aborted_or_paused_request: Option<&Request>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut unresponded_canister_update_call_contexts = call_contexts
@@ -423,14 +423,14 @@ pub struct CallContextManager {
     next_callback_id: u64,
 
     /// Call contexts (including deleted ones) that still have open callbacks.
-    call_contexts: MutableIntMap<CallContextId, CallContext, u64>,
+    call_contexts: MutableIntMap<CallContextId, CallContext>,
 
     /// Counts of open callbacks per call context.
-    outstanding_callbacks: MutableIntMap<CallContextId, usize, u64>,
+    outstanding_callbacks: MutableIntMap<CallContextId, usize>,
 
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
-    callbacks: MutableIntMap<CallbackId, Arc<Callback>, u64>,
+    callbacks: MutableIntMap<CallbackId, Arc<Callback>>,
 
     /// Callback deadline priority queue. Holds all not-yet-expired best-effort
     /// callbacks, ordered by deadline. `CallbackIds` break ties, ensuring
@@ -438,7 +438,7 @@ pub struct CallContextManager {
     ///
     /// When a `CallbackId` is returned by `expired_callbacks()`, it is removed from
     /// the queue. This ensures that each callback is expired at most once.
-    unexpired_callbacks: MutableIntMap<(CoarseTime, CallbackId), (), u128>,
+    unexpired_callbacks: MutableIntMap<(CoarseTime, CallbackId), ()>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
@@ -583,7 +583,7 @@ impl CallContextManager {
 
     /// Returns the currently open `CallContexts` maintained by this
     /// `CallContextManager`.
-    pub fn call_contexts(&self) -> &MutableIntMap<CallContextId, CallContext, u64> {
+    pub fn call_contexts(&self) -> &MutableIntMap<CallContextId, CallContext> {
         &self.call_contexts
     }
 
@@ -616,7 +616,7 @@ impl CallContextManager {
     }
 
     /// Returns the `Callback`s maintained by this `CallContextManager`.
-    pub fn callbacks(&self) -> &MutableIntMap<CallbackId, Arc<Callback>, u64> {
+    pub fn callbacks(&self) -> &MutableIntMap<CallbackId, Arc<Callback>> {
         &self.callbacks
     }
 
@@ -1082,8 +1082,8 @@ impl From<&CallContextManager> for pb::CallContextManager {
 impl TryFrom<pb::CallContextManager> for CallContextManager {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
-        let mut call_contexts = MutableIntMap::<CallContextId, CallContext, u64>::new();
-        let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>, u64>::new();
+        let mut call_contexts = MutableIntMap::<CallContextId, CallContext>::new();
+        let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>>::new();
         for pb::CallContextEntry {
             call_context_id,
             call_context,
@@ -1143,7 +1143,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
 ///
 /// Time complexity: `O(n)`.
 fn calculate_callback_deadlines(
-    callbacks: &MutableIntMap<CallbackId, Arc<Callback>, u64>,
+    callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
 ) -> BTreeSet<(CoarseTime, CallbackId)> {
     callbacks
         .iter()
@@ -1156,13 +1156,13 @@ fn calculate_callback_deadlines(
 ///
 /// Time complexity: `O(n)`.
 fn calculate_outstanding_callbacks(
-    callbacks: &MutableIntMap<CallbackId, Arc<Callback>, u64>,
-) -> MutableIntMap<CallContextId, usize, u64> {
+    callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
+) -> MutableIntMap<CallContextId, usize> {
     callbacks
         .iter()
         .map(|(_, callback)| callback.call_context_id)
         .fold(
-            MutableIntMap::<CallContextId, usize, u64>::new(),
+            MutableIntMap::<CallContextId, usize>::new(),
             |mut counts, call_context_id| {
                 counts.insert(
                     call_context_id,
@@ -1173,7 +1173,9 @@ fn calculate_outstanding_callbacks(
         )
 }
 
-impl AsInt<u128> for (CoarseTime, CallbackId) {
+impl AsInt for (CoarseTime, CallbackId) {
+    type Repr = u128;
+
     #[inline]
     fn as_int(&self) -> u128 {
         (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1.get() as u128

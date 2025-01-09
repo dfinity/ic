@@ -1080,7 +1080,7 @@ fn test_disallow_concurrent_upgrade_execution(
     let execution_in_progress_proposal = ProposalData {
         action: proposal_in_progress_action_id,
         id: Some(1_u64.into()),
-        decided_timestamp_seconds: 123,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3041,7 +3041,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let motion_proposal = ProposalData {
         action: motion_action_id,
         id: Some(motion_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3056,7 +3056,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3115,7 +3115,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
     let executing_upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(executing_upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3161,8 +3161,8 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let previous_upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(previous_upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
-        executed_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
+        executed_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 5,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3177,7 +3177,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3222,7 +3222,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
     let proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3277,7 +3277,7 @@ fn test_upgrade_proposals_blocked_by_pending_upgrade() {
     let proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3321,6 +3321,76 @@ fn test_upgrade_proposals_blocked_by_pending_upgrade() {
     let some_other_proposal_id = 99_u64;
     match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
         Ok(_) => panic!("Some other upgrade proposal was not blocked."),
+        Err(err) => assert_eq!(
+            err.error_type,
+            ErrorType::ResourceExhausted as i32,
+            "{:#?}",
+            err,
+        ),
+    }
+}
+
+/// Ugrade proposals (e.g. UpgradeSnsToNextVersion) block all other upgrade actions while they're adopted until they're done executing, unless they're too old. This test checks the "unless they're too old" part
+#[test]
+fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
+    // Step 1: Prepare the world.
+    use ProposalDecisionStatus as Status;
+
+    let upgrade_action_id: u64 =
+        (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+    let proposal_id = 1_u64;
+    let some_other_proposal_id = 99_u64;
+    let proposal = ProposalData {
+        action: upgrade_action_id,
+        id: Some(proposal_id.into()),
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+            - crate::governance::UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS
+            - 1,
+        latest_tally: Some(Tally {
+            yes: 1,
+            no: 0,
+            total: 1,
+            timestamp_seconds: 1,
+        }),
+        ..Default::default()
+    };
+    assert_eq!(proposal.status(), Status::Adopted);
+
+    let mut governance = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {
+                proposal_id => proposal,
+            },
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::<NativeEnvironment>::default(),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Step 2: Check that the proposal is not blocked by an old proposal.
+    match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
+        Ok(_) => {},
+        Err(err) => panic!("The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {:#?}", err),
+    }
+
+    // Step 3: Make the proposal newer
+    governance
+        .proto
+        .proposals
+        .get_mut(&proposal_id)
+        .unwrap()
+        .decided_timestamp_seconds = NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+        - crate::governance::UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS
+        + 1;
+
+    // Step 4: Check that the proposal is now blocked by an old proposal.
+    match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
+        Ok(_) => panic!("The proposal should have gotten blocked by an old proposal"),
         Err(err) => assert_eq!(
             err.error_type,
             ErrorType::ResourceExhausted as i32,
@@ -3626,10 +3696,7 @@ fn test_move_staked_maturity_on_dissolved_neurons_works() {
     let neuron_id_2 = test_neuron_id(controller_2);
     let regular_maturity: u64 = 1000000;
     let staked_maturity: u64 = 424242;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
     // Dissolved neuron.
     let neuron_1 = Neuron {
         id: Some(neuron_id_1.clone()),

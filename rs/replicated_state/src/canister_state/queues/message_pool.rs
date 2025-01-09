@@ -132,21 +132,27 @@ impl Id {
     }
 }
 
-impl AsInt<u64> for Id {
+impl AsInt for Id {
+    type Repr = u64;
+
     #[inline]
     fn as_int(&self) -> u64 {
         self.0
     }
 }
 
-impl AsInt<u128> for (CoarseTime, Id) {
+impl AsInt for (CoarseTime, Id) {
+    type Repr = u128;
+
     #[inline]
     fn as_int(&self) -> u128 {
         (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1 .0 as u128
     }
 }
 
-impl AsInt<u128> for (usize, Id) {
+impl AsInt for (usize, Id) {
+    type Repr = u128;
+
     #[inline]
     fn as_int(&self) -> u128 {
         (self.0 as u128) << 64 | self.1 .0 as u128
@@ -236,7 +242,9 @@ impl<T> From<Reference<T>> for Id {
     }
 }
 
-impl<T> AsInt<u64> for Reference<T> {
+impl<T> AsInt for Reference<T> {
+    type Repr = u64;
+
     #[inline]
     fn as_int(&self) -> u64 {
         self.0
@@ -356,7 +364,7 @@ impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReferenc
 pub(super) struct MessagePool {
     /// Pool contents.
     #[validate_eq(CompareWithValidateEq)]
-    messages: MutableIntMap<Id, RequestOrResponse, u64>,
+    messages: MutableIntMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
@@ -366,7 +374,7 @@ pub(super) struct MessagePool {
     ///    `outbound_guaranteed_request_deadlines.keys().collect() == messages.keys().filter(|id| (id.context(), id.class(), id.kind()) == (Context::Outbound, Class::GuaranteedResponse, Kind::Request)).collect()`
     ///  * The deadline matches the one recorded in `deadline_queue`:
     ///    `outbound_guaranteed_request_deadlines.iter().all(|(id, deadline)| deadline_queue.contains(&(deadline, id)))`
-    outbound_guaranteed_request_deadlines: MutableIntMap<Id, CoarseTime, u64>,
+    outbound_guaranteed_request_deadlines: MutableIntMap<Id, CoarseTime>,
 
     /// Running message stats for the pool.
     message_stats: MessageStats,
@@ -377,13 +385,13 @@ pub(super) struct MessagePool {
     /// by deadline.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
-    deadline_queue: MutableIntMap<(CoarseTime, Id), (), u128>,
+    deadline_queue: MutableIntMap<(CoarseTime, Id), ()>,
 
     /// Load shedding priority queue. Holds all best-effort messages, ordered by
     /// size.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
-    size_queue: MutableIntMap<(usize, Id), (), u128>,
+    size_queue: MutableIntMap<(usize, Id), ()>,
 
     /// A monotonically increasing counter used to generate unique message IDs.
     message_id_generator: u64,
@@ -691,9 +699,7 @@ impl MessagePool {
     /// `debug_assert!()` checks.
     ///
     /// Time complexity: `O(n)`.
-    fn calculate_message_stats(
-        messages: &MutableIntMap<Id, RequestOrResponse, u64>,
-    ) -> MessageStats {
+    fn calculate_message_stats(messages: &MutableIntMap<Id, RequestOrResponse>) -> MessageStats {
         let mut stats = MessageStats::default();
         for (id, msg) in messages.iter() {
             stats += MessageStats::stats_delta(msg, id.context());
@@ -786,11 +792,11 @@ impl MessagePool {
     /// Time complexity: `O(n * log(n))`.
     #[allow(clippy::type_complexity)]
     fn calculate_priority_queues(
-        messages: &MutableIntMap<Id, RequestOrResponse, u64>,
-        outbound_guaranteed_request_deadlines: &MutableIntMap<Id, CoarseTime, u64>,
+        messages: &MutableIntMap<Id, RequestOrResponse>,
+        outbound_guaranteed_request_deadlines: &MutableIntMap<Id, CoarseTime>,
     ) -> (
-        MutableIntMap<(CoarseTime, Id), (), u128>,
-        MutableIntMap<(usize, Id), (), u128>,
+        MutableIntMap<(CoarseTime, Id), ()>,
+        MutableIntMap<(usize, Id), ()>,
     ) {
         let mut expected_deadline_queue = MutableIntMap::new();
         let mut expected_size_queue = MutableIntMap::new();
@@ -856,7 +862,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
     fn try_from(item: pb_queues::MessagePool) -> Result<Self, Self::Error> {
         let message_count = item.messages.len();
 
-        let messages: MutableIntMap<_, _, _> = item
+        let messages: MutableIntMap<_, _> = item
             .messages
             .into_iter()
             .map(|entry| {

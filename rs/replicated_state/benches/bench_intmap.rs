@@ -16,7 +16,9 @@ const BENCH_SIZES: &[u64] = &[10, 100, 1000];
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Key128(i32, usize);
 
-impl AsInt<u128> for Key128 {
+impl AsInt for Key128 {
+    type Repr = u128;
+
     #[inline]
     fn as_int(&self) -> u128 {
         (self.0 as u128) << 64 | self.1 as u128
@@ -32,19 +34,19 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
     for &n in BENCH_SIZES.iter() {
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter(|| {
-                let m: IntMap<u64, _, _> = (0..n).map(|x| (x * 13 % n, value(x))).collect();
+                let m: IntMap<u64, _> = (0..n).map(|x| (x * 13 % n, value(x))).collect();
                 black_box(m);
             })
         });
         group.bench_function(BenchmarkId::new("mpatricia", n), |b| {
             b.iter(|| {
-                let m: MutableIntMap<u64, _, _> = (0..n).map(|x| (x * 13 % n, value(x))).collect();
+                let m: MutableIntMap<u64, _> = (0..n).map(|x| (x * 13 % n, value(x))).collect();
                 black_box(m);
             })
         });
         group.bench_function(BenchmarkId::new("mpatricia_128", n), |b| {
             b.iter(|| {
-                let m: MutableIntMap<Key128, _, _> =
+                let m: MutableIntMap<Key128, _> =
                     (0..n).map(|x| (key128(x * 13 % n), value(x))).collect();
                 black_box(m);
             })
@@ -82,8 +84,8 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Remove");
     for &n in BENCH_SIZES.iter() {
-        let patricia_map: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
-        let mpatricia_map: MutableIntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_map: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let mpatricia_map: MutableIntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());
@@ -151,9 +153,9 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
         let kv = |x| (N * x, value(x));
         let kv128 = |x| (key128(N * x), value(x));
 
-        let patricia_map: IntMap<u64, Value, _> = (0..n).map(kv).collect();
-        let mpatricia_map: MutableIntMap<u64, Value, _> = (0..n).map(kv).collect();
-        let patricia_128_map: MutableIntMap<Key128, Value, _> = (0..n).map(kv128).collect();
+        let patricia_map: IntMap<u64, Value> = (0..n).map(kv).collect();
+        let mpatricia_map: MutableIntMap<u64, Value> = (0..n).map(kv).collect();
+        let patricia_128_map: MutableIntMap<Key128, Value> = (0..n).map(kv128).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> = Arc::new((0..n).map(kv).collect());
         let btree_128_map: Arc<BTreeMap<Key128, Value>> = Arc::new((0..n).map(kv128).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(kv).collect());
@@ -219,12 +221,11 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Union");
     for &n in BENCH_SIZES.iter() {
-        let patricia_lmap: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
-        let patricia_rmap: IntMap<u64, Value, _> =
-            (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
+        let patricia_lmap: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_rmap: IntMap<u64, Value> = (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
 
-        let mpatricia_lmap: MutableIntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
-        let mpatricia_rmap: MutableIntMap<u64, Value, _> =
+        let mpatricia_lmap: MutableIntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let mpatricia_rmap: MutableIntMap<u64, Value> =
             (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
 
         let btree_lmap: Arc<BTreeMap<u64, Value>> =
@@ -286,8 +287,8 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Iter");
     for &n in BENCH_SIZES.iter() {
-        let patricia_map: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
-        let mpatricia_map: MutableIntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_map: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let mpatricia_map: MutableIntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());
