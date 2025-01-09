@@ -67,7 +67,6 @@ mock! {
             &self,
             algorithm_id: AlgorithmId,
             message: Vec<u8>,
-            key_id: KeyId,
         ) -> Result<CspSignature, CspBasicSignatureError>;
 
         fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
@@ -78,7 +77,6 @@ mock! {
             &self,
             algorithm_id: AlgorithmId,
             message: Vec<u8>,
-            key_id: KeyId,
         ) -> Result<CspSignature, CspMultiSignatureError>;
 
         fn gen_committee_signing_key_pair(

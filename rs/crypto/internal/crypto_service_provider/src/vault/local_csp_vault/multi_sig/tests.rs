@@ -4,7 +4,7 @@ use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::types::CspPublicKey;
-use crate::vault::api::BasicSignatureCspVault;
+use crate::types::CspSecretKey;
 use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
@@ -15,7 +15,9 @@ use crate::Csp;
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::AlgorithmId;
 use mockall::Sequence;
 use rand::Rng;
@@ -182,7 +184,6 @@ fn should_multi_sign_and_verify_with_generated_key() {
     let (csp_pub_key, csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
 
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
@@ -195,7 +196,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
         )
         .build();
     let sig = csp_vault
-        .multi_sign(AlgorithmId::MultiBls12_381, msg.clone(), key_id)
+        .multi_sign(AlgorithmId::MultiBls12_381, msg.clone())
         .expect("failed to generate signature");
 
     assert!(verifier
@@ -208,24 +209,62 @@ fn should_multi_sign_and_verify_with_generated_key() {
 }
 
 #[test]
+fn should_fail_to_sign_if_committee_signing_public_key_not_found() {
+    let mut pks_returning_none = MockPublicKeyStore::new();
+    pks_returning_none
+        .expect_committee_signing_pubkey()
+        .return_const(None);
+    let vault = LocalCspVault::builder_for_test()
+        .with_public_key_store(pks_returning_none)
+        .build();
+
+    let result = vault.multi_sign(AlgorithmId::MultiBls12_381, b"message".to_vec());
+
+    assert_eq!(result, Err(CspMultiSignatureError::PublicKeyNotFound));
+}
+
+#[test]
+fn should_fail_to_sign_if_key_id_instantiation_fails() {
+    // This would only fail if the committee signing public key is larger than 4 GB.
+    // Given that creating such large keys in a test is very expensive, and
+    // that this scenario is extremely unlikely (as the node key generation
+    // logic has to be broken) we are not explicitly testing this.
+}
+
+#[test]
+fn should_fail_to_multi_sign_if_secret_key_not_found() {
+    let mut pks_returning_some_key = MockPublicKeyStore::new();
+    pks_returning_some_key
+        .expect_committee_signing_pubkey()
+        .return_const(some_public_key_proto());
+    let vault = LocalCspVault::builder_for_test()
+        .with_public_key_store(pks_returning_some_key)
+        .build();
+
+    let result = vault.multi_sign(AlgorithmId::MultiBls12_381, b"message".to_vec());
+
+    assert_matches!(
+        result,
+        Err(CspMultiSignatureError::SecretKeyNotFound { .. })
+    );
+}
+
+#[test]
 fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
     let csp_vault = LocalCspVault::builder_for_test().build();
-    let (csp_pub_key, _csp_pop) = csp_vault
+    let (_pk, _pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
-
-    let msg = vec![31; 41];
 
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::MultiBls12_381 {
+            let result = csp_vault.multi_sign(algorithm_id, b"msg".to_vec());
+
             assert_eq!(
-                csp_vault
-                    .multi_sign(algorithm_id, msg.clone(), key_id)
-                    .expect_err("Unexpected success."),
-                CspMultiSignatureError::UnsupportedAlgorithm {
+                result,
+                Err(CspMultiSignatureError::UnsupportedAlgorithm {
                     algorithm: algorithm_id,
-                }
+                })
             );
         }
     }
@@ -233,23 +272,42 @@ fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
 
 #[test]
 fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
-    let csp_vault = LocalCspVault::builder_for_test().build();
-    let wrong_csp_pub_key = csp_vault
-        .gen_node_signing_key_pair()
-        .expect("failed to generate keys");
+    let mut pks_returning_some_committee_key = MockPublicKeyStore::new();
+    pks_returning_some_committee_key
+        .expect_committee_signing_pubkey()
+        .return_const(some_public_key_proto());
+
+    let mut sks_returning_wrong_key_type = MockSecretKeyStore::new();
+    sks_returning_wrong_key_type
+        .expect_get()
+        .times(1)
+        .return_const(Some(CspSecretKey::TlsEd25519(
+            TlsEd25519SecretKeyDerBytes::new(b"dummy".to_vec()),
+        )));
+
+    let csp_vault = LocalCspVault::builder_for_test()
+        .with_public_key_store(pks_returning_some_committee_key)
+        .with_node_secret_key_store(sks_returning_wrong_key_type)
+        .build();
 
     let msg = vec![31; 41];
-    let result = csp_vault.multi_sign(
-        AlgorithmId::MultiBls12_381,
-        msg,
-        KeyId::try_from(&wrong_csp_pub_key).unwrap(),
-    );
+    let result = csp_vault.multi_sign(AlgorithmId::MultiBls12_381, msg);
 
     assert_eq!(
-        result.expect_err("Unexpected success."),
-        CspMultiSignatureError::WrongSecretKeyType {
+        result,
+        Err(CspMultiSignatureError::WrongSecretKeyType {
             algorithm: AlgorithmId::MultiBls12_381,
-            secret_key_variant: "Ed25519".to_string()
-        }
+            secret_key_variant: "TlsEd25519".to_string()
+        })
     );
+}
+
+fn some_public_key_proto() -> PublicKeyProto {
+    PublicKeyProto {
+        version: 0,
+        algorithm: 1,
+        key_value: vec![123; 32],
+        proof_data: None,
+        timestamp: None,
+    }
 }

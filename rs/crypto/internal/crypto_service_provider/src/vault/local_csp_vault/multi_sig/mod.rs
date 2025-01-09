@@ -1,5 +1,5 @@
 //! Multi-Signature operations provided by the CSP vault.
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
@@ -25,10 +25,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         message: Vec<u8>,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let start_time = self.metrics.now();
-        let result = self.multi_sign_internal(algorithm_id, &message[..], key_id);
+        let result = self.multi_sign_internal(algorithm_id, &message[..]);
         self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
             MetricsScope::Local,
@@ -120,8 +119,21 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         message: &[u8],
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
+        let commitee_signing_pubkey = self
+            .public_key_store_read_lock()
+            .committee_signing_pubkey()
+            .ok_or(CspMultiSignatureError::PublicKeyNotFound)?;
+        let key_id = KeyId::try_from((
+            AlgorithmId::MultiBls12_381,
+            &commitee_signing_pubkey.key_value,
+        ))
+        .map_err(|e| match e {
+            KeyIdInstantiationError::InvalidArguments(_) => {
+                CspMultiSignatureError::KeyIdInstantiationError
+            }
+        })?;
+
         let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =
             maybe_secret_key.ok_or(CspMultiSignatureError::SecretKeyNotFound {

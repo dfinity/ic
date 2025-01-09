@@ -1,11 +1,13 @@
 //! Tests of Basic Signature operations in the CSP vault.
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
-use crate::types::{CspPublicKey, CspSignature};
+use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
 use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureKeygenError};
@@ -17,13 +19,12 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::AlgorithmId;
-use ic_types::NumberOfNodes;
 use mockall::Sequence;
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-use rand_chacha::ChaChaRng;
+use rand::Rng;
 use std::io;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -174,29 +175,32 @@ fn should_correctly_sign_compared_to_testvec() {
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
 
-    let rng = &mut reproducible_rng();
-
-    let key_id = rng.gen::<[u8; 32]>();
-
-    let (sk, _pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+    let (sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
 
     let csp_vault = {
-        let mut key_store = TempSecretKeyStore::new();
+        let node_signing_public_key = node_signing_pk_to_proto(pk);
+        let key_id =
+            KeyId::try_from((AlgorithmId::Ed25519, &node_signing_public_key.key_value)).unwrap();
 
-        key_store
-            .insert(KeyId::from(key_id), sk, None)
+        let mut node_pks = TempPublicKeyStore::new();
+        node_pks
+            .set_once_node_signing_pubkey(node_signing_public_key)
+            .expect("failed to set pubkey in PKS");
+
+        let mut node_sks = TempSecretKeyStore::new();
+        node_sks
+            .insert(key_id, sk, None)
             .expect("failed to insert key into SKS");
 
-        let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
         LocalCspVault::builder_for_test()
-            .with_rng(csprng)
-            .with_node_secret_key_store(key_store)
+            .with_public_key_store(node_pks)
+            .with_node_secret_key_store(node_sks)
             .build()
     };
 
     assert_eq!(
         csp_vault
-            .sign(AlgorithmId::Ed25519, msg, KeyId::from(key_id))
+            .sign(AlgorithmId::Ed25519, msg)
             .expect("failed to create signature"),
         sig
     );
@@ -213,71 +217,95 @@ fn should_sign_verifiably_with_generated_node_signing_key() {
 }
 
 #[test]
+fn should_fail_to_sign_if_node_signing_public_key_not_found() {
+    let mut pks_returning_none = MockPublicKeyStore::new();
+    pks_returning_none
+        .expect_node_signing_pubkey()
+        .return_const(None);
+    let vault = LocalCspVault::builder_for_test()
+        .with_public_key_store(pks_returning_none)
+        .build();
+
+    let result = vault.sign(AlgorithmId::Ed25519, b"sample message".to_vec());
+
+    assert_eq!(result, Err(CspBasicSignatureError::PublicKeyNotFound));
+}
+
+#[test]
+fn should_fail_to_sign_if_key_id_instantiation_fails() {
+    // This would only fail if the node signing public key is larger than 4 GB.
+    // Given that creating such large keys in a test is very expensive, and
+    // that this scenario is extremely unlikely (as the node key generation
+    // logic has to be broken) we are not explicitly testing this.
+}
+
+#[test]
+fn should_fail_to_sign_if_secret_key_not_found() {
+    let mut pks_returning_some_key = MockPublicKeyStore::new();
+    pks_returning_some_key
+        .expect_node_signing_pubkey()
+        .return_const(some_public_key_proto());
+    let vault = LocalCspVault::builder_for_test()
+        .with_public_key_store(pks_returning_some_key)
+        .build();
+
+    let result = vault.sign(AlgorithmId::Ed25519, b"sample message".to_vec());
+
+    assert_matches!(
+        result,
+        Err(CspBasicSignatureError::SecretKeyNotFound { .. })
+    );
+}
+
+#[test]
 fn should_fail_to_sign_with_unsupported_algorithm_id() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-    let public_key = csp_vault
+    let _ = csp_vault
         .gen_node_signing_key_pair()
         .expect("failed to generate keys");
 
-    let msg = b"sample message".to_vec();
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::Ed25519 {
-            let sign_result = csp_vault.sign(
-                AlgorithmId::EcdsaP256,
-                msg.clone(),
-                KeyId::try_from(&public_key).unwrap(),
+            let sign_result = csp_vault.sign(algorithm_id, b"msg".to_vec());
+
+            assert_eq!(
+                sign_result,
+                Err(CspBasicSignatureError::UnsupportedAlgorithm {
+                    algorithm: algorithm_id
+                })
             );
-            assert!(sign_result.is_err());
-            let err = sign_result.expect_err("Expected an error.");
-            match err {
-                CspBasicSignatureError::UnsupportedAlgorithm { .. } => {}
-                _ => panic!("Expected UnsupportedAlgorithm, got {:?}", err),
-            }
         }
     }
 }
 
 #[test]
-fn should_fail_to_sign_with_non_existent_key() {
-    let rng = &mut reproducible_rng();
-    let csp_vault = LocalCspVault::builder_for_test()
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
-        .build_into_arc();
-    let (_, pk_bytes) = ed25519::keypair_from_rng(rng);
-
-    let key_id = KeyId::try_from(&CspPublicKey::Ed25519(pk_bytes)).unwrap();
-    let msg = b"some message".to_vec();
-    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
-    assert!(sign_result.is_err());
-}
-
-#[test]
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-    let rng = &mut reproducible_rng();
+    let mut pks_returning_some_key = MockPublicKeyStore::new();
+    pks_returning_some_key
+        .expect_node_signing_pubkey()
+        .return_const(some_public_key_proto());
+
+    let mut sks_returning_wrong_key_type = MockSecretKeyStore::new();
+    sks_returning_wrong_key_type
+        .expect_get()
+        .times(1)
+        .return_const(Some(CspSecretKey::TlsEd25519(
+            TlsEd25519SecretKeyDerBytes::new(b"dummy".to_vec()),
+        )));
+
     let csp_vault = LocalCspVault::builder_for_test()
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_public_key_store(pks_returning_some_key)
+        .with_node_secret_key_store(sks_returning_wrong_key_type)
         .build();
 
-    let threshold = NumberOfNodes::from(1);
-    let (_pub_coeffs, key_ids) = csp_vault
-        .threshold_keygen_for_test(
-            AlgorithmId::ThresBls12_381,
-            threshold,
-            NumberOfNodes::from(1),
-        )
-        .expect("failed to generate threshold sig keys");
-    let key_id = key_ids[0];
-    let msg_len: usize = rng.gen_range(0..1024);
-    let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
-
-    let result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
+    let result = csp_vault.sign(AlgorithmId::Ed25519, b"message".to_vec());
 
     assert_eq!(
-        result.expect_err("Unexpected success."),
-        CspBasicSignatureError::WrongSecretKeyType {
+        result,
+        Err(CspBasicSignatureError::WrongSecretKeyType {
             algorithm: AlgorithmId::Ed25519,
-            secret_key_variant: "ThresBls12_381".to_string()
-        }
+            secret_key_variant: "TlsEd25519".to_string()
+        })
     );
 }
 
@@ -303,11 +331,7 @@ pub fn generate_key_pair_and_sign_message(
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
         _ => panic!("Wrong CspPublicKey: {:?}", csp_pk),
     };
-    let sign_result = csp_vault.sign(
-        AlgorithmId::Ed25519,
-        message,
-        KeyId::try_from(&csp_pk).unwrap(),
-    );
+    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, message);
     (pk_bytes, sign_result)
 }
 
@@ -315,4 +339,14 @@ fn random_message<R: Rng>(rng: &mut R, msg_len_in_bytes: usize) -> Vec<u8> {
     let msg: Vec<u8> = (0..msg_len_in_bytes).map(|_| rng.gen::<u8>()).collect();
     assert_eq!(msg.len(), msg_len_in_bytes);
     msg
+}
+
+fn some_public_key_proto() -> PublicKeyProto {
+    PublicKeyProto {
+        version: 0,
+        algorithm: 1,
+        key_value: vec![123; 32],
+        proof_data: None,
+        timestamp: None,
+    }
 }

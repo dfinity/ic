@@ -121,10 +121,9 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         algorithm_id: AlgorithmId,
         msg: ByteBuf,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.sign(algorithm_id, msg.into_vec(), key_id);
+        let job = move || vault.sign(algorithm_id, msg.into_vec());
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 
@@ -143,10 +142,9 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         algorithm_id: AlgorithmId,
         message: ByteBuf,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.multi_sign(algorithm_id, message.into_vec(), key_id);
+        let job = move || vault.multi_sign(algorithm_id, message.into_vec());
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 

@@ -3,22 +3,22 @@ use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::local_csp_vault::builder::LocalCspVaultBuilder;
 use crate::{LocalCspVault, SecretKeyStore};
 use assert_matches::assert_matches;
-use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_crypto_internal_test_vectors::multi_bls12_381::{
     TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
-use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use rand::Rng;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
@@ -27,22 +27,6 @@ const KEY_ID: [u8; 32] = [0u8; 32];
 
 mod sign_common {
     use super::*;
-
-    #[test]
-    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
-        let csp = Csp::builder_for_test()
-            .with_vault(
-                LocalCspVault::builder_for_test()
-                    .with_mock_stores()
-                    .with_node_secret_key_store(secret_key_store_returning_none())
-                    .build(),
-            )
-            .build();
-
-        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
-
-        assert!(result.unwrap_err().is_secret_key_not_found());
-    }
 
     #[test]
     #[should_panic]
@@ -62,48 +46,30 @@ mod sign_common {
 
 mod sign_ed25519 {
     use super::*;
+    use crate::keygen::utils::node_signing_pk_to_proto;
 
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
     #[test]
     fn should_correctly_sign() {
-        let (sk, _, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let (sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let node_signing_public_key = node_signing_pk_to_proto(pk);
+        let key_id =
+            KeyId::try_from((AlgorithmId::Ed25519, &node_signing_public_key.key_value)).unwrap();
+
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
                     .with_mock_stores()
-                    .with_node_secret_key_store(secret_key_store_with(KeyId::from(KEY_ID), sk))
-                    .build(),
-            )
-            .build();
-
-        assert_eq!(
-            csp.sign(AlgorithmId::Ed25519, msg, KeyId::from(KEY_ID))
-                .unwrap(),
-            sig
-        );
-    }
-
-    #[test]
-    fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-        let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-            SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
-        ));
-        let csp = Csp::builder_for_test()
-            .with_vault(
-                LocalCspVault::builder_for_test()
-                    .with_mock_stores()
-                    .with_node_secret_key_store(secret_key_store_with(
-                        KeyId::from(KEY_ID),
-                        sk_with_wrong_type,
+                    .with_public_key_store(public_key_store_with_node_signing_pubkey(
+                        node_signing_public_key,
                     ))
+                    .with_node_secret_key_store(secret_key_store_with(key_id, sk))
                     .build(),
             )
             .build();
 
-        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
-
-        assert!(result.unwrap_err().is_invalid_argument());
+        assert_eq!(csp.sign(AlgorithmId::Ed25519, msg, key_id), Ok(sig));
     }
 }
 
@@ -477,11 +443,7 @@ mod verify_ed25519 {
             let sig = csp
                 .csp_vault
                 .as_ref()
-                .sign(
-                    AlgorithmId::Ed25519,
-                    msg.to_vec(),
-                    KeyId::try_from(&pk).expect("Failed to convert CspPublicKey to KeyId"),
-                )
+                .sign(AlgorithmId::Ed25519, msg.to_vec())
                 .expect("Failed to generate a signature");
 
             Self { csp, pk, sig }
@@ -489,16 +451,16 @@ mod verify_ed25519 {
     }
 }
 
-fn secret_key_store_returning_none() -> impl SecretKeyStore {
-    let mut sks = MockSecretKeyStore::new();
-    sks.expect_get().returning(|_| None);
-    sks
-}
-
 fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl SecretKeyStore {
     let mut temp_store = TempSecretKeyStore::new();
     let scope = None;
     temp_store.insert(key_id, secret_key, scope).unwrap();
+    temp_store
+}
+
+fn public_key_store_with_node_signing_pubkey(key: PublicKeyProto) -> impl PublicKeyStore {
+    let mut temp_store = TempPublicKeyStore::new();
+    assert!(temp_store.set_once_node_signing_pubkey(key).is_ok());
     temp_store
 }
 
