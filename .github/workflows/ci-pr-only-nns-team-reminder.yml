@@ -1,0 +1,68 @@
+name: Governance Unreleased Changelog Reminder
+
+on:
+  pull_request:
+    types:
+      - review_requested
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: mainStep
+        # If the PR requires nns-team to approve, GitHub will force nns-team to
+        # be in requested_teams. Therefore, the following condition is always
+        # met when nns-team must approve. (Further filtering takes place in the
+        # script itself.)
+        if: contains(github.event.pull_request.requested_teams.*.name, 'nns-team')
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if we already reminded (to avoid spam).
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const alreadyRemindedAboutUnreleasedChangelog = reviews
+              .data
+              .some(review => review
+                .body
+                .startsWith("If this pull request affects the behavior of any canister owned by")
+              );
+            console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
+            if (alreadyRemindedAboutUnreleasedChangelog) {
+              return;
+            }
+
+            // Post a review to remind the author to update unreleased_changelog.md.
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            console.log("Adding reminder to update unreleased_changelog.md...");
+            const reminderText = `
+              If this pull request affects the behavior of any canister owned by
+              the Governance team, remember to update the corresponding
+              unreleased_changes.md file(s).
+
+              To acknowldge this reminder (and unblock the PR), dismiss this
+              code review by going to the bottom of the pull request page, and
+              supply one of the following reasons:
+
+              1. Done.
+
+              2. No canister behavior changes.
+            `
+            .replace(/^ +/gm, '')
+            .trim();
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: reminderText,
+              // This is what forces the author to explicitly acknowledge.
+              event: "REQUEST_CHANGES",
+            });
+            console.log("Reminder was added successfully.");
