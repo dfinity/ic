@@ -135,26 +135,26 @@ impl Bucket {
             return Some(Decision::Block);
         }
 
-        if let Some(v) = &self.limiter {
-            return Some(
-                if match v {
-                    Limiter::Single(v) => v.try_wait().is_ok(),
-                    Limiter::Sharded(v, prefix) => {
-                        let prefix = match ctx.ip {
-                            IpAddr::V4(_) => prefix.v4,
-                            IpAddr::V6(_) => prefix.v6,
-                        };
+        if let Some(limiter) = &self.limiter {
+            let allowed = match limiter {
+                Limiter::Single(v) => v.try_wait().is_ok(),
+                Limiter::Sharded(v, prefix) => {
+                    let prefix = match ctx.ip {
+                        IpAddr::V4(_) => prefix.v4,
+                        IpAddr::V6(_) => prefix.v6,
+                    };
 
-                        // We assume that the prefix is correct, assert is safe
-                        let net = IpNet::new_assert(ctx.ip, prefix);
-                        v.acquire(net)
-                    }
-                } {
-                    Decision::Pass
-                } else {
-                    Decision::Limit
-                },
-            );
+                    // We assume that the prefix is correct, assert is safe
+                    let net = IpNet::new_assert(ctx.ip, prefix);
+                    v.acquire(net)
+                }
+            };
+
+            return Some(if allowed {
+                Decision::Pass
+            } else {
+                Decision::Limit
+            });
         }
 
         // Should never get here

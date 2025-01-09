@@ -13,12 +13,12 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_registry_keys::API_BOUNDARY_NODE_RECORD_KEY_PREFIX;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use tokio::sync::watch;
@@ -100,7 +100,6 @@ pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
-
 
 #[derive(Clone, Debug)]
 pub struct Subnet {
@@ -207,33 +206,24 @@ impl Snapshotter {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<ApiBoundaryNode>, Error> {
-        let keys = self
+        let node_ids = self
             .registry_client
-            .get_key_family(API_BOUNDARY_NODE_RECORD_KEY_PREFIX, version)
-            .context("unable to get API BN key family")?;
-
-        let node_ids = keys
-            .iter()
-            .map(|k| {
-                // This should be safe I guess
-                PrincipalId::from_str(k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX).unwrap())
-                    .unwrap()
-            })
-            .collect::<Vec<_>>();
+            .get_api_boundary_node_ids(version)
+            .context("unable to get API BN node ids")?;
 
         let nodes = node_ids
             .into_iter()
             .map(|x| -> Result<_, Error> {
                 let node = self
                     .registry_client
-                    .get_node_record(x.into(), version)
+                    .get_node_record(x, version)
                     .context("unable to get node record")?
                     .context("node not available")?;
 
                 let http_endpoint = node.http.context("http endpoint not available")?;
 
                 Ok(ApiBoundaryNode {
-                    id: x.0,
+                    id: x.get().0,
                     addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
                         .context("unable to parse IP address")?,
                     port: http_endpoint.port as u16,
