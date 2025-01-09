@@ -29,27 +29,33 @@ const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 /*
 #[test]
 fn playground() {
-    let seeds = vec![0_u64; 3];
-    let max_payload_bytes = MAX_PAYLOAD_BYTES;
-    let calls_per_round = 1;
-    let reply_weight = 1;
-    let call_weight = 10;
+    let seed = vec![17374506990209185531; 3];
+    let config = CanisterConfig {
+        receivers: vec![],
+        call_bytes: (0, 131),
+        reply_bytes: (0, 0),
+        instructions_count: (0, 0),
+        timeout_secs: (0, 37),
+        calls_per_heartbeat: 2,
+        reply_weight: 3,
+        downstream_call_weight: 0,
+        best_effort_weight: 0,
+        guaranteed_response_weight: 3,
+    };
 
-    if let Err((msg, mut dbg)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-        seeds.as_slice(),
-        max_payload_bytes,
-        calls_per_round as u32,
-        reply_weight as u32,
-        call_weight as u32,
+    if let Err((error_msg, mut nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
+        10,     // chatter_phase_round_count
+        300,    // shutdown_phase_max_rounds
+        &seed,
+        config,
     ) {
-        let r = dbg.records.pop_first().unwrap().1;
-        assert!(false, "{:?}\n\n{}\n\n{:#?}", msg, r.len(), r);
-    } else {
-        //unreachable!();
+        assert!(false, "{}\n\n{:#?}", error_msg, nfo.records.pop_first().unwrap());
+    }
+    else {
+        unreachable!();
     }
 }
 */
-
 prop_compose! {
     /// Generates an arbitrary pair of weights such that w1 + w2 = total > 0.
     fn arb_weights(total: u32)(
@@ -88,7 +94,7 @@ prop_compose! {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
+    #![proptest_config(ProptestConfig::with_cases(5))]
     #[test]
     fn check_guaranteed_response_message_memory_limits_are_respected(
         seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
@@ -186,11 +192,13 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
         )
-    })
+    })?;
+
+    fixture.failed_with_reason("TEST")
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
+    #![proptest_config(ProptestConfig::with_cases(5))]
     #[test]
     fn check_calls_conclude_with_migrating_canister(
         seed in any::<u64>().no_shrink(),
@@ -204,7 +212,57 @@ proptest! {
         ).is_ok());
     }
 }
+/*
+#[test]
+fn playground2() {
+    let seed = 17374506990209185531;
+    let config = CanisterConfig {
+        receivers: vec![],
+        call_bytes: (0, 131),
+        reply_bytes: (0, 0),
+        instructions_count: (0, 0),
+        timeout_secs: (0, 37),
+        calls_per_heartbeat: 2,
+        reply_weight: 3,
+        downstream_call_weight: 0,
+        best_effort_weight: 0,
+        guaranteed_response_weight: 3,
+    };
 
+    if let Err((error_msg, mut nfo)) = check_calls_conclude_with_migrating_canister_impl(
+        10,     // chatter_phase_round_count
+        300,    // shutdown_phase_max_rounds
+        seed,
+        config,
+    ) {
+        assert!(
+            false,
+            "{}\n\n{:#?}\n\n{:#?}",
+            error_msg,
+            nfo.records.pop_first().unwrap(),
+            nfo
+                //.local_env
+                .remote_env
+                .get_latest_state()
+                .canister_states
+                .iter()
+                .filter_map(|(canister_id, canister_state)| Some(
+                    (canister_id, (canister_state.system_state.get_status(), canister_state.system_state.queues()))
+                ))
+
+                //.filter_map(|(canister_id, canister_state)| canister_state.has_input().then_some(
+                //    (canister_id, canister_state.system_state.queues())
+                //))
+                //.map(|(canister_id, canister_state)| (canister_id, canister_state.has_input()))
+                .collect::<BTreeMap<_, _>>(),
+        );
+//        assert!(false, "{}\n\n{:#?}", error_msg, nfo.remote_env.get_latest_state().canister_states);
+    }
+    else {
+        unreachable!();
+    }
+}
+*/
 /// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
 /// remote subnet with 5 canisters installed. All canisters, except one local canister referred to
 /// as `migrating_canister`, are stopped.
@@ -236,8 +294,6 @@ fn check_calls_conclude_with_migrating_canister_impl(
     });
 
     config.receivers = fixture.canisters();
-//    config.best_effort_weight = 0;
-//    config.guaranteed_response_weight = 1;
 
     let migrating_canister = fixture.local_canisters.first().unwrap().clone();
 
@@ -248,6 +304,9 @@ fn check_calls_conclude_with_migrating_canister_impl(
     // Stop all canisters except `migrating_canister`.
     for canister in fixture.canisters() {
         if canister != migrating_canister {
+            // Make sure the canister doesn't make calls when it is
+            // put into running state to read its records.
+            fixture.stop_chatter(canister);
             fixture.stop_canister_non_blocking(canister);
         }
     }
@@ -475,6 +534,9 @@ impl Fixture {
     /// Force queries the records from `canister` by first attempting to query them; if it fails, start
     /// the canister and try querying them again.
     ///
+    /// Note: If the canister is configured to make calls, starting it will trigger calls before
+    ///       the records are returned.
+    ///
     /// Panics if `canister` is not installed in `Self`.
     pub fn force_query_records(&self, canister: CanisterId) -> BTreeMap<u32, CanisterRecord> {
         match self.query_records(canister) {
@@ -675,8 +737,8 @@ impl Fixture {
                     .into_iter()
                     .map(|canister| (canister, self.force_query_records(canister)))
                     .collect(),
-                latest_local_state: self.local_env.get_latest_state(),
-                latest_remote_state: self.remote_env.get_latest_state(),
+                local_env: self.local_env.clone(),
+                remote_env: self.remote_env.clone(),
             },
         ))
     }
@@ -686,8 +748,8 @@ impl Fixture {
 #[allow(dead_code)]
 struct DebugInfo {
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
-    pub latest_local_state: Arc<ReplicatedState>,
-    pub latest_remote_state: Arc<ReplicatedState>,
+    pub local_env: Arc<StateMachine>,
+    pub remote_env: Arc<StateMachine>,
 }
 
 /// Installs a 'random-traffic-test-canister' in `env`.

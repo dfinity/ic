@@ -2144,7 +2144,8 @@ impl SystemState {
     /// following a canister migration, based on the updated set of local canisters.
     ///
     /// See [`CanisterQueues::split_input_schedules`] for further details.
-    pub(crate) fn split_input_schedules(
+    pub fn split_input_schedules(
+        //pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,

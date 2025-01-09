@@ -2632,7 +2632,7 @@ impl StateMachine {
             }
         }
 
-        let canister_state = ic_state_manager::checkpoint::load_canister_state(
+        let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
             ic_types::Height::new(0),
@@ -2649,7 +2649,14 @@ impl StateMachine {
         .0;
 
         let (h, mut state) = self.state_manager.take_tip();
+
+        // Repartition input schedules; Required step for migrating canisters.
+        canister_state
+            .system_state
+            .split_input_schedules(&canister_id, &state.canister_states);
+
         state.put_canister_state(canister_state);
+
         self.state_manager.commit_and_certify(
             state,
             h.increment(),
