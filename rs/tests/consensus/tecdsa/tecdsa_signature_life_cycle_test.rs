@@ -100,7 +100,7 @@ fn test(env: TestEnv) {
                     ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
-                error_code: None,
+                error_code: Some("IC0406".to_string()),
             })
         );
         assert_eq!(
@@ -121,7 +121,7 @@ fn test(env: TestEnv) {
                     existing enabled keys: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
-                error_code: None,
+                error_code: Some("IC0406".to_string()),
             })
         );
 
@@ -228,7 +228,7 @@ fn test(env: TestEnv) {
                                 existing enabled keys: []\")",
                                 method_name, key_id
                             ),
-                            error_code: None
+                            error_code: Some("IC0406".to_string())
                         })
                     );
                     break;

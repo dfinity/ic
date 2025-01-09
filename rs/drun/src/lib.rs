@@ -250,6 +250,7 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
+            &state_manager.state_layout().tmp(),
         )
         .into_parts();
 

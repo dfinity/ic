@@ -43,9 +43,16 @@ type CanisterSummary = record {
   canister_id : opt principal;
 };
 
+type ChunkedCanisterWasm = record {
+  wasm_module_hash : blob;
+  store_canister_id : principal;
+  chunk_hashes_list : vec blob;
+};
+
 type ChangeCanisterRequest = record {
   arg : blob;
   wasm_module : blob;
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
