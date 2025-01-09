@@ -1,6 +1,5 @@
 use arbitrary::{Arbitrary, Unstructured};
 use clap::Parser;
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::replica_logger::no_op_logger;
 use std::fs::File;
 use std::io;
