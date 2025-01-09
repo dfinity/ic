@@ -275,7 +275,15 @@ where
                 left,
                 right,
             } => {
-                debug_assert!(left.len() > 0 && right.len() > 0);
+                // Neither `left` nor `right` must be `Tree::Empty`.
+                #[cfg(debug_assertions)]
+                match (left.as_ref(), right.as_ref()) {
+                    (Tree::Empty, _) | (_, Tree::Empty) => {
+                        panic!("Unexpected empty branch")
+                    }
+                    _ => {}
+                }
+
                 if !matches_prefix(key, *prefix, *branching_bit) {
                     None
                 } else if key & (I::one() << *branching_bit) == I::zero() {
