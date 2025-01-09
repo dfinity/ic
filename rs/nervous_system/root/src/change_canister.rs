@@ -27,7 +27,7 @@ pub struct ChunkedCanisterWasm {
     /// Indicates which canister stores the WASM chunks. The store canister must be on the same
     /// subnet as the target canister (Root must be one of the controllers of both of them).
     /// May be the same as the target canister ID.
-    pub store_canister_id: Option<CanisterId>,
+    pub store_canister_id: CanisterId,
 
     /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain
     /// at least one chunk.
@@ -143,7 +143,7 @@ impl ChangeCanisterRequest {
     pub fn with_chunked_wasm(
         mut self,
         wasm_module_hash: Vec<u8>,
-        store_canister_id: Option<CanisterId>,
+        store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     ) -> Self {
         self.chunked_canister_wasm = Some(ChunkedCanisterWasm {
@@ -311,7 +311,7 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
     }) = chunked_canister_wasm
     {
         let target_canister = canister_id;
-        let store_canister = store_canister_id.map(CanisterId::get);
+        let store_canister = Some(store_canister_id.get());
         let chunk_hashes_list = chunk_hashes_list
             .into_iter()
             .map(|hash| ChunkHash { hash })

@@ -39,18 +39,20 @@ use crate::{
     proposal::ValidGenericNervousSystemFunction,
 };
 use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_management_canister_types::CanisterInstallModeError;
+use ic_management_canister_types::{CanisterIdRecord, CanisterInstallModeError, StoredChunksReply};
 use ic_nervous_system_common::{
     hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
+use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
@@ -71,6 +73,12 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
+
+/// The maximum message size for inter-canister calls to a different subnet
+/// is 2MiB and thus we restrict the maximum joint size of the canister WASM
+/// and argument to 2MB (2,000,000B) to leave some slack for Candid overhead
+/// and a few constant-size fields (e.g., compute and memory allocation).
+pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 
 /// The Governance spec gives each Action a u64 equivalent identifier. This module gives
 /// those u64 values a human-readable const variable for use in the SNS.
@@ -2533,9 +2541,164 @@ pub enum Wasm {
     Bytes(Vec<u8>),
     Chunked {
         wasm_module_hash: Vec<u8>,
-        store_canister_id: Option<CanisterId>,
+        store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     },
+}
+
+/// Returns the sha256sum of `new_canister_wasm` in Ok result, list of defects in Err result.
+fn validate_wasm_bytes(
+    new_canister_wasm: &Vec<u8>,
+    canister_upgrade_arg: &Option<Vec<u8>>,
+) -> Result<Vec<u8>, Vec<String>> {
+    let mut defects = vec![];
+
+    // See https://ic-interface-spec.netlify.app/#canister-module-format
+    const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
+
+    if new_canister_wasm.len() < 4
+        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+    {
+        defects.push("new_canister_wasm lacks the magic value in its header.".into());
+    }
+
+    if new_canister_wasm.len().saturating_add(
+        canister_upgrade_arg
+            .as_ref()
+            .map(|arg| arg.len())
+            .unwrap_or_default(),
+    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+    {
+        defects.push(format!(
+            "the maximum canister WASM and argument size \
+            for UpgradeSnsControlledCanister is {} bytes.",
+            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        ));
+    }
+    if !defects.is_empty() {
+        return Err(defects);
+    }
+
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(&new_canister_wasm[..]);
+        let sha = state.finish();
+        sha.to_vec()
+    };
+    Ok(canister_wasm_sha256)
+}
+
+/// Returns the sha256sum of `new_canister_wasm` in Ok result, list of defects in Err result.
+async fn validate_chunked_wasm(
+    env: &dyn Environment,
+    wasm_module_hash: &Vec<u8>,
+    store_canister_id: CanisterId,
+    chunk_hashes_list: &Vec<Vec<u8>>,
+) -> Result<Vec<u8>, Vec<String>> {
+    let mut defects = vec![];
+
+    match &chunk_hashes_list[..] {
+        [] => {
+            let defect = "chunked_canister_wasm.chunk_hashes_list cannot be empty.".to_string();
+            defects.push(defect);
+        }
+        [chunk_hash] if wasm_module_hash != chunk_hash => {
+            let defect = format!(
+                "chunked_canister_wasm.chunk_hashes_list specifies only one hash ({}), but \
+                it differs from chunked_canister_wasm.wasm_module_hash ({}).",
+                format_full_hash(chunk_hash),
+                format_full_hash(&wasm_module_hash[..]),
+            );
+            defects.push(defect);
+        }
+        _ => (),
+    }
+
+    let arg = match Encode!(&CanisterIdRecord::from(store_canister_id)) {
+        Ok(arg) => arg,
+        Err(err) => {
+            let defect = format!("Cannot encode stored_chunks arg: {err}");
+            defects.push(defect);
+            return Err(defects);
+        }
+    };
+
+    let stored_chunks_response = env
+        .call_canister(CanisterId::ic_00(), "stored_chunks", arg)
+        .await;
+
+    let stored_chunks_response = match stored_chunks_response {
+        Ok(stored_chunks_response) => stored_chunks_response,
+        Err(err) => {
+            let defect = format!("Cannot call stored_chunks for {store_canister_id}: {err:?}");
+            defects.push(defect);
+            return Err(defects);
+        }
+    };
+
+    let stored_chunks_response = match Decode!(&stored_chunks_response, StoredChunksReply) {
+        Ok(stored_chunks_response) => stored_chunks_response,
+        Err(err) => {
+            let defect = format!(
+                "Cannot decode response from calling stored_chunks for {store_canister_id}: {err}"
+            );
+            defects.push(defect);
+            return Err(defects);
+        }
+    };
+
+    // Finally, check that the expected chunks were sucessfully uploaded to the store canister.
+    let stored_chunks = stored_chunks_response
+        .0
+        .iter()
+        .map(|chunk| format_full_hash(&chunk.hash))
+        .collect::<BTreeSet<_>>();
+    let expected_chunks = chunk_hashes_list
+        .iter()
+        .map(|chunk| format_full_hash(chunk))
+        .collect::<BTreeSet<_>>();
+
+    if !expected_chunks.is_subset(&stored_chunks) {
+        let missing_chunks = expected_chunks
+            .difference(&stored_chunks)
+            .cloned()
+            .collect::<Vec<_>>();
+        let defect = format!(
+            "{} out of {} expected WASM chunks were not uploaded to the store canister: {}",
+            missing_chunks.len(),
+            expected_chunks.len(),
+            missing_chunks.join(", ")
+        );
+        defects.push(defect);
+    }
+
+    if !defects.is_empty() {
+        return Err(defects);
+    }
+
+    Ok(wasm_module_hash.clone())
+}
+
+impl Wasm {
+    pub async fn validate(
+        &self,
+        env: &dyn Environment,
+        canister_upgrade_arg: &Option<Vec<u8>>,
+    ) -> Result<Vec<u8>, Vec<String>> {
+        match self {
+            Self::Bytes(bytes) => validate_wasm_bytes(bytes, canister_upgrade_arg),
+            Self::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            } => {
+                validate_chunked_wasm(env, wasm_module_hash, *store_canister_id, chunk_hashes_list)
+                    .await
+            }
+        }
+    }
 }
 
 impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
@@ -2556,15 +2719,18 @@ impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
                     chunk_hashes_list,
                 }),
             ) => {
-                let store_canister_id = if let Some(store_canister_id) = store_canister_id {
-                    let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
-                        .map_err(|err| {
+                let Some(store_canister_id) = store_canister_id else {
+                    return Err(format!(
+                        "{ERR_PREFIX}.chunked_canister_wasm.store_canister_id must be \
+                             specified."
+                    ));
+                };
+
+                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                    .map_err(|err| {
                         format!("{ERR_PREFIX}.chunked_canister_wasm.store_canister_id: {err}")
                     })?;
-                    Some(store_canister_id)
-                } else {
-                    None
-                };
+
                 Ok(Self::Chunked {
                     wasm_module_hash: wasm_module_hash.clone(),
                     store_canister_id,

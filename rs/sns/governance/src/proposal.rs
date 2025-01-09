@@ -41,6 +41,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
+use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -92,12 +93,6 @@ pub const EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECON
 /// Analogous to the previous constant; this one is for MintSnsTokens proposals. The value here is
 /// the same, but we keep separate constants, because we consider this to be a coincidence.
 pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * ONE_DAY_SECONDS;
-
-/// The maximum message size for inter-canister calls to a different subnet
-/// is 2MiB and thus we restrict the maximum joint size of the canister WASM
-/// and argument to 2MB (2,000,000B) to leave some slack for Candid overhead
-/// and a few constant-size fields (e.g., compute and memory allocation).
-pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
@@ -412,7 +407,7 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-            validate_and_render_upgrade_sns_controlled_canister(upgrade)
+            validate_and_render_upgrade_sns_controlled_canister(upgrade, env).await
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
             match governance_proto.deployed_version_or_err() {
@@ -1038,8 +1033,9 @@ impl TokenProposalAction for MintSnsTokens {
 }
 
 /// Validates and renders a proposal with action UpgradeSnsControlledCanister.
-fn validate_and_render_upgrade_sns_controlled_canister(
+async fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
+    env: &dyn Environment,
 ) -> Result<String, String> {
     let mut defects = vec![];
 
@@ -1051,12 +1047,12 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     };
 
     let UpgradeSnsControlledCanister {
-        canister_id: _,
+        canister_id,
         canister_upgrade_arg,
         mode,
         // The WASM-related fields are extracted separately.
-        chunked_canister_wasm: _chunked_canister_wasm,
-        new_canister_wasm: _new_canister_wasm,
+        chunked_canister_wasm: _,
+        new_canister_wasm: _,
     } = upgrade;
 
     // Make sure `mode` is not None, and not an invalid/unknown value.
@@ -1069,78 +1065,47 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     let mode = upgrade.mode_or_upgrade();
 
     // Inspect canister_id.
-    let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
-    match validate_required_field("canister_id", &upgrade.canister_id) {
+    let canister_id = match validate_required_field("canister_id", &canister_id) {
         Err(err) => {
             defects.push(err);
+            None
         }
-        Ok(id) => {
-            canister_id = *id;
-        }
-    }
-
-    // Inspect wasm.
-    const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
-    // see https://ic-interface-spec.netlify.app/#canister-module-format
-    const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
-
-    let wasm = match Wasm::try_from(upgrade) {
-        Err(err) => {
-            defects.push(err);
-            return generate_final_report(defects);
-        }
-        Ok(wasm) => wasm,
+        Ok(principal_id) => match CanisterId::try_from_principal_id(*principal_id) {
+            Ok(canister_id) => Some(canister_id),
+            Err(err) => {
+                let defect = format!(
+                    "UpgradeSnsControlledCanister.canister_id is invalid: {:?}",
+                    err
+                );
+                defects.push(defect);
+                None
+            }
+        },
     };
 
-    let canister_wasm_sha256 = match wasm {
-        Wasm::Bytes(new_canister_wasm) => {
-            if new_canister_wasm.len() < 4
-                || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-                    && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
-            {
-                defects.push("new_canister_wasm lacks the magic value in its header.".into());
-            }
-
-            if new_canister_wasm.len().saturating_add(
-                canister_upgrade_arg
-                    .as_ref()
-                    .map(|arg| arg.len())
-                    .unwrap_or_default(),
-            ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-            {
-                defects.push(format!(
-                    "the maximum canister WASM and argument size \
-                    for UpgradeSnsControlledCanister is {} bytes.",
-                    MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
-                ));
-            }
-
-            let canister_wasm_sha256 = {
-                let mut state = Sha256::new();
-                state.write(&new_canister_wasm[..]);
-                let sha = state.finish();
-                hex::encode(sha)
-            };
-            canister_wasm_sha256
+    // Inspect wasm.
+    let canister_wasm_sha256 = match Wasm::try_from(upgrade) {
+        Err(err) => {
+            defects.push(err);
+            None
         }
-        Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        } => {
-            // TODO: check that chunk_hashes_list.len() > 0
-            // TODO: check that chunk_hashes_list.len() == 1 ==> chunk_hashes_list[0] == wasm_module_hash
-            // TODO: call store.list_chunks() and check it returns a superset of chunk_hashes_list.
-            todo!();
-
-            wasm_module_hash
-        }
+        Ok(wasm) => match wasm.validate(env, canister_upgrade_arg).await {
+            Err(new_defects) => {
+                defects.extend(new_defects.into_iter());
+                None
+            }
+            Ok(canister_wasm_sha256) => Some(format_full_hash(&canister_wasm_sha256)),
+        },
     };
 
     // Generate final report.
     if !defects.is_empty() {
         return generate_final_report(defects);
     }
+
+    // It is now safe to unwrap the values required for rendering the proposal.
+    let canister_id = canister_id.unwrap();
+    let canister_wasm_sha256 = canister_wasm_sha256.unwrap();
 
     let upgrade_args_sha_256 = canister_upgrade_arg
         .as_ref()
@@ -2586,8 +2551,8 @@ mod tests {
     use crate::{
         pb::v1::{
             governance::{self, Version},
-            Ballot, Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId,
-            Subaccount, WaitForQuietState,
+            Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
+            ProposalId, Subaccount, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -2601,6 +2566,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
+    use ic_management_canister_types::{CanisterIdRecord, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -2803,8 +2769,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn render_upgrade_sns_controlled_canister_proposal() {
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal() {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
@@ -2812,7 +2778,10 @@ mod tests {
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
         };
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap();
 
         assert_eq!(
             text,
@@ -2829,8 +2798,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
@@ -2838,7 +2807,10 @@ mod tests {
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
         };
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap();
 
         assert_eq!(
             text,
@@ -2855,8 +2827,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
@@ -2864,11 +2836,14 @@ mod tests {
             mode: Some(100), // 100 is not a valid mode
             chunked_canister_wasm: None,
         };
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap_err();
         assert!(text.contains("Invalid mode"));
     }
 
-    fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
+    async fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
@@ -2876,9 +2851,12 @@ mod tests {
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
         };
-        assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(
+        let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
-        ));
+            &setup_for_upgrade_sns_controlled_canister_without_chunks(),
+        )
+        .await;
+        assert_is_ok(result);
 
         let mut result = basic_motion_proposal();
         result.action = Some(proposal::Action::UpgradeSnsControlledCanister(upgrade));
@@ -2889,82 +2867,102 @@ mod tests {
         result
     }
 
-    fn assert_validate_upgrade_sns_controlled_canister_is_err(proposal: &Proposal) {
+    async fn assert_validate_upgrade_sns_controlled_canister_is_err(
+        proposal: &Proposal,
+        env: &dyn Environment,
+    ) {
         assert_is_err(validate_default_proposal(proposal));
         assert_is_err(validate_default_action(&proposal.action));
 
         match proposal.action.as_ref().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade))
+                let result =
+                    validate_and_render_upgrade_sns_controlled_canister(upgrade, env).await;
+                assert_is_err(result)
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
     }
 
-    #[test]
-    fn upgrade_must_have_canister_id() {
-        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+    #[tokio::test]
+    async fn upgrade_must_have_canister_id() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal().await;
 
         // Create a defect.
-        match proposal.action.as_mut().unwrap() {
+        let env = match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 upgrade.canister_id = None;
-                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
+                let result =
+                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                assert_is_err(result);
+                env
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
-        }
+        };
 
-        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env).await;
     }
 
     /// The minimum WASM is 8 bytes long. Therefore, we must not allow the
     /// new_canister_wasm field to be empty.
-    #[test]
-    fn upgrade_wasm_must_be_non_empty() {
-        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+    #[tokio::test]
+    async fn upgrade_wasm_must_be_non_empty() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal().await;
 
         // Create a defect.
-        match proposal.action.as_mut().unwrap() {
+        let env = match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 upgrade.new_canister_wasm = vec![];
-                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
+                let result =
+                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                assert_is_err(result);
+                env
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
-        }
+        };
 
-        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env);
     }
 
-    #[test]
-    fn upgrade_wasm_must_not_be_dead_beef() {
-        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+    #[tokio::test]
+    async fn upgrade_wasm_must_not_be_dead_beef() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal().await;
 
         // Create a defect.
-        match proposal.action.as_mut().unwrap() {
+        let env = match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 // This is invalid, because it does not have the magical first
                 // four bytes that a WASM is supposed to have. (Instead, the
                 // first four bytes of this Vec are 0xDeadBeef.)
                 upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
                 assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
-                assert_is_err(validate_and_render_upgrade_sns_controlled_canister(upgrade));
+                let result =
+                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                assert_is_err(result);
+                env
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
-        }
+        };
 
-        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+        assert_validate_upgrade_sns_controlled_canister_is_err(&proposal, &env);
     }
 
-    #[test]
-    fn upgrade_wasm_can_be_gzipped() {
-        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+    #[tokio::test]
+    async fn upgrade_wasm_can_be_gzipped() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal().await;
 
         match proposal.action.as_mut().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 upgrade.new_canister_wasm =
                     vec![0x1f, 0x8b, 0x08, 0x08, 0xa3, 0x8e, 0xcf, 0x63, 0, 0x03];
                 assert!(upgrade.new_canister_wasm.len() >= 8); // The minimum wasm len.
-                assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(upgrade));
+                let result =
+                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                assert_is_ok(result);
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
         }
@@ -3273,6 +3271,47 @@ mod tests {
             0,
             0,
         )
+    }
+
+    fn setup_for_upgrade_sns_controlled_canister_without_chunks() -> NativeEnvironment {
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.default_canister_call_response = Err((Some(1), "Unexpected call!".to_string()));
+        env
+    }
+
+    fn setup_for_upgrade_sns_controlled_canister_tests(
+        upgrade: &UpgradeSnsControlledCanister,
+    ) -> NativeEnvironment {
+        let UpgradeSnsControlledCanister {
+            canister_id,
+            new_canister_wasm,
+            canister_upgrade_arg,
+            mode,
+            chunked_canister_wasm,
+        } = upgrade;
+
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+        env.default_canister_call_response =
+            Err((Some(1), "Oh no something was not covered!".to_string()));
+
+        if let Some(ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        }) = chunked_canister_wasm
+        {
+            env.set_call_canister_response(
+                CanisterId::ic_00(),
+                "stored_chunks",
+                Encode!(&CanisterIdRecord::from(store_canister_id.clone().unwrap())).unwrap(),
+                Ok(Encode!(&StoredChunksReply(chunk_hashes_list.clone())).unwrap()),
+            );
+        };
+
+        env
     }
 
     /// This assumes that the current_version is:
