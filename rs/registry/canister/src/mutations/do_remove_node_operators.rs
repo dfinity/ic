@@ -9,8 +9,6 @@ use ic_registry_keys::{make_node_operator_record_key, NODE_RECORD_KEY_PREFIX};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use serde::{Deserialize, Serialize};
 
-use std::convert::TryFrom;
-
 use ic_protobuf::registry::node::v1::NodeRecord;
 use prost::Message;
 
@@ -21,20 +19,15 @@ impl Registry {
 
         let mut mutations = vec![];
 
-        // Node Operator IDs that are parsable as PrincipalIds and have an associated
-        // NodeOperatorRecord in the Registry
+        // Filter Node Operator IDs that have an associated NodeOperatorRecord in the Registry
         let mut valid_node_operator_ids = payload
             .node_operators_to_remove
             .into_iter()
-            .filter_map(|bytes| {
-                PrincipalId::try_from(bytes)
-                    .ok()
-                    .filter(|node_operator_id| {
-                        let node_operator_record_key =
-                            make_node_operator_record_key(*node_operator_id).into_bytes();
-                        self.get(&node_operator_record_key, self.latest_version())
-                            .is_some()
-                    })
+            .filter(|node_operator_id| {
+                let node_operator_record_key =
+                    make_node_operator_record_key(*node_operator_id).into_bytes();
+                self.get(&node_operator_record_key, self.latest_version())
+                    .is_some()
             })
             .collect();
 
