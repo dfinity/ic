@@ -78,7 +78,7 @@ fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 extern "C" {
     fn install_backtrace_handler();
 }
