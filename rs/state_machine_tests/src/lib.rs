@@ -2547,9 +2547,6 @@ impl StateMachine {
     /// After you import the canister, you can execute methods on it and upgrade it.
     /// The original directory is not modified.
     ///
-    /// The function is currently not used in code, but it is useful for local
-    /// testing and debugging. Do not remove it.
-    ///
     /// # Panics
     ///
     /// This function panics if loading the canister snapshot fails.
@@ -2558,6 +2555,8 @@ impl StateMachine {
         canister_directory: P,
         canister_id: CanisterId,
     ) {
+        use ic_replicated_state::testing::SystemStateTesting;
+
         let canister_directory = canister_directory.as_ref();
         assert!(
             canister_directory.is_dir(),
