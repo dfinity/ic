@@ -1,8 +1,8 @@
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::incoming_from_nth_systemd_socket;
 use ic_config::{Config, ConfigSource};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_http_endpoints_async_utils::incoming_from_nth_systemd_socket;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use std::os::unix::io::FromRawFd;
@@ -22,7 +22,7 @@ const IC_CRYPTO_CSP_SOCKET_FILENAME: &str = "ic-crypto-csp.socket";
 )]
 struct Opts {
     /// Sets the replica configuration file
-    #[clap(long = "replica-config-file", parse(from_os_str))]
+    #[clap(long = "replica-config-file")]
     config: PathBuf,
 }
 

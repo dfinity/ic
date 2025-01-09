@@ -177,8 +177,6 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Start testing. Advance the state machine so the heartbeat triggers
     // at the new time.
     state_machine.tick();
-    // Wait to ensure that the call to the exchange rate canister completes.
-    state_machine.run_until_completion(10_000);
 
     // Step 3: Verify that the rate has been set by calling the cycles minting canister.
     let response = get_icp_xdr_conversion_rate(&state_machine);
@@ -207,8 +205,6 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
     // Trigger the heartbeat.
     state_machine.tick();
-    // Wait to ensure that the call to the exchange rate canister completes.
-    state_machine.run_until_completion(10_000);
 
     let response = get_icp_xdr_conversion_rate(&state_machine);
     // The rate's timestamp should be the CMC's first rate timestamp + 5 minutes + 10 secs.
@@ -380,8 +376,6 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Start testing. Advance the state machine so the heartbeat triggers
     // at the new time.
     state_machine.tick();
-    // Wait to ensure that the call to the exchange rate canister completes.
-    state_machine.run_until_completion(10_000);
 
     // Step 3: Verify that the rate has been set by calling the cycles minting canister.
     let response = get_icp_xdr_conversion_rate(&state_machine);

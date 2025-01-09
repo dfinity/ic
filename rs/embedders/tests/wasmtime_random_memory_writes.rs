@@ -1,5 +1,6 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
@@ -17,7 +18,6 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::MemoryAllocation;
 use ic_types::{
-    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
@@ -66,7 +66,7 @@ fn test_api_for_update(
         call_context_test_id(13),
     );
 
-    let static_system_state = SandboxSafeSystemState::new(
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
@@ -77,7 +77,8 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        Default::default(),
         Some(caller),
         api_type.call_context_id(),
     );
@@ -99,6 +100,9 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

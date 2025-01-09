@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/fake",
@@ -52,7 +53,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_temp_crypto",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -61,7 +61,6 @@ rust_test(
     name = "temp_crypto_test",
     aliases = ALIASES,
     crate = ":temp_crypto",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -69,7 +68,6 @@ rust_test(
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":temp_crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

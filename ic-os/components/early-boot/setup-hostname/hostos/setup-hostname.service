@@ -1,6 +1,5 @@
 [Unit]
 Description=Set up hostname
-Before=systemd-networkd.target
 DefaultDependencies=no
 Before=systemd-networkd.service
 After=systemd-tmpfiles-setup.service

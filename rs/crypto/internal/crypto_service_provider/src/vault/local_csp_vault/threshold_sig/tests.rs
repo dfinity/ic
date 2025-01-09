@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for threshold signature implementations
 
 use crate::vault::local_csp_vault::LocalCspVault;

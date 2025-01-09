@@ -1,13 +1,18 @@
 pub mod host_memory;
 mod signal_stack;
-mod system_api;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod system_api;
 pub mod system_api_complexity;
 
 use std::{
     cell::Ref,
     collections::HashMap,
     convert::TryFrom,
+    fs::File,
     mem::size_of,
+    os::fd::{AsRawFd, IntoRawFd},
+    os::unix::fs::MetadataExt,
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -34,6 +39,7 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -58,7 +64,7 @@ pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
 pub(crate) const MAX_STORE_TABLES: usize = 1;
-pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
+pub(crate) const MAX_STORE_TABLE_ELEMENTS: usize = 1_000_000;
 
 fn demangle(func_name: &str) -> String {
     if let Ok(name) = rustc_demangle::try_demangle(func_name) {
@@ -330,6 +336,42 @@ impl WasmtimeEmbedder {
         self.pre_instantiate(&module)
     }
 
+    /// TODO(EXC-1800): Replace this with `wasmtime::Module::deserialize_open_file`.
+    fn deserialize_from_file(&self, serialized_module: &File) -> HypervisorResult<Module> {
+        let mmap_size = serialized_module.metadata().unwrap().size() as usize;
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
+                serialized_module.as_raw_fd(),
+                0,
+            )
+        }
+        .unwrap_or_else(|err| panic!("Module deserialization failed: {:?}", err))
+            as *mut u8;
+        let bytes = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+        unsafe {
+            Module::deserialize(&self.create_engine()?, bytes).map_err(|err| {
+                HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
+                    format!("{:?}", err),
+                ))
+            })
+        }
+    }
+
+    pub fn read_file_and_pre_instantiate(
+        &self,
+        serialized_module: File,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        // TODO(EXC-1800): Switch to new wasmtime API and remove leaking the
+        // file.
+        let module = self.deserialize_from_file(&serialized_module)?;
+        let _ = serialized_module.into_raw_fd();
+        self.pre_instantiate(&module)
+    }
+
     fn list_memory_infos(
         &self,
         modification_tracking: ModificationTracking,
@@ -531,6 +573,14 @@ impl WasmtimeEmbedder {
                 main_memory_type = WasmMemoryType::Wasm64;
             }
         }
+        let dirty_page_overhead = match main_memory_type {
+            WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
+            WasmMemoryType::Wasm64 => NumInstructions::from(
+                self.config.dirty_page_overhead.get()
+                    * self.config.wasm64_dirty_page_overhead_multiplier,
+            ),
+        };
+
         Ok(WasmtimeInstance {
             instance,
             memory_trackers,
@@ -542,7 +592,7 @@ impl WasmtimeEmbedder {
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
-            dirty_page_overhead: self.config.dirty_page_overhead,
+            dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: current_accessed_limit,
@@ -1035,7 +1085,7 @@ impl WasmtimeInstance {
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'table' is not a table".to_string(),
                     })?
-                    .get(&mut self.store, closure.func_idx)
+                    .get(&mut self.store, closure.func_idx as u64)
                     .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
                     .as_func()
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {

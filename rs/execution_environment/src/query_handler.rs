@@ -33,7 +33,7 @@ use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
+    CanisterId, NumInstructions, PrincipalId, SubnetId,
 };
 use prometheus::Histogram;
 use serde::Serialize;
@@ -53,6 +53,9 @@ pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
+
+const DISTRIKT_SUBNET_PRINCIPAL: &str =
+    "shefu-t3kr5-t5q3w-mqmdq-jabyv-vyvtf-cyyey-3kmo4-toyln-emubw-4qe";
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -100,6 +103,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -139,6 +143,7 @@ impl InternalHttpQueryHandler {
     pub fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -152,6 +157,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -248,11 +254,16 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
+        // We apply the (rather high) subnet soft limit for callbacks because the
+        // instruction limit for the whole composite query tree imposes a much lower
+        // implicit bound anyway.
+        let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
+            self.own_subnet_id,
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -260,6 +271,8 @@ impl InternalHttpQueryHandler {
             state.clone(),
             data_certificate,
             subnet_available_memory,
+            subnet_available_callbacks,
+            self.config.canister_guaranteed_callback_quota as u64,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,

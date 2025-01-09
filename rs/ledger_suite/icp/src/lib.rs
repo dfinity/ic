@@ -807,6 +807,26 @@ impl NotifyCanisterArgs {
 
 /// Arguments taken by the account_balance candid endpoint.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct AccountIdentifierByteBuf {
+    pub account: ByteBuf,
+}
+
+impl TryFrom<AccountIdentifierByteBuf> for BinaryAccountBalanceArgs {
+    type Error = String;
+
+    fn try_from(value: AccountIdentifierByteBuf) -> Result<Self, Self::Error> {
+        Ok(BinaryAccountBalanceArgs {
+            account: AccountIdBlob::try_from(value.account.as_slice()).map_err(|_| {
+                format!(
+                    "Invalid account identifier length (expected 32, got {})",
+                    value.account.len()
+                )
+            })?,
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct BinaryAccountBalanceArgs {
     pub account: AccountIdBlob,
 }
@@ -1038,6 +1058,12 @@ impl TryFrom<CandidBlock> for Block {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct IcpAllowanceArgs {
+    pub account: AccountIdentifier,
+    pub spender: AccountIdentifier,
+}
+
 /// Argument taken by the transfer fee endpoint
 ///
 /// The reason it is a struct is so that it can be extended -- e.g., to be able
@@ -1090,7 +1116,7 @@ pub struct TipOfChainRes {
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
-    pub length: usize,
+    pub length: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
@@ -1237,6 +1263,7 @@ pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
 
 #[cfg(test)]
 mod test {
+    use ic_stable_structures::storable::Storable;
     use std::str::FromStr;
 
     use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
@@ -1398,6 +1425,13 @@ mod test {
             let encoded = block.clone().encode();
             let decoded = Block::decode(encoded).expect("Unable to decode block!");
             prop_assert_eq!(block, decoded)
+        })
+    }
+
+    #[test]
+    fn test_storable_serialization() {
+        proptest!(|(a in arb_account())| {
+            prop_assert_eq!(AccountIdentifier::from_bytes(a.to_bytes()), a)
         })
     }
 }

@@ -3,12 +3,13 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg, idkg};
+use ic_consensus::{certification::CertifierImpl, idkg};
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
@@ -115,7 +116,11 @@ fn consensus_produces_expected_batches() {
                     .build(),
             )],
         );
-        let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
+        let summary = ic_consensus_dkg::make_genesis_summary(
+            &*registry_client,
+            replica_config.subnet_id,
+            None,
+        );
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
@@ -156,8 +161,9 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(router.clone());
-        let dkg = dkg::DkgImpl::new(
+        let consensus_bouncer =
+            ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
+        let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
@@ -200,20 +206,23 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY);
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY);
         driver.step(); // this stops before notary timeout expires after making 3rd block
 
+        let backlog_delay_millis = 2000;
         // Make a few more batches past the summary.
-        for _ in 0..=DKG_INTERVAL_LENGTH {
-            time_source.advance_time(Duration::from_millis(2000));
+        for i in 0..=DKG_INTERVAL_LENGTH {
+            time_source.advance_time(
+                INITIAL_NOTARY_DELAY + Duration::from_millis((i + 2) * backlog_delay_millis),
+            );
             driver.step();
         }
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
-        // Plus 2 initial driver steps.
-        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
+        // Plus 3 initial driver steps.
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 3);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
         let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(

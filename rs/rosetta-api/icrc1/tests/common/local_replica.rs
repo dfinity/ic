@@ -2,17 +2,17 @@
 use candid::{Encode, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
-use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Identity};
+use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
-use ic_icrc1_ledger_sm_tests::{
+use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_suite_state_machine_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
     TOKEN_NAME, TOKEN_SYMBOL,
 };
-use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_canister_core::archive::ArchiveOptions;
 
 use crate::common::local_replica;
 use pocket_ic::PocketIc;
@@ -39,10 +39,10 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
 
     // Setup the agent
-    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
+        .with_url(replica_url.clone())
         .with_identity(basic_identity)
-        .with_arc_transport(Arc::new(transport))
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
 
@@ -75,7 +75,7 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
 }
 
 // Return the wasm of the icrc ledger
-fn icrc_ledger_wasm() -> Vec<u8> {
+pub fn icrc_ledger_wasm() -> Vec<u8> {
     let icrc_ledger_project_path =
         std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
@@ -87,12 +87,32 @@ fn icrc_ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(icrc_ledger_project_path, "ic-icrc1-ledger", &[])
 }
 
+pub fn icrc_ledger_old_certificate_wasm() -> Vec<u8> {
+    let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE): {}",
+            ledger_wasm_path, e
+        )
+    })
+}
+
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
 pub fn create_and_install_icrc_ledger(pocket_ic: &PocketIc, init_args: InitArgs) -> Principal {
     let wasm_module = local_replica::icrc_ledger_wasm();
-    let canister_id = Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").unwrap();
+    create_and_install_custom_icrc_ledger(pocket_ic, init_args, wasm_module)
+}
+
+pub fn create_and_install_custom_icrc_ledger(
+    pocket_ic: &PocketIc,
+    init_args: InitArgs,
+    wasm_module: Vec<u8>,
+) -> Principal {
     let custom_encoded_init_args = Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap();
+    let canister_id = Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").unwrap();
     pocket_ic
         .create_canister_with_id(None, None, canister_id)
         .unwrap();

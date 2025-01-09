@@ -17,4 +17,4 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 libnss = { workspace = true }
 local-ip-address = { workspace = true }
-paste = "1.0.14"
+paste = { workspace = true }

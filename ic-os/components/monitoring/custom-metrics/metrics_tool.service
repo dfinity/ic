@@ -1,0 +1,37 @@
+[Unit]
+Description=Report custom metrics once per minute
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/metrics_tool --metrics /run/node_exporter/collector_textfile/custom_metrics.prom
+DeviceAllow=/dev/vda
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateDevices=no
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateUsers=no
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/proc/interrupts
+ReadWritePaths=/run/node_exporter/collector_textfile
+RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=~AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+UMask=022
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

@@ -1,0 +1,21 @@
+[package]
+name = "systest-message-routing-common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+futures = { workspace = true }
+slog = { workspace = true }
+xnet-test = { path = "../../../rust_canisters/xnet_test" }
+ic-system-test-driver = { path = "../../driver" }
+
+[lib]
+name = "systest_message_routing_common"
+path = "common.rs"

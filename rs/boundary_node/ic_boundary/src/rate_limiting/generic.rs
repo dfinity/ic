@@ -1,6 +1,6 @@
-use std::{fmt, path::PathBuf, sync::Arc, time::Duration};
+use std::{net::IpAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use anyhow::{Context, Error};
+use anyhow::{Context as _, Error};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use axum::{
@@ -11,16 +11,21 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
-use humantime::parse_duration;
+use ic_bn_lib::http::ConnInfo;
+use ic_canister_client::Agent;
 use ic_types::CanisterId;
+use ipnet::IpNet;
+use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
-use regex::Regex;
-use serde::{
-    de::{self, Deserializer},
-    Deserialize,
-};
-use tokio::fs;
 use tracing::warn;
+
+use super::{
+    fetcher::{
+        CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
+        FetchesRules, FileFetcher,
+    },
+    sharded::{create_ratelimiter, ShardedRatelimiter},
+};
 
 use crate::{
     core::Run,
@@ -28,80 +33,37 @@ use crate::{
     routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
 
-/// Implement serde parser for Action
-struct ActionVisitor;
-impl<'de> de::Visitor<'de> for ActionVisitor {
-    type Value = Action;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "a rate limit spec in <count>/<duration> format e.g. 100/30s or block"
-        )
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        if s == "block" {
-            return Ok(Action::Block);
-        }
-
-        let (count, interval) = s
-            .split_once('/')
-            .ok_or(de::Error::custom("invalid limit format"))?;
-
-        let count = count.parse::<u32>().map_err(de::Error::custom)?;
-        let interval = parse_duration(interval).map_err(de::Error::custom)?;
-
-        if count == 0 || interval == Duration::ZERO {
-            return Err(de::Error::custom("count and interval should be > 0"));
-        }
-
-        Ok(Action::Limit(count, interval))
+// Converts between different request types
+// We can't use a single one because Ratelimit API crate needs to build on WASM and ic-bn-lib does not
+fn convert_request_type(rt: RequestType) -> RequestTypeRule {
+    match rt {
+        RequestType::Query => RequestTypeRule::Query,
+        RequestType::Call => RequestTypeRule::Call,
+        RequestType::SyncCall => RequestTypeRule::SyncCall,
+        RequestType::ReadState => RequestTypeRule::ReadState,
+        RequestType::ReadStateSubnet => RequestTypeRule::ReadStateSubnet,
+        _ => RequestTypeRule::Unknown,
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-enum Action {
-    Block,
-    Limit(u32, Duration),
-}
-
-impl<'de> Deserialize<'de> for Action {
-    fn deserialize<D>(deserializer: D) -> Result<Action, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_str(ActionVisitor)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct Rule {
-    subnet_id: Option<Principal>,
+pub struct Context<'a> {
+    subnet_id: Principal,
     canister_id: Option<Principal>,
-    request_type: Option<RequestType>,
-    #[serde(default, with = "serde_regex")]
-    methods: Option<Regex>,
-    limit: Action,
+    method: Option<&'a str>,
+    request_type: RequestType,
+    ip: IpAddr,
 }
 
-/// Regex does not implement Eq, so do it manually
-impl PartialEq for Rule {
-    fn eq(&self, other: &Self) -> bool {
-        self.methods.as_ref().map(|x| x.as_str()) == other.methods.as_ref().map(|x| x.as_str())
-            && self.canister_id == other.canister_id
-            && self.subnet_id == other.subnet_id
-            && self.limit == other.limit
-    }
+#[derive(Clone)]
+enum Limiter {
+    Single(Arc<Ratelimiter>),
+    Sharded(Arc<ShardedRatelimiter<IpNet>>, IpPrefixes),
 }
-impl Eq for Rule {}
 
+#[derive(Clone)]
 struct Bucket {
-    rule: Rule,
-    limiter: Option<Ratelimiter>,
+    rule: RateLimitRule,
+    limiter: Option<Limiter>,
 }
 
 impl PartialEq for Bucket {
@@ -111,34 +73,143 @@ impl PartialEq for Bucket {
 }
 impl Eq for Bucket {}
 
-pub struct Limiter {
-    path: PathBuf,
-    buckets: ArcSwap<Vec<Bucket>>,
+impl Bucket {
+    fn is_allowed(&self, ctx: &Context) -> Option<bool> {
+        if let Some(v) = self.rule.subnet_id {
+            if ctx.subnet_id != v {
+                return None;
+            }
+        }
+
+        if let Some(v) = self.rule.canister_id {
+            if let Some(x) = ctx.canister_id {
+                if x != v {
+                    return None;
+                }
+            }
+        }
+
+        if let Some(v) = &self.rule.request_types {
+            if !v.contains(&convert_request_type(ctx.request_type)) {
+                return None;
+            }
+        }
+
+        if let Some(rgx) = &self.rule.methods_regex {
+            if let Some(v) = ctx.method {
+                if !rgx.is_match(v) {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+
+        if let Some(v) = self.rule.ip {
+            if !v.contains(&ctx.ip) {
+                return None;
+            }
+        }
+
+        if self.rule.limit == Action::Pass {
+            return Some(true);
+        } else if self.rule.limit == Action::Block {
+            return Some(false);
+        }
+
+        if let Some(v) = &self.limiter {
+            return Some(match v {
+                Limiter::Single(v) => v.try_wait().is_ok(),
+                Limiter::Sharded(v, prefix) => {
+                    let prefix = match ctx.ip {
+                        IpAddr::V4(_) => prefix.v4,
+                        IpAddr::V6(_) => prefix.v6,
+                    };
+
+                    // We assume that the prefix is correct, assert is safe
+                    let net = IpNet::new_assert(ctx.ip, prefix);
+                    v.acquire(net)
+                }
+            });
+        }
+
+        // Should never get here
+        unreachable!();
+    }
 }
 
-impl Limiter {
-    pub fn new(path: PathBuf) -> Self {
+pub struct Options {
+    pub tti: Duration,
+    pub max_shards: u64,
+}
+
+pub struct GenericLimiter {
+    fetcher: Arc<dyn FetchesRules>,
+    buckets: ArcSwap<Vec<Bucket>>,
+    opts: Options,
+}
+
+impl GenericLimiter {
+    pub fn new_from_file(path: PathBuf, opts: Options) -> Self {
+        let fetcher = Arc::new(FileFetcher(path));
+        Self::new_with_fetcher(fetcher, opts)
+    }
+
+    pub fn new_from_canister_query(canister_id: CanisterId, agent: Agent, opts: Options) -> Self {
+        let config_fetcher = CanisterConfigFetcherQuery(agent, canister_id);
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id, opts)
+    }
+
+    pub fn new_from_canister_update(canister_id: CanisterId, agent: Agent, opts: Options) -> Self {
+        let config_fetcher = CanisterConfigFetcherUpdate(agent, canister_id);
+        Self::new_with_config_fetcher(Arc::new(config_fetcher), canister_id, opts)
+    }
+
+    fn new_with_config_fetcher(
+        config_fetcher: Arc<dyn FetchesConfig>,
+        canister_id: CanisterId,
+        opts: Options,
+    ) -> Self {
+        let fetcher = Arc::new(CanisterFetcher(config_fetcher, canister_id));
+        Self::new_with_fetcher(fetcher, opts)
+    }
+
+    fn new_with_fetcher(fetcher: Arc<dyn FetchesRules>, opts: Options) -> Self {
         Self {
-            path,
+            fetcher,
             buckets: ArcSwap::new(Arc::new(vec![])),
+            opts,
         }
     }
 
-    fn process_rules(rules: Vec<Rule>) -> Vec<Bucket> {
+    fn process_rules(&self, rules: Vec<RateLimitRule>, old: &Arc<Vec<Bucket>>) -> Vec<Bucket> {
         rules
             .into_iter()
-            .map(|rule| {
-                let limiter = if let Action::Limit(limit, duration) = rule.limit {
-                    Some(
-                        Ratelimiter::builder(
-                            1,
-                            duration.checked_div(limit).unwrap_or(Duration::ZERO),
+            .enumerate()
+            .map(|(idx, rule)| {
+                // Check if the same rule exists in the same position.
+                // If yes, then copy over the old limiter to avoid resetting it.
+                if let Some(v) = old.get(idx) {
+                    if v.rule == rule {
+                        return v.clone();
+                    }
+                }
+
+                let limiter = if let Action::Limit(limit, duration) = &rule.limit {
+                    Some(if let Some(v) = &rule.ip_prefix_group {
+                        Limiter::Sharded(
+                            Arc::new(ShardedRatelimiter::new(
+                                *limit,
+                                *limit,
+                                *duration,
+                                self.opts.tti,
+                                self.opts.max_shards,
+                            )),
+                            *v,
                         )
-                        .max_tokens(limit as u64)
-                        .initial_available(limit as u64)
-                        .build()
-                        .unwrap(),
-                    )
+                    } else {
+                        Limiter::Single(Arc::new(create_ratelimiter(*limit, *limit, *duration)))
+                    })
                 } else {
                     None
                 };
@@ -148,31 +219,15 @@ impl Limiter {
             .collect()
     }
 
-    async fn load_rules(&self) -> Result<Vec<Rule>, Error> {
-        // no file -> no rules
-        if fs::metadata(&self.path).await.is_err() {
-            return Ok(vec![]);
-        }
-
-        let data = fs::read(&self.path)
-            .await
-            .context("unable to read rules file")?;
-        let rules: Vec<Rule> = serde_yaml::from_slice(&data).context("unable to parse rules")?;
-        Ok(rules)
-    }
-
-    fn apply_rules(&self, rules: Vec<Rule>) -> bool {
-        let new = Arc::new(Self::process_rules(rules));
+    fn apply_rules(&self, rules: Vec<RateLimitRule>) -> bool {
         let old = self.buckets.load_full();
+        let new = Arc::new(self.process_rules(rules, &old));
 
         if old != new {
             warn!("GenericLimiter: ruleset updated: {} rules", new.len());
 
             for b in new.as_ref() {
-                warn!(
-                    "GenericLimiter: subnet: {:?}, canister: {:?}, methods: {:?}, action: {:?}",
-                    b.rule.subnet_id, b.rule.canister_id, b.rule.methods, b.rule.limit,
-                );
+                warn!("GenericLimiter: {}", b.rule);
             }
 
             self.buckets.store(new);
@@ -183,54 +238,20 @@ impl Limiter {
     }
 
     async fn refresh(&self) -> Result<(), Error> {
-        let rules = self.load_rules().await.context("unable to load rules")?;
+        let rules = self
+            .fetcher
+            .fetch_rules()
+            .await
+            .context("unable to fetch rules")?;
+
         self.apply_rules(rules);
         Ok(())
     }
 
-    fn acquire_token(
-        &self,
-        subnet_id: Principal,
-        canister_id: Option<Principal>,
-        method: Option<&str>,
-        request_type: RequestType,
-    ) -> bool {
+    fn acquire_token(&self, ctx: Context) -> bool {
         for b in self.buckets.load_full().as_ref() {
-            if let Some(v) = b.rule.subnet_id {
-                if subnet_id != v {
-                    continue;
-                }
-            }
-
-            if let Some(v) = b.rule.canister_id {
-                if let Some(x) = canister_id {
-                    if x != v {
-                        continue;
-                    }
-                }
-            }
-
-            if let Some(v) = b.rule.request_type {
-                if request_type != v {
-                    continue;
-                }
-            }
-
-            if let Some(rgx) = &b.rule.methods {
-                if let Some(v) = method {
-                    if !rgx.is_match(v) {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            }
-
-            if let Some(r) = &b.limiter {
-                return r.try_wait().is_ok();
-            } else {
-                // Always block
-                return false;
+            if let Some(v) = b.is_allowed(&ctx) {
+                return v;
             }
         }
 
@@ -240,26 +261,33 @@ impl Limiter {
 }
 
 #[async_trait]
-impl Run for Arc<Limiter> {
+impl Run for Arc<GenericLimiter> {
     async fn run(&mut self) -> Result<(), Error> {
-        self.refresh().await
+        if let Err(e) = self.refresh().await {
+            warn!("GenericLimiter: unable to refresh: {e:#}");
+        }
+        Ok(())
     }
 }
 
 pub async fn middleware(
-    State(state): State<Arc<Limiter>>,
+    State(state): State<Arc<GenericLimiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(conn_info): Extension<Arc<ConnInfo>>,
     canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
-    if !state.acquire_token(
-        subnet.id,
-        canister_id.map(|x| (x.0).get().into()),
-        ctx.method_name.as_deref(),
-        ctx.request_type,
-    ) {
+    let ctx = Context {
+        subnet_id: subnet.id,
+        canister_id: canister_id.map(|x| x.0.get().into()),
+        method: ctx.method_name.as_deref(),
+        request_type: ctx.request_type,
+        ip: conn_info.remote_addr.ip(),
+    };
+
+    if !state.acquire_token(ctx) {
         return Err(ErrorCause::RateLimited(RateLimitCause::Generic));
     }
 
@@ -268,260 +296,245 @@ pub async fn middleware(
 
 #[cfg(test)]
 mod test {
+    use crate::principal;
+
     use super::*;
     use indoc::indoc;
-
-    #[test]
-    fn test_rules() {
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: 100/1s
-
-        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          methods: ^(foo|bar)$
-          limit: 60/1m
-
-        - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
-          canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          limit: 90/1m
-
-        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          methods: ^(foo|bar)$
-          limit: block
-
-        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          request_type: query
-          methods: ^(foo|bar)$
-          limit: block
-
-        - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          request_type: call
-          limit: block
-        "};
-        let rules: Vec<Rule> = serde_yaml::from_str(rules).unwrap();
-
-        assert_eq!(
-            rules,
-            vec![
-                Rule {
-                    subnet_id: None,
-                    canister_id: Some(Principal::from_text("aaaaa-aa").unwrap()),
-                    request_type: None,
-                    methods: Some(Regex::new("^.*$").unwrap()),
-                    limit: Action::Limit(100, Duration::from_secs(1)),
-                },
-                Rule {
-                    subnet_id: None,
-                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_type: None,
-                    methods: Some(Regex::new("^(foo|bar)$").unwrap()),
-                    limit: Action::Limit(60, Duration::from_secs(60)),
-                },
-                Rule {
-                    subnet_id: Some(
-                        Principal::from_text(
-                            "3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe"
-                        )
-                        .unwrap()
-                    ),
-                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_type: None,
-                    methods: None,
-                    limit: Action::Limit(90, Duration::from_secs(60)),
-                },
-                Rule {
-                    subnet_id: None,
-                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_type: None,
-                    methods: Some(Regex::new("^(foo|bar)$").unwrap()),
-                    limit: Action::Block,
-                },
-                Rule {
-                    subnet_id: None,
-                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_type: Some(RequestType::Query),
-                    methods: Some(Regex::new("^(foo|bar)$").unwrap()),
-                    limit: Action::Block,
-                },
-                Rule {
-                    subnet_id: None,
-                    canister_id: Some(Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap()),
-                    request_type: Some(RequestType::Call),
-                    methods: None,
-                    limit: Action::Block,
-                },
-            ],
-        );
-
-        Limiter::process_rules(rules);
-
-        // Bad canister
-        let rules = indoc! {"
-        - canister_id: aaaaa-zzz
-          methods: ^.*$
-          limit: 100/1s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        // Bad regex
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: foo(bar
-          limit: 100/1s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        // Bad limits
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: 100/
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: /100s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: /
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: 0/1s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: 1/0s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          methods: ^.*$
-          limit: 1/1
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-
-        // Bad request type
-        let rules = indoc! {"
-        - canister_id: aaaaa-aa
-          request_type: blah
-          limit: 10/1s
-        "};
-        let rules = serde_yaml::from_str::<Vec<Rule>>(rules);
-        assert!(rules.is_err());
-    }
+    use std::str::FromStr;
 
     #[test]
     fn test_ratelimit() {
         let rules = indoc! {"
+        - canister_id: pawub-syaaa-aaaam-qb7zq-cai
+          limit: pass
+
+        - canister_id: pawub-syaaa-aaaam-qb7zq-cai
+          limit: block
+
         - subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
           canister_id: aaaaa-aa
-          methods: ^.*$
+          methods_regex: ^.*$
           limit: 10/1h
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          methods: ^(foo|bar)$
+          ip: 10.0.0.0/24
+          methods_regex: ^(foo|bar)$
           limit: 20/1h
 
         - canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
-          methods: ^baz$
+          methods_regex: ^baz$
           limit: block
 
         - canister_id: qoctq-giaaa-aaaaa-aaaea-cai
-          request_type: call
+          ip: 10.0.0.0/8
+          request_types: [call]
+          limit: 10/1h
+
+        - canister_id: qoctq-giaaa-aaaaa-aaaea-cai
+          request_types: [read_state]
+          ip_prefix_group:
+            v4: 24
+            v6: 64
           limit: 10/1h
 
         - canister_id: qoctq-giaaa-aaaaa-aaaea-cai
           limit: 20/1h
         "};
-        let rules: Vec<Rule> = serde_yaml::from_str(rules).unwrap();
-
-        let limiter = Limiter::new("/tmp/foo".into());
+        let rules: Vec<RateLimitRule> = serde_yaml::from_str(rules).unwrap();
+        let opts = Options {
+            tti: Duration::from_secs(10),
+            max_shards: 10000,
+        };
+        let limiter = GenericLimiter::new_from_file("/tmp/foo".into(), opts);
         limiter.apply_rules(rules);
 
-        let id1 = Principal::from_text("aaaaa-aa").unwrap();
-        let id2 = Principal::from_text("5s2ji-faaaa-aaaaa-qaaaq-cai").unwrap();
-        let id3 = Principal::from_text("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+        let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
+        let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
+
+        let id1 = principal!("aaaaa-aa");
+        let id2 = principal!("5s2ji-faaaa-aaaaa-qaaaq-cai");
+        let id3 = principal!("qoctq-giaaa-aaaaa-aaaea-cai");
+        let id4 = principal!("pawub-syaaa-aaaam-qb7zq-cai");
+
         let subnet_id =
-            Principal::from_text("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe")
-                .unwrap();
+            principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe");
         let subnet_id2 =
-            Principal::from_text("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
-                .unwrap();
+            principal!("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae");
+
+        // Check that pass action for this canister always allows
+        for _ in 0..100 {
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id4),
+                method: None,
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
+        }
 
         // Check id1 blocking with any method
         // 10 pass
         for _ in 0..10 {
-            assert!(limiter.acquire_token(subnet_id, Some(id1), Some("foo"), RequestType::Query));
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id1),
+                method: Some("foo"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
+
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(subnet_id, Some(id1), Some("bar"), RequestType::Query));
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id1),
+                method: Some("bar"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
 
         // Check id2 blocking with two methods
         // 20 pass
         // Another subnet_id which shouldn't have any difference
         for _ in 0..20 {
-            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("foo"), RequestType::Query));
+            assert!(limiter.acquire_token(Context {
+                subnet_id: subnet_id2,
+                canister_id: Some(id2),
+                method: Some("foo"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
+
         // Then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(subnet_id2, Some(id2), Some("bar"), RequestType::Query));
+            assert!(!limiter.acquire_token(Context {
+                subnet_id: subnet_id2,
+                canister_id: Some(id2),
+                method: Some("bar"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
         // Other methods should not block ever
         for _ in 0..100 {
-            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("lol"), RequestType::Query));
+            assert!(limiter.acquire_token(Context {
+                subnet_id: subnet_id2,
+                canister_id: Some(id2),
+                method: Some("lol"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
         for _ in 0..100 {
-            assert!(limiter.acquire_token(subnet_id2, Some(id2), Some("rofl"), RequestType::Query));
+            assert!(limiter.acquire_token(Context {
+                subnet_id: subnet_id2,
+                canister_id: Some(id2),
+                method: Some("rofl"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
 
         // This method should be blocked always
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(subnet_id, Some(id2), Some("baz"), RequestType::Query));
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id2),
+                method: Some("baz"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
 
         // Check id3 blocking with any method and request type call
         // 10 pass
         for _ in 0..10 {
-            assert!(limiter.acquire_token(subnet_id, Some(id3), Some("foo"), RequestType::Call));
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: Some("rofl"),
+                request_type: RequestType::Call,
+                ip: ip1,
+            }));
         }
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(subnet_id, Some(id3), Some("bar"), RequestType::Call));
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: Some("bar"),
+                request_type: RequestType::Call,
+                ip: ip1,
+            }));
         }
 
         // Then check id3 blocking with any method and request type query
         // 20 pass
         for _ in 0..20 {
-            assert!(limiter.acquire_token(subnet_id, Some(id3), Some("baz"), RequestType::Query));
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: Some("baz"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
         }
         // then all blocked
         for _ in 0..100 {
-            assert!(!limiter.acquire_token(subnet_id, Some(id3), Some("zob"), RequestType::Query));
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: Some("zob"),
+                request_type: RequestType::Query,
+                ip: ip1,
+            }));
+        }
+
+        // Check per-ip-subnet blocking
+        // IP1
+        // 10 pass
+        for _ in 0..10 {
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: None,
+                request_type: RequestType::ReadState,
+                ip: ip1,
+            }));
+        }
+        // Then all blocked
+        for _ in 0..10 {
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: None,
+                request_type: RequestType::ReadState,
+                ip: ip1,
+            }));
+        }
+        // IP2
+        // 10 pass
+        for _ in 0..10 {
+            assert!(limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: None,
+                request_type: RequestType::ReadState,
+                ip: ip2,
+            }));
+        }
+        // Then all blocked
+        for _ in 0..10 {
+            assert!(!limiter.acquire_token(Context {
+                subnet_id,
+                canister_id: Some(id3),
+                method: None,
+                request_type: RequestType::ReadState,
+                ip: ip2,
+            }));
         }
     }
 }

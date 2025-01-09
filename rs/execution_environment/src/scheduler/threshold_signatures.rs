@@ -139,7 +139,9 @@ mod tests {
             MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
                 key_id: key_id.clone(),
                 message: Arc::new(vec![1; 64]),
+                taproot_tree_root: None,
             }),
+            MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
         let context = SignWithThresholdContext {
             request: RequestBuilder::new().build(),

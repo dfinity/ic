@@ -28,7 +28,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    messages::{CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
+    messages::{CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time,
     time::UNIX_EPOCH,
@@ -293,7 +293,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -745,6 +746,11 @@ fn api_availability_test(
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
             assert_api_not_supported(api.ic0_mint_cycles(0));
         }
+        SystemApiCallId::MintCycles128 => {
+            // ic0.mint_cycles128 is only supported for CMC which is tested separately
+            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
+            assert_api_not_supported(api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]));
+        }
         SystemApiCallId::IsController => {
             assert_api_availability(
                 |api| api.ic0_is_controller(0, 0, &[42; 128]),
@@ -822,7 +828,7 @@ fn system_api_availability() {
             let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
             check_stable_apis_support(api);
 
-            // check ic0.mint_cycles API availability for CMC
+            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles(0),
@@ -830,6 +836,14 @@ fn system_api_availability() {
                 &cmc_system_state,
                 cycles_account_manager,
                 SystemApiCallId::MintCycles,
+                context,
+            );
+            assert_api_availability(
+                |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
+                api_type.clone(),
+                &cmc_system_state,
+                cycles_account_manager,
+                SystemApiCallId::MintCycles128,
                 context,
             );
 
@@ -992,7 +1006,7 @@ fn test_canister_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1020,7 +1034,7 @@ fn test_canister_cycle_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1055,7 +1069,7 @@ fn test_msg_cycles_available_traps() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1220,7 +1234,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1243,7 +1257,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1275,7 +1289,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1323,13 +1337,14 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1400,13 +1415,14 @@ fn helper_test_on_low_wasm_memory(
     execution_parameters.memory_allocation = system_state.memory_allocation;
     execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
 
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters.canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1620,13 +1636,14 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1733,13 +1750,14 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );

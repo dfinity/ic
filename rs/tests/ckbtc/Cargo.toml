@@ -1,0 +1,72 @@
+[package]
+name = "ic-tests-ckbtc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+assert_matches = { workspace = true }
+bitcoincore-rpc = "0.15.0"
+candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-btc-interface = { workspace = true }
+ic-btc-checker = { path = "../../bitcoin/checker" }
+ic-canister-client = { path = "../../canister_client" }
+ic-ckbtc-agent = { path = "../../bitcoin/ckbtc/agent" }
+ic-ckbtc-minter = { path = "../../bitcoin/ckbtc/minter" }
+ic-config = { path = "../../config" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../tests/driver" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/tecdsa/utils" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+k256 = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "ic-systest-ckbtc-minter-basics-test"
+path = "ckbtc_minter_basics_test.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-batching"
+path = "ckbtc_minter_batching.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-deposit-and-withdrawal"
+path = "ckbtc_minter_deposit_and_withdrawal.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-retrieve-btc"
+path = "ckbtc_minter_retrieve_btc.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-checker"
+path = "ckbtc_minter_checker.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-update-balance"
+path = "ckbtc_minter_update_balance.rs"

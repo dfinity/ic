@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use evm_rpc_client::Nat256;
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -194,6 +195,18 @@ impl<Unit> TryFrom<candid::Nat> for CheckedAmountOf<Unit> {
     }
 }
 
+impl<Unit> From<Nat256> for CheckedAmountOf<Unit> {
+    fn from(value: Nat256) -> Self {
+        Self::from_be_bytes(value.into_be_bytes())
+    }
+}
+
+impl<Unit> From<CheckedAmountOf<Unit>> for Nat256 {
+    fn from(value: CheckedAmountOf<Unit>) -> Self {
+        Nat256::from_be_bytes(value.to_be_bytes())
+    }
+}
+
 impl<Unit> From<CheckedAmountOf<Unit>> for candid::Nat {
     fn from(value: CheckedAmountOf<Unit>) -> Self {
         use num_bigint::BigUint;
@@ -279,13 +292,13 @@ impl<C, Unit> minicbor::Encode<C> for CheckedAmountOf<Unit> {
         e: &mut minicbor::Encoder<W>,
         ctx: &mut C,
     ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        crate::cbor::u256::encode(&self.0, e, ctx)
+        icrc_cbor::u256::encode(&self.0, e, ctx)
     }
 }
 
 impl<'b, C, Unit> minicbor::Decode<'b, C> for CheckedAmountOf<Unit> {
     fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
-        crate::cbor::u256::decode(d, ctx).map(Self::from_inner)
+        icrc_cbor::u256::decode(d, ctx).map(Self::from_inner)
     }
 }
 

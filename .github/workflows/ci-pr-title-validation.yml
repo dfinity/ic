@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, edited]
 
 # Copied & adapted (job name, version label) from
-# https://github.com/ytanikin/PRConventionalCommits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
+# https://github.com/ytanikin/pr-conventional-commits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
 
 jobs:
   validate-pr-title:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR Title
-        uses:  ytanikin/PRConventionalCommits@8d258b54939f6769fcd935a52b96d6b0383a00c5 # v1.2.0
+        uses: ytanikin/pr-conventional-commits@8d258b54939f6769fcd935a52b96d6b0383a00c5 # v1.2.0
         with:
           task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert"]'
 

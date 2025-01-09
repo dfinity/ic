@@ -61,13 +61,13 @@ use crossbeam::atomic::AtomicCell;
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{body::Incoming, Request, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
@@ -301,7 +301,6 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
-    enable_synchronous_call_handler_for_v3_endpoint: bool,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -347,30 +346,14 @@ pub fn start_server(
     let call_router =
         call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
-    let call_v3_router = if enable_synchronous_call_handler_for_v3_endpoint {
-        call_v3::new_router(
-            call_handler,
-            ingress_watcher_handle,
-            metrics.clone(),
-            config.ingress_message_certificate_timeout_seconds,
-            delegation_from_nns.clone(),
-            state_reader.clone(),
-        )
-    } else {
-        call_v3::new_asynchronous_call_service_router(
-            call_handler.clone(),
-            Some(ingress_watcher_handle.clone()),
-        )
-        // We only want to enforce the global concurrency limit for the asynchronous call handler.
-        .layer(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(map_box_error_to_response))
-                .load_shed()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_call_concurrent_requests,
-                )),
-        )
-    };
+    let call_v3_router = call_v3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
+    );
 
     let query_router = QueryServiceBuilder::builder(
         log.clone(),

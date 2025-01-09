@@ -236,6 +236,9 @@ pub struct Swap {
     /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
     #[prost(uint64, optional, tag = "20")]
     pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Information about the timers that perform periodic tasks of this Swap canister.
+    #[prost(message, optional, tag = "22")]
+    pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -845,7 +848,7 @@ pub mod sns_neuron_recipe {
         /// in the SNS Ledger.
         /// See `nervous_system_common::compute_neuron_staking_subaccount`.
         /// The memo is used along with the a principal_id of the "controller" of
-        /// the neuron. In the case of the decentralization sale, that will either be
+        /// the neuron. In the case of the decentralization swap, that will either be
         /// the PrincipalId of NNS Governance canister for Neurons' Fund investors,
         /// or the PrincipalId of the direct investor.
         #[prost(uint64, tag = "1")]

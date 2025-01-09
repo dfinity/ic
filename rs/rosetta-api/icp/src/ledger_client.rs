@@ -5,6 +5,7 @@ mod handle_follow;
 mod handle_list_neurons;
 mod handle_merge_maturity;
 mod handle_neuron_info;
+mod handle_refresh_voting_power;
 mod handle_register_vote;
 mod handle_remove_hotkey;
 mod handle_send;
@@ -16,7 +17,7 @@ mod handle_start_dissolve;
 mod handle_stop_dissolve;
 pub mod list_known_neurons_response;
 pub mod list_neurons_response;
-mod neuron_response;
+pub mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
@@ -62,6 +63,7 @@ use crate::{
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
         handle_disburse::handle_disburse, handle_follow::handle_follow,
         handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
         handle_spawn::handle_spawn, handle_stake::handle_stake,
@@ -129,12 +131,25 @@ pub struct LedgerClient {
     offline: bool,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
     ListNeuronsResponse(ListNeuronsResponse),
+}
+
+impl TryFrom<ObjectMap> for OperationOutput {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse OperationOutput from Object: {}",
+                e
+            ))
+        })
+    }
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
@@ -497,6 +512,15 @@ impl LedgerAccess for LedgerClient {
     }
 }
 
+/// The HTTP path for update calls on the replica.
+fn update_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/call", cid)
+}
+
+fn read_state_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/read_state", cid)
+}
+
 impl LedgerClient {
     // Exponential backoff from 100ms to 10s with a multiplier of 1.3.
     const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -562,7 +586,7 @@ impl LedgerClient {
 
         let url = self
             .ic_url
-            .join(&ic_canister_client::update_path(canister_id))
+            .join(&update_path(canister_id))
             .expect("URL join failed");
 
         // Submit the update call (with retry).
@@ -713,7 +737,7 @@ impl LedgerClient {
             let wait_timeout = Self::TIMEOUT - start_time.elapsed();
             let url = self
                 .ic_url
-                .join(&ic_canister_client::read_state_path(canister_id))
+                .join(&read_state_path(canister_id))
                 .expect("URL join failed");
 
             match send_post_request(
@@ -733,7 +757,7 @@ impl LedgerClient {
                         let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
                             .map_err(|err| format!("While parsing the status body: {}", err))?;
 
-                        let status = ic_canister_client::parse_read_state_response(
+                        let status = ic_read_state_response_parser::parse_read_state_response(
                             &request_id,
                             &canister_id,
                             self.root_key.as_ref(),
@@ -830,6 +854,7 @@ impl LedgerClient {
             RequestType::Stake { .. } => handle_stake(bytes),
             RequestType::StartDissolve { .. } => handle_start_dissolve(bytes, request_type),
             RequestType::StopDissolve { .. } => handle_stop_dissolve(bytes, request_type),
+            RequestType::RefreshVotingPower { .. } => handle_refresh_voting_power(bytes),
         }
     }
 }

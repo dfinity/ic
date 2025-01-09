@@ -246,6 +246,24 @@ message NeuronInfo {
   optional NeuronType neuron_type = 11;
   // See the Visibility enum.
   optional Visibility visibility = 12;
+  // The last time that voting power was "refreshed". There are two ways to
+  // refresh the voting power of a neuron: set following, or vote directly. In
+  // the future, there will be a dedicated API for refreshing. Note that direct
+  // voting implies that refresh also occurs when a proposal is created, because
+  // direct voting is part of proposal creation.
+  //
+  // Effect: When this becomes > 6 months ago, the amount of voting power that
+  // this neuron can exercise decreases linearly down to 0 over the course of 1
+  // month. After that, following is cleared, except for ManageNeuron proposals.
+  //
+  // This will always be populated. If the underlying neuron was never
+  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+  // after the UNIX epoch).
+  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
+  // See the analogous field in Nueron.
+  optional uint64 deciding_voting_power = 14;
+  // See the analogous field in Neuron.
+  optional uint64 potential_voting_power = 15;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -429,6 +447,83 @@ message Neuron {
 
   // See the Visibility enum.
   optional Visibility visibility = 23;
+
+  // The last time that voting power was "refreshed". There are two ways to
+  // refresh the voting power of a neuron: set following, or vote directly. In
+  // the future, there will be a dedicated API for refreshing. Note that direct
+  // voting implies that refresh also occurs when a proposal is created, because
+  // direct voting is part of proposal creation.
+  //
+  // Effect: When this becomes > 6 months ago, the amount of voting power that
+  // this neuron can exercise decreases linearly down to 0 over the course of 1
+  // month. After that, following is cleared, except for ManageNeuron proposals.
+  //
+  // This will always be populated. If the underlying neuron was never
+  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+  // after the UNIX epoch).
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+
+  // The index of the next entry in the recent_ballots list that will be
+  // used for the circular buffer. This is used to determine which entry
+  // to overwrite next.
+  optional uint32 recent_ballots_next_entry_index = 25;
+
+  // The amount of "sway" this neuron has when voting on proposals.
+  //
+  // When a proposal is created, each eligible neuron gets a "blank" ballot. The
+  // amount of voting power in that ballot is set to the neuron's deciding
+  // voting power at the time of proposal creation. There are two ways that a
+  // proposal can become decided:
+  //
+  //   1. Early: Either more than half of the total voting power in the ballots
+  //   votes in favor (then the proposal is approved), or at least half of the
+  //   votal voting power in the ballots votes against (then, the proposal is
+  //   rejected).
+  //
+  //   2. The proposal's voting deadline is reached. At that point, if there is
+  //   more voting power in favor than against, and at least 3% of the total
+  //   voting power voted in favor, then the proposal is approved. Otherwise, it
+  //   is rejected.
+  //
+  // If a neuron regularly refreshes its voting power, this has the same value
+  // as potential_voting_power. Actions that cause a refresh are as follows:
+  //
+  //     1. voting directly (not via following)
+  //     2. set following
+  //     3. refresh voting power
+  //
+  // (All of these actions are performed via the manage_neuron method.)
+  //
+  // However, if a neuron has not refreshed in a "long" time, this will be less
+  // than potential voting power. See VotingPowerEconomics. As a further result
+  // of less deciding voting power, not only does it have less influence on the
+  // outcome of proposals, the neuron receives less voting rewards (when it
+  // votes indirectly via following).
+  //
+  // For details, see https://dashboard.internetcomputer.org/proposal/132411.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  optional uint64 deciding_voting_power = 26;
+
+  // The amount of "sway" this neuron can have if it refreshes its voting power
+  // frequently enough.
+  //
+  // Unlike deciding_voting_power, this does NOT take refreshing into account.
+  // Rather, this only takes three factors into account:
+  //
+  //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+  //        This primarily consists of the neuron's ICP balance.
+  //
+  //     2. Age - Neurons with more age have more voting power (all else being
+  //        equal).
+  //
+  //     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+  //        power (all else being equal). Neurons with a dissolve delay of less
+  //        than six months are not eligible to vote. Therefore, such neurons
+  //        are considered to have 0 voting power.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  optional uint64 potential_voting_power = 27;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -454,6 +549,8 @@ message AbridgedNeuron {
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+  optional uint32 recent_ballots_next_entry_index = 25;
 
   reserved 1;
   reserved "id";
@@ -1105,6 +1202,11 @@ message ManageNeuron {
     }
   }
 
+  // This is one way for a neuron to make sure that its deciding_voting_power is
+  // not less than its potential_voting_power. See the description of those
+  // fields in Neuron.
+  message RefreshVotingPower {}
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1118,6 +1220,7 @@ message ManageNeuron {
     MergeMaturity merge_maturity = 13;
     Merge merge = 14;
     StakeMaturity stake_maturity = 15;
+    RefreshVotingPower refresh_voting_power = 16;
   }
 }
 
@@ -1183,6 +1286,8 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
   }
 
+  message RefreshVotingPowerResponse {}
+
   oneof command {
     GovernanceError error = 1;
     ConfigureResponse configure = 2;
@@ -1197,6 +1302,7 @@ message ManageNeuronResponse {
     MergeMaturityResponse merge_maturity = 11;
     MergeResponse merge = 12;
     StakeMaturityResponse stake_maturity = 13;
+    RefreshVotingPowerResponse refresh_voting_power = 14;
   }
 }
 
@@ -1417,6 +1523,13 @@ message ProposalData {
   // TODO[NNS1-2566]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
   // `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
   optional NeuronsFundData neurons_fund_data = 21;
+
+  // This is the amount of voting power that would be available if all neurons
+  // kept themselves "refreshed". This is used as the baseline for voting
+  // rewards. That is, the amount of maturity that a neuron receives is the
+  // amount of voting power that it exercised (so called "deciding" voting
+  // power) in proportion to this.
+  optional uint64 total_potential_voting_power = 22;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -1720,6 +1833,9 @@ message ProposalInfo {
   optional uint64 deadline_timestamp_seconds = 19;
 
   DerivedProposalInformation derived_proposal_information = 20;
+
+  // See [ProposalData::total_potential_voting_power].
+  optional uint64 total_potential_voting_power = 21;
 }
 
 // Network economics contains the parameters for several operations related
@@ -1728,9 +1844,6 @@ message ProposalInfo {
 // to set the parameters that it wishes to change.
 // In other words, it's not possible to set any of the values of
 // NetworkEconomics to 0.
-//
-// NOTE: If adding a value to this proto, make sure there is a corresponding
-// `if` in Governance::perform_action().
 message NetworkEconomics {
   reserved 3, 7;
   // The number of E8s (10E-8 of an ICP token) that a rejected
@@ -1780,6 +1893,32 @@ message NetworkEconomics {
 
   // Global Neurons' Fund participation thresholds.
   optional NeuronsFundEconomics neurons_fund_economics = 11;
+
+  // Parameters that affect the voting power of neurons.
+  VotingPowerEconomics voting_power_economics = 12;
+}
+
+// Parameters that affect the voting power of neurons.
+message VotingPowerEconomics {
+  // If a neuron has not "refreshed" its voting power after this amount of time,
+  // its deciding voting power starts decreasing linearly. See also
+  // clear_following_after_seconds.
+  //
+  // For explanation of what "refresh" means in this context, see
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+  optional uint64 start_reducing_voting_power_after_seconds = 1;
+
+  // After a neuron has experienced voting power reduction for this amount of
+  // time, a couple of things happen:
+  //
+  //     1. Deciding voting power reaches 0.
+  //
+  //     2. Its following on topics other than NeuronManagement are cleared.
+  //
+  // Initially, set to 1/12 years.
+  optional uint64 clear_following_after_seconds = 2;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2118,6 +2257,7 @@ message UpdateCanisterSettings {
     optional uint64 freezing_threshold = 4;
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
+    optional uint64 wasm_memory_threshold = 7;
   }
 
   // The settings to update. Required.
@@ -2293,23 +2433,39 @@ message Governance {
       // analogous fields (declared a little lower in this message). For
       // example, count = count_buckets.values().sum().
       optional uint64 count = 1;
+
       optional uint64 total_staked_e8s = 2;
       optional uint64 total_staked_maturity_e8s_equivalent = 3;
       optional uint64 total_maturity_e8s_equivalent = 4;
+
+      // Deprecated. Use one of the following instead.
       optional uint64 total_voting_power = 5;
+      // Used to decide proposals. If all neurons refresh their voting
+      // power/following frequently enough, this will be equal to potential
+      // voting power. If not, this will be less.
+      optional uint64 total_deciding_voting_power = 11;
+      // Used for voting rewards.
+      optional uint64 total_potential_voting_power = 12;
 
       // These fields are keyed by floor(dissolve delay / 0.5 years). These are
       // analogous to the (singular) fields above. Here, the usual definition of
       // year for the IC is used: exactly 365.25 days.
       map<uint64, uint64> count_buckets = 6;
+
       map<uint64, uint64> staked_e8s_buckets = 7;
       map<uint64, uint64> staked_maturity_e8s_equivalent_buckets = 8;
       map<uint64, uint64> maturity_e8s_equivalent_buckets = 9;
+
+      // Deprecated. Use one of the following instead.
       map<uint64, uint64> voting_power_buckets = 10;
+      map<uint64, uint64> deciding_voting_power_buckets = 13;
+      map<uint64, uint64> potential_voting_power_buckets = 14;
     }
 
     NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
     NeuronSubsetMetrics public_neuron_subset_metrics = 39;
+    NeuronSubsetMetrics declining_voting_power_neuron_subset_metrics = 40;
+    NeuronSubsetMetrics fully_lost_voting_power_neuron_subset_metrics = 41;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -2865,4 +3021,14 @@ message ArchivedMonthlyNodeProviderRewards {
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
+}
+
+// Internal type to allow ProposalVotingStateMachine to be stored
+// in stable memory.
+message ProposalVotingStateMachine {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Topic topic = 2;
+  repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
+  repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
+  map<uint64, Vote> recent_neuron_ballots_to_record = 5;
 }

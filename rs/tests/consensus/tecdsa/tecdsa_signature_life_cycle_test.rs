@@ -97,10 +97,10 @@ fn test(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "Unable to route management canister request schnorr_public_key: \
-                    IDkgKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
+                    ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
-                error_code: None,
+                error_code: Some("IC0406".to_string()),
             })
         );
         assert_eq!(
@@ -117,11 +117,11 @@ fn test(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "Unable to route management canister request sign_with_schnorr: \
-                    IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, \
-                    existing keys with signing enabled: {}\")",
+                    ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                    existing enabled keys: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
-                error_code: None,
+                error_code: Some("IC0406".to_string()),
             })
         );
 
@@ -215,6 +215,7 @@ fn test(env: TestEnv) {
                 let method_name = match key_id {
                     MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
                     MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 if let Err(sig_err) = sig_result {
                     assert_eq!(
@@ -223,11 +224,11 @@ fn test(env: TestEnv) {
                             reject_code: RejectCode::CanisterReject,
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
-                                IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, \
-                                existing keys with signing enabled: []\")",
+                                ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                                existing enabled keys: []\")",
                                 method_name, key_id
                             ),
-                            error_code: None
+                            error_code: Some("IC0406".to_string())
                         })
                     );
                     break;

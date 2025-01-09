@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
 
 mod proto_to_csp_fs_enc_pubkey_conversions_tests {

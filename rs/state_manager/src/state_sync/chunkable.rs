@@ -1156,7 +1156,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 manifest_in_construction: _,
                 ref manifest_chunks,
             } => {
-                #[allow(clippy::needless_collect)]
                 let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
                 Box::new(ids.into_iter())
             }
@@ -1166,7 +1165,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 state_sync_file_group: _,
                 ref fetch_chunks,
             } => {
-                #[allow(clippy::needless_collect)]
                 let ids: Vec<_> = fetch_chunks
                     .iter()
                     .map(|id| ChunkId::new(*id as u32))

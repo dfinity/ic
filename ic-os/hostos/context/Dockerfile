@@ -108,6 +108,10 @@ RUN systemctl disable \
 
 # ------ HOSTOS WORK ---------------------------------------------
 
+# Divert symbolic link for dynamically generated nftables
+# ruleset.
+RUN ln -sf /run/ic-node/nftables-ruleset/nftables.conf /etc/nftables.conf
+
 ARG ROOT_PASSWORD=
 RUN \
     if [ "${ROOT_PASSWORD}" != "" ]; then \

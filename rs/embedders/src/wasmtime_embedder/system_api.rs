@@ -286,7 +286,9 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls<
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
+pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>
@@ -1184,6 +1186,18 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData>, amount: u64| {
                 with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "mint_cycles128", {
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {}", e)))
             }
         })
         .unwrap();

@@ -5,8 +5,9 @@ use crate::{
     request_handler::{verify_network_id, RosettaRequestHandler},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+        StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;
@@ -105,6 +106,9 @@ impl RosettaRequestHandler {
                     neuron_index,
                     controller,
                 } => follow(&mut requests, arg, from, neuron_index, controller)?,
+                RequestType::RefreshVotingPower { neuron_index } => {
+                    refresh_voting_power(&mut requests, arg, from, neuron_index)?
+                }
             }
         }
 
@@ -595,6 +599,28 @@ fn follow(
     Ok(())
 }
 
+fn refresh_voting_power(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    })?;
+    if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) = manage.command
+    {
+        requests.push(Request::RefreshVotingPower(RefreshVotingPower {
+            neuron_index,
+            account: from,
+        }));
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use ic_base_types::CanisterId;

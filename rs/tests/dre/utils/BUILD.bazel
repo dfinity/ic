@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "MACRO_DEPENDENCIES")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -8,7 +7,6 @@ rust_library(
     testonly = True,
     srcs = glob(["**/*.rs"]),
     crate_name = "os_qualification_utils",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted
@@ -17,9 +15,9 @@ rust_library(
         "//rs/nns/common",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
-        "//rs/tests",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:futures",

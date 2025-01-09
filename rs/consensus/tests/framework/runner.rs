@@ -2,11 +2,11 @@ use super::delivery::*;
 use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierImpl},
-    dkg, idkg,
+    idkg,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_consensus_utils::pool_reader::PoolReader;
@@ -171,9 +171,11 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let consensus_bouncer =
-            ic_consensus::consensus::ConsensusBouncer::new(deps.message_routing.clone());
-        let dkg = dkg::DkgImpl::new(
+        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(
+            &deps.metrics_registry,
+            deps.message_routing.clone(),
+        );
+        let dkg = ic_consensus_dkg::DkgImpl::new(
             deps.replica_config.node_id,
             Arc::clone(&consensus_crypto),
             deps.consensus_pool.read().unwrap().get_cache(),

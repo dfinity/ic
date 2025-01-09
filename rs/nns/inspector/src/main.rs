@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use ic_base_types::CanisterId;
+use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
@@ -27,14 +28,13 @@ use std::{
 )]
 struct CliArgs {
     /// Path to stable the `canister_states` directory
-    #[clap(parse(from_os_str))]
     input: PathBuf,
 
-    #[clap(parse(from_os_str), default_value = ".")]
+    #[clap(default_value = ".")]
     output: PathBuf,
 
     /// The location of the "rs" directory. Used to find .proto files.
-    #[clap(long, parse(from_os_str), default_value = ".")]
+    #[clap(long, default_value = ".")]
     rs: PathBuf,
 }
 
@@ -329,7 +329,7 @@ fn decode_ledger_stable_memory(cbor: PathBuf, output: &Path) {
         Ok(l) => l,
     };
     let mut records: Vec<LedgerBalanceRecord> = ledger
-        .balances
+        .balances()
         .store
         .iter()
         .map(|(key, icpts)| LedgerBalanceRecord {

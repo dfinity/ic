@@ -80,6 +80,39 @@ pub fn get_node_operator_id_for_node(
         )
 }
 
+pub fn get_node_provider_id_for_operator_id(
+    registry: &Registry,
+    node_operator_id: PrincipalId,
+) -> Result<PrincipalId, String> {
+    let node_operator_key = make_node_operator_record_key(node_operator_id);
+    registry
+        .get(node_operator_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!(
+                "Node Operator Id {:} not found in the registry.",
+                node_operator_key
+            )),
+            |result| {
+                PrincipalId::try_from(
+                    NodeOperatorRecord::decode(result.value.as_slice())
+                        .map_err(|_| {
+                            format!(
+                                "Could not decode node_operator_record for Node Operator Id {}",
+                                node_operator_id
+                            )
+                        })?
+                        .node_provider_principal_id,
+                )
+                .map_err(|_| {
+                    format!(
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
+                        node_operator_id
+                    )
+                })
+            },
+        )
+}
+
 pub fn get_node_operator_record(
     registry: &Registry,
     node_operator_id: PrincipalId,
