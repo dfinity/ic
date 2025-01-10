@@ -196,9 +196,9 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // amount of time.
 thread_local! {
 
-    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
