@@ -119,8 +119,12 @@ MOUNT=false
 CHROOT_DIR=""
 COMMAND=""
 
+#unshare --fork --pid --map-root-user --setuid 0 --setgid 0 echo "hello"
+
 PID_UNSHARE="unshare --fork --pid"
-MOUNT_UNSHARE="$PID_UNSHARE --mount --map-root-user"
+MOUNT_UNSHARE="$PID_UNSHARE --mount --user --map-root-user"
+
+#MOUNT_UNSHARE="$PID_UNSHARE --mount --map-auto --map-root-user --setuid 0 --setgid 0"
 
 run_with_chroot() {
     ((EUID == 0)) || die "This script must be run with root privileges"

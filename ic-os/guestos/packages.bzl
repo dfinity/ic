@@ -65,6 +65,11 @@ common_packages = [
     # this package can be removed
     "selinux-policy-dev",
     "checkpolicy",
+
+    # Linux 6.11
+    "@linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb//file",
+    "@linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb//file",
+    "@linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb//file",
 ]
 
 # These are additional Ubuntu packages installed on the "dev" images.

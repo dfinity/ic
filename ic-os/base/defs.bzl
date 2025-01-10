@@ -3,7 +3,7 @@ load("//ic-os/components:hostos.bzl", "component_files")
 
 CUSTOM_PACKAGE_DEFS_ = {
     "node_exporter": {
-        "src": "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
+        "srcs": ["@node_exporter-1.8.1.linux-amd64.tar.gz//file"],
         "install": """
             mkdir -p $$CONTAINER_DIR/etc/node_exporter
             tar --strip-components=1 -C $$CONTAINER_DIR/usr/local/bin/ \
@@ -12,7 +12,7 @@ CUSTOM_PACKAGE_DEFS_ = {
         """,
     },
     "filebeat": {
-        "src": "@filebeat-oss-8.9.1-linux-x86_64.tar.gz//file",
+        "srcs": ["@filebeat-oss-8.9.1-linux-x86_64.tar.gz//file"],
         "install": """
             mkdir -p $$CONTAINER_DIR/var/lib/filebeat \
                      $$CONTAINER_DIR/var/log/filebeat
@@ -32,31 +32,44 @@ def icos_container_filesystem(name, apt_packages, component_files, build_args, c
             "//ic-os/base:apt_snapshot.txt",
             "//ic-os/components:networking/resolv.conf",
             "@ubuntu-base-24.04.1-base-amd64.tar.gz//file",
-        ] + _custom_package_srcs(custom_packages),
+        ] + _package_srcs(apt_packages, custom_packages),
         tools = ["//toolchains/sysimage:run_in_namespace"],
         cmd = """
-            set -euo pipefail
+            set -xeuo pipefail
 
             export SOURCE_DATE_EPOCH=0
 
             # Create container directory
-            CONTAINER_DIR=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
+            CONTAINER_DIR=$$(mktemp -d --tmpdir "icosbuildXXXX")
             trap 'rm -rf $$CONTAINER_DIR' INT TERM EXIT
+
+            # We put all shared files required in the setup into ICOS_BUILD_DIR
+            export ICOS_BUILD_DIR="$$CONTAINER_DIR/icos_build"
+            mkdir $$ICOS_BUILD_DIR
 
             # Untar the Ubuntu base image
             $(location //toolchains/sysimage:run_in_namespace) /bin/bash -x << EOF
-                tar -xzf $(location @ubuntu-base-24.04.1-base-amd64.tar.gz//file) -C $$CONTAINER_DIR
+                tar -xzf $(location @ubuntu-base-24.04.1-base-amd64.tar.gz//file) --no-same-owner -C $$CONTAINER_DIR
 EOF
 
             # Set up networking
             cp $(location //ic-os/components:networking/resolv.conf) $$CONTAINER_DIR/etc/resolv.conf
 
+            echo "{prepare_local_apt_packages_commands}"
+            {prepare_local_apt_packages_commands}
             {install_custom_packages_commands}
 
             export APT_SNAPSHOT=$$(<$(location //ic-os/base:apt_snapshot.txt))
             # Run setup from within the newly built environment
             $(location //toolchains/sysimage:run_in_namespace) --mount --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
                 set -euo pipefail
+
+                export ICOS_BUILD_DIR="/icos_build"
+
+                cat /etc/subuid
+
+                newuidmap $$BASHPID 0 1000 65534
+                newgidmap $$BASHPID 0 1002 65534
 
                 # Set timezone
                 ln -snf /usr/share/zoneinfo/UTC /etc/localtime && echo UTC > /etc/timezone
@@ -79,8 +92,9 @@ EOF
 
             mv $$CONTAINER_DIR/out.tar $@
         """.format(
-            apt_packages = " ".join(apt_packages),
+            apt_packages = _apt_packages_string(apt_packages),
             install_custom_packages_commands = _install_custom_packages_commands(custom_packages),
+            prepare_local_apt_packages_commands = _prepare_local_apt_packages_commands(apt_packages),
         ),
     )
 
@@ -95,7 +109,7 @@ EOF
         outs = [name],
         cmd = """
             # Create container directory
-            export CONTAINER_DIR=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
+            export CONTAINER_DIR=$$(mktemp -d --tmpdir "icosbuildXXXX")
             trap 'rm -rf $$CONTAINER_DIR' INT TERM EXIT
 
             # We put all shared files required in the setup into ICOS_BUILD_DIR
@@ -137,11 +151,15 @@ EOF
         ),
     )
 
-def _custom_package_srcs(custom_packages):
+def _package_srcs(apt_packages, custom_packages):
     srcs = []
+    for package in apt_packages:
+        if package.startswith("@"):
+            srcs.append(package)
+
     for package in custom_packages:
         package_def = CUSTOM_PACKAGE_DEFS_[package] or fail("Custom package not defined: %s" % package)
-        srcs.append(package_def["src"])
+        srcs.extend(package_def["srcs"])
     return srcs
 
 def _install_custom_packages_commands(custom_packages):
@@ -149,6 +167,34 @@ def _install_custom_packages_commands(custom_packages):
     for package in custom_packages:
         package_def = CUSTOM_PACKAGE_DEFS_[package] or fail("Custom package not defined: %s" % package)
         commands += package_def["install"] + "\n"
+    return commands
+
+def _apt_packages_string(apt_packages):
+    result = ""
+    for package in apt_packages:
+        if package.startswith("@"):
+            result += _apt_package_path(package)
+        else:
+            result += package
+        result += " "
+    return result
+
+def _apt_package_path(package):
+    package = package.removeprefix("@")
+    package = package.removesuffix("//file")
+    if not package.endswith(".deb"):
+        fail("apk package names should end in .deb, found: " + package)
+    return "$$ICOS_BUILD_DIR/" + package
+
+def _prepare_local_apt_packages_commands(apt_packages):
+    commands = ""
+    for package in apt_packages:
+        if not package.startswith("@"):
+            continue
+        commands += 'cp "$(location {package})" "{target_path}" \n'.format(
+            package = package,
+            target_path = _apt_package_path(package),
+        )
     return commands
 
 def _copy_components_commands(label_to_destination_map):
