@@ -162,6 +162,7 @@ impl Bucket {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Options {
     pub tti: Duration,
     pub max_shards: u64,
@@ -276,7 +277,10 @@ impl GenericLimiter {
         let new = Arc::new(self.process_rules(rules, &old, scale));
 
         if old != new {
-            warn!("GenericLimiter: ruleset updated: {} rules", new.len());
+            warn!(
+                "GenericLimiter: ruleset updated: {} rules (scale {scale})",
+                new.len()
+            );
 
             for b in new.as_ref() {
                 warn!("GenericLimiter: {}", b.rule);
@@ -298,7 +302,7 @@ impl GenericLimiter {
 
         self.apply_rules(rules.clone(), self.scale.load(Ordering::SeqCst));
 
-        // Store the new copy of the rules
+        // Store the new copy of the rules as a golden copy for future recalculation
         self.active_rules.store(Arc::new(rules));
 
         Ok(())
@@ -341,6 +345,8 @@ impl Run for Arc<GenericLimiter> {
                         // Store the count of API BNs as a scale and make sure it's >= 1
                         let scale = v.api_bns.len().max(1) as u32;
                         self.scale.store(scale, Ordering::SeqCst);
+
+                        warn!("GenericLimiter: got a new registry snapshot, recalculating with scale {scale}");
 
                         // Recalculate the rules based on the potentially new scale
                         self.apply_rules(self.active_rules.load().as_ref().clone(), scale);
@@ -401,8 +407,32 @@ mod test {
         }
     }
 
+    struct TestFetcher(Vec<RateLimitRule>);
+
+    #[async_trait]
+    impl FetchesRules for TestFetcher {
+        async fn fetch_rules(&self) -> Result<Vec<RateLimitRule>, Error> {
+            Ok(self.0.clone())
+        }
+    }
+
     #[tokio::test]
     async fn test_ratelimit() {
+        let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
+        let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
+        let ip_local4 = IpAddr::from_str("127.0.0.1").unwrap();
+        let ip_local6 = IpAddr::from_str("::1").unwrap();
+
+        let id0 = principal!("pawub-syaaa-aaaam-qb7zq-cai");
+        let id1 = principal!("aaaaa-aa");
+        let id2 = principal!("5s2ji-faaaa-aaaaa-qaaaq-cai");
+        let id3 = principal!("qoctq-giaaa-aaaaa-aaaea-cai");
+
+        let subnet_id =
+            principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe");
+        let subnet_id2 =
+            principal!("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae");
+
         let rules = indoc! {"
         - canister_id: pawub-syaaa-aaaam-qb7zq-cai
           limit: block
@@ -445,6 +475,47 @@ mod test {
             autoscale: true,
         };
 
+        // Check that fetching works
+        let fetcher = TestFetcher(rules.clone());
+        let (_, rx) = watch::channel(None);
+        let limiter = Arc::new(GenericLimiter::new_with_fetcher(
+            Arc::new(fetcher),
+            opts.clone(),
+            rx,
+        ));
+        assert!(limiter.refresh().await.is_ok());
+        assert_eq!(limiter.active_rules.load().len(), 7);
+
+        // Check id1 limiting with any method
+        // 10 pass
+        for _ in 0..10 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: Some(id1),
+                    method: Some("foo"),
+                    request_type: RequestType::Query,
+                    ip: ip1,
+                }),
+                Decision::Pass
+            );
+        }
+
+        // then all blocked
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: Some(id1),
+                    method: Some("bar"),
+                    request_type: RequestType::Query,
+                    ip: ip1,
+                }),
+                Decision::Limit
+            );
+        }
+
+        // Check different rules
         let (tx, rx) = watch::channel(None);
         let limiter = Arc::new(GenericLimiter::new_with_fetcher(
             Arc::new(BrokenFetcher),
@@ -458,21 +529,6 @@ mod test {
         });
 
         limiter.apply_rules(rules.clone(), 1);
-
-        let ip1 = IpAddr::from_str("10.0.0.1").unwrap();
-        let ip2 = IpAddr::from_str("192.168.0.1").unwrap();
-        let ip_local4 = IpAddr::from_str("127.0.0.1").unwrap();
-        let ip_local6 = IpAddr::from_str("::1").unwrap();
-
-        let id0 = principal!("pawub-syaaa-aaaam-qb7zq-cai");
-        let id1 = principal!("aaaaa-aa");
-        let id2 = principal!("5s2ji-faaaa-aaaaa-qaaaq-cai");
-        let id3 = principal!("qoctq-giaaa-aaaaa-aaaea-cai");
-
-        let subnet_id =
-            principal!("3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe");
-        let subnet_id2 =
-            principal!("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae");
 
         let mut snapshot = generate_stub_snapshot(vec![]);
         snapshot.api_bns = vec![
