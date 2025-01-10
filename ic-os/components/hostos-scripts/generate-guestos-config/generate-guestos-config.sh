@@ -84,10 +84,10 @@ function assemble_config_media() {
     fi
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
-    if [[ -n "$ipv4_address" && "$ipv4_address" != "null" \
-          && -n "$ipv4_prefix_length" && "$ipv4_prefix_length" != "null" \
-          && -n "$ipv4_gateway" && "$ipv4_gateway" != "null" \
-          && -n "$domain_name" && "$domain_name" != "null" ]]; then
+    if [[ -n "$ipv4_address" && "$ipv4_address" != "null" &&
+        -n "$ipv4_prefix_length" && "$ipv4_prefix_length" != "null" &&
+        -n "$ipv4_gateway" && "$ipv4_gateway" != "null" &&
+        -n "$domain_name" && "$domain_name" != "null" ]]; then
         cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
         cmd+=(--domain "${domain_name}")
