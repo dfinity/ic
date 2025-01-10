@@ -1,4 +1,6 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("//ic-os/components:hostos.bzl", "component_files")
 
 CUSTOM_PACKAGE_DEFS_ = {
@@ -25,6 +27,102 @@ CUSTOM_PACKAGE_DEFS_ = {
 
 def icos_container_filesystem(name, apt_packages, component_files, build_args, custom_packages, setup_script):
     base_image_name = "base_" + name
+
+    oci_image(
+        name = name + "_base_image_test",
+        architecture = "amd64",
+        os = "linux",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tars = [
+            #            #            "@ubuntu-base-24.04.1-base-amd64.tar.gz//file",
+            #            #            "@noble//linux-image-virtual-hwe-24.04/amd64",
+            "@noble//initramfs-tools/amd64",
+            #
+            #            # Need systemd for boot process
+            #            "@noble//systemd/amd64",
+            #            "@noble//systemd-sysv/amd64",
+            #            "@noble//systemd-journal-remote/amd64",
+            #            "@noble//systemd-resolved/amd64",
+            #
+            #            # Third-party services we will be running
+            #            #            "@noble//chrony/amd64",
+            #            #            "@noble//openssh-server/amd64",
+            #            #
+            #            # Runtime libraries for replica
+            #            "@noble//liblmdb0/amd64",
+            #            "@noble//libunwind8/amd64",
+            #            "@noble//libselinux1/amd64",
+            #            #
+            #            # Smartcard support for replica
+            #            "@noble//pcsc-tools/amd64",
+            #            "@noble//pcscd/amd64",
+            #            "@noble//opensc/amd64",
+            #
+            #            # Required system setup tools
+            #            "@noble//attr/amd64",
+            #            "@noble//ca-certificates/amd64",
+            #            "@noble//cryptsetup/amd64",
+            #            "@noble//curl/amd64",
+            #            "@noble//faketime/amd64",
+            #            "@noble//fdisk/amd64",
+            #            "@noble//iproute2/amd64",
+            #            "@noble//isc-dhcp-client/amd64",
+            #            "@noble//jq/amd64",
+            #            "@noble//less/amd64",
+            #            "@noble//lvm2/amd64",
+            #            "@noble//net-tools/amd64",
+            #            "@noble//nftables/amd64",
+            #            "@noble//parted/amd64",
+            #            "@noble//rsync/amd64",
+            #            #            "@noble//sudo/amd64",
+            #            "@noble//sysfsutils/amd64",
+            #            "@noble//udev/amd64",
+            #            "@noble//usbutils/amd64",
+            #            "@noble//xfsprogs/amd64",
+            #            "@noble//zstd/amd64",
+            #
+            #            # This is unclear -- why is this here? This should "probably" be dev tool.
+            #            "@noble//protobuf-compiler/amd64",
+            #
+            #            # SELinux support
+            #            "@noble//selinux-policy-default/amd64",
+            #            "@noble//selinux-utils/amd64",
+            #            "@noble//semodule-utils/amd64",
+            #            "@noble//policycoreutils/amd64",
+            #            # this is required for policy building -- presently policy modules are built
+            #            # inside the target which is not fully proper. When the build is moved out,
+            #            # this package can be removed
+            #            "@noble//selinux-policy-dev/amd64",
+            #            "@noble//checkpolicy/amd64",
+        ],
+    )
+
+    oci_tar(
+        name = name + "_base_image_test_export.tar",
+        image = name + "_base_image_test",
+    )
+
+    # First load the image
+    oci_load(
+        repo_tags = ["icos_base:test"],
+        name = name + "_base_image_test_load",
+        image = name + "_base_image_test",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    #    native.genrule(
+    #        name = name + "_base_image_test_export.tar",
+    #        outs = [],
+    #        srcs = [name],
+    #        cmd = """
+    #
+    #        """,
+    #    )
+
     native.genrule(
         name = "build_" + base_image_name,
         outs = [base_image_name],
@@ -210,3 +308,52 @@ def _copy_components_commands(label_to_destination_map):
         """.format(label = label, destination = destination)
 
     return command
+
+def oci_tar(name, image, repo_tags = []):
+    """Create a tarball from an OCI image. The target is marked as 'manual'.
+
+    Args:
+      name: This name will be used for the tarball (must end with '.tar').
+      repo_tags: OCI tags for oci_load.
+      image: The OCI image to bundle.
+    """
+
+    if not name.endswith(".tar"):
+        fail("Expected tarname to end with '.tar': " + name)
+
+    basename = name.removesuffix(".tar")
+
+    name_image = basename + "_image"
+
+    # First load the image
+    oci_load(
+        name = name_image,
+        image = image,
+        repo_tags = repo_tags,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    # create the tarball
+    name_tarballdir = basename + "_tarballdir"
+    native.filegroup(
+        name = name_tarballdir,
+        srcs = [":" + name_image],
+        output_group = "tarball",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
+    )
+
+#    # Copy the tarball out so we can reference the file by 'name'
+#    copy_file(
+#        name = basename + "_tar",
+#        src = ":" + name_tarballdir,
+#        out = name,
+#        target_compatible_with = [
+#            "@platforms//os:linux",
+#        ],
+#        tags = ["manual"],
+#    )

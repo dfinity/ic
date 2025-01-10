@@ -865,3 +865,41 @@ http_file(
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
+
+# IC-OS deps
+http_file(
+    name = "ubuntu-base-24.04.1-base-amd64.tar.gz",
+    downloaded_file_path = "ubuntu-base-24.04.1-base-amd64.tar.gz",
+    sha256 = "5b0ffb1e31d4b85f5a2214f105d1377ba616c453b38ff46c278dc6472b21e2d8",
+    url = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.1/release/ubuntu-base-24.04.1-base-amd64.tar.gz",
+)
+
+http_file(
+    name = "filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+    sha256 = "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7",
+    url = "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+)
+
+http_file(
+    name = "node_exporter-1.8.1.linux-amd64.tar.gz",
+    sha256 = "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011",
+    url = "https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz",
+)
+
+http_file(
+    name = "linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb",
+    sha256 = "d4cd2d97fcca81b57bec947b0e8ca004d556afce1d13f5cebe5d677c0445c6a2",
+    url = "http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb",
+)
+
+http_file(
+    name = "linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb",
+    sha256 = "241811191691c68e0874519ee71bda9de39e23510dee5e5512150db874f5b285",
+    url = "http://mirrors.kernel.org/ubuntu/pool/main/l/linux-signed/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb",
+)
+
+http_file(
+    name = "linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb",
+    sha256 = "5c31c7e0d996ebc0928c5e1ad3b80fea047b56dfbbdaa759f7e7a70b1c42f10e",
+    url = "http://mirrors.kernel.org/ubuntu/pool/main/l/linux-meta/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb",
+)

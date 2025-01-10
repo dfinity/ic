@@ -121,8 +121,8 @@ COMMAND=""
 
 #unshare --fork --pid --map-root-user --setuid 0 --setgid 0 echo "hello"
 
-PID_UNSHARE="unshare --fork --pid"
-MOUNT_UNSHARE="$PID_UNSHARE --mount --user --map-root-user"
+PID_UNSHARE="podman unshare"
+MOUNT_UNSHARE="$PID_UNSHARE"
 
 #MOUNT_UNSHARE="$PID_UNSHARE --mount --map-auto --map-root-user --setuid 0 --setgid 0"
 
