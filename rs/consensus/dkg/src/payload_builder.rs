@@ -7,10 +7,11 @@ use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+use ic_protobuf::registry::subnet::v1::{
+    chain_key_initialization::Initialization, CatchUpPackageContents,
+};
 use ic_registry_client_helpers::{
-    crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
-    subnet::SubnetRegistry,
+    crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -457,37 +458,61 @@ pub fn get_dkg_summary_from_cup_contents(
         .registry_store_uri
         .as_ref()
         .map(|v| RegistryVersion::from(v.registry_version));
-    let mut transcripts = DkgTranscripts {
-        low_threshold: cup_contents
+
+    let mut transcripts: BTreeMap<NiDkgTag, NiDkgTranscript> = BTreeMap::new();
+
+    transcripts.insert(
+        NiDkgTag::LowThreshold,
+        cup_contents
             .initial_ni_dkg_transcript_low_threshold
             .map(|dkg_transcript_record| {
                 initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
                     .expect("Decoding initial low-threshold DKG transcript failed.")
             })
             .expect("Missing initial low-threshold DKG transcript"),
-        high_threshold: cup_contents
+    );
+    transcripts.insert(
+        NiDkgTag::HighThreshold,
+        cup_contents
             .initial_ni_dkg_transcript_high_threshold
             .map(|dkg_transcript_record| {
                 initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
                     .expect("Decoding initial high-threshold DKG transcript failed.")
             })
             .expect("Missing initial high-threshold DKG transcript"),
-    };
+    );
+
+    let vet_key_transcripts = cup_contents
+        .chain_key_initializations
+        .iter()
+        .filter_map(|init| {
+            let key_id = &init.key_id.expect("Initialization without a key id");
+            let init = &init.initialization.expect("Empty initialization");
+
+            // IDkg initializations are handled in a different place. This is to include NiDkgTranscripts into the Summary only
+            let Initialization::TranscriptRecord(record) = init else {
+                return None;
+            };
+
+            let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
+                .expect("IDkg key combined with NiDkg initialization");
+
+            let transcript = initial_ni_dkg_transcript_from_registry_record(record).expect(
+                &format!("Decoding high-threshold DKG for key-id {} failed.", key_id),
+            );
+
+            Some((NiDkgTag::HighThresholdForKey(key_id), transcript))
+        });
+    transcripts.extend(vet_key_transcripts);
 
     // If we're in a NNS subnet recovery with failover nodes, we set the transcript versions to the
     // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
     // computed incorrectly.
     if let Some(version) = registry_version_of_original_registry {
-        transcripts.low_threshold.registry_version = version;
-        transcripts.high_threshold.registry_version = version;
+        for (_, transcript) in &mut transcripts {
+            transcript.registry_version = version;
+        }
     }
-
-    let transcripts = vec![
-        (NiDkgTag::LowThreshold, transcripts.low_threshold),
-        (NiDkgTag::HighThreshold, transcripts.high_threshold),
-    ]
-    .into_iter()
-    .collect();
 
     let committee = get_node_list(subnet_id, registry, registry_version)
         .expect("Could not retrieve committee list");
