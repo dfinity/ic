@@ -35,7 +35,7 @@ use ic_sns_governance_api::pb::v1::{
     GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
     ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
     RewardEvent, SetMode, SetModeResponse,
@@ -208,11 +208,13 @@ fn caller() -> PrincipalId {
     PrincipalId::from(cdk_caller())
 }
 
-/// In contrast to canister_init(), this method does not do deserialization.
-/// In addition to canister_init, this method is called by canister_post_upgrade.
 #[init]
-fn canister_init_(init_payload: GovernanceProto) {
+fn canister_init(init_payload: GovernanceApi) {
     let init_payload = sns_gov_pb::Governance::from(init_payload);
+    canister_init_(init_payload);
+}
+
+fn canister_init_(init_payload: sns_gov_pb::Governance) {
     let init_payload = ValidGovernanceProto::try_from(init_payload).expect(
         "Cannot start canister, because the deserialized \
          GovernanceProto is invalid in some way",
@@ -277,7 +279,7 @@ fn canister_post_upgrade() {
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
-    match GovernanceProto::decode(reader) {
+    match sns_gov_pb::Governance::decode(reader) {
         Err(err) => {
             log!(
                 ERROR,
@@ -304,7 +306,7 @@ fn canister_post_upgrade() {
     log!(INFO, "Completed post upgrade");
 }
 
-fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
+fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut sns_gov_pb::Governance) {
     for neuron in governance_proto.neurons.values_mut() {
         for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
             disbursement.finalize_disbursement_timestamp_seconds = Some(
