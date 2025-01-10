@@ -13,6 +13,8 @@ mod benches_u256;
 mod benches_u64;
 
 pub const NUM_TRANSFERS: u32 = 10_000;
+pub const NUM_APPROVALS: u32 = 10_000;
+pub const NUM_TRANSFERS_FROM: u32 = 10_000;
 
 pub fn upgrade() {
     let _p = canbench_rs::bench_scope("upgrade");
@@ -20,8 +22,9 @@ pub fn upgrade() {
     post_upgrade(None);
 }
 
-pub fn icrc1_transfer(
+pub fn icrc_transfer(
     from: Principal,
+    spender: Option<Account>,
     arg: TransferArg,
 ) -> Result<BlockIndex, ic_ledger_canister_core::ledger::TransferError<Tokens>> {
     let from_account = Account {
@@ -31,7 +34,7 @@ pub fn icrc1_transfer(
     execute_transfer_not_async(
         from_account,
         arg.to,
-        None,
+        spender,
         arg.fee,
         arg.amount,
         arg.memo,
@@ -58,8 +61,9 @@ fn mint_tokens<T: Into<Nat>>(minter: Principal, amount: T) -> Account {
         subaccount: Some([255_u8; 32]),
     };
     assert_matches!(
-        icrc1_transfer(
+        icrc_transfer(
             minter,
+            None,
             TransferArg {
                 from_subaccount: None,
                 to: account_with_tokens,
