@@ -624,12 +624,12 @@ proposal_field_value() {
 
 nns_upgrade_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
+    cat "$FILE" | grep "# Upgrade the" | cut -d' ' -f4
 }
 
 sns_wasm_publish_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Publish the SNS" | cut -d' ' -f7
+    cat "$FILE" | grep "# Publish SNS" | cut -d' ' -f4
 }
 #### Proposal text validators
 
