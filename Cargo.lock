@@ -13061,7 +13061,6 @@ dependencies = [
 name = "ic-test-utilities-types"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "bincode",
  "ic-canister-client-sender",
  "ic-crypto-ed25519",
