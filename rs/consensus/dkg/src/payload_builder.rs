@@ -555,6 +555,7 @@ pub(crate) fn get_configs_for_local_transcripts(
                 )
             }
         };
+
         let threshold =
             NumberOfNodes::from(tag.threshold_for_subnet_of_size(node_ids.len()) as u32);
         let new_config = match NiDkgConfig::new(NiDkgConfigData {
@@ -847,6 +848,7 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -861,46 +863,64 @@ mod tests {
     #[test]
     fn test_get_configs_for_local_transcripts() {
         let prev_committee: Vec<_> = (10..21).map(node_test_id).collect();
-        let reshared_transcript = Some(dummy_transcript_for_tests_with_params(
-            prev_committee.clone(),
-            NiDkgTag::HighThreshold,
-            NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
-            888,
-        ));
+
         let receivers: BTreeSet<_> = (3..8).map(node_test_id).collect();
         let start_block_height = Height::from(777);
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
 
-        // let mut registry = MockRegistryClient::new();
-        // registry.expect_get_value().return_const({
-        //     let pk = SubnetRecord {
-        //         ..Default::default()
-        //     };
-        //     let mut v = Vec::new();
-        //     pk.encode(&mut v).unwrap();
-        //     Ok(Some(v))
-        // });
+        let vet_kd_ids = vec![
+            NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("first_key"),
+            }),
+            NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("second_key"),
+            }),
+        ];
+
+        let mut reshared_transcripts = BTreeMap::new();
+        reshared_transcripts.insert(
+            NiDkgTag::HighThreshold,
+            dummy_transcript_for_tests_with_params(
+                prev_committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
+                888,
+            ),
+        );
+        for key in &vet_kd_ids {
+            let tag = NiDkgTag::HighThresholdForKey(key.clone());
+
+            reshared_transcripts.insert(
+                tag.clone(),
+                dummy_transcript_for_tests_with_params(
+                    prev_committee.clone(),
+                    tag.clone(),
+                    tag.clone()
+                        .threshold_for_subnet_of_size(prev_committee.len())
+                        as u32,
+                    888,
+                ),
+            );
+        }
 
         // Tests the happy path.
         let configs = get_configs_for_local_transcripts(
             subnet_id,
             receivers.clone(),
             start_block_height,
-            &vec![(
-                NiDkgTag::HighThreshold,
-                reshared_transcript.clone().unwrap(),
-            )]
-            .into_iter()
-            .collect(),
+            //&reshared_transcript.into_iter().collect(),
+            &reshared_transcripts,
             registry_version,
-            &[],
+            &vet_kd_ids,
         )
         .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
 
-        // We produced exactly two configs, and with expected ids.
-        assert_eq!(configs.len(), 2);
-        for (index, tag) in tags_iter(&[]).enumerate() {
+        // We produced exactly four configs (high, low and two vetkeys), and with expected ids.
+        assert_eq!(configs.len(), 4);
+        for (index, tag) in tags_iter(&vet_kd_ids).enumerate() {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
@@ -922,9 +942,9 @@ mod tests {
                 config.threshold().get().get(),
                 match tag {
                     // 5 receivers => committee size is 4 => high threshold is  4 - f with f = 1
-                    NiDkgTag::HighThreshold => 3,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 3,
                     // low threshold is f + 1, with f same as for high threshold.
-                    _ => 2,
+                    NiDkgTag::LowThreshold => 2,
                 }
             );
 
@@ -934,26 +954,27 @@ mod tests {
             assert_eq!(
                 config.max_corrupt_dealers().get(),
                 match tag {
-                    NiDkgTag::HighThreshold => 3,
-                    _ => 1,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 3,
+                    NiDkgTag::LowThreshold => 1,
                 }
             );
 
             // We use the committee of the reshared transcript as dealers for the high
             // threshold, or the current subnet members, for the low threshold.
             let expected_dealers = match tag {
-                NiDkgTag::HighThreshold => {
+                NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
                     prev_committee.clone().into_iter().collect::<BTreeSet<_>>()
                 }
-                _ => receivers.clone().into_iter().collect::<BTreeSet<_>>(),
+                NiDkgTag::LowThreshold => receivers.clone().into_iter().collect::<BTreeSet<_>>(),
             };
             assert_eq!(config.dealers().get(), &expected_dealers);
 
             assert_eq!(
-                config.resharing_transcript(),
+                config.resharing_transcript().as_ref(),
                 match tag {
-                    NiDkgTag::HighThreshold => &reshared_transcript,
-                    _ => &None,
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) =>
+                        reshared_transcripts.get(&tag),
+                    NiDkgTag::LowThreshold => None,
                 }
             );
         }
