@@ -20,7 +20,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{HttpRequest, HttpRequestContent, MessageId},
+    messages::{HttpRequest, HttpRequestContent},
     RegistryVersion, SubnetId, Time,
 };
 use ic_validator::{
@@ -246,12 +246,12 @@ impl IntoResponse for CborUserError {
     }
 }
 
-pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug>(
+pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestContent>(
     request: &HttpRequest<C>,
-    message_id: MessageId,
     err: RequestValidationError,
     log: &ReplicaLogger,
 ) -> HttpError {
+    let message_id = request.id();
     match err {
         RequestValidationError::InvalidSignature(_) => {
             info!(
