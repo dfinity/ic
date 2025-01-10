@@ -248,7 +248,7 @@ impl NeuronStore {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> NeuronMetrics {
-        let mut metrics = if self.use_stable_memory_for_all_neurons {
+        let mut metrics = if self.allow_active_neurons_in_stable_memory {
             NeuronMetrics {
                 ..Default::default()
             }
@@ -265,7 +265,7 @@ impl NeuronStore {
             }
         };
 
-        if self.use_stable_memory_for_all_neurons {
+        if self.allow_active_neurons_in_stable_memory {
             self.compute_neuron_metrics_all_stable(
                 &mut metrics,
                 neuron_minimum_stake_e8s,

@@ -569,13 +569,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.18.11",
             ),
             "ic-agent": crate.spec(
-                version = "^0.37.1",
-                features = [
-                    "experimental_sync_call",
-                    "hyper",
-                    "reqwest",
-                    "pem",
-                ],
+                version = "^0.39.2",
+                features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
@@ -588,10 +583,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "ic-canister-sig-creation": crate.spec(
-                version = "^1.0.1",
+                git = "https://github.com/dfinity/ic-canister-sig-creation",
+                rev = "7f9e931954637526295269155881207f6c832d6d",
             ),
             "ic-cbor": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.16.0",
@@ -606,17 +602,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-certificate-verification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-http-certification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-http-gateway": crate.spec(
-                git = "https://github.com/dfinity/http-gateway",
-                tag = "0.1.0-b0",
+                version = "0.1.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -626,7 +621,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-response-verification": crate.spec(
-                version = "2.6.0",
+                version = "3.0.2",
             ),
             "ic-sha3": crate.spec(
                 version = "^1.0.0",
@@ -646,10 +641,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-transport-types": crate.spec(
-                version = "^0.37.1",
+                version = "^0.39.2",
             ),
             "ic-utils": crate.spec(
-                version = "^0.37.0",
+                version = "^0.39.0",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
@@ -695,7 +690,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "ipnet": crate.spec(
-                version = "^2.5.0",
+                version = "^2.10.1",
+                features = ["serde"],
             ),
             "isocountry": crate.spec(
                 version = "^0.3.2",
@@ -878,7 +874,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "opentelemetry_sdk": crate.spec(
-                version = "^0.27.0",
+                version = "^0.27.1",
                 features = [
                     "trace",
                     "rt-tokio",
@@ -1434,17 +1430,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "^26.0.0",
+                version = "^28.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
                     "gc",
+                    "gc-null",
                     "parallel-compilation",
                     "runtime",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^26.0.0",
+                version = "^28.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",

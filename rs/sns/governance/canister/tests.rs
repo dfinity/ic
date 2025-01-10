@@ -1,11 +1,7 @@
 use super::*;
 use assert_matches::assert_matches;
 use candid_parser::utils::{service_equal, CandidSource};
-use ic_sns_governance_api::pb::v1::{
-    governance::{Version, Versions},
-    upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
-    DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
-};
+use ic_sns_governance_api::pb::v1::{DisburseMaturityInProgress, Neuron};
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
@@ -115,6 +111,12 @@ fn test_populate_finalize_disbursement_timestamp_seconds() {
 
 #[test]
 fn test_upgrade_journal() {
+    use ic_sns_governance::pb::v1::{
+        governance::{Version, Versions},
+        upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
+        UpgradeJournal, UpgradeJournalEntry,
+    };
+
     let journal = UpgradeJournal {
         entries: vec![UpgradeJournalEntry {
             timestamp_seconds: Some(1000),
@@ -135,7 +137,7 @@ fn test_upgrade_journal() {
 
     // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
     // journal object.
-    let http_response = serve_journal(&journal.entries);
+    let http_response = serve_journal(&journal);
     let expected_headers: HashSet<(_, _)> = HashSet::from_iter([
         ("Content-Type".to_string(), "application/json".to_string()),
         ("Content-Length".to_string(), "277".to_string()),

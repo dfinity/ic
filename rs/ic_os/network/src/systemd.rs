@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -7,6 +8,7 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
+use config_types::DeterministicIpv6Config;
 use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
@@ -74,6 +76,54 @@ pub fn restart_systemd_networkd() {
     // Explicitly don't care about return code status...
 }
 
+// TODO(NODE-1466): Consolidate generate_systemd_config_files_new_config and generate_and_write_systemd_files
+pub fn generate_systemd_config_files_new_config(
+    output_directory: &Path,
+    ipv6_config: &DeterministicIpv6Config,
+    generated_mac: Option<&MacAddr6>,
+    ipv6_address: &Ipv6Addr,
+) -> Result<()> {
+    let mut interfaces = get_interfaces()?;
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
+    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
+
+    let ping_target = ipv6_config.gateway.to_string();
+
+    let fastest_interface = interfaces
+        .iter()
+        .find(|i| {
+            match has_ipv6_connectivity(i, ipv6_address, ipv6_config.prefix_length, &ping_target) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
+                    false
+                }
+            }
+        })
+        .context("Could not find any network interfaces")?;
+
+    eprintln!("Using fastest interface: {:?}", fastest_interface);
+
+    // Format the IP address to include the subnet length. See `man systemd.network`.
+    let ipv6_address = format!(
+        "{}/{}",
+        &ipv6_address.to_string(),
+        ipv6_config.prefix_length
+    );
+    generate_and_write_systemd_files(
+        output_directory,
+        fastest_interface,
+        generated_mac,
+        &ipv6_address,
+        &ipv6_config.gateway.to_string(),
+    )?;
+
+    println!("Restarting systemd networkd");
+    restart_systemd_networkd();
+
+    Ok(())
+}
+
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
@@ -120,8 +170,7 @@ pub fn generate_systemd_config_files(
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by_key(|v| v.speed_mbps);
-    interfaces.reverse();
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();

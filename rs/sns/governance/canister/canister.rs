@@ -11,7 +11,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_journal, serve_logs, serve_logs_v2, serve_metrics,
+    serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -25,28 +25,26 @@ use ic_sns_governance::{
     logs::{ERROR, INFO},
     pb::v1 as sns_gov_pb,
     types::{Environment, HeapGrowthPotential},
+    upgrade_journal::serve_journal,
+};
+use ic_sns_governance_api::pb::v1::{
+    get_running_sns_version_response::UpgradeInProgress, governance::Version,
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+    FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
     AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
-};
-use ic_sns_governance_api::pb::{
-    v1 as api,
-    v1::{
-        get_running_sns_version_response::UpgradeInProgress, governance::Version,
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
-        FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-        GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-        GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
-        GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
-        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        RewardEvent, SetMode, SetModeResponse,
-    },
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -646,9 +644,7 @@ pub fn http_request(request: HttpRequest) -> HttpResponse {
                 .clone()
                 .expect("The upgrade journal is not initialized for this SNS.");
 
-            let journal = api::UpgradeJournal::from(journal);
-
-            serve_journal(&journal.entries)
+            serve_journal(&journal)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
