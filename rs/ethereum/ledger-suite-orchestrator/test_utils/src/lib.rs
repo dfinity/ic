@@ -305,7 +305,7 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
-        MetricsAssert::from(self)
+        MetricsAssert::from_query_metrics(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
@@ -347,35 +347,11 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
-impl QueryMetrics for LedgerSuiteOrchestrator {
-    fn query_metrics(&self) -> Vec<String> {
-        use ic_canisters_http_types::{HttpRequest, HttpResponse};
-        let request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: Default::default(),
-            body: Default::default(),
-        };
-        let response = Decode!(
-            &assert_reply(
-                self.env
-                    .as_ref()
-                    .query(
-                        self.ledger_suite_orchestrator_id,
-                        "http_request",
-                        Encode!(&request).expect("failed to encode HTTP request"),
-                    )
-                    .expect("failed to get metrics")
-            ),
-            HttpResponse
-        )
-        .unwrap();
-        assert_eq!(response.status_code, 200_u16);
-        String::from_utf8_lossy(response.body.as_slice())
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>()
+impl QueryMetrics<UserError> for LedgerSuiteOrchestrator {
+    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.as_ref()
+            .query(self.ledger_suite_orchestrator_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 

@@ -1,33 +1,47 @@
 //! Fluent assertions for metrics.
 
+use candid::{Decode, Encode};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use regex::Regex;
+use std::fmt::Debug;
 
 pub struct MetricsAssert<T> {
     actual: T,
     metrics: Vec<String>,
 }
 
-pub trait QueryMetrics {
-    fn query_metrics(&self) -> Vec<String>;
-}
-
-impl From<Vec<String>> for MetricsAssert<()> {
-    fn from(metrics: Vec<String>) -> Self {
-        Self {
-            actual: (),
-            metrics,
-        }
-    }
-}
-
-impl<T: QueryMetrics> From<T> for MetricsAssert<T> {
-    fn from(actual: T) -> Self {
-        let metrics = actual.query_metrics();
-        Self { metrics, actual }
-    }
+pub trait QueryMetrics<E: Debug> {
+    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
 
 impl<T> MetricsAssert<T> {
+    pub fn from_query_metrics<E>(actual: T) -> Self
+    where
+        T: QueryMetrics<E>,
+        E: Debug,
+    {
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: "/metrics".to_string(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+        let response = Decode!(
+            &actual
+                .query_metrics(Encode!(&request).expect("failed to encode HTTP request"))
+                .expect("failed to query get_transactions on the ledger"),
+            HttpResponse
+        )
+        .unwrap();
+        assert_eq!(response.status_code, 200_u16);
+        let metrics = String::from_utf8_lossy(response.body.as_slice())
+            .trim()
+            .split('\n')
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+        Self { metrics, actual }
+    }
+
     pub fn actual(self) -> T {
         self.actual
     }

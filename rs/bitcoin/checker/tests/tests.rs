@@ -1,4 +1,4 @@
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{decode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
@@ -8,6 +8,7 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
@@ -376,7 +377,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from(&setup).assert_contains_metric_matching(
+        MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -421,7 +422,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -465,7 +466,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -753,7 +754,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from(&setup)
+    MetricsAssert::from_query_metrics(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -797,7 +798,7 @@ fn should_query_logs_and_metrics() {
 
 fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     use candid::Decode;
-    let request = ic_canisters_http_types::HttpRequest {
+    let request = HttpRequest {
         method: "GET".to_string(),
         url: url.into(),
         headers: Default::default(),
@@ -816,7 +817,7 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
                 )
                 .expect("failed to query get_transactions on the ledger")
         ),
-        ic_canisters_http_types::HttpResponse
+        HttpResponse
     )
     .unwrap();
 
@@ -833,13 +834,15 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-impl QueryMetrics for &Setup {
-    fn query_metrics(&self) -> Vec<String> {
-        let response = make_http_query(self, "/metrics");
-        String::from_utf8_lossy(&response)
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>()
+impl QueryMetrics<UserError> for &Setup {
+    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.env
+            .query_call(
+                self.btc_checker_canister,
+                Principal::anonymous(),
+                "http_request",
+                request,
+            )
+            .map(assert_reply)
     }
 }
