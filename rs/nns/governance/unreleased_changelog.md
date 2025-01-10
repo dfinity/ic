@@ -9,6 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
+### List Neurons Paging
+
+In the case where more than 500 neurons would be returned from the API, the API will now
+return a `next_start_from_neuron_id` field in the response. The value can then be added
+to the next request to get the next set of neurons.
+
+This will only affect neuron holders with more than 500 neurons, which is a small minority.
+
+The advantage of this is that is now possible for neuron holders with many inactive neurons
+to list all of their neurons, while also limiting the amount of work the endpoint does in a 
+single request.
+
 ### Periodic Confirmation
 
 Enabled voting power adjustment and follow pruning.
