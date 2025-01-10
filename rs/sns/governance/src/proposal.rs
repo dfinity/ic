@@ -1097,7 +1097,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     if !defects.is_empty() {
         let tip = if upgrade.chunked_canister_wasm.is_some() {
             format!(
-                "\nPlease make sure that both Governance ({}) and Root ({}) are controllers of
+                "\nPlease make sure that both Governance ({}) and Root ({}) are controllers of \
                  the Wasm store canister.",
                 env.canister_id().get(),
                 root_canister_id.get(),
