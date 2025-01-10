@@ -367,7 +367,7 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
-        // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
+        // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         // Regenerate config.json on *every boot* in case the config structure changes between
         // when we roll out the update-config service and when we roll out the 'config integration'
         Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
