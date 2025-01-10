@@ -1573,6 +1573,59 @@ pub fn list_neurons(
     Decode!(&result, ListNeuronsResponse).unwrap()
 }
 
+/// This function is intended to ensure all neurons are paged through.  It
+/// recursively calls `list_neurons`.  This method will panic if more than 20 requests are made
+/// this method could be adjusted.
+pub fn list_all_neurons_and_combine_responses(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
+    assert!(
+        request.start_from_neuron_id.is_none(),
+        "This method is intended to ensure all neurons \
+                        are paged through.  `start_from_neuron_id` should be None."
+    );
+
+    let mut response = list_neurons(
+        state_machine,
+        sender,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
+            start_from_neuron_id: None,
+        },
+    );
+
+    let mut next_neuron_id = response.next_start_from_neuron_id;
+
+    let mut count = 0;
+    while next_neuron_id.is_some() {
+        let mut new_request = request.clone();
+        new_request.start_from_neuron_id = next_neuron_id;
+        let mut new_response = list_neurons(state_machine, sender, new_request);
+        response.full_neurons.append(&mut new_response.full_neurons);
+        response
+            .neuron_infos
+            .extend(new_response.neuron_infos.into_iter());
+
+        next_neuron_id = new_response.next_start_from_neuron_id;
+
+        count += 1;
+        if count > 20 {
+            panic!(
+                "More than 20 requests were made to list_neurons.  \
+                    Did you intend to retrieve more than 10,000 neurons?"
+            );
+        }
+    }
+
+    response.next_start_from_neuron_id = None;
+    response
+}
+
 pub fn list_neurons_by_principal(
     state_machine: &StateMachine,
     sender: PrincipalId,
