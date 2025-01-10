@@ -749,8 +749,9 @@ impl StreamHandlerImpl {
                     if state.metadata.certification_version < CertificationVersion::V19 =>
                 {
                     // Unable to induct a request, generate reject response and push it into `stream`.
-                    stream.push(generate_reject_response_for(reason, &request));
-                    *available_guaranteed_response_memory -= request.count_bytes() as i64;
+                    let reject_response = generate_reject_response_for(reason, &request);
+                    *available_guaranteed_response_memory -= reject_response.count_bytes() as i64;
+                    stream.push(reject_response);
                     stream.push_accept_signal();
                 }
                 Some((reason, RequestOrResponse::Request(_))) => {
