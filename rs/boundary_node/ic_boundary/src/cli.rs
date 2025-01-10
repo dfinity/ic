@@ -288,6 +288,13 @@ pub struct RateLimiting {
     /// Maximum number of shards that we store (per rule)
     #[clap(env, long, default_value = "30000")]
     pub rate_limit_generic_max_shards: u64,
+
+    /// Whether to use the number of API BNs from the registry to scale the rate limit rules.
+    /// E.g. if a ratelimit action is set to "500/1h" and the number of API BNs is 5 then the
+    /// rule would be adjusted to "100/1h" so that the total ratelimit of all API BNs would be "500/1h".
+    /// Important: if after the divison the numerator would be less than 1 then it would be rounded to 1.
+    #[clap(env, long)]
+    pub rate_limit_generic_autoscale: bool,
 }
 
 #[derive(Args)]

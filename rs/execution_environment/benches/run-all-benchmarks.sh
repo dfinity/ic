@@ -28,15 +28,12 @@ run() {
 
     # Counter file tracks the number of benchmark executions so far.
     counter_file="${min_file%.*}.counter"
-    counter=$(cat "${counter_file}" 2>/dev/null || echo "-1")
-    # Quickly execute the benchmarks initially to identify any broken ones.
-    [ "${counter}" -eq "-1" ] && quick="yes" || quick="no"
-    [ -f "${min_file}" ] || counter="-1"
+    counter=$(cat "${counter_file}" 2>/dev/null || echo "0")
+    [ -f "${min_file}" ] || counter="0"
     # Execute benchmark if needed.
     if [ "${counter}" -lt "${i}" ]; then
         echo "==> Running ${name} benchmarks ($((counter + 1)) of ${REPEAT})" >&2
-        QUICK="${quick}" BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" \
-            "${RUN_BENCHMARK}"
+        BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" "${RUN_BENCHMARK}"
         echo "$((counter + 1))" >"${counter_file}"
     fi
     # Summarize results if the benchmark was executed or if it's the final iteration.
@@ -46,7 +43,7 @@ run() {
     fi
 }
 
-for i in $(seq 0 "${REPEAT}"); do
+for i in $(seq 1 "${REPEAT}"); do
     run "${i}" "Embedders Compilation" \
         "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
     run "${i}" "Embedders Heap" \

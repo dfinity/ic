@@ -127,6 +127,7 @@ system_test_nns(
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
+    proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
     ],
@@ -140,6 +141,7 @@ system_test_nns(
         "//rs/nns/constants",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
         "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",

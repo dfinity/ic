@@ -7,7 +7,6 @@ use ic_config::{
 };
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{
@@ -192,9 +191,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             LOCAL_MESSAGE_MEMORY_CAPACITY,
             REMOTE_MESSAGE_MEMORY_CAPACITY,
         )
-    })?;
-
-    fixture.failed_with_reason("TEST")
+    })
 }
 
 proptest! {
