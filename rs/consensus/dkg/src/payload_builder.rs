@@ -245,14 +245,32 @@ pub(super) fn create_summary_payload(
     // the next transcripts, as they are the newest ones.
     // If `next_transcripts` does not contain the required transcripts (due to
     // failed DKGs in the past interval) we reshare the current transcripts.
-    // TODO: Likely, we should do this on a per tag basis
-    let reshared_transcripts = if next_transcripts.contains_key(&NiDkgTag::LowThreshold)
-        && next_transcripts.contains_key(&NiDkgTag::HighThreshold)
-    {
-        &next_transcripts
-    } else {
-        &current_transcripts
-    };
+    // TODO: Implement a test for this and then remove old code
+    // let reshared_transcripts = if next_transcripts.contains_key(&NiDkgTag::LowThreshold)
+    //     && next_transcripts.contains_key(&NiDkgTag::HighThreshold)
+    // {
+    //     &next_transcripts
+    // } else {
+    //     &current_transcripts
+    // };
+    let reshared_transcripts = tags_iter(&vet_kd_ids)
+        .filter_map(|tag| {
+            let transcript = next_transcripts
+                .get(&tag)
+                .or_else(|| current_transcripts.get(&tag))
+                .map(|transcript| (tag.clone(), transcript.clone()));
+
+            if transcript.is_none() {
+                error!(
+                    logger,
+                    "Found tag {:?} in summary configs without any current or next transcripts",
+                    tag
+                );
+            }
+
+            transcript
+        })
+        .collect::<BTreeMap<_, _>>();
 
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
@@ -264,7 +282,7 @@ pub(super) fn create_summary_payload(
             validation_context.registry_version,
         )?,
         height,
-        reshared_transcripts,
+        &reshared_transcripts,
         validation_context.registry_version,
         &vet_kd_ids,
     )?);
