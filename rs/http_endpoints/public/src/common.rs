@@ -256,10 +256,7 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
         RequestValidationError::InvalidSignature(_) => {
             info!(
                 log,
-                "msg_id: {}, err: {}, request: {:?}",
-                message_id,
-                err,
-                request
+                "msg_id: {}, err: {}, request: {:?}", message_id, err, request
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),
