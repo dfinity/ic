@@ -1000,6 +1000,7 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
+                            .with_chain_key_config(one_vet_key())
                             .build(),
                     )],
                 );
@@ -1155,6 +1156,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(one_vet_key())
                         .build(),
                 )],
             );
@@ -1191,14 +1193,13 @@ mod tests {
             // Test the regular case (Both DKGs succeeded)
             let next_summary = create_summary_payload(&genesis_summary);
             for (_, conf) in next_summary.configs.iter() {
-                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                    assert_eq!(
-                        next_summary
-                            .clone()
-                            .next_transcript(&NiDkgTag::HighThreshold)
-                            .unwrap(),
+                let tag = &conf.dkg_id().dkg_tag;
+                match tag {
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
+                        next_summary.clone().next_transcript(tag).unwrap(),
                         &conf.resharing_transcript().clone().unwrap()
-                    )
+                    ),
+                    NiDkgTag::LowThreshold => (),
                 }
             }
 
@@ -1208,13 +1209,15 @@ mod tests {
             genesis_summary.configs.clear();
             let next_summary = create_summary_payload(&genesis_summary);
             for (_, conf) in next_summary.configs.iter() {
-                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                    assert_eq!(
+                let tag = &conf.dkg_id().dkg_tag;
+                match tag {
+                    NiDkgTag::HighThreshold => assert_eq!(
                         next_summary
                             .clone()
                             .current_transcript(&NiDkgTag::HighThreshold),
                         &conf.resharing_transcript().clone().unwrap()
-                    )
+                    ),
+                    _ => (),
                 }
             }
         });
@@ -1236,6 +1239,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(one_vet_key())
                         .build(),
                 )],
             );
@@ -1253,7 +1257,9 @@ mod tests {
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
             assert_eq!(summary.configs.len(), 2);
 
-            for tag in tags_iter(&[]) {
+            let vet_kd_ids =
+                get_enabled_vet_keys(subnet_id, &*registry, summary.registry_version).unwrap();
+            for tag in tags_iter(&vet_kd_ids) {
                 let (id, conf) = summary
                     .configs
                     .iter()
