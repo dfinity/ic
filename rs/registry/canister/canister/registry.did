@@ -272,7 +272,7 @@ type RemoveFirewallRulesPayload = record {
 type RemoveNodeDirectlyPayload = record { node_id : principal };
 
 type RemoveNodeOperatorsPayload = record {
-  node_operators_to_remove : vec blob;
+  node_operators_to_remove : vec principal;
 };
 
 type RemoveNodesPayload = record { node_ids : vec principal };
