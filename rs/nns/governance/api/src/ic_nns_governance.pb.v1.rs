@@ -710,6 +710,7 @@ pub mod proposal {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
+
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1080,6 +1081,8 @@ pub mod manage_neuron {
         #[prost(message, tag = "12")]
         NeuronId(NeuronId),
     }
+
+    // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1110,6 +1113,7 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
 /// The response of the ManageNeuron command
@@ -1339,6 +1343,7 @@ pub struct ManageNeuronRequest {
     pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
+// KEEP THIS IN SYNC WITH manage_neuron::Command!
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1367,7 +1372,11 @@ pub enum ManageNeuronCommandRequest {
     Merge(manage_neuron::Merge),
     #[prost(message, tag = "15")]
     StakeMaturity(manage_neuron::StakeMaturity),
+    #[prost(message, tag = "16")]
+    RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2035,15 +2044,13 @@ pub struct ProposalInfo {
     #[prost(uint64, optional, tag = "21")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
 }
+
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2097,7 +2104,47 @@ pub struct NetworkEconomics {
     /// Global Neurons' Fund participation thresholds.
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: Option<NeuronsFundEconomics>,
+
+    /// Parameters that affect the voting power of neurons.
+    #[prost(message, optional, tag = "12")]
+    pub voting_power_economics: ::core::option::Option<VotingPowerEconomics>,
 }
+
+/// Parameters that affect the voting power of neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerEconomics {
+    /// If a neuron has not "refreshed" its voting power after this amount of time,
+    /// its deciding voting power starts decreasing linearly. See also
+    /// clear_following_after_seconds.
+    ///
+    /// For explanation of what "refresh" means in this context, see
+    /// <https://dashboard.internetcomputer.org/proposal/132411>
+    ///
+    /// Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+    #[prost(uint64, optional, tag = "1")]
+    pub start_reducing_voting_power_after_seconds: ::core::option::Option<u64>,
+
+    /// After a neuron has experienced voting power reduction for this amount of
+    /// time, a couple of things happen:
+    ///
+    ///      1. Deciding voting power reaches 0.
+    ///
+    ///      2. Its following on topics other than NeuronManagement are cleared.
+    ///
+    /// Initially, set to 1/12 years.
+    #[prost(uint64, optional, tag = "2")]
+    pub clear_following_after_seconds: ::core::option::Option<u64>,
+}
+
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
 /// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
@@ -2666,6 +2713,8 @@ pub mod update_canister_settings {
         pub log_visibility: Option<i32>,
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: Option<u64>,
+        #[prost(uint64, optional, tag = "7")]
+        pub wasm_memory_threshold: Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2991,6 +3040,12 @@ pub mod governance {
             Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "39")]
         pub public_neuron_subset_metrics: Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "40")]
+        pub declining_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "41")]
+        pub fully_lost_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3007,27 +3062,46 @@ pub mod governance {
             /// example, count = count_buckets.values().sum().
             #[prost(uint64, optional, tag = "1")]
             pub count: Option<u64>,
+
             #[prost(uint64, optional, tag = "2")]
             pub total_staked_e8s: Option<u64>,
             #[prost(uint64, optional, tag = "3")]
             pub total_staked_maturity_e8s_equivalent: Option<u64>,
             #[prost(uint64, optional, tag = "4")]
             pub total_maturity_e8s_equivalent: Option<u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(uint64, optional, tag = "5")]
             pub total_voting_power: Option<u64>,
+            /// Used to decide proposals. If all neurons refresh their voting
+            /// power/following frequently enough, this will be equal to potential
+            /// voting power. If not, this will be less.
+            #[prost(uint64, optional, tag = "11")]
+            pub total_deciding_voting_power: ::core::option::Option<u64>,
+            /// Used for voting rewards.
+            #[prost(uint64, optional, tag = "12")]
+            pub total_potential_voting_power: ::core::option::Option<u64>,
+
             /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
             /// analogous to the (singular) fields above. Here, the usual definition of
             /// year for the IC is used: exactly 365.25 days.
             #[prost(map = "uint64, uint64", tag = "6")]
             pub count_buckets: ::std::collections::HashMap<u64, u64>,
+
             #[prost(map = "uint64, uint64", tag = "7")]
             pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "8")]
             pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "9")]
             pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(map = "uint64, uint64", tag = "10")]
             pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "13")]
+            pub deciding_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "14")]
+            pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)

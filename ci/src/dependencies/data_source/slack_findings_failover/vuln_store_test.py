@@ -14,6 +14,7 @@ from data_source.slack_findings_failover.vuln_store import SlackVulnerabilitySto
 
 TEST_SLACK_MSG = "SLACK_MSG"
 TEST_SLACK_MSG_ID = "SLACK_MSG_ID"
+TEST_SLACK_MSG_PERMALINK = "SLACK_MSG_PERMALINK"
 
 TEST_SLACK_API_SEND_MSG_CALL = call.send_message(message=TEST_SLACK_MSG, is_block_kit_message=True, thread_id=None)
 
@@ -36,6 +37,7 @@ def slack_api_risk_ass_msg_call(msg_id, risk_ass):
 def slack_api():
     slack_api = Mock()
     slack_api.send_message.return_value = TEST_SLACK_MSG_ID
+    slack_api.get_permalink.return_value = TEST_SLACK_MSG_PERMALINK
     return slack_api
 
 
@@ -48,6 +50,7 @@ def slack_store(slack_api):
 def slack_vuln_info():
     svi = Mock()
     svi.vulnerability.id = "vid"
+    svi.vulnerability.name = "vname"
     svi.msg_info_by_channel = {
         "c1": SlackVulnerabilityMessageInfo("c1", "m1"),
         "c2": SlackVulnerabilityMessageInfo("c2", "m2"),
@@ -137,9 +140,9 @@ def test_handle_dep_removed_event(slack_store, slack_vuln_info, slack_api):
 
 def test_handle_risk_unknown_event(slack_store, slack_vuln_info, slack_api, info_by_project):
     events = [SlackVulnerabilityEvent.risk_unknown("vid", "c1"), SlackVulnerabilityEvent.risk_unknown("vid", "c2")]
+    scan_res = {"c1": SlackScanResult(), "c2": SlackScanResult()}
 
-    slack_store.handle_events(events, {}, slack_vuln_info, info_by_project)
+    slack_store.handle_events(events, scan_res, slack_vuln_info, info_by_project)
 
-    slack_api.assert_has_calls(
-        [slack_api_risk_ass_msg_call("m1", "risk_ass1"), slack_api_risk_ass_msg_call("m2", "risk_ass2")]
-    )
+    assert scan_res["c1"].unrated_vulnerabilities_reminder == {"vname": (TEST_SLACK_MSG_PERMALINK, {"risk_ass1"})}
+    assert scan_res["c2"].unrated_vulnerabilities_reminder == {"vname": (TEST_SLACK_MSG_PERMALINK, {"risk_ass2"})}

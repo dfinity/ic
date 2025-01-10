@@ -10,8 +10,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl,
-    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
+    make_registry_cup_from_cup_contents,
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
@@ -279,7 +279,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    idkg_keys_signing_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -293,15 +293,15 @@ fn make_nodes_registry(
         let latest_registry_version = registry_data_provider.latest_version();
         RegistryVersion::from(latest_registry_version.get() + 1)
     };
-    // ECDSA subnet_id must be different from nns_subnet_id, otherwise
-    // `sign_with_ecdsa` won't be charged.
+    // subnet_id must be different from nns_subnet_id, otherwise
+    // the IC00 call won't be charged.
     let subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for (key_id, is_signing_enabled) in idkg_keys_signing_enabled_status {
-        if !*is_signing_enabled {
+    for (key_id, is_enabled) in chain_keys_enabled_status {
+        if !*is_enabled {
             continue;
         }
         registry_data_provider
@@ -408,7 +408,7 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: idkg_keys_signing_enabled_status
+            key_configs: chain_keys_enabled_status
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
@@ -842,7 +842,7 @@ pub struct StateMachine {
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
+    chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -914,7 +914,7 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
@@ -943,7 +943,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            idkg_keys_signing_enabled_status: Default::default(),
+            chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
             is_ecdsa_signing_enabled: true,
@@ -1053,19 +1053,19 @@ impl StateMachineBuilder {
     }
 
     pub fn with_master_ecdsa_public_key(self) -> Self {
-        self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        self.with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "master_ecdsa_public_key".to_string(),
         }))
     }
 
-    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_signing_enabled_status.insert(key_id, true);
+    pub fn with_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_enabled_status.insert(key_id, true);
         self
     }
 
-    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_signing_enabled_status.insert(key_id, false);
+    pub fn with_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_enabled_status.insert(key_id, false);
         self
     }
 
@@ -1150,7 +1150,7 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.idkg_keys_signing_enabled_status,
+            self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
             self.is_ecdsa_signing_enabled,
@@ -1450,7 +1450,7 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+        chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
@@ -1499,7 +1499,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &idkg_keys_signing_enabled_status,
+            &chain_keys_enabled_status,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1596,6 +1596,7 @@ impl StateMachine {
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
+                &state_manager.state_layout().tmp(),
             )
         });
 
@@ -1619,9 +1620,9 @@ impl StateMachine {
         };
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
-        let mut idkg_subnet_secret_keys = BTreeMap::new();
+        let mut chain_key_subnet_secret_keys = BTreeMap::new();
 
-        for key_id in idkg_keys_signing_enabled_status.keys() {
+        for key_id in chain_keys_enabled_status.keys() {
             let (public_key, private_key) = match key_id {
                 MasterPublicKeyId::Ecdsa(id) if *id == master_ecdsa_public_key => {
                     // ckETH tests rely on using the hard-coded ecdsa_secret_key
@@ -1719,7 +1720,7 @@ impl StateMachine {
                 }
             };
 
-            idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
+            chain_key_subnet_secret_keys.insert(key_id.clone(), private_key);
 
             chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
@@ -1791,7 +1792,7 @@ impl StateMachine {
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
             chain_key_subnet_public_keys,
-            idkg_subnet_secret_keys,
+            chain_key_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             log_level,
             nodes,
@@ -2114,7 +2115,7 @@ impl StateMachine {
         assert!(context.is_ecdsa());
 
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-            self.idkg_subnet_secret_keys.get(&context.key_id())
+            self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
             let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
@@ -2143,7 +2144,7 @@ impl StateMachine {
     ) -> Result<SignWithSchnorrReply, UserError> {
         assert!(context.is_schnorr());
 
-        let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
+        let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
                 let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
@@ -2151,8 +2152,22 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
-                    .to_vec()
+                if let Some(ref aux) = context.schnorr_args().taproot_tree_root {
+                    dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
+                        .map(|v| v.to_vec())
+                        .map_err(|_| {
+                            UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                format!(
+                                    "Invalid inputs for BIP341 signature with key {}",
+                                    context.key_id()
+                                ),
+                            )
+                        })?
+                } else {
+                    dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                        .to_vec()
+                }
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2160,6 +2175,13 @@ impl StateMachine {
                     &context.derivation_path[..],
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
+
+                if context.schnorr_args().taproot_tree_root.is_some() {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "Ed25519 does not use BIP341 aux parameter".to_string(),
+                    ));
+                }
 
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
@@ -2547,8 +2569,7 @@ impl StateMachine {
     /// After you import the canister, you can execute methods on it and upgrade it.
     /// The original directory is not modified.
     ///
-    /// The function is currently not used in code, but it is useful for local
-    /// testing and debugging. Do not remove it.
+    /// This function is useful for local testing and debugging. Do not remove it.
     ///
     /// # Panics
     ///
@@ -2558,6 +2579,8 @@ impl StateMachine {
         canister_directory: P,
         canister_id: CanisterId,
     ) {
+        use ic_replicated_state::testing::SystemStateTesting;
+
         let canister_directory = canister_directory.as_ref();
         assert!(
             canister_directory.is_dir(),
@@ -2610,7 +2633,7 @@ impl StateMachine {
             }
         }
 
-        let canister_state = ic_state_manager::checkpoint::load_canister_state(
+        let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
             ic_types::Height::new(0),
@@ -2627,7 +2650,14 @@ impl StateMachine {
         .0;
 
         let (h, mut state) = self.state_manager.take_tip();
+
+        // Repartition input schedules; Required step for migrating canisters.
+        canister_state
+            .system_state
+            .split_input_schedules(&canister_id, &state.canister_states);
+
         state.put_canister_state(canister_state);
+
         self.state_manager.commit_and_certify(
             state,
             h.increment(),
@@ -3214,6 +3244,11 @@ impl StateMachine {
     /// Returns the status of the ingress message with the specified ID.
     pub fn ingress_status(&self, msg_id: &MessageId) -> IngressStatus {
         (self.ingress_history_reader.get_latest_status())(msg_id)
+    }
+
+    /// Returns the caller of the ingress message with the specified ID if available.
+    pub fn ingress_caller(&self, msg_id: &MessageId) -> Option<UserId> {
+        self.get_latest_state().get_ingress_status(msg_id).user_id()
     }
 
     /// Starts the canister with the specified ID.

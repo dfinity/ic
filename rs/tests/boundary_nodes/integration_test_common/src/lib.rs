@@ -38,15 +38,8 @@ use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
-use ic_agent::{
-    agent::http_transport::{
-        hyper_transport::hyper::StatusCode,
-        reqwest_transport::{reqwest, ReqwestTransport},
-    },
-    export::Principal,
-    Agent,
-};
-use reqwest::{redirect::Policy, ClientBuilder, Method};
+use ic_agent::{export::Principal, Agent};
+use reqwest::{redirect::Policy, ClientBuilder, Method, StatusCode};
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::{runtime::Runtime, time::sleep};
@@ -180,9 +173,10 @@ pub fn api_query_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env, logger.clone()).await?;
 
-        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-        let agent = Agent::builder().with_transport(transport).build()?;
+        let agent = Agent::builder()
+            .with_url(format!("https://{host}/"))
+            .with_http_client(client)
+            .build()?;
         agent.fetch_root_key().await?;
 
         let out = agent.query(&cid, "read").call().await?;
@@ -220,8 +214,10 @@ pub fn api_call_test(env: TestEnv) {
             .unwrap();
 
         // check that the update call went through
-        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-        let agent = Agent::builder().with_transport(transport).build()?;
+        let agent = Agent::builder()
+            .with_url(format!("https://{host}/"))
+            .with_http_client(client)
+            .build()?;
         agent.fetch_root_key().await?;
 
         let out = agent.query(&cid, "read").call().await?;
@@ -250,10 +246,10 @@ pub fn api_sync_call_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
-            .with_use_call_v3_endpoint();
-
-        let agent = Agent::builder().with_transport(transport).build()?;
+        let agent = Agent::builder()
+            .with_url(format!("https://{host}/"))
+            .with_http_client(client)
+            .build()?;
         agent.fetch_root_key().await?;
 
         // update call
@@ -285,9 +281,10 @@ pub fn api_canister_read_state_test(env: TestEnv) {
     block_on(async move {
         let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-        let agent = Agent::builder().with_transport(transport).build()?;
+        let agent = Agent::builder()
+            .with_url(format!("https://{host}/"))
+            .with_http_client(client)
+            .build()?;
         agent.fetch_root_key().await?;
 
         let _ = agent.read_state_canister_info(cid, "module_hash").await?;
@@ -311,9 +308,10 @@ pub fn api_subnet_read_state_test(env: TestEnv) {
     let (client, host) = setup_client(env.clone()).expect("failed to setup client");
 
     block_on(async move {
-        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-        let agent = Agent::builder().with_transport(transport).build()?;
+        let agent = Agent::builder()
+            .with_url(format!("https://{host}/"))
+            .with_http_client(client)
+            .build()?;
         agent.fetch_root_key().await?;
 
         let subnet_id: Principal = env
@@ -674,11 +672,9 @@ pub fn asset_canister_test(env: TestEnv) {
                     .get(format!("https://{host}/invalid-4mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
-                    .text()
-                    .await.context("unable to download asset body")?;
+                    .await.context("unable to request asset")?;
 
-                if !res.contains("Response verification failed") {
+                if res.status() != StatusCode::SERVICE_UNAVAILABLE {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -1628,15 +1624,8 @@ pub fn http_endpoints_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::INTERNAL_SERVER_ERROR {
+            if res.status() != StatusCode::SERVICE_UNAVAILABLE {
                 bail!("{name} failed: {}", res.status())
-            }
-
-            let body = res.bytes().await?.to_vec();
-            let body = String::from_utf8_lossy(&body);
-
-            if !body.contains("Response verification failed") {
-                bail!("{name} failed: invalid asset did not fail verification")
             }
 
             Ok(())

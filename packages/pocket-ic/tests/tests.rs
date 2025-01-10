@@ -1,4 +1,7 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use ic_certification::Label;
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
@@ -9,11 +12,12 @@ use pocket_ic::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc,
-    PocketIcBuilder, WasmResult,
+    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
+    PocketIc, PocketIcBuilder, WasmResult,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{io::Read, time::SystemTime};
 
@@ -1113,7 +1117,7 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing enabled keys: []"));
 }
 
 #[test]
@@ -2009,25 +2013,91 @@ fn ingress_status() {
     pic.add_cycles(canister_id, INIT_CYCLES);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
+    let caller = Principal::from_slice(&[0xFF; 29]);
     let msg_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "whoami",
-            encode_one(()).unwrap(),
-        )
+        .submit_call(canister_id, caller, "whoami", encode_one(()).unwrap())
         .unwrap();
 
-    assert!(pic.ingress_status(msg_id.clone()).is_none());
+    match pic.ingress_status(msg_id.clone(), None) {
+        IngressStatusResult::NotAvailable => (),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
+
+    // since the ingress status is not available, any caller can attempt to retrieve it
+    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
+        IngressStatusResult::NotAvailable => (),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
 
     pic.tick();
 
-    let ingress_status = pic.ingress_status(msg_id).unwrap().unwrap();
-    let principal = match ingress_status {
+    let reply = match pic.ingress_status(msg_id.clone(), None) {
+        IngressStatusResult::Success(result) => result.unwrap(),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    };
+    let principal = match reply {
         WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
         WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
     };
     assert_eq!(principal, canister_id.to_string());
+
+    // now that the ingress status is available, the caller must match
+    let expected_err = "The user tries to access Request ID not signed by the caller.";
+    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
+        IngressStatusResult::Forbidden(msg) => assert_eq!(msg, expected_err,),
+        status => panic!("Unexpected ingress status: {:?}", status),
+    }
+
+    // confirm the behavior of read state requests
+    let resp = read_state_request_status(&pic, canister_id, msg_id.message_id.as_slice());
+    assert_eq!(resp.status(), reqwest::StatusCode::FORBIDDEN);
+    assert_eq!(
+        String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap(),
+        expected_err
+    );
+}
+
+fn read_state_request_status(
+    pic: &PocketIc,
+    canister_id: Principal,
+    msg_id: &[u8],
+) -> reqwest::blocking::Response {
+    let path = vec!["request_status".into(), Label::from_bytes(msg_id)];
+    let paths = vec![path.clone()];
+    let content = ReadState {
+        ingress_expiry: pic
+            .get_time()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+            + 240_000_000_000,
+        sender: Principal::anonymous(),
+        paths,
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/read_state",
+        pic.instance_id(),
+        canister_id.to_text()
+    );
+    let client = reqwest::blocking::Client::new();
+    client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .unwrap()
 }
 
 #[test]

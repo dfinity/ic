@@ -1,19 +1,21 @@
 use crate::{
+    blockchainstate::BlockchainState,
     config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    GetSuccessorsHandler, TransactionManagerRequest,
+    BlockchainManagerRequest, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
+use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
@@ -127,10 +129,20 @@ pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
     last_received_tx: watch::Sender<Option<Instant>>,
-    get_successors_handler: GetSuccessorsHandler,
+    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest>,
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {
+    let get_successors_handler = GetSuccessorsHandler::new(
+        &config,
+        // The get successor handler should be low latency, and instead of not sharing state and
+        // offloading the computation to an event loop here we directly access the shared state.
+        blockchain_state,
+        blockchain_manager_tx,
+        metrics_registry,
+    );
+
     let btc_adapter_impl = BtcServiceImpl {
         last_received_tx,
         get_successors_handler,
@@ -150,7 +162,7 @@ pub fn start_grpc_server(
             });
         }
         IncomingSource::Systemd => {
-            let incoming = unsafe { incoming_from_first_systemd_socket() };
+            let incoming = unsafe { incoming_from_nth_systemd_socket(1) };
             let server_fut = Server::builder()
                 .add_service(BtcServiceServer::new(btc_adapter_impl))
                 // SAFETY: The process is managed by systemd and is configured to start with at least one socket.

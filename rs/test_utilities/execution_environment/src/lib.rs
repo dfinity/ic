@@ -69,13 +69,15 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
-use std::convert::TryFrom;
-use std::sync::Arc;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    convert::TryFrom,
+    os::unix::prelude::FileExt,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
     time::Duration,
 };
-use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
 
 mod wat_canister;
@@ -108,7 +110,7 @@ pub fn generate_subnets(
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
     }
@@ -1722,7 +1724,7 @@ pub struct ExecutionTestBuilder {
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
-    chain_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1762,7 +1764,7 @@ impl Default for ExecutionTestBuilder {
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
-            chain_keys_with_signing_enabled: Default::default(),
+            chain_keys_enabled_status: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1857,12 +1859,12 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.chain_keys_with_signing_enabled.insert(key_id, true);
+        self.chain_keys_enabled_status.insert(key_id, true);
         self
     }
 
-    pub fn with_signing_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.chain_keys_with_signing_enabled.insert(key_id, false);
+    pub fn with_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_enabled_status.insert(key_id, false);
         self
     }
 
@@ -1988,6 +1990,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_query_caching_disabled(mut self) -> Self {
+        self.execution_config.query_caching = FlagStatus::Disabled;
         self
     }
 
@@ -2216,8 +2223,8 @@ impl ExecutionTestBuilder {
         if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
             config.schnorr_signature_fee = schnorr_signature_fee;
         }
-        for (key_id, is_signing_enabled) in &self.chain_keys_with_signing_enabled {
-            // Populate hte chain key settings
+        for (key_id, is_enabled) in &self.chain_keys_enabled_status {
+            // Populate the chain key settings
             self.registry_settings.chain_key_settings.insert(
                 key_id.clone(),
                 ChainKeySettings {
@@ -2226,11 +2233,11 @@ impl ExecutionTestBuilder {
                 },
             );
 
-            if *is_signing_enabled {
+            if *is_enabled {
                 state
                     .metadata
                     .network_topology
-                    .idkg_signing_subnets
+                    .chain_key_enabled_subnets
                     .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state
@@ -2239,7 +2246,7 @@ impl ExecutionTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
+                .chain_keys_held
                 .insert(key_id.clone());
         }
 
@@ -2250,7 +2257,7 @@ impl ExecutionTestBuilder {
             self.execution_config.bitcoin.testnet_canister_id;
 
         let chain_key_subnet_public_keys = self
-            .chain_keys_with_signing_enabled
+            .chain_keys_enabled_status
             .into_keys()
             .map(|key_id| match key_id {
                 MasterPublicKeyId::Ecdsa(_) => (
@@ -2308,6 +2315,7 @@ impl ExecutionTestBuilder {
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            Path::new("/tmp"),
         );
         if self.precompiled_universal_canister {
             hypervisor.compilation_cache_insert_for_testing(

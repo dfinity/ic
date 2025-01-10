@@ -14,7 +14,7 @@ members = [
     "packages/pocket-ic/test_canister",
     "packages/ic-vetkd-utils",
     "rs/artifact_pool",
-    "rs/async_utils",
+    "rs/http_endpoints/async_utils",
     "rs/backup",
     "rs/bitcoin/adapter",
     "rs/bitcoin/client",
@@ -23,7 +23,7 @@ members = [
     "rs/bitcoin/ckbtc/minter",
     "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
-    "rs/bitcoin/kyt",
+    "rs/bitcoin/checker",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
@@ -197,7 +197,7 @@ members = [
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
-    "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
+    "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
@@ -247,6 +247,7 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
+    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -287,9 +288,6 @@ members = [
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "rs/ledger_suite/icrc1",
-    "rs/ledger_suite/icrc1/benchmark/generator",
-    "rs/ledger_suite/icrc1/benchmark/worker",
-    "rs/ledger_suite/icrc1/index",
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/tests/sm-tests",
@@ -302,7 +300,6 @@ members = [
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
     "rs/rust_canisters/canister_creator",
@@ -365,7 +362,6 @@ members = [
     "rs/test_utilities/time",
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
-    "rs/tests",
     "rs/tests/boundary_nodes",
     "rs/tests/boundary_nodes/custom_domains",
     "rs/tests/boundary_nodes/integration_test_common",
@@ -379,10 +375,13 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/cross_chain",
     "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/financial_integrations",
+    "rs/tests/financial_integrations/rosetta/",
+    "rs/tests/financial_integrations/rosetta/rosetta_test_lib",
     "rs/tests/message_routing",
     "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
@@ -407,9 +406,9 @@ members = [
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
-    "rs/tests/testing_verification",
-    "rs/tests/testing_verification/wabt-tests",
-    "rs/tests/testing_verification/testnets",
+    "rs/tests/idx",
+    "rs/tests/idx/wabt-tests",
+    "rs/tests/testnets",
     "rs/tla_instrumentation/local_key",
     "rs/tla_instrumentation/tla_instrumentation",
     "rs/tla_instrumentation/tla_instrumentation_proc_macros",
@@ -510,7 +509,7 @@ bitcoin = { version = "0.28.2", features = ["default", "use-serde", "rand"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
-bytes = "1.7.2"
+bytes = "1.9.0"
 candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
@@ -545,7 +544,7 @@ flate2 = "1.0.31"
 futures = "0.3.31"
 futures-util = "0.3.31"
 hex = { version = "0.4.3", features = ["serde"] }
-http = "1.1.0"
+http = "1.2.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
@@ -559,26 +558,23 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.37.1", features = [
-    "experimental_sync_call",
-    "hyper",
-    "reqwest",
-    "pem",
-] }
+ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
 ic-btc-interface = "0.2.2"
-ic-btc-test-utils = "0.1.0"
-ic-cbor = "2.6.0"
+ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
+ic-cbor = "3"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
-ic-certificate-verification = "2.6.0"
-ic-certification = "2.6.0"
-ic-http-certification = "2.6.0"
-ic-response-verification = "2.6.0"
+ic-certificate-verification = "3"
+ic-certification = "3"
+ic-http-certification = "3"
+ic-http-gateway = "0.1"
+ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
-ic-transport-types = { version = "0.37.1" }
-ic-utils = { version = "0.37.0", features = ["raw"] }
+ic-transport-types = { version = "0.39.2" }
+ic-utils = { version = "0.39", features = ["raw"] }
 ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
@@ -589,6 +585,7 @@ ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 inferno = "0.12.0"
+ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
@@ -607,6 +604,7 @@ libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
+macaddr = "1.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
@@ -696,6 +694,7 @@ slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+ssh2 = "0.9.4"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
@@ -707,13 +706,13 @@ thiserror = "2.0.3"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
 tracing-flame = "0.2.0"
-tokio = { version = "1.41.1", features = ["full"] }
-tokio-metrics = "0.3.1"
+tokio = { version = "1.42.0", features = ["full"] }
+tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
 tokio-test = "0.4.4"
-tokio-util = { version = "0.7.12", features = ["full"] }
+tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.1", features = ["full"] }
@@ -726,10 +725,10 @@ tower-http = { version = "0.6.2", features = [
     "compression-full",
     "tracing",
 ] }
-tracing = "0.1.40"
+tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-opentelemetry = "0.28.0"
-tracing-subscriber = { version = "0.3.18", features = [
+tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",
     "fmt",
     "json",

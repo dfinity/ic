@@ -18,10 +18,14 @@ use std::sync::Arc;
 pub fn spawn_socketed_process(
     exec_path: &str,
     argv: &[String],
+    env: &[(&str, &str)],
     socket: RawFd,
 ) -> std::io::Result<Child> {
     let mut cmd = Command::new(exec_path);
     cmd.args(argv);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
 
     // In case of Command we inherit the current process's environment. This should
     // particularly include things such as Rust backtrace flags. It might be
@@ -46,6 +50,7 @@ pub fn spawn_socketed_process(
     Ok(child_handle)
 }
 
+/// Only used for testing setups.
 /// Spawn a canister sandbox process and yield RPC interface object to
 /// communicate with it.
 ///
@@ -61,6 +66,8 @@ pub fn spawn_canister_sandbox_process(
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
     spawn_canister_sandbox_process_with_factory(exec_path, argv, controller_service, safe_shutdown)
 }
+
+/// Only used for testing setups.
 /// Spawn a canister sandbox process and yield RPC interface object to
 /// communicate with it. When the socket is closed by the other side,
 /// we check if the safe_shutdown flag was set. If not this function
@@ -77,7 +84,7 @@ pub fn spawn_canister_sandbox_process_with_factory(
     safe_shutdown: Arc<AtomicBool>,
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
     let (socket, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
-    let pid = spawn_socketed_process(exec_path, argv, sock_sandbox.as_raw_fd())?.id() as i32;
+    let pid = spawn_socketed_process(exec_path, argv, &[], sock_sandbox.as_raw_fd())?.id() as i32;
 
     let socket = Arc::new(socket);
 
@@ -95,32 +102,35 @@ pub fn spawn_canister_sandbox_process_with_factory(
 
     // Set up thread to handle incoming channel -- replies are routed
     // to reply buffer, requests to the RPC request handler given.
-    let thread_handle = std::thread::spawn(move || {
-        let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
-            Arc::new(rpc::ServerStub::new(
-                controller_service,
-                out.make_sink::<protocol::ctlsvc::Reply>(),
-            )),
-            reply_handler.clone(),
-        );
-        transport::socket_read_messages::<_, _>(
-            move |message| {
-                demux.handle(message);
-            },
-            socket,
-            SocketReaderConfig::default(),
-        );
-        reply_handler.flush_with_errors();
-        // If we the connection drops, but it is not terminated from
-        // our end, that implies that the sandbox process died. At
-        // that point we need to terminate replica as we have no way
-        // to progress execution safely, and we can not restart
-        // execution in a deterministic and safe manner that will not
-        // corrupt the state.
-        if !safe_shutdown.load(Ordering::SeqCst) {
-            abort_and_shutdown();
-        }
-    });
+    let thread_handle = std::thread::Builder::new()
+        .name("CanisterSandboxIPC".to_string())
+        .spawn(move || {
+            let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
+                Arc::new(rpc::ServerStub::new(
+                    controller_service,
+                    out.make_sink::<protocol::ctlsvc::Reply>(),
+                )),
+                reply_handler.clone(),
+            );
+            transport::socket_read_messages::<_, _>(
+                move |message| {
+                    demux.handle(message);
+                },
+                socket,
+                SocketReaderConfig::default(),
+            );
+            reply_handler.flush_with_errors();
+            // If we the connection drops, but it is not terminated from
+            // our end, that implies that the sandbox process died. At
+            // that point we need to terminate replica as we have no way
+            // to progress execution safely, and we can not restart
+            // execution in a deterministic and safe manner that will not
+            // corrupt the state.
+            if !safe_shutdown.load(Ordering::SeqCst) {
+                abort_and_shutdown();
+            }
+        })
+        .unwrap();
 
     Ok((svc, Pid::from_raw(pid), thread_handle))
 }

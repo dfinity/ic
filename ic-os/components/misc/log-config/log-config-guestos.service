@@ -1,0 +1,14 @@
+[Unit]
+Description=Log config partition
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
+After=update-config.service
+Wants=update-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/log-config.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

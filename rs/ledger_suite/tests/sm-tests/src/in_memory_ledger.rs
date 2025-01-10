@@ -1,6 +1,6 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider};
+use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
 use crate::metrics::parse_metric;
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1::Operation;
@@ -13,6 +13,8 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::Instant;
+use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
@@ -316,7 +318,7 @@ where
 
 impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
-    AccountId: PartialEq + Ord + Clone + Hash,
+    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType,
 {
     fn decrease_allowance(
@@ -571,7 +573,8 @@ where
         + Hash
         + Eq
         + std::fmt::Debug
-        + AllowanceProvider,
+        + AllowanceProvider
+        + BalanceProvider,
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
     pub fn new(burns_without_spender: Option<BurnsWithoutSpender<AccountId>>) -> Self {
@@ -681,14 +684,10 @@ where
             "Checking {} balances and {} allowances",
             actual_num_balances, actual_num_approvals
         );
+        let mut balances_checked = 0;
+        let now = Instant::now();
         for (account, balance) in self.balances.iter() {
-            let actual_balance = Decode!(
-                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                    .expect("failed to query balance")
-                    .bytes(),
-                Nat
-            )
-            .expect("failed to decode balance_of response");
+            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
 
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
@@ -698,7 +697,30 @@ where
                 balance,
                 actual_balance
             );
+            if balances_checked % 100000 == 0 && balances_checked > 0 {
+                println!(
+                    "Checked {} balances in {:?}",
+                    balances_checked,
+                    now.elapsed()
+                );
+            }
+            balances_checked += 1;
         }
+        println!(
+            "{} balances checked in {:?}",
+            balances_checked,
+            now.elapsed()
+        );
+        let now = Instant::now();
+        let mut allowances_checked = 0;
+        let mut expiration_in_future_count = 0;
+        let mut expiration_in_past_count = 0;
+        let mut no_expiration_count = 0;
+        let timestamp = env
+            .time()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         for (approval, allowance) in self.allowances.iter() {
             let (from, spender): (AccountId, AccountId) = approval.clone().into();
             assert!(
@@ -708,17 +730,58 @@ where
                 &spender
             );
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
+            match actual_allowance.expires_at {
+                None => {
+                    no_expiration_count += 1;
+                }
+                Some(expires_at) => {
+                    if expires_at > timestamp {
+                        expiration_in_future_count += 1;
+                    } else {
+                        expiration_in_past_count += 1;
+                    }
+                }
+            }
             assert_eq!(
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
                 &from,
                 &spender,
                 approval,
                 allowance,
-                actual_allowance
+                actual_allowance,
+                env.time()
             );
+            assert_eq!(
+                allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+                actual_allowance.expires_at,
+                "Mismatch in allowance expiration for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance,
+                env.time()
+            );
+            if allowances_checked % 10000 == 0 && allowances_checked > 0 {
+                println!(
+                    "Checked {} allowances in {:?}",
+                    allowances_checked,
+                    now.elapsed()
+                );
+            }
+            allowances_checked += 1;
         }
+        println!(
+            "{} allowances checked in {:?}",
+            allowances_checked,
+            now.elapsed()
+        );
+        println!(
+            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
+            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+        );
     }
 }
 

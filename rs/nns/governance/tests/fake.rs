@@ -105,6 +105,7 @@ impl Default for FakeState {
 /// advanced, and ledger accounts manipulated.
 pub struct FakeDriver {
     pub state: Arc<Mutex<FakeState>>,
+    pub error_on_next_ledger_call: Arc<Mutex<Option<NervousSystemError>>>,
 }
 
 /// Create a default mock driver.
@@ -112,6 +113,7 @@ impl Default for FakeDriver {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(Default::default())),
+            error_on_next_ledger_call: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -181,6 +183,7 @@ impl FakeDriver {
     pub fn get_fake_env(&self) -> Box<dyn Environment> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -188,12 +191,14 @@ impl FakeDriver {
     pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -241,6 +246,13 @@ impl FakeDriver {
             num_accounts
         );
     }
+
+    pub fn fail_next_ledger_call(&self) {
+        self.error_on_next_ledger_call
+            .lock()
+            .unwrap()
+            .replace(NervousSystemError::new());
+    }
 }
 
 #[async_trait]
@@ -276,6 +288,18 @@ impl IcpLedger for FakeDriver {
             ]))
         );
 
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            println!("Failing the ledger transfer because we were instructed to fail the next ledger call");
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                }
+            );
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -286,6 +310,13 @@ impl IcpLedger for FakeDriver {
 
         if !is_minting_operation {
             if *from_e8s < requested_e8s {
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    tla::TlaValue::Variant {
+                        tag: "Fail".to_string(),
+                        value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                    }
+                );
                 return Err(NervousSystemError::new_with_message(format!(
                     "Insufficient funds. Available {} requested {}",
                     *from_e8s, requested_e8s
@@ -307,6 +338,10 @@ impl IcpLedger for FakeDriver {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         Ok(self.get_supply())
     }
 
@@ -314,8 +349,6 @@ impl IcpLedger for FakeDriver {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        let accounts = &mut self.state.try_lock().unwrap().accounts;
-
         tla_log_request!(
             "WaitForBalanceQuery",
             Destination::new("ledger"),
@@ -325,6 +358,19 @@ impl IcpLedger for FakeDriver {
                 account_to_tla(account)
             )]))
         );
+
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            );
+            return Err(err);
+        }
+
+        let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         tla_log_response!(

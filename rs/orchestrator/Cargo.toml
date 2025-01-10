@@ -19,7 +19,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
@@ -53,6 +53,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 strum = { workspace = true }

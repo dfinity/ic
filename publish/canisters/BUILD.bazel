@@ -13,12 +13,11 @@ CANISTERS = {
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
-    "ic-btc-kyt.wasm.gz": "//rs/bitcoin/kyt:btc_kyt_canister",
+    "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
-    "ic-icrc1-index.wasm.gz": "//rs/ledger_suite/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
@@ -30,6 +29,7 @@ CANISTERS = {
     "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
+    "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
@@ -70,7 +70,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
-    "ic-btc-kyt.wasm.gz": "6",
+    "ic-btc-checker.wasm.gz": "6",
     # Size when constraint addded: 696_633 bytes
     "ic-ckbtc-minter.wasm.gz": "8",
     # Size when constraint addded: 1_230_630 bytes
@@ -80,6 +80,10 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # therefore strictly controlled.
     # Size when constraint addded: 1_655_752 bytes
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "17",
+
+    # -- BN team --
+    # Size when constraint addded: 540_349 bytes
+    "rate-limit-canister.wasm.gz": "7",
 }
 
 # How these limits were chosen:

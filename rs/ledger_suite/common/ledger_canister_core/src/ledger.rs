@@ -208,6 +208,7 @@ pub enum TransferError<Tokens> {
 const APPROVE_PRUNE_LIMIT: usize = 100;
 
 /// Adds a new block with the specified transaction to the ledger.
+/// Trim balances if necessary.
 pub fn apply_transaction<L>(
     ledger: &mut L,
     transaction: L::Transaction,
@@ -217,6 +218,22 @@ pub fn apply_transaction<L>(
 where
     L: LedgerData,
     L::BalancesStore: InspectableBalancesStore,
+{
+    let result = apply_transaction_no_trimming(ledger, transaction, now, effective_fee);
+    trim_balances(ledger, now);
+    result
+}
+
+/// Adds a new block with the specified transaction to the ledger.
+/// Do not perform any balance trimming.
+pub fn apply_transaction_no_trimming<L>(
+    ledger: &mut L,
+    transaction: L::Transaction,
+    now: TimeStamp,
+    effective_fee: L::Tokens,
+) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
+where
+    L: LedgerData,
 {
     let num_pruned = purge_old_transactions(ledger, now);
 
@@ -301,6 +318,16 @@ where
                 transaction_hash: tx_hash,
             });
     }
+
+    Ok((height, ledger.blockchain().last_hash.unwrap()))
+}
+
+/// Trim balances. Can be used e.g. if the ledger is low on heap memory.
+fn trim_balances<L>(ledger: &mut L, now: TimeStamp)
+where
+    L: LedgerData,
+    L::BalancesStore: InspectableBalancesStore,
+{
     let effective_max_number_of_accounts =
         ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity() - 1;
 
@@ -331,54 +358,6 @@ where
             ))
             .unwrap();
     }
-
-    // We estimate that an approval takes up twice as much space as a balance:
-    // balance = account + num_tokens
-    // approval = 2 * account + num_tokens + timestamp
-    let max_number_of_approvals =
-        (effective_max_number_of_accounts - ledger.balances().store.len()) / 2;
-
-    if ledger.approvals().len() > max_number_of_approvals {
-        let num_approvals_to_trim = ledger.approvals().len() - max_number_of_approvals;
-        // There might be some more expired approvals to prune.
-        ledger.approvals_mut().prune(now, num_approvals_to_trim);
-
-        if ledger.approvals().len() > max_number_of_approvals {
-            let approvals_to_trim = ledger
-                .approvals()
-                .select_approvals_to_trim(ledger.approvals().len() - max_number_of_approvals);
-
-            for approval in approvals_to_trim {
-                let approve_tx = L::Transaction::approve(
-                    approval.0,
-                    approval.1,
-                    L::Tokens::zero(),
-                    Some(now),
-                    Some(TRIMMED_MEMO),
-                );
-
-                approve_tx
-                    .apply(ledger, now, L::Tokens::zero())
-                    .expect("failed to reset approval to zero");
-
-                let parent_hash = ledger.blockchain().last_hash;
-                let fee_collector = ledger.fee_collector().cloned();
-
-                ledger
-                    .blockchain_mut()
-                    .add_block(L::Block::from_transaction(
-                        parent_hash,
-                        approve_tx,
-                        now,
-                        L::Tokens::zero(),
-                        fee_collector,
-                    ))
-                    .unwrap();
-            }
-        }
-    }
-
-    Ok((height, ledger.blockchain().last_hash.unwrap()))
 }
 
 /// Finds the archive canister that contains the block with the specified height.
