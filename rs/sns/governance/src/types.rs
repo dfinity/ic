@@ -2546,11 +2546,10 @@ pub enum Wasm {
     },
 }
 
-/// Returns the sha256sum of `new_canister_wasm` in Ok result, list of defects in Err result.
 fn validate_wasm_bytes(
-    new_canister_wasm: &Vec<u8>,
+    new_canister_wasm: &[u8],
     canister_upgrade_arg: &Option<Vec<u8>>,
-) -> Result<Vec<u8>, Vec<String>> {
+) -> Result<(), Vec<String>> {
     let mut defects = vec![];
 
     // See https://ic-interface-spec.netlify.app/#canister-module-format
@@ -2581,25 +2580,18 @@ fn validate_wasm_bytes(
         return Err(defects);
     }
 
-    let canister_wasm_sha256 = {
-        let mut state = Sha256::new();
-        state.write(&new_canister_wasm[..]);
-        let sha = state.finish();
-        sha.to_vec()
-    };
-    Ok(canister_wasm_sha256)
+    Ok(())
 }
 
-/// Returns the sha256sum of `new_canister_wasm` in Ok result, list of defects in Err result.
 async fn validate_chunked_wasm(
     env: &dyn Environment,
     wasm_module_hash: &Vec<u8>,
     store_canister_id: CanisterId,
-    chunk_hashes_list: &Vec<Vec<u8>>,
-) -> Result<Vec<u8>, Vec<String>> {
+    chunk_hashes_list: &[Vec<u8>],
+) -> Result<(), Vec<String>> {
     let mut defects = vec![];
 
-    match &chunk_hashes_list[..] {
+    match chunk_hashes_list {
         [] => {
             let defect = "chunked_canister_wasm.chunk_hashes_list cannot be empty.".to_string();
             defects.push(defect);
@@ -2678,15 +2670,16 @@ async fn validate_chunked_wasm(
         return Err(defects);
     }
 
-    Ok(wasm_module_hash.clone())
+    Ok(())
 }
 
 impl Wasm {
+    /// Returns the list of defects of this Wasm in Err result.
     pub async fn validate(
         &self,
         env: &dyn Environment,
         canister_upgrade_arg: &Option<Vec<u8>>,
-    ) -> Result<Vec<u8>, Vec<String>> {
+    ) -> Result<(), Vec<String>> {
         match self {
             Self::Bytes(bytes) => validate_wasm_bytes(bytes, canister_upgrade_arg),
             Self::Chunked {
@@ -2696,6 +2689,42 @@ impl Wasm {
             } => {
                 validate_chunked_wasm(env, wasm_module_hash, *store_canister_id, chunk_hashes_list)
                     .await
+            }
+        }
+    }
+
+    pub fn info(&self) -> String {
+        match self {
+            Self::Bytes(bytes) => {
+                let canister_wasm_sha256 = {
+                    let mut state = Sha256::new();
+                    state.write(&bytes[..]);
+                    let sha = state.finish();
+                    sha.to_vec()
+                };
+                format!(
+                    "Embedded module with {} bytes and SHA256 `{}`.",
+                    bytes.len(),
+                    format_full_hash(&canister_wasm_sha256)
+                )
+            }
+            Self::Chunked {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            } => {
+                format!(
+                    "Remote module stored on canister {} with SHA256 `{}`. \
+                     Split into {} chunks:\n  - {}",
+                    store_canister_id.get(),
+                    format_full_hash(wasm_module_hash),
+                    chunk_hashes_list.len(),
+                    chunk_hashes_list
+                        .iter()
+                        .map(|chunk_hash| { format!("`{}`", format_full_hash(chunk_hash)) })
+                        .collect::<Vec<_>>()
+                        .join("\n  - "),
+                )
             }
         }
     }

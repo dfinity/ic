@@ -1058,7 +1058,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     let mode = upgrade.mode_or_upgrade();
 
     // Inspect canister_id.
-    let canister_id = match validate_required_field("canister_id", &canister_id) {
+    let canister_id = match validate_required_field("canister_id", canister_id) {
         Err(err) => {
             defects.push(err);
             None
@@ -1077,7 +1077,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     };
 
     // Inspect wasm.
-    let canister_wasm_sha256 = match Wasm::try_from(upgrade) {
+    let wasm_info = match Wasm::try_from(upgrade) {
         Err(err) => {
             defects.push(err);
             None
@@ -1087,7 +1087,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
                 defects.extend(new_defects.into_iter());
                 None
             }
-            Ok(canister_wasm_sha256) => Some(format_full_hash(&canister_wasm_sha256)),
+            Ok(_) => Some(wasm.info()),
         },
     };
 
@@ -1101,28 +1101,33 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
     // It is now safe to unwrap the values required for rendering the proposal.
     let canister_id = canister_id.unwrap().get();
-    let canister_wasm_sha256 = canister_wasm_sha256.unwrap();
+    let wasm_info = wasm_info.unwrap();
 
-    let upgrade_args_sha_256 = canister_upgrade_arg
+    let args_info = canister_upgrade_arg
         .as_ref()
         .map(|arg| {
-            let mut state = Sha256::new();
-            state.write(arg);
-            let sha = state.finish();
-            format!("Upgrade arg sha256: {}", hex::encode(sha))
+            format!(
+                "Upgrade argument with {} bytes and SHA256 `{}`.",
+                arg.len(),
+                format_full_hash(arg),
+            )
         })
-        .unwrap_or_else(|| "No upgrade arg".to_string());
+        .unwrap_or_else(|| "No upgrade argument.".to_string());
 
     Ok(format!(
-        r"# Proposal to upgrade SNS controlled canister:
+        r"# Proposal to Upgrade an SNS Controlled Canister
 
-## Canister id: {canister_id:?}
+## Target canister: {canister_id:?}
 
-## Canister wasm sha256: {canister_wasm_sha256}
+## Wasm info
+
+{wasm_info}
 
 ## Mode: {mode:?}
 
-## {upgrade_args_sha_256}",
+## Argument info
+
+{args_info}",
     ))
 }
 
@@ -2785,17 +2790,187 @@ mod tests {
 
         assert_eq!(
             text,
-            r#"# Proposal to upgrade SNS controlled canister:
+            r#"# Proposal to Upgrade an SNS Controlled Canister
 
-## Canister id: xbgkv-fyaaa-aaaaa-aaava-cai
+## Target canister: xbgkv-fyaaa-aaaaa-aaava-cai
 
-## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+## Wasm info
+
+Embedded module with 8 bytes and SHA256 `93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476`.
 
 ## Mode: Upgrade
 
-## No upgrade arg"#
+## Argument info
+
+No upgrade argument."#
                 .to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_chunked_wasm() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                wasm_module_hash: vec![1, 2, 3],
+                store_canister_id: Some(canister_test_id(111).get()),
+                chunk_hashes_list: vec![vec![1, 1, 1], vec![2, 2, 2], vec![3, 3, 3]],
+            }),
+        };
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to Upgrade an SNS Controlled Canister
+
+## Target canister: xbgkv-fyaaa-aaaaa-aaava-cai
+
+## Wasm info
+
+Remote module stored on canister zyo6l-paaaa-aaaaa-aabxq-cai with SHA256 `010203`. Split into 3 chunks:
+  - `010101`
+  - `020202`
+  - `030303`
+
+## Mode: Upgrade
+
+## Argument info
+
+No upgrade argument."#
+                .to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_unexpected_chunk() {
+        let mut chunked_canister_wasm = ChunkedCanisterWasm {
+            wasm_module_hash: vec![1, 2, 3],
+            store_canister_id: Some(canister_test_id(111).get()),
+            chunk_hashes_list: vec![vec![1, 1, 1], vec![2, 2, 2], vec![3, 3, 3]],
+        };
+        let mut upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+        };
+
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+
+        // Modify the update payload to make it invalid (unexpected chunk).
+        {
+            chunked_canister_wasm.chunk_hashes_list.push(vec![4, 4, 4]);
+            upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
+        }
+
+        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap_err();
+
+        assert!(err.contains(
+            "1 out of 4 expected WASM chunks were not uploaded to the store canister: 040404"
+        ));
+    }
+
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_chunk_hash_mismatch() {
+        let mut chunked_canister_wasm = ChunkedCanisterWasm {
+            wasm_module_hash: vec![1, 1, 1],
+            store_canister_id: Some(canister_test_id(111).get()),
+            chunk_hashes_list: vec![vec![1, 1, 1]],
+        };
+        let mut upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+        };
+
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+
+        // Modify the update payload to make it invalid (mismatch between chunk_hashes_list
+        // and wasm_module_hash).
+        {
+            chunked_canister_wasm.chunk_hashes_list = vec![vec![2, 2, 2]];
+            upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
+        }
+
+        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap_err();
+
+        assert!(err.contains(
+            "chunked_canister_wasm.chunk_hashes_list specifies only one hash (020202), \
+                     but it differs from chunked_canister_wasm.wasm_module_hash (010101)"
+        ),);
+    }
+
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_chunks_but_no_store_canister() {
+        let mut chunked_canister_wasm = ChunkedCanisterWasm {
+            wasm_module_hash: vec![1, 1, 1],
+            store_canister_id: Some(canister_test_id(111).get()),
+            chunk_hashes_list: vec![vec![1, 1, 1]],
+        };
+        let mut upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+        };
+
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+
+        // Modify the update payload to make it invalid (store_canister_id not set).
+        {
+            chunked_canister_wasm.store_canister_id = None;
+            upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
+        }
+
+        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("chunked_canister_wasm.store_canister_id must be specified."));
+    }
+
+    #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_empty_chunks_list() {
+        let mut chunked_canister_wasm = ChunkedCanisterWasm {
+            wasm_module_hash: vec![1, 1, 1],
+            store_canister_id: Some(canister_test_id(111).get()),
+            chunk_hashes_list: vec![vec![1, 1, 1]],
+        };
+        let mut upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+        };
+
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+
+        // Modify the update payload to make it invalid (empty chunk_hashes_list).
+        {
+            chunked_canister_wasm.chunk_hashes_list = vec![];
+            upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
+        }
+
+        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("chunked_canister_wasm.chunk_hashes_list cannot be empty."));
     }
 
     #[tokio::test]
@@ -2814,15 +2989,19 @@ mod tests {
 
         assert_eq!(
             text,
-            r#"# Proposal to upgrade SNS controlled canister:
+            r#"# Proposal to Upgrade an SNS Controlled Canister
 
-## Canister id: xbgkv-fyaaa-aaaaa-aaava-cai
+## Target canister: xbgkv-fyaaa-aaaaa-aaava-cai
 
-## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+## Wasm info
+
+Embedded module with 8 bytes and SHA256 `93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476`.
 
 ## Mode: Upgrade
 
-## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
+## Argument info
+
+Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
                 .to_string()
         );
     }
@@ -3300,8 +3479,7 @@ mod tests {
             chunk_hashes_list,
         }) = chunked_canister_wasm
         {
-            let canister_id =
-                CanisterId::unchecked_from_principal(store_canister_id.clone().unwrap());
+            let canister_id = CanisterId::unchecked_from_principal((*store_canister_id).unwrap());
             env.set_call_canister_response(
                 CanisterId::ic_00(),
                 "stored_chunks",
