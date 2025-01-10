@@ -230,7 +230,6 @@ fn legacy_induct_loopback_stream_reject_response() {
                 RejectReason::CanisterNotFound,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a loopback stream with begin advanced and a reject response.
@@ -254,7 +253,7 @@ fn legacy_induct_loopback_stream_reject_response() {
 
             // One reject response generated.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
             // Not equal, because the computed available memory does not account for the
@@ -415,7 +414,6 @@ fn legacy_induct_loopback_stream_reroute_response() {
                 RejectReason::CanisterMigrating,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 25,
                 messages: vec![reject_response],
@@ -453,9 +451,7 @@ fn legacy_induct_loopback_stream_reroute_response() {
                     // Inducting a request triggers a new reservation in the output queue.
                     - MAX_RESPONSE_COUNT_BYTES as i64
                     // Inducting a response uses memory for the response, but also frees a reservation.
-                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64)
-                    // The reject response is in the loopback stream, i.e. no reservation is freed.
-                    - reject_response_count_bytes as i64,
+                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64),
                 available_guaranteed_response_memory,
             );
             // Not equal, because the computed available memory does not account for the
@@ -856,7 +852,7 @@ fn garbage_collect_messages_success() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             let rejected_messages = stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -925,7 +921,7 @@ fn garbage_collect_messages_with_reject_signals_success() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             let rejected_messages = stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -982,7 +978,7 @@ fn garbage_collect_signals_success() {
             });
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1027,7 +1023,7 @@ fn garbage_collect_signals_in_wrong_order() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1069,7 +1065,7 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1107,7 +1103,7 @@ fn garbage_collect_signals_with_invalid_empty_slice() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1149,7 +1145,7 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -1191,7 +1187,7 @@ fn assert_garbage_collect_messages_last_signal_after_last_message() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -2437,7 +2433,6 @@ fn legacy_induct_stream_slices_partial_success() {
                 RejectReason::CanisterNotFound,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 46),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             // The expected stream has...
             let expected_stream = stream_from_config(StreamConfig {
@@ -2472,8 +2467,7 @@ fn legacy_induct_stream_slices_partial_success() {
             assert_eq!(
                 initial_available_guaranteed_response_memory
                     - MAX_RESPONSE_COUNT_BYTES as i64
-                    - response_count_bytes as i64
-                    - reject_response_count_bytes as i64,
+                    - response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
             // Not equal, because the computed available memory does not account for the
@@ -2739,7 +2733,6 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2780,7 +2773,7 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
 
             // One reject response enqueued.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
             // Not equal, because the computed available memory does not account for the
@@ -2923,7 +2916,6 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2964,7 +2956,7 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
 
             // One reject response enqueued.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
             // Not equal, because the computed available memory does not account for the

@@ -28,7 +28,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CanisterId, CountBytes, SubnetId,
+    CanisterId, SubnetId,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
@@ -352,20 +352,20 @@ impl StreamHandlerImpl {
 
         let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
-        let mut loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
+        let loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
 
         // 2. Garbage collect all initial messages and retain any rejected messages.
         let signals_end = loopback_stream.signals_end();
         let reject_signals = loopback_stream.reject_signals().clone();
         let rejected_messages = self.garbage_collect_messages(
-            &mut loopback_stream,
+            loopback_stream,
             self.subnet_id,
             signals_end,
             &reject_signals,
         );
 
         // 3. Garbage collect signals for all initial messages.
-        self.discard_signals_before(&mut loopback_stream, signals_end);
+        self.discard_signals_before(loopback_stream, signals_end);
 
         // 4. Respond to rejected requests and reroute rejected responses.
         self.handle_rejected_messages(
@@ -402,14 +402,14 @@ impl StreamHandlerImpl {
         let mut streams = state.take_streams();
         for (remote_subnet, stream_slice) in stream_slices {
             match streams.get_mut(remote_subnet) {
-                Some(mut stream) => {
+                Some(stream) => {
                     let rejected_messages = self.garbage_collect_messages(
-                        &mut stream,
+                        stream,
                         *remote_subnet,
                         stream_slice.header().signals_end(),
                         stream_slice.header().reject_signals(),
                     );
-                    self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
+                    self.garbage_collect_signals(stream, *remote_subnet, stream_slice);
 
                     if stream.reverse_stream_flags() != stream_slice.header().flags() {
                         stream.set_reverse_stream_flags(*stream_slice.header().flags());
@@ -674,7 +674,7 @@ impl StreamHandlerImpl {
         for (remote_subnet_id, mut stream_slice) in stream_slices {
             // Output stream, for resulting signals and (in the initial iteration) reject
             // `Responses`.
-            let mut stream = streams.get_mut_or_insert(remote_subnet_id);
+            let stream = streams.get_mut_or_insert(remote_subnet_id);
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
                 assert_eq!(
@@ -688,7 +688,7 @@ impl StreamHandlerImpl {
                     msg,
                     remote_subnet_id,
                     &mut state,
-                    &mut stream,
+                    stream,
                     available_guaranteed_response_memory,
                 );
             }
@@ -749,9 +749,7 @@ impl StreamHandlerImpl {
                     if state.metadata.certification_version < CertificationVersion::V19 =>
                 {
                     // Unable to induct a request, generate reject response and push it into `stream`.
-                    let reject_response = generate_reject_response_for(reason, &request);
-                    *available_guaranteed_response_memory -= reject_response.count_bytes() as i64;
-                    stream.push(reject_response);
+                    stream.push(generate_reject_response_for(reason, &request));
                     stream.push_accept_signal();
                 }
                 Some((reason, RequestOrResponse::Request(_))) => {
