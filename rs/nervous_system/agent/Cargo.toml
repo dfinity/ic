@@ -17,7 +17,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }

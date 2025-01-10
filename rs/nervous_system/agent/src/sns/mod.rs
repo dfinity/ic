@@ -31,7 +31,14 @@ impl Sns {
         let list_upgrade_steps_request = ListUpgradeStepsRequest {
             limit: 0,
             sns_governance_canister_id: Some(self.governance.canister_id),
-            starting_at: version.deployed_version.map(SnsVersion::from),
+            starting_at: version.deployed_version.map(|version| SnsVersion {
+                root_wasm_hash: version.root_wasm_hash,
+                governance_wasm_hash: version.governance_wasm_hash,
+                ledger_wasm_hash: version.ledger_wasm_hash,
+                swap_wasm_hash: version.swap_wasm_hash,
+                archive_wasm_hash: version.archive_wasm_hash,
+                index_wasm_hash: version.index_wasm_hash,
+            }),
         };
         agent
             .call(SNS_WASM_CANISTER_ID, list_upgrade_steps_request)
