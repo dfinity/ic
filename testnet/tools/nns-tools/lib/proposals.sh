@@ -284,8 +284,8 @@ generate_sns_bless_wasm_proposal_text() {
     # If the canister has an unrelease_changelog.md file, use that to populate
     # the "Features & Fixes" section of the proposal.
     FEATURES_AND_FIXES="TODO Hand-craft this section."
-    PRIMARY_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
-    UNRELEASED_CHANGELOG_PATH="${PRIMARY_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
     if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
         FEATURES_AND_FIXES=$(
             sed -n '/# Next Upgrade Proposal/,$p' \
