@@ -170,6 +170,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/bitcoin/mock",
@@ -180,7 +181,6 @@ rust_ic_test(
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
-        "//rs/test_utilities/metrics",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",

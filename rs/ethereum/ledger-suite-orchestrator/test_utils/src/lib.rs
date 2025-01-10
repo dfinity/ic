@@ -14,9 +14,9 @@ use ic_management_canister_types::{
     CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
     Payload,
 };
+use ic_metrics_assert::{MetricsAssert, QueryCall};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
 use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
@@ -347,8 +347,8 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
-impl QueryMetrics<UserError> for LedgerSuiteOrchestrator {
-    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+impl QueryCall<UserError> for LedgerSuiteOrchestrator {
+    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.as_ref()
             .query(self.ledger_suite_orchestrator_id, "http_request", request)
             .map(assert_reply)

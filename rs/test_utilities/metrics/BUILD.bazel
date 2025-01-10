@@ -5,10 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/monitoring/metrics",
-    "//rs/rust_canisters/http_types",
-    "@crate_index//:candid",
     "@crate_index//:prometheus",
-    "@crate_index//:regex",
 ]
 
 rust_library(

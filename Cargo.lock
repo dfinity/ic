@@ -5924,10 +5924,10 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
+ "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
- "ic-test-utilities-metrics",
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
@@ -6558,11 +6558,11 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-core",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic-test-utilities-metrics",
  "ic-types",
  "ic-utils-ensure",
  "ic0 0.18.11",
@@ -9350,9 +9350,9 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic-test-utilities-metrics",
  "ic-types",
  "ic-universal-canister",
  "icrc-ledger-types",
@@ -9616,6 +9616,16 @@ dependencies = [
  "slog",
  "tokio",
  "tokio-metrics",
+]
+
+[[package]]
+name = "ic-metrics-assert"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "regex",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]

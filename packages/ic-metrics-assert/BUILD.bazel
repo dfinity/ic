@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "ic-metrics-assert",
+    actual = ":ic_metrics_assert",
+)
+
+rust_library(
+    name = "ic_metrics_assert",
+    srcs = [
+        "src/lib.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)

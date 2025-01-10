@@ -10,8 +10,8 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_metrics_assert::{MetricsAssert, QueryCall};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_test_utilities_metrics::assertions::{MetricsAssert, QueryMetrics};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
@@ -834,8 +834,8 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-impl QueryMetrics<UserError> for &Setup {
-    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+impl QueryCall<UserError> for &Setup {
+    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.env
             .query_call(
                 self.btc_checker_canister,

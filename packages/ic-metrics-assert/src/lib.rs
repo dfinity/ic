@@ -1,23 +1,38 @@
 //! Fluent assertions for metrics.
 
-use candid::{Decode, Encode};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use candid::{CandidType, Decode, Deserialize, Encode};
 use regex::Regex;
+use serde_bytes::ByteBuf;
 use std::fmt::Debug;
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: ByteBuf,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpResponse {
+    pub status_code: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: ByteBuf,
+}
 
 pub struct MetricsAssert<T> {
     actual: T,
     metrics: Vec<String>,
 }
 
-pub trait QueryMetrics<E: Debug> {
-    fn query_metrics(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
+pub trait QueryCall<E: Debug> {
+    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
 
 impl<T> MetricsAssert<T> {
     pub fn from_query_metrics<E>(actual: T) -> Self
     where
-        T: QueryMetrics<E>,
+        T: QueryCall<E>,
         E: Debug,
     {
         let request = HttpRequest {
@@ -28,7 +43,7 @@ impl<T> MetricsAssert<T> {
         };
         let response = Decode!(
             &actual
-                .query_metrics(Encode!(&request).expect("failed to encode HTTP request"))
+                .query_call(Encode!(&request).expect("failed to encode HTTP request"))
                 .expect("failed to query get_transactions on the ledger"),
             HttpResponse
         )

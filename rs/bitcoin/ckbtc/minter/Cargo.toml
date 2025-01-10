@@ -56,9 +56,9 @@ ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
+ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-ic-test-utilities-metrics = { path = "../../../test_utilities/metrics" }
 ic-types = { path = "../../../types/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
