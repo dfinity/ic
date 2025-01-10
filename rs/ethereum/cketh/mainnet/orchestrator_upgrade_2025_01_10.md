@@ -59,8 +59,10 @@ b006ae9934 feat(ICP-ledger): FI-1438: Implement V3 for ICP ledger - migrate allo
 ### Index
 
 ```
-git log --format="%C(auto) %h %s" 2190613d3b5bcd9b74c382b22d151580b8ac271a..c741e349451edf0c9792149ad439bb32a0161371 -- rs/ledger_suite/icrc1/index
+git log --format="%C(auto) %h %s" 2190613d3b5bcd9b74c382b22d151580b8ac271a..c741e349451edf0c9792149ad439bb32a0161371 -- rs/ledger_suite/icrc1/index-ng
+c741e34945 feat: ICRC-ledger: FI-1439: Implement V4 for ICRC ledger - migrate balances to stable structures (#2901)
 575ca531a7 chore(ICRC_Index): FI-1468: Remove old ICRC index canister (#3286)
+8d4fcddc6e test(ICRC_Index): FI-1617: Optimize retrieve_blocks_from_ledger_interval tests (#3236)
 e369646b76 fix: Use default rust edition instead of specifying it in the BUILD rules (#3047)
 ```
 
