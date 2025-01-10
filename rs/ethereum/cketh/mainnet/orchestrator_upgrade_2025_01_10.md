@@ -67,6 +67,7 @@ e369646b76 fix: Use default rust edition instead of specifying it in the BUILD r
 ```
 
 ### Archive
+No changes since last version (`2190613d3b5bcd9b74c382b22d151580b8ac271a`).
 
 ```
 git log --format="%C(auto) %h %s" 2190613d3b5bcd9b74c382b22d151580b8ac271a..c741e349451edf0c9792149ad439bb32a0161371 -- rs/ledger_suite/icrc1/archive
