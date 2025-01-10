@@ -1071,7 +1071,6 @@ impl<'a, K: AsInt, V: Clone> std::iter::Iterator for IntMapIter<'a, K, V> {
         // Find the leftmost subtree, pushing all the right hand side nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
-            debug_assert!(left.len() > 0 && right.len() > 0);
             self.0.push(right);
             p = left;
         }
@@ -1106,7 +1105,6 @@ impl<K: AsInt, V: Clone> std::iter::Iterator for IntMapIntoIter<K, V> {
         // Find the leftmost subtree, pushing all the right hand side nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
-            debug_assert!(left.len() > 0 && right.len() > 0);
             self.0.push(take_arc(right));
             p = take_arc(left);
         }
