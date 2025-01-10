@@ -133,8 +133,8 @@ generate_nns_upgrade_proposal_text() {
     # our canisters will have such a file, but for now, we are still test
     # driving this process.
     FEATURES_AND_FIXES="TODO Hand-craft this section."
-    PRIMARY_RELATIVE_CODE_LOCATION=$(echo "${RELATIVE_CODE_LOCATION}" | cut -d' ' -f1)
-    UNRELEASED_CHANGELOG_PATH="${PRIMARY_RELATIVE_CODE_LOCATION}/unreleased_changelog.md"
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
     if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
         FEATURES_AND_FIXES=$(
             sed -n '/# Next Upgrade Proposal/,$p' \
