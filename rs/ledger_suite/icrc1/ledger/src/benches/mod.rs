@@ -15,7 +15,7 @@ mod benches_u64;
 pub const NUM_TRANSFERS: u32 = 10_000;
 pub const NUM_APPROVALS: u32 = 10_000;
 pub const NUM_TRANSFERS_FROM: u32 = 10_000;
-pub const NUM_GET_BLOCKS: u32 = 2_000;
+pub const NUM_GET_BLOCKS: u32 = 100;
 
 pub fn upgrade() {
     let _p = canbench_rs::bench_scope("upgrade");
