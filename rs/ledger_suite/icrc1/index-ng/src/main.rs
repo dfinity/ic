@@ -1224,9 +1224,7 @@ fn check_index_and_ledger_block_equality() {
 
     let mut gamma = std::collections::HashSet::new();
     let index_block_type = ledger_env.merge_type(index_env, index_block_type.clone());
-    // Check if the ledger `query_encoded_blocks` response <: the index `get_blocks` response,
-    // i.e., if the index response type is a subtype of the ledger response type.
-    candid::types::subtype::subtype(
+    candid::types::subtype::equal(
         &mut gamma,
         &ledger_env,
         &ledger_block_type,
