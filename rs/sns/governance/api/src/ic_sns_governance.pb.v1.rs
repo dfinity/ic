@@ -367,8 +367,7 @@ pub struct Motion {
     pub motion_text: ::prost::alloc::string::String,
 }
 
-/// Represents a WASM chunked into potentially multiple smaller chunks, each of which can safely
-/// be sent around the ICP.
+/// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -385,7 +384,7 @@ pub struct ChunkedCanisterWasm {
     #[prost(message, optional, tag = "2")]
     pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
-    /// one chink.
+    /// one chunk.
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }

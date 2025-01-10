@@ -1432,6 +1432,7 @@ pub mod sns {
         use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
+        use sns_pb::UpgradeSnsControlledCanister;
 
         pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
         pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
@@ -1713,6 +1714,44 @@ pub mod sns {
                     url: "".to_string(),
                     action: Some(sns_pb::proposal::Action::UpgradeSnsToNextVersion(
                         sns_pb::UpgradeSnsToNextVersion {},
+                    )),
+                },
+            )
+            .await
+            .unwrap();
+
+            // Check 1: The upgrade proposal did not fail.
+            assert_eq!(proposal_data.failure_reason, None);
+
+            // Check 2: The upgrade proposal succeeded.
+            assert!(proposal_data.executed_timestamp_seconds > 0);
+        }
+
+        pub async fn propose_to_upgrade_sns_controlled_canister_and_wait(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            upgrade: UpgradeSnsControlledCanister,
+        ) {
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
+            let (sns_neuron_id, sns_neuron_principal_id) =
+                find_neuron_with_majority_voting_power(pocket_ic, sns_governance_canister_id)
+                    .await
+                    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+            let proposal_data = propose_and_wait(
+                pocket_ic,
+                sns_governance_canister_id,
+                sns_neuron_principal_id,
+                sns_neuron_id.clone(),
+                sns_pb::Proposal {
+                    title: "Upgrade SNS controlled canister.".to_string(),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(sns_pb::proposal::Action::UpgradeSnsControlledCanister(
+                        upgrade,
                     )),
                 },
             )

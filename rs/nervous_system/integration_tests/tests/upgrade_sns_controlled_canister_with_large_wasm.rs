@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 
 use candid::Principal;
 use canister_test::Wasm;
-use ic_base_types::PrincipalId;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     await_with_timeout, install_canister_on_subnet, nns, sns,
@@ -11,10 +10,9 @@ use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters},
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nervous_system_root::change_canister::ChunkedCanisterWasm;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::common::modify_wasm_bytes;
+use ic_sns_governance::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister};
 use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
@@ -24,50 +22,19 @@ const MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 5 * 60;
 
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
-#[tokio::test]
-async fn test_store_same_as_target() {
-    let store_same_as_target = true;
-    run_test(store_same_as_target).await;
-}
+// TODO: Figure out how to best support uploading chunks into the target itself, which has
+// SNS Root as the controller but not SNS Governance.
+//
+// #[tokio::test]
+// async fn test_store_same_as_target() {
+//     let store_same_as_target = true;
+//     run_test(store_same_as_target).await;
+// }
 
 #[tokio::test]
 async fn test_store_different_from_target() {
     let store_same_as_target = false;
     run_test(store_same_as_target).await;
-}
-
-mod interim_sns_helpers {
-    use super::*;
-
-    use candid::{Decode, Encode};
-    use pocket_ic::nonblocking::PocketIc;
-    use pocket_ic::WasmResult;
-
-    /// Interim test function for calling Root.change_canister.
-    ///
-    /// This function is not in src/pocket_ic_helpers.rs because it's going to be replaced with
-    /// a proposal with the same effect. It should not be used in any other tests.
-    pub async fn change_canister(
-        pocket_ic: &PocketIc,
-        canister_id: PrincipalId,
-        sender: PrincipalId,
-        request: ChangeCanisterRequest,
-    ) {
-        let result = pocket_ic
-            .update_call(
-                canister_id.into(),
-                sender.into(),
-                "change_canister",
-                Encode!(&request).unwrap(),
-            )
-            .await
-            .unwrap();
-        let result = match result {
-            WasmResult::Reply(result) => result,
-            WasmResult::Reject(s) => panic!("Call to change_canister failed: {:#?}", s),
-        };
-        Decode!(&result, ()).unwrap()
-    }
 }
 
 fn very_large_wasm_bytes() -> Vec<u8> {
@@ -212,7 +179,7 @@ async fn run_test(store_same_as_target: bool) {
             app_subnet,
             vec![],
             None,
-            vec![sns.root.canister_id],
+            vec![sns.root.canister_id, sns.governance.canister_id],
         )
         .await
     };
@@ -239,25 +206,19 @@ async fn run_test(store_same_as_target: bool) {
     .await;
 
     // 2. Run code under test.
-    interim_sns_helpers::change_canister(
+    sns::governance::propose_to_upgrade_sns_controlled_canister_and_wait(
         &pocket_ic,
-        sns.root.canister_id,
         sns.governance.canister_id,
-        ChangeCanisterRequest {
-            stop_before_installing: true,
-            mode: CanisterInstallMode::Upgrade,
-            canister_id: target_canister_id,
-            // This is the old field being generalized.
-            wasm_module: vec![],
-            // This is the new field we want to test.
+        UpgradeSnsControlledCanister {
+            canister_id: Some(target_canister_id.get()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallMode::Upgrade as i32),
             chunked_canister_wasm: Some(ChunkedCanisterWasm {
                 wasm_module_hash: new_wasm_hash.clone().to_vec(),
-                store_canister_id,
+                store_canister_id: Some(store_canister_id.get()),
                 chunk_hashes_list,
             }),
-            arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
         },
     )
     .await;

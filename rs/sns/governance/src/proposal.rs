@@ -1099,7 +1099,8 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    // It is now safe to unwrap the values required for rendering the proposal.
+    // If this is reached, then defects is empty. In that case, it is safe to unwrap the values
+    // required for rendering the proposal.
     let canister_id = canister_id.unwrap().get();
     let wasm_info = wasm_info.unwrap();
 
@@ -3032,7 +3033,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
         };
         let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
-            &setup_for_upgrade_sns_controlled_canister_without_chunks(),
+            &new_environment_that_expects_no_canister_calls(),
         )
         .await;
         assert_is_ok(result);
@@ -3452,7 +3453,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
         )
     }
 
-    fn setup_for_upgrade_sns_controlled_canister_without_chunks() -> NativeEnvironment {
+    fn new_environment_that_expects_no_canister_calls() -> NativeEnvironment {
         let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
         env.default_canister_call_response = Err((Some(1), "Unexpected call!".to_string()));
