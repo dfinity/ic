@@ -126,12 +126,10 @@ fn test_node_operator_records_can_be_added_and_removed() {
             .await
             .unwrap();
 
-        let proposal_payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![
-                *TEST_NEURON_1_OWNER_PRINCIPAL,
-                *TEST_NEURON_2_OWNER_PRINCIPAL,
-            ],
-        };
+        let proposal_payload = RemoveNodeOperatorsPayload::new(vec![
+            *TEST_NEURON_1_OWNER_PRINCIPAL,
+            *TEST_NEURON_2_OWNER_PRINCIPAL,
+        ]);
 
         let node_operator_record_key_1 =
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).into_bytes();

@@ -20,7 +20,21 @@ impl Registry {
         let mut mutations = vec![];
 
         // Filter Node Operator IDs that have an associated NodeOperatorRecord in the Registry
-        let mut valid_node_operator_ids = payload
+        let valid_node_operator_ids_deprecated: Vec<PrincipalId> = payload
+            .deprecated_node_operators_to_remove
+            .into_iter()
+            .filter_map(|bytes| {
+                PrincipalId::try_from(bytes)
+                    .ok()
+                    .filter(|node_operator_id| {
+                        let node_operator_record_key =
+                            make_node_operator_record_key(*node_operator_id).into_bytes();
+                        self.get(&node_operator_record_key, self.latest_version())
+                            .is_some()
+                    })
+            })
+            .collect();
+        let valid_node_operator_ids = payload
             .node_operators_to_remove
             .into_iter()
             .filter(|node_operator_id| {
@@ -30,6 +44,8 @@ impl Registry {
                     .is_some()
             })
             .collect();
+        let mut valid_node_operator_ids =
+            [valid_node_operator_ids_deprecated, valid_node_operator_ids].concat();
 
         self.filter_node_operators_that_have_nodes(&mut valid_node_operator_ids);
 
@@ -71,6 +87,20 @@ impl Registry {
 /// The payload of a request to remove Node Operator records from the Registry
 #[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize, Hash)]
 pub struct RemoveNodeOperatorsPayload {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub deprecated_node_operators_to_remove: Vec<Vec<u8>>,
+
+    // In Protobuf, a repeated field is effectively optional in the sense that if it
+    // is not included on the wire or if it has no elements, it defaults to an empty list.
+    #[prost(message, repeated, tag = "2")]
     pub node_operators_to_remove: Vec<PrincipalId>,
+}
+
+impl RemoveNodeOperatorsPayload {
+    pub fn new(node_operators_to_remove: Vec<PrincipalId>) -> Self {
+        Self {
+            deprecated_node_operators_to_remove: vec![],
+            node_operators_to_remove,
+        }
+    }
 }

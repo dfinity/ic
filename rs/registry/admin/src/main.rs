@@ -635,9 +635,7 @@ impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
 #[async_trait]
 impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
     async fn payload(&self, _: &Agent) -> RemoveNodeOperatorsPayload {
-        RemoveNodeOperatorsPayload {
-            node_operators_to_remove: self.node_operators_to_remove.clone(),
-        }
+        RemoveNodeOperatorsPayload::new(self.node_operators_to_remove.clone())
     }
 }
 
