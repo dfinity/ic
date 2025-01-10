@@ -16,7 +16,7 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_replicated_state::{
-    metadata_state::{StreamHandle, Streams},
+    metadata_state::{Stream, Streams},
     replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
@@ -28,7 +28,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CanisterId, SubnetId,
+    CanisterId, CountBytes, SubnetId,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::{
@@ -462,7 +462,7 @@ impl StreamHandlerImpl {
     /// `signals_end` are invalid (not strictly increasing).
     fn garbage_collect_messages(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         signals_end: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
@@ -503,7 +503,7 @@ impl StreamHandlerImpl {
     /// if `stream_slice.messages.begin != stream.signals_end`.
     fn garbage_collect_signals(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         stream_slice: &StreamSlice,
     ) {
@@ -530,7 +530,7 @@ impl StreamHandlerImpl {
     }
 
     /// Wrapper around `Stream::discard_signals_before()` plus telemetry.
-    fn discard_signals_before(&self, stream: &mut StreamHandle, header_begin: StreamIndex) {
+    fn discard_signals_before(&self, stream: &mut Stream, header_begin: StreamIndex) {
         let signal_count_before = stream.reject_signals().len();
         stream.discard_signals_before(header_begin);
         self.observe_gced_reject_signals(signal_count_before - stream.reject_signals().len());
@@ -726,7 +726,7 @@ impl StreamHandlerImpl {
         msg: RequestOrResponse,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         available_guaranteed_response_memory: &mut i64,
     ) {
         let msg_type = match msg {
@@ -749,8 +749,8 @@ impl StreamHandlerImpl {
                     if state.metadata.certification_version < CertificationVersion::V19 =>
                 {
                     // Unable to induct a request, generate reject response and push it into `stream`.
-                    *available_guaranteed_response_memory -=
-                        stream.push(generate_reject_response_for(reason, &request)) as i64;
+                    stream.push(generate_reject_response_for(reason, &request));
+                    *available_guaranteed_response_memory -= request.count_bytes() as i64;
                     stream.push_accept_signal();
                 }
                 Some((reason, RequestOrResponse::Request(_))) => {

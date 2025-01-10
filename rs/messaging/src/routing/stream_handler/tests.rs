@@ -4246,19 +4246,6 @@ fn request_in_slice(
     }
 }
 
-/// Returns a reference to a response in a stream at `stream_index`.
-///
-/// Panics if no such response exists.
-fn response_in_stream(
-    opt_stream: Option<&Stream>,
-    stream_index: u64,
-) -> &ic_types::messages::Response {
-    match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
-        Some(RequestOrResponse::Response(response)) => response,
-        _ => unreachable!(),
-    }
-}
-
 /// Returns a reference to a response in the stream slice at `stream_index`.
 ///
 /// Panics if no such response exists.

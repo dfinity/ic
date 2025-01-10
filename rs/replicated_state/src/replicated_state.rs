@@ -908,11 +908,6 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of guaranteed responses in streams for each canister.
-    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
-    }
-
     /// Returns the number of canisters in this `ReplicatedState`.
     pub fn num_canisters(&self) -> usize {
         self.canister_states.len()
@@ -1245,8 +1240,6 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
-
-        //self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1295,7 +1288,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.streams().is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
