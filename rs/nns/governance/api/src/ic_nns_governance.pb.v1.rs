@@ -3513,7 +3513,8 @@ pub struct ListNeurons {
     /// If this is set, it skips all neuron IDs until this value is reached, then returns
     /// the remaining neurons up until the internal limit is reached.  This is only needed
     /// if the caller is paginating through the list of neurons, and did not get the full
-    /// list in the first request.
+    /// list in the first request. If neurons are included in `neuron_ids` that do not exist,
+    /// it is possible that fewer neurons will be returned than the limit.
     #[prost(uint64, optional, tag = "5")]
     pub start_from_neuron_id: Option<u64>,
 }
