@@ -1185,10 +1185,19 @@ impl Scheduler for SchedulerImpl {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
+        use std::time::{SystemTime, UNIX_EPOCH};
         // IMPORTANT!
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
+
+        println!(
+            "[TL] [{}] [execute_round] [start]",
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        );
 
         let round_log;
         let mut csprng;
@@ -1625,6 +1634,13 @@ impl Scheduler for SchedulerImpl {
                 .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states.len() as u64;
+            println!(
+                "[TL] [{}] [execute_round] [end]",
+                std::time::SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
             final_state
         }
     }
@@ -1797,6 +1813,24 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
+            println!(
+                "[TL] [{}] [execute_round] execute_canister_result: description: {:?}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis(),
+                description
+            );
+            if let Some(is) = &ingress_status {
+                println!(
+                    "[TL] [{}] [execute_round] [{}]: Response received.",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                    is.0 // the message id
+                );
+            }
             if instructions_used.map_or(false, |instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.
                 executed_canister_ids.insert(new_canister.canister_id());

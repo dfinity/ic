@@ -201,6 +201,13 @@ impl DeterministicTimeSlicing {
     //   the next slice.
     // - or returns the `InstructionLimitExceeded` error.
     fn try_pause(&self, instruction_counter: i64) -> Result<SliceExecutionOutput, HypervisorError> {
+        println!(
+            "[TL] [try_pause] {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        );
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
         if state.is_last_slice() {

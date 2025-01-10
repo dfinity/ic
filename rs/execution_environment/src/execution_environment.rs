@@ -3172,9 +3172,11 @@ impl ExecutionEnvironment {
             | ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
             | ExecutionTask::OnLowWasmMemory => {
-                unreachable!("Function abort_paused_execution_and_return_task is only called after 
-                the paused task is returned from TaskQueue, hence no task other than PausedExecution 
-                and PausedInstallCode should appear in paused_task except if there is a bug.")
+                unreachable!(
+                    "Function abort_paused_execution_and_return_task is only called after
+                the paused task is returned from TaskQueue, hence no task other than PausedExecution
+                and PausedInstallCode should appear in paused_task except if there is a bug."
+                )
             }
         }
     }
@@ -3646,6 +3648,13 @@ pub fn execute_canister(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteCanisterResult {
+    println!(
+        "[TL] [{}] [execute_canister]",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {
@@ -3728,6 +3737,18 @@ pub fn execute_canister(
             (CanisterMessageOrTask::Message(message), None)
         }
     };
+    if let CanisterMessageOrTask::Message(msg) = &input {
+        if let CanisterMessage::Ingress(ingress) = msg {
+            println!(
+                "[TL] [{}] [execute_canister] [{}] Starting execution",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis(),
+                ingress.message_id
+            );
+        }
+    }
     execute_canister_input(
         input,
         prepaid_execution_cycles,
