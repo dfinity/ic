@@ -199,7 +199,7 @@ proptest! {
     #[test]
     fn check_calls_conclude_with_migrating_canister(
         seed in any::<u64>().no_shrink(),
-        config in arb_canister_config(1 * KB as u32, 10),
+        config in arb_canister_config(KB as u32, 10),
     ) {
         prop_assert!(check_calls_conclude_with_migrating_canister_impl(
             10,     // chatter_phase_round_count
@@ -292,7 +292,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
 
     config.receivers = fixture.canisters();
 
-    let migrating_canister = fixture.local_canisters.first().unwrap().clone();
+    let migrating_canister = *fixture.local_canisters.first().unwrap();
 
     // Send config to `migrating_canister` and seed its rng.
     fixture.set_config(migrating_canister, config);
@@ -650,7 +650,7 @@ impl Fixture {
         for _ in 0..max_ticks {
             self.tick();
 
-            perform_checks(&self)?;
+            perform_checks(self)?;
 
             // Check for open call contexts.
             if self.open_call_contexts_count().values().sum::<usize>() == 0 {
