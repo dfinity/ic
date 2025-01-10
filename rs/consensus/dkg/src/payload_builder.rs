@@ -848,7 +848,8 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
+    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -1219,8 +1220,8 @@ mod tests {
         });
     }
 
-    // Creates a summary from registry and tests that all fields of the summary
-    // contain the expected contents.
+    /// Creates a summary from registry and tests that all fields of the summary
+    /// contain the expected contents.
     #[test]
     fn test_make_genesis_summary() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1300,10 +1301,10 @@ mod tests {
     }
 
     #[test]
-    // In this test we check that all summary payloads are created at the expected
-    // heights and with the expected contents. Note, we do not test anything related
-    // to the presence or contents of transcripts, as this would require using a
-    // real CSP.
+    /// In this test we check that all summary payloads are created at the expected
+    /// heights and with the expected contents. Note, we do not test anything related
+    /// to the presence or contents of transcripts, as this would require using a
+    /// real CSP.
     fn test_create_regular_summaries() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
@@ -1319,6 +1320,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
+                        .with_chain_key_config(one_vet_key())
                         .build(),
                 )],
             );
@@ -1360,9 +1362,12 @@ mod tests {
                     dkg_summary.next_interval_length,
                     Height::from(dkg_interval_len)
                 );
-                assert_eq!(dkg_summary.configs.len(), 2);
+                assert_eq!(dkg_summary.configs.len(), 3);
 
-                for tag in tags_iter(&[]) {
+                let vet_kd_ids =
+                    get_enabled_vet_keys(subnet_id, &*registry, dkg_summary.registry_version)
+                        .unwrap();
+                for tag in tags_iter(&vet_kd_ids) {
                     let (id, conf) = dkg_summary
                         .configs
                         .iter()
@@ -1398,31 +1403,40 @@ mod tests {
                         conf.threshold().get().get(),
                         match tag {
                             NiDkgTag::LowThreshold => 3,
-                            NiDkgTag::HighThreshold => 5,
-                            /////////////////////////////////////////////////////
-                            // TODO(CON-1413): extend this test once we can create local transcript configs for vetKeys that were requested by registry
-                            /////////////////////////////////////////////////////
-                            NiDkgTag::HighThresholdForKey(_) => todo!("CON-1413"),
+                            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 5,
                         }
                     );
 
                     // In later intervals we can also check that the resharing transcript matches
                     // the expected value.
                     if interval > 0 {
-                        if tag == NiDkgTag::HighThreshold {
-                            assert_eq!(
-                                dkg_summary
-                                    .clone()
-                                    .next_transcript(&NiDkgTag::HighThreshold)
-                                    .unwrap(),
-                                &conf.resharing_transcript().clone().unwrap()
-                            );
-                        } else {
-                            assert!(&conf.resharing_transcript().is_none());
+                        match tag {
+                            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
+                                assert_eq!(
+                                    dkg_summary.clone().next_transcript(&tag).unwrap(),
+                                    &conf.resharing_transcript().clone().unwrap()
+                                );
+                            }
+                            _ => assert!(&conf.resharing_transcript().is_none()),
                         }
                     }
                 }
             }
         });
+    }
+
+    fn one_vet_key() -> ChainKeyConfig {
+        ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: String::from("vet_kd_key"),
+                }),
+                pre_signatures_to_create_in_advance: 20,
+                max_queue_size: 20,
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        }
     }
 }
