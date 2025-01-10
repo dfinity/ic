@@ -407,7 +407,8 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-            validate_and_render_upgrade_sns_controlled_canister(upgrade, env).await
+            validate_and_render_upgrade_sns_controlled_canister(upgrade, env, root_canister_id)
+                .await
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
             match governance_proto.deployed_version_or_err() {
@@ -1036,6 +1037,7 @@ impl TokenProposalAction for MintSnsTokens {
 async fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
     env: &dyn Environment,
+    root_canister_id: CanisterId,
 ) -> Result<String, String> {
     let mut defects = vec![];
 
@@ -1093,8 +1095,18 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
     // Generate final report.
     if !defects.is_empty() {
+        let tip = if upgrade.chunked_canister_wasm.is_some() {
+            format!(
+                "\nPlease make sure that both Governance ({}) and Root ({}) are controllers of
+                 the Wasm store canister.",
+                env.canister_id().get(),
+                root_canister_id.get(),
+            )
+        } else {
+            "".to_string()
+        };
         return Err(format!(
-            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}",
+            "UpgradeSnsControlledCanister was invalid for the following reason(s):\n{}{tip}",
             defects.join("\n"),
         ));
     }
@@ -2785,9 +2797,13 @@ mod tests {
             chunked_canister_wasm: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap();
+        let text = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             text,
@@ -2822,9 +2838,13 @@ No upgrade argument."#
             }),
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap();
+        let text = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             text,
@@ -2871,9 +2891,13 @@ No upgrade argument."#
             upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
         }
 
-        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap_err();
+        let err = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap_err();
 
         assert!(err.contains(
             "1 out of 4 expected WASM chunks were not uploaded to the store canister: 040404"
@@ -2904,9 +2928,13 @@ No upgrade argument."#
             upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
         }
 
-        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap_err();
+        let err = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap_err();
 
         assert!(err.contains(
             "chunked_canister_wasm.chunk_hashes_list specifies only one hash (020202), \
@@ -2937,9 +2965,13 @@ No upgrade argument."#
             upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
         }
 
-        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap_err();
+        let err = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap_err();
 
         assert!(err.contains("chunked_canister_wasm.store_canister_id must be specified."));
     }
@@ -2967,9 +2999,13 @@ No upgrade argument."#
             upgrade.chunked_canister_wasm.replace(chunked_canister_wasm);
         }
 
-        let err = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap_err();
+        let err = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap_err();
 
         assert!(err.contains("chunked_canister_wasm.chunk_hashes_list cannot be empty."));
     }
@@ -2984,9 +3020,13 @@ No upgrade argument."#
             chunked_canister_wasm: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap();
+        let text = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             text,
@@ -3017,9 +3057,13 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             chunked_canister_wasm: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
-        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade, &env)
-            .await
-            .unwrap_err();
+        let text = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap_err();
         assert!(text.contains("Invalid mode"));
     }
 
@@ -3034,6 +3078,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
         let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
             &new_environment_that_expects_no_canister_calls(),
+            canister_test_id(55),
         )
         .await;
         assert_is_ok(result);
@@ -3056,8 +3101,12 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
 
         match proposal.action.as_ref().unwrap() {
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
-                let result =
-                    validate_and_render_upgrade_sns_controlled_canister(upgrade, env).await;
+                let result = validate_and_render_upgrade_sns_controlled_canister(
+                    upgrade,
+                    env,
+                    canister_test_id(55),
+                )
+                .await;
                 assert_is_err(result)
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
@@ -3073,8 +3122,12 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
                 let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 upgrade.canister_id = None;
-                let result =
-                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                let result = validate_and_render_upgrade_sns_controlled_canister(
+                    upgrade,
+                    &env,
+                    canister_test_id(55),
+                )
+                .await;
                 assert_is_err(result);
                 env
             }
@@ -3095,8 +3148,12 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
                 let env = setup_for_upgrade_sns_controlled_canister_tests(upgrade);
                 upgrade.new_canister_wasm = vec![];
-                let result =
-                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                let result = validate_and_render_upgrade_sns_controlled_canister(
+                    upgrade,
+                    &env,
+                    canister_test_id(55),
+                )
+                .await;
                 assert_is_err(result);
                 env
             }
@@ -3119,8 +3176,12 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
                 // first four bytes of this Vec are 0xDeadBeef.)
                 upgrade.new_canister_wasm = vec![0xde, 0xad, 0xbe, 0xef, 1, 0, 0, 0];
                 assert!(upgrade.new_canister_wasm.len() == 8); // The minimum wasm len.
-                let result =
-                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                let result = validate_and_render_upgrade_sns_controlled_canister(
+                    upgrade,
+                    &env,
+                    canister_test_id(55),
+                )
+                .await;
                 assert_is_err(result);
                 env
             }
@@ -3140,8 +3201,12 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
                 upgrade.new_canister_wasm =
                     vec![0x1f, 0x8b, 0x08, 0x08, 0xa3, 0x8e, 0xcf, 0x63, 0, 0x03];
                 assert!(upgrade.new_canister_wasm.len() >= 8); // The minimum wasm len.
-                let result =
-                    validate_and_render_upgrade_sns_controlled_canister(upgrade, &env).await;
+                let result = validate_and_render_upgrade_sns_controlled_canister(
+                    upgrade,
+                    &env,
+                    canister_test_id(55),
+                )
+                .await;
                 assert_is_ok(result);
             }
             _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),

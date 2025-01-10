@@ -312,15 +312,14 @@ message Motion {
   string motion_text = 1;
 }
 
-// Represents a WASM chunked into potentially multiple smaller chunks, each of which can safely
-// be sent around the ICP.
+// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
 message ChunkedCanisterWasm {
   // Obligatory check sum of the overall WASM to be reassembled from chunks.
   bytes wasm_module_hash = 1;
   // Obligatory; indicates which canister stores the WASM chunks.
   ic_base_types.pb.v1.PrincipalId store_canister_id = 2;
   // Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
-  // one chink.
+  // one chunk.
   repeated bytes chunk_hashes_list = 3;
 }
 
