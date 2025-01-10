@@ -1,17 +1,18 @@
 use crate::{
     benches::{
         assert_has_num_balances, emulate_archive_blocks, icrc_transfer, max_length_principal,
-        mint_tokens, upgrade, NUM_APPROVALS, NUM_TRANSFERS, NUM_TRANSFERS_FROM,
+        mint_tokens, upgrade, NUM_APPROVALS, NUM_GET_BLOCKS, NUM_TRANSFERS, NUM_TRANSFERS_FROM,
     },
-    icrc2_approve_not_async, init_state, Access, Account, LOG,
+    get_blocks, icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, Account, LOG,
 };
 use assert_matches::assert_matches;
 use canbench_rs::{bench, BenchResult};
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_icrc1_ledger::{FeatureFlags, InitArgs, InitArgsBuilder};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 156, 1, 1]);
 
@@ -92,6 +93,37 @@ fn bench_icrc1_transfers() -> BenchResult {
                 emulate_archive_blocks::<Access>(&LOG);
             }
             assert_has_num_balances(NUM_TRANSFERS_FROM + NUM_TRANSFERS + 2);
+        }
+        for i in 0..NUM_GET_BLOCKS {
+            let spender = Account {
+                owner: max_length_principal(i),
+                subaccount: Some([11_u8; 32]),
+            };
+            let transfer = TransferArg {
+                from_subaccount: account_with_tokens.subaccount,
+                to: Account {
+                    owner: max_length_principal(1_000_000_000 + i),
+                    subaccount: Some([11_u8; 32]),
+                },
+                created_at_time: Some(1_000_000_000 + start_time + i as u64),
+                ..cketh_transfer()
+            };
+            let result = icrc_transfer(account_with_tokens.owner, Some(spender), transfer.clone());
+            assert_matches!(result, Ok(_));
+        }
+        let req = GetBlocksRequest {
+            start: Nat::from(NUM_TRANSFERS_FROM + NUM_TRANSFERS + NUM_APPROVALS),
+            length: Nat::from(NUM_GET_BLOCKS),
+        };
+        {
+            let _p = canbench_rs::bench_scope("get_blocks");
+            let blocks_res = get_blocks(req.clone());
+            assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc3_get_blocks");
+            let blocks_res = icrc3_get_blocks(vec![req]);
+            assert_eq!(blocks_res.blocks.len(), 100usize); // this is the max for `icrc3_get_blocks`
         }
         upgrade();
     })
