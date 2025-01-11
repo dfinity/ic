@@ -159,6 +159,14 @@ pub fn execute_update(
 
     let memory_usage = helper.canister().memory_usage();
     let message_memory_usage = helper.canister().message_memory_usage();
+    eprintln!(
+        "XXX {} execute_update() original.method:{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+        original.method,
+    );
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
@@ -208,6 +216,14 @@ pub fn execute_update(
             }
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
+            eprintln!(
+                "XXX {} execute_update output.wasm_result:{:?}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                output.wasm_result
+            );
             update_round_limits(round_limits, &slice);
             helper.finish(
                 output,
@@ -344,6 +360,13 @@ impl UpdateHelper {
             | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
+                eprintln!(
+                    "XXX {} UpdateHelper::new CanisterTimer::Inactive",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                );
                 canister.system_state.global_timer = CanisterTimer::Inactive;
             }
         }

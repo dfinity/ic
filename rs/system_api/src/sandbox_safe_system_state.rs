@@ -472,6 +472,13 @@ impl SystemStateChanges {
 
         // Update canister global timer
         if let Some(new_global_timer) = self.new_global_timer {
+            eprintln!(
+                "XXX {} apply_changes new_global_timer:{new_global_timer:?}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            );
             system_state.global_timer = new_global_timer;
         }
 
@@ -754,6 +761,13 @@ impl SandboxSafeSystemState {
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
         // Update both sandbox global timer and the changes.
+        eprintln!(
+            "XXX {} set_global_timer timer:{timer:?}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         self.system_state_changes.new_global_timer = Some(timer);
         self.global_timer = timer;
     }

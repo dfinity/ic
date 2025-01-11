@@ -727,6 +727,30 @@ struct MemoryUsage {
 }
 
 impl MemoryUsage {
+    fn subnet_available_memory(&self) -> SubnetAvailableMemory {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+            % 100;
+        // Inject no memory in 10% cases.
+        if now < 10 {
+            eprintln!(
+                "XXX {} subnet_available_memory INJECT message_memory:0",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            );
+            return SubnetAvailableMemory::new(
+                self.subnet_available_memory.get_execution_memory(),
+                0,
+                self.subnet_available_memory
+                    .get_wasm_custom_sections_memory(),
+            );
+        }
+        self.subnet_available_memory
+    }
     fn new(
         log: ReplicaLogger,
         canister_id: CanisterId,
@@ -760,7 +784,7 @@ impl MemoryUsage {
             stable_memory_usage,
             wasm_memory_usage,
             current_message_usage,
-            subnet_available_memory,
+            subnet_available_memory: subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
             memory_allocation,
@@ -848,7 +872,7 @@ impl MemoryUsage {
 
         match self.memory_allocation {
             MemoryAllocation::BestEffort => {
-                match self.subnet_available_memory.check_available_memory(
+                match self.subnet_available_memory().check_available_memory(
                     execution_bytes,
                     NumBytes::from(0),
                     NumBytes::from(0),
@@ -861,7 +885,7 @@ impl MemoryUsage {
                         )?;
                         // All state changes after this point should not fail
                         // because the cycles have already been reserved.
-                        self.subnet_available_memory
+                        self.subnet_available_memory()
                             .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
                             .expect(
                                 "Decrementing subnet available memory is \
@@ -955,7 +979,14 @@ impl MemoryUsage {
             NumBytes::new(new_usage),
         )?;
 
-        match self.subnet_available_memory.try_decrement(
+        eprintln!(
+            "XXX {} allocate_message_memory message_bytes:{message_bytes}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        match self.subnet_available_memory().try_decrement(
             NumBytes::from(0),
             message_bytes,
             NumBytes::from(0),
@@ -985,8 +1016,18 @@ impl MemoryUsage {
             self.current_message_usage,
             message_bytes
         );
-        self.subnet_available_memory
-            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
+        eprintln!(
+            "XXX {} deallocate_message_memory",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        self.subnet_available_memory().increment(
+            NumBytes::from(0),
+            message_bytes,
+            NumBytes::from(0),
+        );
         self.allocated_message_memory -= message_bytes;
         self.current_message_usage -= message_bytes;
     }
@@ -1506,6 +1547,14 @@ impl SystemApiImpl {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
     ) -> HypervisorResult<i32> {
+        eprintln!(
+            "XXX {} push_output_request req.method_name:{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            req.method_name
+        );
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
