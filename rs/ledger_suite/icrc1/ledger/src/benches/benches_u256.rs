@@ -33,7 +33,7 @@ fn bench_icrc1_transfers() -> BenchResult {
 
     canbench_rs::bench_fn(|| {
         {
-            let _p = canbench_rs::bench_scope("transfers");
+            let _p = canbench_rs::bench_scope("icrc1_transfer");
             for i in 0..NUM_TRANSFERS {
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
@@ -51,7 +51,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             assert_has_num_balances(NUM_TRANSFERS + 2);
         }
         {
-            let _p = canbench_rs::bench_scope("approvals");
+            let _p = canbench_rs::bench_scope("icrc2_approve");
             for i in 0..NUM_APPROVALS {
                 let approve = ApproveArgs {
                     from_subaccount: account_with_tokens.subaccount,
@@ -72,7 +72,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             }
         }
         {
-            let _p = canbench_rs::bench_scope("transfers_from");
+            let _p = canbench_rs::bench_scope("icrc2_transfer_from");
             for i in 0..NUM_TRANSFERS_FROM {
                 let spender = Account {
                     owner: max_length_principal(i),

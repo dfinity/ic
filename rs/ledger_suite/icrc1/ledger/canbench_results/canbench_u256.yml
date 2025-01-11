@@ -1,14 +1,22 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 58832813883
+      instructions: 58832813772
       heap_increase: 271
       stable_memory_increase: 256
     scopes:
-      approvals:
+      icrc1_transfer:
+        instructions: 13635001695
+        heap_increase: 43
+        stable_memory_increase: 0
+      icrc2_approve:
         instructions: 20413485760
         heap_increase: 41
         stable_memory_increase: 128
+      icrc2_transfer_from:
+        instructions: 24042619927
+        heap_increase: 5
+        stable_memory_increase: 0
       icrc3_get_blocks:
         instructions: 7877258
         heap_increase: 0
@@ -21,16 +29,8 @@ benches:
         instructions: 149556765
         heap_increase: 129
         stable_memory_increase: 128
-      transfers:
-        instructions: 13635001695
-        heap_increase: 43
-        stable_memory_increase: 0
-      transfers_from:
-        instructions: 24042619927
-        heap_increase: 5
-        stable_memory_increase: 0
       upgrade:
-        instructions: 504336032
+        instructions: 504335921
         heap_increase: 182
         stable_memory_increase: 128
   bench_upgrade_baseline:
