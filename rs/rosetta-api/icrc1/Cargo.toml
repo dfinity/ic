@@ -54,6 +54,7 @@ tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+ulid = ">=1.1.4"
 url = { workspace = true }
 
 [lib]
