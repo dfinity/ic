@@ -134,6 +134,7 @@ impl ICWasmModule {
 }
 
 pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
+    let memory64_enabled = embedder_config.feature_flags.wasm64 == FlagStatus::Enabled;
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -151,20 +152,18 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
-        memory64_enabled: embedder_config.feature_flags.wasm64 == FlagStatus::Enabled,
+        memory64_enabled,
 
         threads_enabled: false,
         relaxed_simd_enabled: false,
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(
-            if embedder_config.feature_flags.wasm64 == FlagStatus::Enabled {
-                SYSTEM_API_IMPORTS_WASM64.to_vec()
-            } else {
-                SYSTEM_API_IMPORTS_WASM32.to_vec()
-            },
-        ),
+        available_imports: Some(if memory64_enabled {
+            SYSTEM_API_IMPORTS_WASM64.to_vec()
+        } else {
+            SYSTEM_API_IMPORTS_WASM32.to_vec()
+        }),
         ..Default::default()
     }
 }
