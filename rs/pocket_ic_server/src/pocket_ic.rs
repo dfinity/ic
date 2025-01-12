@@ -401,20 +401,6 @@ impl Subnets for SubnetsImpl {
             .as_ref()
             .map(|subnet| subnet.state_machine.clone())
     }
-    fn get_from_node(&self, node_id: NodeId) -> Option<Arc<StateMachine>> {
-        self.subnets
-            .read()
-            .unwrap()
-            .iter()
-            .find(|(_, subnet)| {
-                subnet
-                    .state_machine
-                    .nodes
-                    .iter()
-                    .any(|n| n.node_id == node_id)
-            })
-            .map(|(_, subnet)| subnet.state_machine.clone())
-    }
 }
 
 pub struct PocketIc {

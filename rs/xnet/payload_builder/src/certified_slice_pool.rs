@@ -1,7 +1,10 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{max_message_index, ExpectedIndices};
+use crate::{
+    max_message_index, ExpectedIndices, RefillStreamSliceIndices, POOL_BYTE_SIZE_SOFT_CAP,
+    POOL_SLICE_BYTE_SIZE_MAX, SLICE_BYTE_SIZE_MIN,
+};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -1086,6 +1089,8 @@ pub struct CertifiedSlicePool {
     /// The actual slice pool contents.
     slices: BTreeMap<SubnetId, UnpackedStreamSlice>,
 
+    own_subnet_id: SubnetId,
+
     /// Cached stream positions (message and signal indices), to be used for
     /// asynchronously populating the pool. They may not match the begin indices
     /// of the pooled slice.
@@ -1105,10 +1110,12 @@ impl CertifiedSlicePool {
     /// instrumentation.
     pub fn new(
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        own_subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             slices: Default::default(),
+            own_subnet_id,
             stream_positions: Default::default(),
             certified_stream_store,
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
@@ -1276,6 +1283,72 @@ impl CertifiedSlicePool {
                 }
             }
         }
+    }
+
+    pub fn refill_stream_slice_indices(
+        &self,
+    ) -> impl Iterator<Item = (SubnetId, RefillStreamSliceIndices)> {
+        let mut result: BTreeMap<SubnetId, RefillStreamSliceIndices> = BTreeMap::new();
+
+        let pool_slice_stats = {
+            if self.byte_size() > POOL_BYTE_SIZE_SOFT_CAP {
+                // Abort if pool is already full.
+                return result.into_iter();
+            }
+
+            self.peers()
+                // Skip our own subnet, the loopback stream is routed separately.
+                .filter(|&&subnet_id| subnet_id != self.own_subnet_id)
+                .map(|&subnet_id| (subnet_id, self.slice_stats(subnet_id)))
+                .collect::<BTreeMap<_, _>>()
+        };
+
+        for (subnet_id, slice_stats) in pool_slice_stats {
+            let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
+                // Have a cached stream position.
+                (Some(stream_position), messages_begin, msg_count, byte_size) => {
+                    (stream_position, messages_begin, msg_count, byte_size)
+                }
+
+                // No cached stream position, no pooling / refill necessary.
+                (None, _, _, _) => continue,
+            };
+
+            let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+                // Existing pooled stream, pull partial slice and append.
+                Some(messages_begin) if messages_begin == stream_position.message_index => (
+                    stream_position.message_index,
+                    stream_position.message_index + (msg_count as u64).into(),
+                    POOL_SLICE_BYTE_SIZE_MAX.saturating_sub(byte_size),
+                ),
+
+                // No pooled stream, or pooled stream does not begin at cached stream position, pull
+                // complete slice from cached stream position.
+                _ => (
+                    stream_position.message_index,
+                    stream_position.message_index,
+                    POOL_SLICE_BYTE_SIZE_MAX,
+                ),
+            };
+
+            if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
+                // No more space left in the pool for this slice, bail out.
+                continue;
+            }
+
+            result.insert(
+                subnet_id,
+                RefillStreamSliceIndices {
+                    witness_begin,
+                    msg_begin,
+                    // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
+                    // bytes for certification plus base witness, 2% for large payloads).
+                    byte_limit: (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+                },
+            );
+        }
+
+        result.into_iter()
     }
 
     /// Returns an iterator over the `SubnetIds` passed to the last

@@ -295,12 +295,6 @@ pub struct EndpointLocator {
     proximity: PeerLocation,
 }
 
-impl EndpointLocator {
-    pub fn node_id(&self) -> NodeId {
-        self.node_id
-    }
-}
-
 impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
     /// the given `StateManager`, `CertifiedStreamStore` and`RegistryClient`.
@@ -336,6 +330,7 @@ impl XNetPayloadBuilderImpl {
         let deterministic_rng_for_testing = Arc::new(None);
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             Arc::clone(&certified_stream_store),
+            subnet_id,
             metrics_registry,
         )));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
@@ -1201,6 +1196,12 @@ pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
 /// the payload once we're this close to the payload size limit.
 pub const SLICE_BYTE_SIZE_MIN: usize = 1 << 10;
 
+pub struct RefillStreamSliceIndices {
+    pub witness_begin: StreamIndex,
+    pub msg_begin: StreamIndex,
+    pub byte_limit: usize,
+}
+
 /// An async task that refills the slice pool.
 pub struct PoolRefillTask {
     /// A pool of slices, filled in the background by an async task.
@@ -1217,8 +1218,6 @@ pub struct PoolRefillTask {
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
     log: ReplicaLogger,
-
-    block_on_async_tasks: bool,
 }
 
 impl PoolRefillTask {
@@ -1239,106 +1238,29 @@ impl PoolRefillTask {
             runtime_handle: runtime_handle.clone(),
             metrics,
             log,
-            block_on_async_tasks: false,
         };
 
         runtime_handle.spawn(async move {
             while let Some(registry_version) = refill_receiver.recv().await {
-                task.refill_pool(
-                    POOL_BYTE_SIZE_SOFT_CAP,
-                    POOL_SLICE_BYTE_SIZE_MAX,
-                    registry_version,
-                )
-                .await;
+                task.refill_pool(registry_version).await;
             }
         });
 
         RefillTaskHandle(Mutex::new(refill_trigger))
     }
 
-    pub fn new_for_testing(
-        pool: Arc<Mutex<CertifiedSlicePool>>,
-        endpoint_resolver: XNetEndpointResolver,
-        xnet_client: Arc<dyn XNetClient>,
-        runtime_handle: runtime::Handle,
-        metrics: Arc<XNetPayloadBuilderMetrics>,
-        log: ReplicaLogger,
-    ) -> Self {
-        Self {
-            pool,
-            endpoint_resolver,
-            xnet_client,
-            runtime_handle,
-            metrics,
-            log,
-            block_on_async_tasks: true,
-        }
-    }
-
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    pub async fn refill_pool(
-        &self,
-        pool_byte_size_soft_cap: usize,
-        slice_byte_size_max: usize,
-        registry_version: RegistryVersion,
-    ) {
-        let pool_slice_stats = {
-            let pool = self.pool.lock().unwrap();
+    pub async fn refill_pool(&self, registry_version: RegistryVersion) {
+        let refill_stream_slice_indices = self.pool.lock().unwrap().refill_stream_slice_indices();
 
-            if pool.byte_size() > pool_byte_size_soft_cap {
-                // Abort if pool is already full.
-                return;
-            }
-
-            pool.peers()
-                // Skip our own subnet, the loopback stream is routed separately.
-                .filter(|&&subnet_id| subnet_id != self.endpoint_resolver.subnet_id)
-                .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
-                .collect::<BTreeMap<_, _>>()
-        };
-
-        for (subnet_id, slice_stats) in pool_slice_stats {
-            let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
-                // Have a cached stream position.
-                (Some(stream_position), messages_begin, msg_count, byte_size) => {
-                    (stream_position, messages_begin, msg_count, byte_size)
-                }
-
-                // No cached stream position, no pooling / refill necessary.
-                (None, _, _, _) => continue,
-            };
-
-            let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
-                // Existing pooled stream, pull partial slice and append.
-                Some(messages_begin) if messages_begin == stream_position.message_index => (
-                    stream_position.message_index,
-                    stream_position.message_index + (msg_count as u64).into(),
-                    slice_byte_size_max.saturating_sub(byte_size),
-                ),
-
-                // No pooled stream, or pooled stream does not begin at cached stream position, pull
-                // complete slice from cached stream position.
-                _ => (
-                    stream_position.message_index,
-                    stream_position.message_index,
-                    slice_byte_size_max,
-                ),
-            };
-
-            if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-                // No more space left in the pool for this slice, bail out.
-                continue;
-            }
-
+        for (subnet_id, indices) in refill_stream_slice_indices {
             // `XNetEndpoint` URL of a node on `subnet_id`.
             let endpoint_locator = match self.endpoint_resolver.xnet_endpoint_url(
                 subnet_id,
-                witness_begin,
-                msg_begin,
-                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
-                // bytes for certification plus base witness, 2% for large payloads).
-                (slice_byte_limit.saturating_sub(350)) * 98 / 100,
+                indices.witness_begin,
+                indices.msg_begin,
+                indices.byte_limit,
             ) {
                 Ok(endpoint_locator) => endpoint_locator,
                 Err(e) => {
@@ -1353,7 +1275,7 @@ impl PoolRefillTask {
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
-            let query = async move {
+            self.runtime_handle.spawn(async move {
                 let since = Instant::now();
                 metrics.outstanding_queries.inc();
                 let query_result = xnet_client.query(&endpoint_locator).await;
@@ -1364,7 +1286,7 @@ impl PoolRefillTask {
                     Ok(slice) => {
                         let logger = log.clone();
                         let res = tokio::task::spawn_blocking(move || {
-                            if witness_begin != msg_begin {
+                            if indices.witness_begin != indices.msg_begin {
                                 // Pulled a stream suffix, append to pooled slice.
                                 pool.lock()
                                     .unwrap()
@@ -1409,12 +1331,7 @@ impl PoolRefillTask {
                         }
                     }
                 }
-            };
-            if self.block_on_async_tasks {
-                query.await;
-            } else {
-                self.runtime_handle.spawn(query);
-            }
+            });
         }
     }
 
