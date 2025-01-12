@@ -3648,13 +3648,6 @@ pub fn execute_canister(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
 ) -> ExecuteCanisterResult {
-    println!(
-        "[TL] [{}] [execute_canister]",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    );
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {

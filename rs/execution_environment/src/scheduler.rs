@@ -1797,6 +1797,13 @@ fn execute_canisters_on_thread(
 
             let instructions_before = round_limits.instructions;
             let canister_had_paused_execution = canister.has_paused_execution();
+            println!(
+                "[TL] [{}] [execute_canister] [start]",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
             let ExecuteCanisterResult {
                 canister: new_canister,
                 instructions_used,
@@ -1812,6 +1819,13 @@ fn execute_canisters_on_thread(
                 time,
                 &mut round_limits,
                 subnet_size,
+            );
+            println!(
+                "[TL] [{}] [execute_canister] [end]",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
             );
             println!(
                 "[TL] [{}] [execute_round] execute_canister_result: description: {:?}",
