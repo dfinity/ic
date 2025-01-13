@@ -146,9 +146,9 @@ use crate::storage::with_voting_state_machines_mut;
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
-    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
-    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
+    MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -2655,6 +2655,7 @@ impl Governance {
     /// - The neuron exists.
     /// - The caller is the controller of the the neuron.
     /// - The neuron's state is `Dissolved` at the current timestamp.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone()))]
     pub async fn disburse_neuron(
         &mut self,
         id: &NeuronId,
@@ -2759,6 +2760,13 @@ impl Governance {
         // an amount less than the transaction fee.
         if fees_amount_e8s > transaction_fee_e8s {
             let now = self.env.now();
+            tla_log_label!("DisburseNeuron_Fee");
+            tla_log_locals! {
+                fees_amount: fees_amount_e8s,
+                neuron_id: id.id,
+                to_account: tla::account_to_tla(to_account),
+                disburse_amount: disburse_amount_e8s
+            };
             let _result = self
                 .ledger
                 .transfer_funds(
@@ -2786,6 +2794,15 @@ impl Governance {
         // user told us to disburse more than they had in their account (but
         // the burn still happened).
         let now = self.env.now();
+
+        tla_log_label!("DisburseNeuron_Stake");
+        tla_log_locals! {
+            fees_amount: fees_amount_e8s,
+            neuron_id: id.id,
+            to_account: tla::account_to_tla(to_account),
+            disburse_amount: disburse_amount_e8s
+        };
+
         let block_height = self
             .ledger
             .transfer_funds(

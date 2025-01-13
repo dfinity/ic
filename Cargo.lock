@@ -11861,6 +11861,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_bytes",
+ "serde_json",
  "strum",
  "strum_macros",
  "tempfile",
@@ -13060,7 +13061,6 @@ dependencies = [
 name = "ic-test-utilities-types"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "bincode",
  "ic-canister-client-sender",
  "ic-crypto-ed25519",
@@ -20915,6 +20915,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "tla_instrumentation"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "local_key",
  "sha2 0.10.8",
