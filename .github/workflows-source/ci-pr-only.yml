@@ -41,7 +41,7 @@ anchors:
     if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
-  bazel-build-fuzzers-archives-test:
+  bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup
     <<: *skip-merge-group
