@@ -2,7 +2,9 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
+    embedders::{Config as EmbeddersConfig, FeatureFlags},
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
@@ -289,6 +291,13 @@ impl FixtureConfig {
             },
             HypervisorConfig {
                 subnet_message_memory_capacity: subnet_message_memory_capacity.into(),
+                embedders_config: EmbeddersConfig {
+                    feature_flags: FeatureFlags {
+                        best_effort_responses: FlagStatus::Enabled,
+                        ..FeatureFlags::default()
+                    },
+                    ..EmbeddersConfig::default()
+                },
                 ..HypervisorConfig::default()
             },
         )
