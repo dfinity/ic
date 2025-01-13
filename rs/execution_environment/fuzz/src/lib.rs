@@ -6,6 +6,11 @@ use ic_canister_sandbox_backend_lib::{
 use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
 use std::os::raw::c_char;
+use std::process::{exit, Command};
+use std::os::unix::process::CommandExt;
+use nix::sys::ptrace;
+use nix::sys::wait::wait;
+use nix::unistd::{fork, ForkResult};
 
 #[allow(improper_ctypes)]
 extern "C" {
@@ -32,7 +37,11 @@ extern "C" {
 pub fn fuzzer_main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        canister_sandbox_main();
+        syscall_monitor(|| { 
+            canister_sandbox_main();
+            Command::new("ls").exec();
+        });
+        
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         #[cfg(not(fuzzing))]
         sandbox_launcher_main();
@@ -56,6 +65,38 @@ pub fn fuzzer_main() {
 
         unsafe {
             LLVMFuzzerRunDriver(argc, argv, test_input_wrap);
+        }
+    }
+}
+
+
+fn syscall_monitor<F>(f: F)
+where
+    F: FnOnce() -> (),
+{
+    match unsafe { fork() } {
+        Ok(ForkResult::Child) => {
+            ptrace::traceme().unwrap();
+            f();
+            exit(0)
+        }
+
+        Ok(ForkResult::Parent { child }) => loop {
+            wait().unwrap();
+
+            match ptrace::getregs(child) {
+                Ok(x) => println!("Syscall name: {:?}", x.orig_rax),
+                Err(_) => break,
+            };
+
+            match ptrace::syscall(child, None) {
+                Ok(_) => continue,
+                Err(_) => break,
+            }
+        },
+
+        Err(err) => {
+            panic!("[main] fork() failed: {}", err);
         }
     }
 }

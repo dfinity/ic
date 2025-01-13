@@ -22,6 +22,7 @@ rust_library(
     deps = [
         "//rs/canister_sandbox:backend_lib",
         "@crate_index//:libfuzzer-sys",
+        "@crate_index//:nix",
     ],
 )
 
