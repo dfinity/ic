@@ -332,7 +332,7 @@ impl InstallCodeHelper {
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                             bytes,
                             available,
-                            threshold: requested,
+                            required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -366,7 +366,7 @@ impl InstallCodeHelper {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
                     available: self.canister.system_state.balance(),
-                    threshold,
+                    required: threshold,
                 };
                 return finish_err(
                     clean_canister,

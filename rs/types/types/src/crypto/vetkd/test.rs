@@ -1,5 +1,7 @@
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
-use crate::crypto::vetkd::{VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare};
+use crate::crypto::vetkd::{
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+};
 use crate::crypto::ExtendedDerivationPath;
 use crate::Height;
 use ic_base_types::PrincipalId;
@@ -42,11 +44,11 @@ mod display_and_debug {
     #[test]
     fn should_correctly_print_vetkd_encrypted_key_share() {
         let input = VetKdEncryptedKeyShare {
-            encrypted_key_share: b"eks".to_vec(),
+            encrypted_key_share: VetKdEncryptedKeyShareContent(b"eks".to_vec()),
             node_signature: b"ns".to_vec(),
         };
         let output = "VetKdEncryptedKeyShare { \
-            encrypted_key_share: 0x656b73, \
+            encrypted_key_share: VetKdEncryptedKeyShareContent(0x656b73), \
             node_signature: 0x6e73 \
         }"
         .to_string();
