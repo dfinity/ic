@@ -2,9 +2,12 @@ use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
+use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
+use ic_protobuf::types::v1::master_public_key_id::KeyId;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -14,6 +17,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -91,9 +95,34 @@ pub fn insert_initial_dkg_transcript(
         empty_ni_dkg_transcript_with_committee(&committee, version, NiDkgTag::LowThreshold),
     );
 
+    let chain_key_initializations = record
+        .chain_key_config
+        .iter()
+        .flat_map(|config| config.key_configs.iter())
+        .filter_map(|config| config.key_id.clone())
+        .filter_map(|key_id| match key_id.key_id {
+            Some(KeyId::Vetkd(ref vet_key_id)) => Some((
+                key_id.clone(),
+                empty_ni_dkg_transcript_with_committee(
+                    &committee,
+                    version,
+                    NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                        vet_key_id.clone().try_into().unwrap(),
+                    )),
+                ),
+            )),
+            _ => None,
+        })
+        .map(|(key_id, transcript)| ChainKeyInitialization {
+            key_id: Some(key_id),
+            initialization: Some(Initialization::TranscriptRecord(transcript.into())),
+        })
+        .collect::<Vec<_>>();
+
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript),
+        chain_key_initializations,
         ..Default::default()
     };
 
