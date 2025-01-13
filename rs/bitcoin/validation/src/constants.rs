@@ -57,6 +57,12 @@ const TESTNET: &[(BlockHeight, &str)] = &[
     (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
 ];
 
+/// Bitcoin testnet checkpoints
+#[rustfmt::skip]
+const TESTNET4: &[(BlockHeight, &str)] = &[
+    (64000, "000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5")
+];
+
 /// Returns the maximum difficulty target depending on the network
 pub fn max_target(network: &Network) -> Target {
     match network {
@@ -96,7 +102,7 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Testnet4 => &[],
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
@@ -116,7 +122,7 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Testnet4 => &[],
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
