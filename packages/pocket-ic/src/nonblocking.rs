@@ -3,9 +3,10 @@ use crate::common::rest::{
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
+    Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
@@ -16,7 +17,7 @@ use crate::management_canister::{
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use crate::{CallError, IngressStatusResult, PocketIcBuilder, UserError, WasmResult};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -599,17 +600,31 @@ impl PocketIc {
     /// or a round has been executed due to a separate PocketIC library call.
     pub async fn ingress_status(
         &self,
-        message_id: RawMessageId,
-    ) -> Option<Result<WasmResult, UserError>> {
+        raw_message_id: RawMessageId,
+        caller: Option<Principal>,
+    ) -> IngressStatusResult {
         let endpoint = "read/ingress_status";
-        let result: Option<RawCanisterResult> = self.post(endpoint, message_id).await;
-        result.map(|result| match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        })
+        let raw_ingress_status_args = RawIngressStatusArgs {
+            raw_message_id,
+            raw_caller: caller.map(|caller| caller.into()),
+        };
+        match self.try_post(endpoint, raw_ingress_status_args).await {
+            Ok(None) => IngressStatusResult::NotAvailable,
+            Ok(Some(raw_result)) => {
+                let result = match raw_result {
+                    RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                        RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                        RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+                    },
+                    RawCanisterResult::Err(user_error) => Err(user_error),
+                };
+                IngressStatusResult::Success(result)
+            }
+            Err((status, message)) => {
+                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for PocketIc::ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                IngressStatusResult::Forbidden(message)
+            }
+        }
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
@@ -625,7 +640,9 @@ impl PocketIc {
             .with_multiplier(2.0)
             .build();
         loop {
-            if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
+            if let IngressStatusResult::Success(ingress_status) =
+                self.ingress_status(message_id.clone(), None).await
+            {
                 break ingress_status;
             }
             tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;
@@ -1361,12 +1378,29 @@ impl PocketIc {
         self.request(HttpMethod::Post, endpoint, body).await
     }
 
+    async fn try_post<T: DeserializeOwned, B: Serialize>(
+        &self,
+        endpoint: &str,
+        body: B,
+    ) -> Result<T, (StatusCode, String)> {
+        self.try_request(HttpMethod::Post, endpoint, body).await
+    }
+
     async fn request<T: DeserializeOwned, B: Serialize>(
         &self,
         http_method: HttpMethod,
         endpoint: &str,
         body: B,
     ) -> T {
+        self.try_request(http_method, endpoint, body).await.unwrap()
+    }
+
+    async fn try_request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        http_method: HttpMethod,
+        endpoint: &str,
+        body: B,
+    ) -> Result<T, (StatusCode, String)> {
         // we may have to try several times if the instance is busy
         let start = std::time::SystemTime::now();
         loop {
@@ -1377,9 +1411,10 @@ impl PocketIc {
                 HttpMethod::Post => reqwest_client.post(url).json(&body),
             };
             let result = builder.send().await.expect("HTTP failure");
+            let status = result.status();
             match ApiResponse::<_>::from_response(result).await {
-                ApiResponse::Success(t) => break t,
-                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Success(t) => break Ok(t),
+                ApiResponse::Error { message } => break Err((status, message)),
                 ApiResponse::Busy { state_label, op_id } => {
                     debug!(
                         "instance_id={} Instance is busy (with a different computation): state_label: {}, op_id: {}",
@@ -1404,24 +1439,31 @@ impl PocketIc {
                             .send()
                             .await
                             .expect("HTTP failure");
-                        match ApiResponse::<_>::from_response(result).await {
-                            ApiResponse::Error { message } => {
-                                debug!("Polling has not succeeded yet: {}", message)
-                            }
-                            ApiResponse::Success(t) => {
-                                return t;
-                            }
-                            ApiResponse::Started { state_label, op_id } => {
-                                warn!(
-                                    "instance_id={} unexpected Started({} {})",
-                                    self.instance_id, state_label, op_id
-                                );
-                            }
-                            ApiResponse::Busy { state_label, op_id } => {
-                                warn!(
-                                    "instance_id={} unexpected Busy({} {})",
-                                    self.instance_id, state_label, op_id
-                                );
+                        if result.status() == reqwest::StatusCode::NOT_FOUND {
+                            let message =
+                                String::from_utf8(result.bytes().await.unwrap().to_vec()).unwrap();
+                            debug!("Polling has not succeeded yet: {}", message);
+                        } else {
+                            let status = result.status();
+                            match ApiResponse::<_>::from_response(result).await {
+                                ApiResponse::Error { message } => {
+                                    return Err((status, message));
+                                }
+                                ApiResponse::Success(t) => {
+                                    return Ok(t);
+                                }
+                                ApiResponse::Started { state_label, op_id } => {
+                                    warn!(
+                                        "instance_id={} unexpected Started({} {})",
+                                        self.instance_id, state_label, op_id
+                                    );
+                                }
+                                ApiResponse::Busy { state_label, op_id } => {
+                                    warn!(
+                                        "instance_id={} unexpected Busy({} {})",
+                                        self.instance_id, state_label, op_id
+                                    );
+                                }
                             }
                         }
                         if let Some(max_request_time_ms) = self.max_request_time_ms {

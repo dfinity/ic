@@ -314,6 +314,7 @@ enum CspVaultMethod {
     IdkgOpenDealing,
     CreateEcdsaSigShare,
     CreateSchnorrSigShare,
+    CreateEncryptedVetKdKeyShare,
     NewPublicSeed,
 }
 
@@ -389,6 +390,9 @@ impl CspVaultMethod {
             CspVaultMethod::CreateSchnorrSigShare => {
                 (MetricsDomain::ThresholdSchnorr, "create_schnorr_sig_share")
             }
+            CspVaultMethod::CreateEncryptedVetKdKeyShare => {
+                (MetricsDomain::VetKd, "create_encrypted_vetkd_key_share")
+            }
             CspVaultMethod::NewPublicSeed => (MetricsDomain::PublicSeed, "new_public_seed"),
         }
     }
@@ -428,6 +432,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
             Req::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Req::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
+            Req::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Req::NewPublicSeed { .. } => Method::NewPublicSeed,
         }
     }
@@ -467,6 +472,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
             Resp::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Resp::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
+            Resp::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Resp::NewPublicSeed { .. } => Method::NewPublicSeed,
         }
     }

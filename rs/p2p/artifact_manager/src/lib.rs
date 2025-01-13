@@ -20,12 +20,10 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
 use tracing::instrument;
-
-type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -136,26 +134,18 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactTransmit<Artifact>>,
+    outbound_tx: Sender<ArtifactTransmit<Artifact>>,
+    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     initial_artifacts: Vec<Artifact>,
-) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
-    // Making this channel bounded can be problematic since we don't have true multiplexing
-    // of P2P messages.
-    // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-    // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-    // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-    // independent of consensus.
-    #[allow(clippy::disallowed_methods)]
-    let (sender, receiver) = unbounded_channel();
+) -> Box<dyn JoinGuard> {
     let shutdown = Arc::new(AtomicBool::new(false));
-
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
             for artifact in initial_artifacts {
-                let _ = send_advert.blocking_send(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                let _ = outbound_tx.blocking_send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                     artifact,
                     is_latency_sensitive: false,
                 }));
@@ -163,18 +153,14 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
             process_messages(
                 time_source,
                 client,
-                send_advert,
-                receiver,
+                outbound_tx,
+                inbound_rx,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
         })
         .unwrap();
-
-    (
-        Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown)),
-        sender,
-    )
+    Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
 // The artifact processor thread loop
@@ -243,7 +229,8 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    send_advert: Sender<ArtifactTransmit<SignedIngress>>,
+    outbound_tx: Sender<ArtifactTransmit<SignedIngress>>,
+    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
@@ -254,46 +241,41 @@ pub fn create_ingress_handlers<
             + Sync,
     >,
     metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
-    Box<dyn JoinGuard>,
-) {
+) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let (jh, sender) = run_artifact_processor(
+    run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        send_advert,
+        outbound_tx,
+        inbound_rx,
         vec![],
-    );
-    (sender, jh)
+    )
 }
 
-/// Starts the event loop that pools consensus for updates on what needs to be replicated.
+/// Starts the event loop that polls consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
     C: PoolMutationsProducer<Pool, Mutations = <Pool as MutablePool<Artifact>>::Mutations> + 'static,
 >(
-    send_advert: Sender<ArtifactTransmit<Artifact>>,
+    outbound_tx: Sender<ArtifactTransmit<Artifact>>,
+    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
     metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    Box<dyn JoinGuard>,
-) {
+) -> Box<dyn JoinGuard> {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
-    let (jh, sender) = run_artifact_processor(
+    run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        send_advert,
+        outbound_tx,
+        inbound_rx,
         inital_artifacts,
-    );
-    (sender, jh)
+    )
 }
 
 // TODO: make it private, it is used only for tests outside of this crate
@@ -472,11 +454,14 @@ mod tests {
 
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
+        #[allow(clippy::disallowed_methods)]
+        let (_, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
         run_artifact_processor::<DummyArtifact>(
             time_source,
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
+            inbound_rx,
             (0..10).map(Into::into).collect(),
         );
 

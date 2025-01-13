@@ -339,13 +339,13 @@ mod tests {
                     is_redacted: false,
                     rules: vec![
                         api::OutputRule {
-                            id: rule_id_1.0.to_string(),
+                            rule_id: rule_id_1.0.to_string(),
                             incident_id: incident_id.0.to_string(),
                             rule_raw: Some(b"{\"a\": 1}".to_vec()),
                             description: Some("verbose description 1".to_string()),
                         },
                         api::OutputRule {
-                            id: rule_id_2.0.to_string(),
+                            rule_id: rule_id_2.0.to_string(),
                             incident_id: incident_id.0.to_string(),
                             rule_raw: Some(b"{\"b\": 2}".to_vec()),
                             description: Some("verbose description 2".to_string()),
@@ -367,13 +367,13 @@ mod tests {
                     is_redacted: true,
                     rules: vec![
                         api::OutputRule {
-                            id: rule_id_1.0.to_string(),
+                            rule_id: rule_id_1.0.to_string(),
                             incident_id: incident_id.0.to_string(),
                             rule_raw: None,
                             description: None,
                         },
                         api::OutputRule {
-                            id: rule_id_2.0.to_string(),
+                            rule_id: rule_id_2.0.to_string(),
                             incident_id: incident_id.0.to_string(),
                             rule_raw: Some(b"{\"b\": 2}".to_vec()),
                             description: Some("verbose description 2".to_string()),
@@ -421,7 +421,7 @@ mod tests {
         assert_eq!(
             response,
             api::OutputRuleMetadata {
-                id: rule_id.0.to_string(),
+                rule_id: rule_id.0.to_string(),
                 incident_id: incident_id.0.to_string(),
                 rule_raw: Some(b"{\"a\": 1}".to_vec()),
                 description: Some("verbose description".to_string()),
@@ -435,7 +435,7 @@ mod tests {
         assert_eq!(
             response,
             api::OutputRuleMetadata {
-                id: rule_id.0.to_string(),
+                rule_id: rule_id.0.to_string(),
                 incident_id: incident_id.0.to_string(),
                 rule_raw: None,
                 description: None,
@@ -498,7 +498,7 @@ mod tests {
         let response = getter_unauthorized.get(&incident_id.0.to_string()).unwrap();
 
         let rule_1 = api::OutputRuleMetadata {
-            id: rule_id_1.0.to_string(),
+            rule_id: rule_id_1.0.to_string(),
             incident_id: incident_id.0.to_string(),
             rule_raw: None,
             description: None,
@@ -507,7 +507,7 @@ mod tests {
             removed_in_version: Some(3),
         };
         let rule_2 = api::OutputRuleMetadata {
-            id: rule_id_2.0.to_string(),
+            rule_id: rule_id_2.0.to_string(),
             incident_id: incident_id.0.to_string(),
             rule_raw: Some(b"{\"b\": 2}".to_vec()),
             description: Some("verbose description 2".to_string()),

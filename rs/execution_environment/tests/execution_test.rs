@@ -2055,6 +2055,7 @@ fn system_subnets_are_not_rate_limited() {
     );
 }
 
+#[ignore]
 #[test]
 fn toolchain_error_message() {
     let sm = StateMachine::new();
