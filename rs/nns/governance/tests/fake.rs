@@ -42,7 +42,7 @@ pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
@@ -257,6 +257,7 @@ impl FakeDriver {
 
 #[async_trait]
 impl IcpLedger for FakeDriver {
+    #[cfg_attr(feature = "tla", tla_function(async_trait_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
