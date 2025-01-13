@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -exuo pipefail
 
 # Wrapper around unshare and chroot that does some extra setup e.g. mounts
 # /dev, /proc. and other API filesystems.
@@ -119,12 +119,8 @@ MOUNT=false
 CHROOT_DIR=""
 COMMAND=""
 
-#unshare --fork --pid --map-root-user --setuid 0 --setgid 0 echo "hello"
-
-PID_UNSHARE="podman unshare"
-MOUNT_UNSHARE="$PID_UNSHARE"
-
-#MOUNT_UNSHARE="$PID_UNSHARE --mount --map-auto --map-root-user --setuid 0 --setgid 0"
+PID_UNSHARE="unshare --fork --pid"
+MOUNT_UNSHARE="$PID_UNSHARE --mount --map-auto --map-root-user --setuid 0 --setgid 0"
 
 run_with_chroot() {
     ((EUID == 0)) || die "This script must be run with root privileges"

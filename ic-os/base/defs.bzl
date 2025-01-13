@@ -164,11 +164,6 @@ EOF
 
                 export ICOS_BUILD_DIR="/icos_build"
 
-                cat /etc/subuid
-
-                newuidmap $$BASHPID 0 1000 65534
-                newgidmap $$BASHPID 0 1002 65534
-
                 # Set timezone
                 ln -snf /usr/share/zoneinfo/UTC /etc/localtime && echo UTC > /etc/timezone
 
