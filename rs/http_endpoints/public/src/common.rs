@@ -28,6 +28,7 @@ use ic_validator::{
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value as CBOR;
+use std::future::Future;
 use std::sync::Arc;
 use std::{collections::BTreeMap, time::Duration};
 use tokio::time::timeout;
@@ -157,55 +158,63 @@ fn cbor_content_type(headers: &HeaderMap) -> bool {
     content_type.to_lowercase() == CONTENT_TYPE_CBOR
 }
 
-#[async_trait::async_trait]
 impl<T, S> FromRequest<S> for Cbor<T>
 where
     T: for<'a> Deserialize<'a>,
     S: Send + Sync,
 {
     type Rejection = (StatusCode, String);
-    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
-        if cbor_content_type(req.headers()) {
-            let bytes = Bytes::from_request(req, state)
-                .await
-                .map_err(|e| (e.status(), e.body_text()))?;
-            match serde_cbor::from_slice(&bytes) {
-                Ok(value) => Ok(Cbor(value)),
-                Err(err) => Err((
+    fn from_request(
+        req: axum::extract::Request,
+        state: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        async {
+            if cbor_content_type(req.headers()) {
+                let bytes = Bytes::from_request(req, state)
+                    .await
+                    .map_err(|e| (e.status(), e.body_text()))?;
+                match serde_cbor::from_slice(&bytes) {
+                    Ok(value) => Ok(Cbor(value)),
+                    Err(err) => Err((
+                        StatusCode::BAD_REQUEST,
+                        format!("Failed to deserialize cbor request: {err}"),
+                    )),
+                }
+            } else {
+                Err((
                     StatusCode::BAD_REQUEST,
-                    format!("Failed to deserialize cbor request: {err}"),
-                )),
+                    format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+                ))
             }
-        } else {
-            Err((
-                StatusCode::BAD_REQUEST,
-                format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
-            ))
         }
     }
 }
 
 pub(crate) struct WithTimeout<E>(pub E);
 
-#[async_trait::async_trait]
 impl<S, E> FromRequest<S> for WithTimeout<E>
 where
     S: Send + Sync,
     E: FromRequest<S>,
 {
     type Rejection = axum::response::Response;
-    async fn from_request(req: axum::extract::Request, s: &S) -> Result<Self, Self::Rejection> {
-        match timeout(MAX_REQUEST_RECEIVE_TIMEOUT, E::from_request(req, s)).await {
-            Ok(Ok(bytes)) => Ok(WithTimeout(bytes)),
-            Ok(Err(err)) => Err(err.into_response()),
-            Err(_) => Err((
-                StatusCode::REQUEST_TIMEOUT,
-                format!(
-                    "receiving request took longer than {}s",
-                    MAX_REQUEST_RECEIVE_TIMEOUT.as_secs()
-                ),
-            )
-                .into_response()),
+    fn from_request(
+        req: axum::extract::Request,
+        s: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        async {
+            match timeout(MAX_REQUEST_RECEIVE_TIMEOUT, E::from_request(req, s)).await {
+                Ok(Ok(bytes)) => Ok(WithTimeout(bytes)),
+                Ok(Err(err)) => Err(err.into_response()),
+                Err(_) => Err((
+                    StatusCode::REQUEST_TIMEOUT,
+                    format!(
+                        "receiving request took longer than {}s",
+                        MAX_REQUEST_RECEIVE_TIMEOUT.as_secs()
+                    ),
+                )
+                    .into_response()),
+            }
         }
     }
 }
