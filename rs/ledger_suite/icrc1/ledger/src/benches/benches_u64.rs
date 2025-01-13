@@ -1,6 +1,6 @@
 use crate::benches::{
     assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
-    upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
+    test_account_offset, upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
 };
 use crate::{icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, LOG};
 use assert_matches::assert_matches;
@@ -70,7 +70,7 @@ fn bench_icrc1_transfers() -> BenchResult {
                 let spender = test_account(i);
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
-                    to: test_account(1_000_000_000 + i),
+                    to: test_account_offset(i),
                     created_at_time: Some(start_time + i as u64),
                     ..ckbtc_transfer()
                 };
@@ -85,7 +85,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             let spender = test_account(i);
             let transfer = TransferArg {
                 from_subaccount: account_with_tokens.subaccount,
-                to: test_account(1_000_000_000 + i),
+                to: test_account_offset(i),
                 created_at_time: Some(1_000_000_000 + start_time + i as u64),
                 ..ckbtc_transfer()
             };

@@ -61,6 +61,10 @@ pub fn test_account(i: u32) -> Account {
     }
 }
 
+pub fn test_account_offset(i: u32) -> Account {
+    test_account(1_000_000_000 + i)
+}
+
 fn mint_tokens<T: Into<Nat>>(minter: Principal, amount: T) -> Account {
     let account_with_tokens = Account {
         owner: max_length_principal(u32::MAX),
