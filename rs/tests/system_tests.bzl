@@ -115,7 +115,6 @@ def _run_system_test(ctx):
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
 
-
     runtime_deps = [depset([ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)

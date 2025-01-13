@@ -1187,7 +1187,9 @@ pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH")?)
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
