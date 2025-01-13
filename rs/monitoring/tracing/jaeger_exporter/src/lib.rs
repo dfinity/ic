@@ -23,14 +23,11 @@ pub fn jaeger_exporter(
         .build()?;
 
     let tracer = sdk_trace::TracerProvider::builder()
-        .with_config(
-            sdk_trace::Config::default()
-                .with_sampler(sdk_trace::Sampler::TraceIdRatioBased(0.01))
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    service_name,
-                )])),
-        )
+        .with_sampler(sdk_trace::Sampler::TraceIdRatioBased(0.01))
+        .with_resource(Resource::new(vec![KeyValue::new(
+            "service.name",
+            service_name,
+        )]))
         .with_batch_exporter(span_exporter, sdk_runtime::Tokio)
         .build();
 

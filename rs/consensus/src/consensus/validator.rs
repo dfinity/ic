@@ -8,8 +8,9 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, idkg,
+    idkg,
 };
+use ic_consensus_dkg as dkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -1313,6 +1314,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &self.metrics.dkg_validator,
+            &self.log,
         )
         .map_err(|err| {
             err.map(

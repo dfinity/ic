@@ -238,3 +238,17 @@ impl upgrade_journal_entry::Event {
         }
     }
 }
+
+pub fn serve_journal(journal: &UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
+    use ic_canisters_http_types::HttpResponseBuilder;
+    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal.clone());
+    match serde_json::to_string(&journal.entries) {
+        Err(err) => {
+            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
+        }
+        Ok(body) => HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json")
+            .with_body_and_content_length(body)
+            .build(),
+    }
+}
