@@ -28,6 +28,7 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
+/// Same order of magnitude as the number of active artifacts. 
 const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;

@@ -135,7 +135,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     outbound_tx: Sender<ArtifactTransmit<Artifact>>,
-    inbound_tx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> Box<dyn JoinGuard> {
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -154,7 +154,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
                 time_source,
                 client,
                 outbound_tx,
-                inbound_tx,
+                inbound_rx,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
@@ -230,7 +230,7 @@ pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
     outbound_tx: Sender<ArtifactTransmit<SignedIngress>>,
-    inbound_tx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
@@ -248,12 +248,12 @@ pub fn create_ingress_handlers<
         metrics_registry,
         Box::new(client),
         outbound_tx,
-        inbound_tx,
+        inbound_rx,
         vec![],
     )
 }
 
-/// Starts the event loop that pools consensus for updates on what needs to be replicated.
+/// Starts the event loop that polls consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
