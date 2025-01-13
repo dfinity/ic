@@ -16,19 +16,10 @@ pub mod defs;
 pub mod steps;
 
 const IC_VERSION_FILE: &str = "ENV_DEPS__IC_VERSION_FILE";
-const CUSTOM_REVISION: &str = "custom_revision";
-
-const CUSTOM_DISK_IMG_TAR_URL: &str = "custom_disk_img_tar_url";
-const DEV_DISK_IMG_TAR_ZST_CAS_URL: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL";
-
-const CUSTOM_DISK_IMG_SHA: &str = "custom_disk_img_sha";
-const DEV_DISK_IMG_TAR_ZST_SHA256: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256";
-
-const CUSTOM_UPDATE_IMG_TAR_URL: &str = "custom_update_img_tar_url";
-const DEV_UPDATE_IMG_TAR_ZST_CAS_URL: &str = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL";
-
-const CUSTOM_UPDATE_IMG_SHA: &str = "custom_update_img_sha";
-const DEV_UPDATE_IMG_TAR_ZST_SHA256: &str = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256";
+const GUESTOS_DISK_IMG_URL: &str = "ENV_DEPS__GUESTOS_DISK_IMG_URL";
+const GUESTOS_DISK_IMG_HASH: &str = "ENV_DEPS__GUESTOS_DISK_IMG_HASH";
+const GUESTOS_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
+const GUESTOS_UPDATE_IMG_HASH: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_HASH";
 
 pub const IC_CONFIG: &str = "IC_CONFIG";
 
@@ -44,33 +35,28 @@ pub fn setup(env: TestEnv, config: IcConfig) {
             orchestrator_url: Url::parse("https://unimportant.com").unwrap(),
             orchestrator_hash: "".to_string(),
         });
-        write_file_and_update_env_variable(
+        update_env_variables(
             &env,
             vec![
                 (
-                    CUSTOM_REVISION,
                     v.to_string(),
                     IC_VERSION_FILE,
                 ),
                 (
-                    CUSTOM_DISK_IMG_TAR_URL,
                     format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/disk-img.tar.zst", v),
-                    DEV_DISK_IMG_TAR_ZST_CAS_URL,
+                    GUESTOS_DISK_IMG_URL,
                 ),
                 (
-                    CUSTOM_DISK_IMG_SHA,
                     fetch_shasum_for_img(v.to_string(), "disk", env.logger()),
-                    DEV_DISK_IMG_TAR_ZST_SHA256,
+                    GUESTOS_DISK_IMG_HASH,
                 ),
                 (
-                    CUSTOM_UPDATE_IMG_TAR_URL,
                     format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", v),
-                    DEV_UPDATE_IMG_TAR_ZST_CAS_URL,
+                    GUESTOS_UPDATE_IMG_URL,
                 ),
                 (
-                    CUSTOM_UPDATE_IMG_SHA,
                     fetch_shasum_for_img(v.to_string(), "update", env.logger()),
-                    DEV_UPDATE_IMG_TAR_ZST_SHA256,
+                    GUESTOS_UPDATE_IMG_HASH,
                 ),
             ],
         );
@@ -122,17 +108,14 @@ pub fn setup(env: TestEnv, config: IcConfig) {
     env.sync_with_prometheus();
 }
 
-fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &str)>) {
-    for (file_name, value_in_file, env_variable) in pairs {
-        let path = get_dependency_path(file_name);
-        std::fs::write(&path, value_in_file)
-            .unwrap_or_else(|_| panic!("Failed to write to path: {}", path.display()));
-        std::env::set_var(env_variable, file_name);
+fn update_env_variables(env: &TestEnv, pairs: Vec<(String, &str)>) {
+    for (value, env_variable) in pairs {
+        std::env::set_var(env_variable, value);
         info!(
             env.logger(),
             "Overriden env variable `{}` to value: {}",
             env_variable,
-            path.display()
+            value
         )
     }
 }
