@@ -4,13 +4,11 @@ use ic_canister_sandbox_backend_lib::{
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
+use nix::sys::ptrace;
+use nix::sys::wait::waitpid;
+use nix::unistd::{fork, ForkResult};
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::process::{exit, Command};
-use std::os::unix::process::CommandExt;
-use nix::sys::ptrace;
-use nix::sys::wait::wait;
-use nix::unistd::{fork, ForkResult};
 
 #[allow(improper_ctypes)]
 extern "C" {
@@ -37,17 +35,13 @@ extern "C" {
 pub fn fuzzer_main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        syscall_monitor(|| { 
-            canister_sandbox_main();
-            Command::new("ls").exec();
-        });
-        
+        syscall_monitor("canister_sandbox_main", canister_sandbox_main);
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         #[cfg(not(fuzzing))]
         sandbox_launcher_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        compiler_sandbox_main();
+        syscall_monitor("compiler_sandbox_main", compiler_sandbox_main);
     } else {
         // Collect command-line arguments
         let args: Vec<CString> = std::env::args()
@@ -69,34 +63,35 @@ pub fn fuzzer_main() {
     }
 }
 
-
-fn syscall_monitor<F>(f: F)
+fn syscall_monitor<F>(name: &str, sandbox: F)
 where
     F: FnOnce() -> (),
 {
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            ptrace::traceme().unwrap();
-            f();
-            exit(0)
+            ptrace::traceme().expect(&format!("{}: Failed at ptrace::traceme", name));
+            sandbox();
         }
+        Ok(ForkResult::Parent { child }) => {
+            loop {
+                waitpid(child, None).expect(&format!("{}: Failed at waitpid", name));
 
-        Ok(ForkResult::Parent { child }) => loop {
-            wait().unwrap();
+                match ptrace::getregs(child) {
+                    Ok(x) => {
+                        // TODO: Add a lookup against allowed syscalls and panic if not present.
+                        println!("Syscall name: {:?}", x.orig_rax)
+                    }
+                    Err(_) => break,
+                };
 
-            match ptrace::getregs(child) {
-                Ok(x) => println!("Syscall name: {:?}", x.orig_rax),
-                Err(_) => break,
-            };
-
-            match ptrace::syscall(child, None) {
-                Ok(_) => continue,
-                Err(_) => break,
+                match ptrace::syscall(child, None) {
+                    Ok(_) => continue,
+                    Err(_) => break,
+                }
             }
-        },
-
+        }
         Err(err) => {
-            panic!("[main] fork() failed: {}", err);
+            panic!("{} fork() failed: {}", name, err);
         }
     }
 }
