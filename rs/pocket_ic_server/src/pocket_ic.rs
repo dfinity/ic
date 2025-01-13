@@ -1648,58 +1648,36 @@ impl Operation for AwaitIngressMessage {
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecuteIngressMessage(pub CanisterCall);
+pub struct IngressMessageStatus {
+    pub message_id: MessageId,
+    pub caller: Option<Principal>,
+}
 
-impl Operation for ExecuteIngressMessage {
+impl Operation for IngressMessageStatus {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let canister_call = self.0.clone();
-        let subnet = route_call(pic, canister_call);
+        let subnet = route(pic, self.message_id.effective_principal.clone(), false);
         match subnet {
             Ok(subnet) => {
-                match subnet.submit_ingress_as(
-                    self.0.sender,
-                    self.0.canister_id,
-                    self.0.method.clone(),
-                    self.0.payload.clone(),
-                ) {
-                    Err(SubmitIngressError::HttpError(e)) => {
-                        eprintln!("Failed to submit ingress message: {}", e);
-                        OpOut::Error(PocketIcError::BadIngressMessage(e))
-                    }
-                    Err(SubmitIngressError::UserError(e)) => {
-                        eprintln!("Failed to submit ingress message: {:?}", e);
-                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
-                    }
-                    Ok(msg_id) => {
-                        // Now, we execute on all subnets until we have the result
-                        let max_rounds = 100;
-                        for _i in 0..max_rounds {
-                            for subnet_ in pic.subnets.get_all() {
-                                subnet_.state_machine.execute_round();
-                            }
-                            match subnet.ingress_status(&msg_id) {
-                                IngressStatus::Known {
-                                    state: IngressState::Completed(result),
-                                    ..
-                                } => return Ok(result).into(),
-                                IngressStatus::Known {
-                                    state: IngressState::Failed(error),
-                                    ..
-                                } => {
-                                    return Err::<
-                                        ic_state_machine_tests::WasmResult,
-                                        ic_state_machine_tests::UserError,
-                                    >(error)
-                                    .into()
-                                }
-                                _ => {}
-                            }
+                if let Some(caller) = self.caller {
+                    if let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id) {
+                        if caller != actual_caller.get().0 {
+                            return OpOut::Error(PocketIcError::Forbidden(
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                            ));
                         }
-                        OpOut::Error(PocketIcError::BadIngressMessage(format!(
-                            "Failed to answer to ingress {} after {} rounds.",
-                            msg_id, max_rounds
-                        )))
                     }
+                }
+                match subnet.ingress_status(&self.message_id.msg_id) {
+                    IngressStatus::Known {
+                        state: IngressState::Completed(result),
+                        ..
+                    } => Ok(result).into(),
+                    IngressStatus::Known {
+                        state: IngressState::Failed(error),
+                        ..
+                    } => Err(error).into(),
+                    _ => OpOut::NoOutput,
                 }
             }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
@@ -1707,35 +1685,12 @@ impl Operation for ExecuteIngressMessage {
     }
 
     fn id(&self) -> OpId {
-        let call_id = self.0.id();
-        OpId(format!("canister_update_{}", call_id.0))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IngressMessageStatus(pub MessageId);
-
-impl Operation for IngressMessageStatus {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(pic, self.0.effective_principal.clone(), false);
-        match subnet {
-            Ok(subnet) => match subnet.ingress_status(&self.0.msg_id) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(result),
-                    ..
-                } => Ok(result).into(),
-                IngressStatus::Known {
-                    state: IngressState::Failed(error),
-                    ..
-                } => Err(error).into(),
-                _ => OpOut::NoOutput,
-            },
-            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
-        }
-    }
-
-    fn id(&self) -> OpId {
-        OpId(format!("ingress_status_{}", self.0.msg_id))
+        OpId(format!(
+            "ingress_status({},{:?},{:?})",
+            self.message_id.msg_id,
+            self.message_id.effective_principal,
+            self.caller.map(|caller| caller.to_string())
+        ))
     }
 }
 

@@ -1,13 +1,12 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-
 use prometheus::{histogram_opts, labels, Histogram};
 
-pub(crate) struct BouncerMetrics {
-    pub(crate) update_duration: Histogram,
+pub struct BouncerMetrics {
+    pub update_duration: Histogram,
 }
 
 impl BouncerMetrics {
-    pub(crate) fn new(registry: &MetricsRegistry, pool_type: &str) -> Self {
+    pub fn new(registry: &MetricsRegistry, pool_type: &str) -> Self {
         Self {
             update_duration: registry.register(
                 Histogram::with_opts(histogram_opts!(
