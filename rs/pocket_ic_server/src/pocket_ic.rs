@@ -545,6 +545,8 @@ impl PocketIc {
             .embedders_config
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
+        // do not panic if a child process exits
+        hypervisor_config.embedders_config.panic_due_to_exit = FlagStatus::Disabled;
         let state_machine_config = StateMachineConfig::new(subnet_config, hypervisor_config);
         let t = time
             .duration_since(SystemTime::UNIX_EPOCH)

@@ -1198,12 +1198,14 @@ impl SandboxedExecutionController {
 
         // We spawn a thread to wait for the exit notification of the launcher
         // process.
-        thread::spawn(move || {
-            let pid = child.id();
-            let output = child.wait().unwrap();
+        if let FlagStatus::Enabled = embedder_config.panic_due_to_exit {
+            thread::spawn(move || {
+                let pid = child.id();
+                let output = child.wait().unwrap();
 
-            panic_due_to_exit(output, pid);
-        });
+                panic_due_to_exit(output, pid);
+            });
+        }
 
         Ok(Self {
             backends,

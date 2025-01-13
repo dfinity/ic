@@ -247,6 +247,9 @@ pub struct Config {
 
     /// The maximum size of the stable memory.
     pub max_stable_memory_size: NumBytes,
+
+    /// If this flag is enabled, then child process exits result in a panic.
+    pub panic_due_to_exit: FlagStatus,
 }
 
 impl Config {
@@ -286,6 +289,7 @@ impl Config {
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
             wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
+            panic_due_to_exit: FlagStatus::Enabled,
         }
     }
 }
