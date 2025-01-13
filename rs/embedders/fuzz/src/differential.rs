@@ -56,7 +56,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
         let first = result.first();
 
         if let Some(first) = first {
-            let _ = result
+            result
                 .iter()
                 .for_each(|r| equal(first.to_vec(), r.to_vec()));
         }
