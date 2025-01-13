@@ -14,7 +14,7 @@ env:
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 jobs:
-  bazel-build-fuzzers-archives:
+  bazel-build-fuzzers-archives-test:
     name: Bazel Build Fuzzers Archives
     timeout-minutes: 90
     runs-on:
