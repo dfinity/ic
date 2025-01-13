@@ -13,6 +13,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{
+    ingress::{IngressState, IngressStatus},
     messages::{MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
     Cycles,
 };
@@ -246,6 +247,102 @@ fn check_calls_conclude_with_migrating_canister_impl(
 
     // Tick until all calls have concluded.
     fixture.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(3))]
+    #[test]
+    fn check_canister_can_be_stopped_with_remote_subnet_stalling(
+        seeds in proptest::collection::vec(any::<u64>().no_shrink(), 2),
+        config in arb_canister_config(MAX_PAYLOAD_BYTES, 5),
+    ) {
+        if let Err((err_msg, nfo)) = check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
+            30,     // chatter_phase_round_count
+            300,    // shutdown_phase_max_rounds
+            seeds.as_slice(),
+            config,
+        ) {
+            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        }
+    }
+}
+
+/// Runs a state machine test with two subnets, a local subnet with one canister installed that
+/// only makes best-effort calls and a remote subnet with one canister installed that makes random
+/// calls of all kinds.
+///
+/// In the first phase a number of rounds are executed on both subnet, including XNet traffic
+/// between both canisters.
+///
+/// For the second phase the local canister is put into `Stopping` state and the remote subnet
+/// stalls, i.e. no more ticks are made on it. The local canister should reject any incoming calls
+/// and since it made only best-effort calls, all pending calls should be rejected or timed out
+/// eventually making the transition to `Stopped` state possible even with the remote subnet stalling.
+///
+/// If the local canister fails to reach `Stopped` state, there is most likely a bug with timing
+/// out best-effort messages.
+fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
+    chatter_phase_round_count: usize,
+    shutdown_phase_max_rounds: usize,
+    seeds: &[u64],
+    mut config: CanisterConfig,
+) -> Result<(), (String, DebugInfo)> {
+    let fixture = Fixture::new(FixtureConfig {
+        local_canisters_count: 1,
+        remote_canisters_count: 1,
+        ..FixtureConfig::default()
+    });
+
+    config.receivers = fixture.canisters();
+
+    let local_canister = *fixture.local_canisters.first().unwrap();
+    let remote_canister = *fixture.remote_canisters.first().unwrap();
+
+    fixture.seed_rng(local_canister, seeds[0]);
+    fixture.seed_rng(remote_canister, seeds[1]);
+
+    // Set the local `config` adapted such that only best-effort calls are made.
+    fixture.set_config(
+        local_canister,
+        CanisterConfig {
+            best_effort_weight: 1,
+            guaranteed_response_weight: 0,
+            ..config.clone()
+        },
+    );
+    // Set the remote `config` as is.
+    fixture.set_config(remote_canister, config);
+
+    // Make calls on both canisters.
+    for _ in 0..chatter_phase_round_count {
+        fixture.tick();
+    }
+    // Stop chatter on the local canister.
+    fixture.stop_chatter(local_canister);
+
+    // Put local canister into `Stopping` state.
+    let msg_id = fixture.stop_canister_non_blocking(local_canister);
+
+    // Tick for up to `shutdown_phase_max_rounds` times on the local subnet only
+    // or until the local canister has stopped.
+    for _ in 0..shutdown_phase_max_rounds {
+        match fixture.local_env.ingress_status(&msg_id) {
+            IngressStatus::Known {
+                state: IngressState::Completed(_),
+                ..
+            } => return Ok(()),
+            _ => {
+                fixture.local_env.tick();
+                fixture
+                    .local_env
+                    .advance_time(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+
+    fixture.failed_with_reason(format!(
+        "failed to stop local canister after {shutdown_phase_max_rounds} ticks"
+    ))
 }
 
 #[derive(Debug)]
