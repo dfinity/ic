@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
         get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
-        get_pending_proposals, list_all_neurons_and_combine_responses, list_neurons, nns_cast_vote,
+        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote,
         nns_governance_get_full_neuron, nns_governance_make_proposal, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
@@ -395,7 +395,7 @@ fn test_voting_can_span_multiple_rounds() {
 
     assert_matches!(response.command, Some(Command::MakeProposal(_)));
 
-    let mut listed_neurons = list_all_neurons_and_combine_responses(
+    let listed_neurons = list_all_neurons_and_combine_responses(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ListNeurons {
