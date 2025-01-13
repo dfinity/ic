@@ -35,6 +35,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(api_canister_read_state_test))
                 .add_test(systest!(api_subnet_read_state_test))
                 .add_test(systest!(legacy_asset_canister_test))
+                .add_test(systest!(long_asset_canister_test))
                 .add_test(systest!(content_type_headers_test))
                 .add_test(systest!(cors_headers_test))
                 .add_test(systest!(proxy_http_canister_test))
