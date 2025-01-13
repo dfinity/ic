@@ -190,8 +190,8 @@ impl HypervisorMetrics {
     fn observe_compilation_metrics(
         &self,
         compilation_result: &CompilationResult,
-        cache_memory_size: NumBytes,
-        cache_disk_size: NumBytes,
+        cache_memory_size: usize,
+        cache_disk_size: usize,
     ) {
         let CompilationResult {
             largest_function_instruction_count,
@@ -204,10 +204,10 @@ impl HypervisorMetrics {
         self.max_complexity.observe(*max_complexity as f64);
         self.compilation_cache_size
             .with_label_values(&["memory"])
-            .set(cache_memory_size.get() as i64);
+            .set(cache_memory_size as i64);
         self.compilation_cache_size
             .with_label_values(&["disk"])
-            .set(cache_disk_size.get() as i64);
+            .set(cache_disk_size as i64);
     }
 }
 
