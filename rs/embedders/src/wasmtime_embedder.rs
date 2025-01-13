@@ -11,8 +11,6 @@ use std::{
     convert::TryFrom,
     fs::File,
     mem::size_of,
-    os::fd::{AsRawFd, IntoRawFd},
-    os::unix::fs::MetadataExt,
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
@@ -39,7 +37,6 @@ use ic_types::{
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
