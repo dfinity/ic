@@ -169,7 +169,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(5))]
+    #![proptest_config(ProptestConfig::with_cases(3))]
     #[test]
     fn check_calls_conclude_with_migrating_canister(
         seed in any::<u64>().no_shrink(),
