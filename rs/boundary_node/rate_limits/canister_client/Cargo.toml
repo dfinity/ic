@@ -1,5 +1,5 @@
 [package]
-name = "canister_client"
+name = "rate-limiting-canister-client"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,9 +7,21 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-k256 = { version = "0.13.1", features = ["pem"] }
-ic-agent = { workspace = true }
+anyhow = { workspace = true }
 candid = { workspace = true }
+clap = { workspace = true }
+ic-agent = { workspace = true }
+k256 = { workspace = true }
 rate-limits-api = { path = "../api" }
 regex = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+
+
+[[bin]]
+name = "rate-limiting-canister-client"
+path = "src/main.rs"

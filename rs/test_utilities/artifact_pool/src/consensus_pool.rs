@@ -145,7 +145,7 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
     Box::new(move |cons_pool, parent, validation_context| {
-        ic_consensus::dkg::create_payload(
+        ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
@@ -188,7 +188,7 @@ impl TestConsensusPool {
                 ))
             }),
         ));
-        let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
+        let summary = ic_consensus_dkg::make_genesis_summary(&*registry_client, subnet_id, None);
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,

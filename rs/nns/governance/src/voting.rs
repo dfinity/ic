@@ -202,16 +202,16 @@ impl Governance {
         is_over_soft_limit: fn() -> bool,
     ) {
         let proposal_id = machine.proposal_id;
+        let Ok(ballots) = proposal_ballots(&mut self.heap_data.proposals, proposal_id.id) else {
+            eprintln!(
+                "{} Proposal {} for voting machine not found.  Machine cannot complete work.",
+                LOG_PREFIX, proposal_id.id
+            );
+            return;
+        };
+
         while !machine.is_completely_finished() {
-            if let Ok(ballots) = proposal_ballots(&mut self.heap_data.proposals, proposal_id.id) {
-                machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
-            } else {
-                eprintln!(
-                    "{} Proposal {} for voting machine not found.  Machine cannot complete work.",
-                    LOG_PREFIX, proposal_id.id
-                );
-                break;
-            }
+            machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
 
             if is_over_soft_limit() {
                 break;

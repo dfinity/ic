@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/consensus/utils",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/replicated_state",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:rayon",
+    "@crate_index//:slog",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/consensus/mocks",
+    "//rs/crypto/test_utils/ni-dkg",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
+]
+
+rust_library(
+    name = "dkg",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = select({
+        "//conditions:default": [],
+    }),
+    crate_name = "ic_consensus_dkg",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "consensus_dkg_doc",
+    crate = ":dkg",
+)
+
+rust_test(
+    name = "consensus_dkg_test",
+    crate = ":dkg",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

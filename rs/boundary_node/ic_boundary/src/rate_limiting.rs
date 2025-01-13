@@ -106,6 +106,7 @@ impl RateLimit {
 
 pub mod fetcher;
 pub mod generic;
+pub mod sharded;
 
 #[cfg(test)]
 pub mod test;

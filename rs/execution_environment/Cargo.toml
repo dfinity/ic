@@ -38,6 +38,7 @@ ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-utils-thread = { path = "../utils/thread" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
@@ -55,6 +56,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
+tempfile = { workspace = true }
 threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
@@ -65,7 +67,6 @@ assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
-ic-btc-test-utils = { workspace = true }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
@@ -82,7 +83,6 @@ itertools = { workspace = true }
 libflate = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
-tempfile = { workspace = true }
 test-strategy = "0.3.1"
 wasmparser = { workspace = true }
 wat = { workspace = true }

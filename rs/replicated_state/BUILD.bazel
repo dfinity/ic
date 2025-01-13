@@ -65,7 +65,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:proptest",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
@@ -121,7 +120,7 @@ rust_bench(
     name = "replicated_state_intmap_bench",
     testonly = True,
     srcs = [
-        "benches/bench_allocator.rs",
+        "benches/bench_intmap.rs",
     ],
     deps = [":replicated_state"] + BIN_DEPENDENCIES,
 )

@@ -90,7 +90,11 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
             AddConfigError::Internal(anyhow!("No config for version={current_version} found"))
         })?;
 
-        let next_version = current_version + 1;
+        let next_version = current_version.checked_add(1).ok_or_else(|| {
+            AddConfigError::Internal(anyhow!(
+                "Overflow occurred while incrementing the current version {current_version}"
+            ))
+        })?;
 
         // Ordered IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
@@ -568,6 +572,28 @@ mod tests {
                 },
             ],
         };
+        let invalid_config_3 = api::InputConfig {
+            schema_version: 1,
+            rules: vec![
+                // Rules at indices 0 and 2 are identical because they have matching field values, even though their rule_raw JSON objects have different binary representations
+                api::InputRule {
+                    incident_id: "ebe7dbb1-63c9-420e-980d-eb0f8c20a9fb".to_string(),
+                    rule_raw: b"{\"a\": 1, \"b\": 2}".to_vec(),
+                    description: "verbose description".to_string(),
+                },
+                api::InputRule {
+                    incident_id: "ebe7dbb1-63c9-420e-980d-eb0f8c20a9fb".to_string(),
+                    rule_raw: b"[]".to_vec(),
+                    description: "".to_string(),
+                },
+                // identical to rule at index = 0, despite having different rule_raw bin representation
+                api::InputRule {
+                    incident_id: "ebe7dbb1-63c9-420e-980d-eb0f8c20a9fb".to_string(),
+                    rule_raw: b"{\"b\": 2, \"a\": 1}".to_vec(),
+                    description: "verbose description".to_string(),
+                },
+            ],
+        };
         // Act & assert
         let adder = ConfigAdder::new(canister_state);
         let error = adder
@@ -581,6 +607,12 @@ mod tests {
             .unwrap_err();
         assert!(
             matches!(error, AddConfigError::InvalidInputConfig(InputConfigError::InvalidRuleJsonEncoding(idx)) if idx == 1)
+        );
+        let error = adder
+            .add_config(invalid_config_3, current_time)
+            .unwrap_err();
+        assert!(
+            matches!(error, AddConfigError::InvalidInputConfig(InputConfigError::DuplicateRules(idx1, idx2))  if idx1 == 0 && idx2 == 2)
         );
     }
 
