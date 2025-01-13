@@ -89,29 +89,6 @@ impl Drop for TimerLogicGuard {
     }
 }
 
-#[must_use]
-pub struct DistributeKytFeeGuard(());
-
-impl DistributeKytFeeGuard {
-    pub fn new() -> Option<Self> {
-        mutate_state(|s| {
-            if s.is_distributing_fee {
-                return None;
-            }
-            s.is_distributing_fee = true;
-            Some(DistributeKytFeeGuard(()))
-        })
-    }
-}
-
-impl Drop for DistributeKytFeeGuard {
-    fn drop(&mut self) {
-        mutate_state(|s| {
-            s.is_distributing_fee = false;
-        });
-    }
-}
-
 pub fn balance_update_guard(p: Principal) -> Result<Guard<PendingBalanceUpdates>, GuardError> {
     Guard::new(p)
 }
@@ -136,6 +113,7 @@ mod tests {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
     }
 
+    #[allow(deprecated)]
     fn test_state_args() -> InitArgs {
         InitArgs {
             btc_network: BtcNetwork::Regtest,
@@ -145,7 +123,9 @@ mod tests {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
-            kyt_principal: Some(CanisterId::from(0)),
+            btc_checker_principal: Some(CanisterId::from(0)),
+            check_fee: None,
+            kyt_principal: None,
             kyt_fee: None,
         }
     }
@@ -166,7 +146,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::needless_collect)]
     fn guard_prevents_more_than_max_concurrent_principals() {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal

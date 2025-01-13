@@ -7,14 +7,14 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["ruff"])
 """
 
-VERSION = "0.0.260"
+VERSION = "0.6.8"
 SHA256 = {
-    "aarch64-apple-darwin": "4e045df5e55f1e23b34910865fe66c8e9d4ea98dbdb5320fc8ff09b8c337d69e",
-    "x86_64-apple-darwin": "3b251413bd5dfa60997489b33024b5f596cb3781f5cf3763529fb24cd97059c0",
-    "x86_64-unknown-linux-gnu": "abb106ee7d1434faa733e6dd442b1d306fa32e0840fde24fbbf96c2289968c63",
+    "aarch64-apple-darwin": "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    "x86_64-apple-darwin": "44039cea2aed4787cedcda0c35e5b352530d6ca2178f39c8bd4ff63526c43aef",
+    "x86_64-unknown-linux-gnu": "7edce7075bf6d43b1ef2a9383b76a43310bbf5d70fa4471330fd5aaf655192b0",
 }
 
-URL = "https://github.com/charliermarsh/ruff/releases/download/v{version}/ruff-{platform}.tar.gz"
+URL = "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.tar.gz"
 
 def _ruff_impl(repository_ctx):
     os_arch = repository_ctx.os.arch
@@ -39,7 +39,7 @@ def _ruff_impl(repository_ctx):
         fail("Unsupported platform: '" + platform + "'")
 
     repository_ctx.report_progress("Fetching " + repository_ctx.name)
-    repository_ctx.download_and_extract(url = URL.format(version = VERSION, platform = platform), sha256 = SHA256[platform])
+    repository_ctx.download_and_extract(url = URL.format(version = VERSION, platform = platform), sha256 = SHA256[platform], stripPrefix = "ruff-{platform}".format(platform = platform))
     repository_ctx.file("BUILD.bazel", RUFF_BUILD, executable = True)
 
 _ruff = repository_rule(

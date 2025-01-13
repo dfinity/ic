@@ -2,8 +2,10 @@
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use ic_management_canister_types::{CanisterSettingsArgsBuilder, LoadCanisterSnapshotArgs};
-use ic_state_machine_tests::{StateMachine, TakeCanisterSnapshotArgs};
+use ic_management_canister_types::{
+    CanisterSettingsArgsBuilder, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+};
+use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 
@@ -14,7 +16,7 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
     let env = env();
     let canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             Cycles::new(u128::MAX / 2),

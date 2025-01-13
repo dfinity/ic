@@ -19,8 +19,8 @@ use std::{
 use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
-use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::{Shutdown, Transport};
@@ -364,7 +364,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{crypto::CryptoHash, Height};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::NODE_1;
     use prost::Message;
     use tokio::runtime::Runtime;
 
@@ -423,7 +423,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
@@ -463,7 +462,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });

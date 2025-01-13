@@ -19,6 +19,7 @@ use crate::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_nervous_system_string::clamp_debug_len;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
 
 impl Registry {
@@ -55,12 +56,15 @@ impl Registry {
 
     pub fn check_global_state_invariants(&self, mutations: &[RegistryMutation]) {
         println!(
-            "{}check_global_state_invariants: {:?}",
+            "{}check_global_state_invariants: {}",
             LOG_PREFIX,
-            mutations
-                .iter()
-                .map(RegistryMutation::to_string)
-                .collect::<Vec<_>>()
+            clamp_debug_len(
+                &(mutations
+                    .iter()
+                    .map(RegistryMutation::to_string)
+                    .collect::<Vec<_>>()),
+                /* max_len = */ 2000
+            )
         );
 
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);

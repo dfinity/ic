@@ -194,9 +194,9 @@ impl rlp::Encodable for Eip1559TransactionRequest {
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
-    #[cbor(n(1), with = "crate::cbor::u256")]
+    #[cbor(n(1), with = "icrc_cbor::u256")]
     pub r: u256,
-    #[cbor(n(2), with = "crate::cbor::u256")]
+    #[cbor(n(2), with = "icrc_cbor::u256")]
     pub s: u256,
 }
 
@@ -350,7 +350,7 @@ impl SignedEip1559TransactionRequest {
             transaction,
             signature,
         };
-        let hash = Hash(ic_crypto_sha3::Keccak256::hash(inner.raw_bytes()));
+        let hash = Hash(ic_sha3::Keccak256::hash(inner.raw_bytes()));
         Self {
             inner,
             memoized_hash: hash,
@@ -436,7 +436,7 @@ impl Eip1559TransactionRequest {
         use rlp::Encodable;
         let mut bytes = self.rlp_bytes().to_vec();
         bytes.insert(0, self.transaction_type());
-        Hash(ic_crypto_sha3::Keccak256::hash(bytes))
+        Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
     pub fn transaction_price(&self) -> TransactionPrice {

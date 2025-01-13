@@ -8,8 +8,8 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/config",
+    "//rs/http_endpoints/async_utils",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",

@@ -6,10 +6,9 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nns/constants",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]
 
@@ -26,7 +25,7 @@ ALIASES = {}
 
 rust_library(
     name = "interface",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_handler_root_interface",
     proc_macro_deps = MACRO_DEPENDENCIES,

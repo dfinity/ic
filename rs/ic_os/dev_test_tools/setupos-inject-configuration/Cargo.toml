@@ -13,4 +13,4 @@ serde_with = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-utils = { path = "../../utils"}
+config = { path = "../../config"}

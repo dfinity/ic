@@ -14,7 +14,9 @@ def project_to_list_item(project: str, indent: int) -> BlockKitListItem:
     if proj_parts:
         if proj_parts[2]:
             prefix = proj_parts[0] if proj_parts[0] else ""
-            return BlockKitListItem(text=[BlockKitRichText(text=prefix + proj_parts[1], url=proj_parts[2])], indent=indent)
+            return BlockKitListItem(
+                text=[BlockKitRichText(text=prefix + proj_parts[1], url=proj_parts[2])], indent=indent
+            )
 
         else:
             return BlockKitListItem(text=[BlockKitRichText(project)], indent=indent)
@@ -23,7 +25,7 @@ def project_to_list_item(project: str, indent: int) -> BlockKitListItem:
 
 
 def parse_slack_field(string: str, field_name: str) -> Optional[str]:
-    if match := re.match(fr"^\*{field_name}\*\n\s*(?P<field_value>.*)$", string):
+    if match := re.match(rf"^\*{field_name}\*\n\s*(?P<field_value>.*)$", string):
         return match.group("field_value")
     return None
 

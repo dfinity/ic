@@ -7,7 +7,7 @@ nano
 # packages requested by networking
 tcpdump
 iperf
-netcat
+netcat-openbsd
 curl
 iputils-ping
 

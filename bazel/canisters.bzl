@@ -24,6 +24,8 @@ def _wasm_rust_transition_impl(_settings, attr):
             "debuginfo=0",
             "-C",
             "lto",
+            "-C",
+            "target-feature=+bulk-memory",
         ],
     }
 

@@ -34,7 +34,7 @@ fn test_skipping_quota() {
             .query_("get_pending_proposals", candid, (skipped,))
             .await;
         let err = res.unwrap_err();
-        let expected_err = "Deserialization Failed";
+        let expected_err = "failed to decode";
         assert!(
             err.contains(expected_err),
             "Expected `{}` did not occur within the observed error:\n{}",

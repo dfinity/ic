@@ -1,0 +1,46 @@
+[package]
+name = "ic-ledger-suite-state-machine-tests"
+description = "StateMachines based tests for https://github.com/dfinity/ICRC-1 ledgers"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+assert_matches = { workspace = true }
+async-trait = { workspace = true }
+candid = { workspace = true }
+cddl = "0.9.4"
+futures = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-config = { path = "../../../config" }
+ic-error-types = { path = "../../../types/error_types" }
+ic-icrc1 = { path = "../../icrc1" }
+ic-icrc1-ledger = { path = "../../icrc1/ledger" }
+ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
+ic-icrc1-tokens-u256 = { path = "../../icrc1/tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "../../icrc1/tokens_u64" }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
+ic-universal-canister = { path = "../../../universal_canister/lib" }
+icp-ledger = { path = "../../icp" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
+icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
+num-traits = { workspace = true }
+proptest = { workspace = true }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icp-tokens = []

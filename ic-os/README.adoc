@@ -7,7 +7,7 @@ IC-OS is an umbrella term for all the operating systems within the IC, including
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
 * HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
-* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser (`icx-proxy`).
+* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser.
 
 == Managing IC-OS files
 

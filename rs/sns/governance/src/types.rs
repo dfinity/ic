@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -32,7 +32,7 @@ use crate::{
             ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
             NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
-            RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
             UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
@@ -46,8 +46,8 @@ use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
-    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
@@ -102,7 +102,7 @@ pub mod native_action_ids {
     /// ManageSnsMetadata Action.
     pub const MANAGE_SNS_METADATA: u64 = 8;
 
-    /// TransferSnsTreasuryFunds
+    /// TransferSnsTreasuryFunds Action.
     pub const TRANSFER_SNS_TREASURY_FUNDS: u64 = 9;
 
     /// RegisterDappCanisters Action.
@@ -111,7 +111,7 @@ pub mod native_action_ids {
     /// DeregisterDappCanisters Action.
     pub const DEREGISTER_DAPP_CANISTERS: u64 = 11;
 
-    /// MintSnsTokens
+    /// MintSnsTokens Action.
     pub const MINT_SNS_TOKENS: u64 = 12;
 
     /// ManageLedgerParameters Action.
@@ -119,6 +119,9 @@ pub mod native_action_ids {
 
     /// ManageDappCanisterSettings Action.
     pub const MANAGE_DAPP_CANISTER_SETTINGS: u64 = 14;
+
+    /// AdvanceSnsTargetVersion Action.
+    pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 }
 
 impl governance::Mode {
@@ -506,8 +509,7 @@ impl NervousSystemParameters {
                 .or(base.max_age_bonus_percentage),
             voting_rewards_parameters: self
                 .voting_rewards_parameters
-                .clone()
-                .or_else(|| base.voting_rewards_parameters.clone())
+                .or(base.voting_rewards_parameters)
                 .map(|v| match base.voting_rewards_parameters.as_ref() {
                     None => v,
                     Some(base) => v.inherit_from(base),
@@ -977,6 +979,15 @@ impl From<prost::DecodeError> for GovernanceError {
     }
 }
 
+impl From<prost::UnknownEnumValue> for GovernanceError {
+    fn from(unknown_enum_value: prost::UnknownEnumValue) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Unknown enum value: {}", unknown_enum_value),
+        )
+    }
+}
+
 impl From<CanisterInstallModeError> for GovernanceError {
     fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
         GovernanceError {
@@ -1169,6 +1180,15 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn advance_sns_target_version() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::ADVANCE_SNS_TARGET_VERSION,
+            name: "Advance SNS target version".to_string(),
+            description: Some("Proposal to advance the target version of this SNS.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1208,6 +1228,9 @@ impl From<Action> for NervousSystemFunction {
             Action::ManageLedgerParameters(_) => NervousSystemFunction::manage_ledger_parameters(),
             Action::ManageDappCanisterSettings(_) => {
                 NervousSystemFunction::manage_dapp_canister_settings()
+            }
+            Action::AdvanceSnsTargetVersion(_) => {
+                NervousSystemFunction::advance_sns_target_version()
             }
         }
     }
@@ -1660,6 +1683,7 @@ impl Action {
             | RemoveGenericNervousSystemFunction(_)
             | ExecuteGenericNervousSystemFunction(_)
             | UpgradeSnsToNextVersion(_)
+            | AdvanceSnsTargetVersion(_)
             | ManageSnsMetadata(_)
             | ManageLedgerParameters(_)
             | RegisterDappCanisters(_)
@@ -1846,6 +1870,7 @@ impl From<&Action> for u64 {
             Action::ManageDappCanisterSettings(_) => {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
+            Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
         }
     }
 }
@@ -1950,12 +1975,7 @@ pub trait Environment: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
-    fn random_u64(&mut self) -> u64;
-
-    /// Returns a random byte array with 32 bytes.
-    ///
-    /// This byte array is the same in all replicas.
-    fn random_byte_array(&mut self) -> [u8; 32];
+    fn insecure_random_u64(&mut self) -> u64;
 
     /// Calls another canister. The return value indicates whether the call can be successfully
     /// initiated. If initiating the call is successful, the call could later be rejected by the
@@ -2011,6 +2031,13 @@ pub struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     /// Drops the lock on the neuron.
     fn drop(&mut self) {
+        // In the case of a panic, the state of the ledger account representing the neuron's stake
+        // may be inconsistent with the internal state of governance.  In that case,
+        // we want to prevent further operations with that neuron until the issue can be
+        // investigated and resolved, which will require code changes.
+        if ic_cdk::api::call::is_recovering_from_trap() {
+            return;
+        }
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
@@ -2418,6 +2445,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         } = manage_dapp_canister_settings;
 
         ManageDappCanisterSettingsRequest {
@@ -2428,6 +2456,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold,
         }
     }
 }
@@ -2521,9 +2550,77 @@ impl From<NeuronRecipes> for Vec<NeuronRecipe> {
     }
 }
 
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SnsVersion {{ root:{}, governance:{}, swap:{}, index:{}, ledger:{}, archive:{} }}",
+            hash_to_hex_string(&self.root_wasm_hash),
+            hash_to_hex_string(&self.governance_wasm_hash),
+            hash_to_hex_string(&self.swap_wasm_hash),
+            hash_to_hex_string(&self.index_wasm_hash),
+            hash_to_hex_string(&self.ledger_wasm_hash),
+            hash_to_hex_string(&self.archive_wasm_hash)
+        )
+    }
+}
+
+impl From<Version> for SnsVersion {
+    fn from(src: Version) -> Self {
+        let Version {
+            root_wasm_hash,
+            governance_wasm_hash,
+            ledger_wasm_hash,
+            swap_wasm_hash,
+            archive_wasm_hash,
+            index_wasm_hash,
+        } = src;
+
+        Self {
+            root_wasm_hash: Some(root_wasm_hash),
+            governance_wasm_hash: Some(governance_wasm_hash),
+            ledger_wasm_hash: Some(ledger_wasm_hash),
+            swap_wasm_hash: Some(swap_wasm_hash),
+            archive_wasm_hash: Some(archive_wasm_hash),
+            index_wasm_hash: Some(index_wasm_hash),
+        }
+    }
+}
+
+impl TryFrom<SnsVersion> for Version {
+    type Error = String;
+
+    fn try_from(src: SnsVersion) -> Result<Self, Self::Error> {
+        let SnsVersion {
+            root_wasm_hash: Some(root_wasm_hash),
+            governance_wasm_hash: Some(governance_wasm_hash),
+            ledger_wasm_hash: Some(ledger_wasm_hash),
+            swap_wasm_hash: Some(swap_wasm_hash),
+            archive_wasm_hash: Some(archive_wasm_hash),
+            index_wasm_hash: Some(index_wasm_hash),
+        } = src
+        else {
+            return Err(
+                "Cannot interpret SnsVersion; please specify all the required fields: \
+                 {{governance, root, swap, index, ledger, archive}}_wasm_hash."
+                    .to_string(),
+            );
+        };
+
+        Ok(Self {
+            governance_wasm_hash,
+            root_wasm_hash,
+            swap_wasm_hash,
+            index_wasm_hash,
+            ledger_wasm_hash,
+            archive_wasm_hash,
+        })
+    }
+}
+
 pub mod test_helpers {
     use super::*;
-    use rand::{Rng, RngCore};
+    use rand::Rng;
     use std::{
         borrow::BorrowMut,
         collections::HashMap,
@@ -2548,7 +2645,11 @@ pub mod test_helpers {
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
         pub canister_calls_map: HashMap<
-            (dfn_core::CanisterId, std::string::String, std::vec::Vec<u8>),
+            (
+                ic_base_types::CanisterId,
+                std::string::String,
+                std::vec::Vec<u8>,
+            ),
             CanisterCallResult,
         >,
 
@@ -2576,25 +2677,21 @@ pub mod test_helpers {
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
                 // This needs to be non-zero
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
     }
 
     impl NativeEnvironment {
+        pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+
         pub fn new(local_canister_id: Option<CanisterId>) -> Self {
             Self {
                 local_canister_id,
                 canister_calls_map: Default::default(),
                 default_canister_call_response: Ok(vec![]),
                 required_canister_call_invocations: Arc::new(RwLock::new(vec![])),
-                now: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                now: Self::DEFAULT_TEST_START_TIMESTAMP_SECONDS,
             }
         }
 
@@ -2669,14 +2766,8 @@ pub mod test_helpers {
             self.now
         }
 
-        fn random_u64(&mut self) -> u64 {
+        fn insecure_random_u64(&mut self) -> u64 {
             rand::thread_rng().gen()
-        }
-
-        fn random_byte_array(&mut self) -> [u8; 32] {
-            let mut result = [0_u8; 32];
-            rand::thread_rng().fill_bytes(&mut result[..]);
-            result
         }
 
         async fn call_canister(
@@ -2741,7 +2832,6 @@ pub mod test_helpers {
         }
     }
 }
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

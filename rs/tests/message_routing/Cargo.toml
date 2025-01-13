@@ -1,0 +1,47 @@
+[package]
+name = "message-routing-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-cdk = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+itertools = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+xnet-test = { path = "../../rust_canisters/xnet_test" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
+ic-utils = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rejoin-test-lib = { path = "./rejoin_test_lib" }
+
+[[bin]]
+name = "global_reboot_test"
+path = "global_reboot_test.rs"
+
+[[bin]]
+name = "memory_safety_test"
+path = "memory_safety_test.rs"
+
+[[bin]]
+name = "rejoin_test"
+path = "rejoin_test.rs"
+
+[[bin]]
+name = "rejoin_test_large_state"
+path = "rejoin_test_large_state.rs"
+
+[[bin]]
+name = "state_sync_malicious_chunk_test"
+path = "state_sync_malicious_chunk_test.rs"

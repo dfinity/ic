@@ -1,10 +1,12 @@
 //! The state manager public interface.
+
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
     batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
     CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -222,23 +224,6 @@ pub trait StateManager: StateReader {
         cup_interval_length: Height,
     );
 
-    /// Returns the list of heights corresponding to accessible states matching
-    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
-    /// accessible states.
-    ///
-    /// Note that the initial state at height 0 is considered uncertified from
-    /// the State Manager point of view.  This is because the protocol requires
-    /// each replica to individually obtain the initial state using some
-    /// out-of-band mechanism (i.e., not state sync).  Also note that the
-    /// authenticity of this initial state will be verified by some protocol
-    /// external to this component.
-    ///
-    /// The list of heights is guaranteed to be
-    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
-    ///   0 even if no states were committed yet.
-    /// * Sorted in ascending order.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height>;
-
     /// Notify this state manager that states with heights strictly less than
     /// the specified `height` can be removed.
     ///
@@ -250,7 +235,8 @@ pub trait StateManager: StateReader {
     fn remove_states_below(&self, height: Height);
 
     /// Notify the state manager that states committed with partial certification
-    /// state and heights strictly less than specified `height` can be removed.
+    /// state and heights strictly less than the specified `height` can be removed, except
+    /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
     ///
     /// Note that:
     ///  * The initial state (height = 0) cannot be removed.
@@ -258,7 +244,11 @@ pub trait StateManager: StateReader {
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
     ///  * No checkpoints are removed, see also `remove_states_below()`
-    fn remove_inmemory_states_below(&self, height: Height);
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    );
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to

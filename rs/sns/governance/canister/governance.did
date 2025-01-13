@@ -9,6 +9,7 @@ type Action = variant {
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
@@ -24,6 +25,7 @@ type Action = variant {
 type ActionAuxiliary = variant {
   TransferSnsTreasuryFunds : MintSnsTokensActionAuxiliary;
   MintSnsTokens : MintSnsTokensActionAuxiliary;
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersionActionAuxiliary;
 };
 
 type AddNeuronPermissions = record {
@@ -155,6 +157,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DeregisterDappCanisters = record {
@@ -257,11 +260,22 @@ type GetProposalResponse = record {
 
 type GetRunningSnsVersionResponse = record {
   deployed_version : opt Version;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt record {
+    mark_failed_at_seconds : nat64;
+    checking_upgrade_lock : nat64;
+    proposal_id : nat64;
+    target_version : opt Version;
+  };
 };
 
 type GetSnsInitializationParametersResponse = record {
   sns_initialization_parameters : text;
+};
+
+type CachedUpgradeSteps = record {
+  upgrade_steps : opt Versions;
+  requested_timestamp_seconds : opt nat64;
+  response_timestamp_seconds : opt nat64;
 };
 
 type Governance = record {
@@ -273,9 +287,10 @@ type Governance = record {
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
+  cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt PendingVersion;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
@@ -283,7 +298,19 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
-  migrated_root_wasm_memory_limit : opt bool;
+  target_version : opt Version;
+  timers : opt Timers;
+  upgrade_journal : opt UpgradeJournal;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
+};
+
+type GetTimersResponse = record {
+  timers : opt Timers;
 };
 
 type GovernanceCachedMetrics = record {
@@ -349,6 +376,20 @@ type ManageDappCanisterSettings = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
+};
+
+type SnsVersion = record {
+  governance_wasm_hash : opt blob;
+  swap_wasm_hash : opt blob;
+  root_wasm_hash : opt blob;
+  index_wasm_hash : opt blob;
+  ledger_wasm_hash : opt blob;
+  archive_wasm_hash : opt blob;
+};
+
+type AdvanceSnsTargetVersion = record {
+  new_target : opt SnsVersion;
 };
 
 type ManageLedgerParameters = record {
@@ -402,6 +443,10 @@ type MintSnsTokens = record {
 
 type MintSnsTokensActionAuxiliary = record {
   valuation : opt Valuation;
+};
+
+type AdvanceSnsTargetVersionActionAuxiliary = record {
+  target_version : opt SnsVersion;
 };
 
 type Motion = record {
@@ -655,7 +700,14 @@ type TransferSnsTreasuryFunds = record {
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
-  proposal_id : nat64;
+  proposal_id : opt nat64;
+  target_version : opt Version;
+};
+
+type PendingVersion = record {
+  mark_failed_at_seconds : nat64;
+  checking_upgrade_lock : nat64;
+  proposal_id : opt nat64;
   target_version : opt Version;
 };
 
@@ -688,6 +740,8 @@ type Version = record {
   index_wasm_hash : blob;
 };
 
+type Versions = record { versions : vec Version };
+
 type VotingRewardsParameters = record {
   final_reward_rate_basis_points : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
@@ -697,6 +751,75 @@ type VotingRewardsParameters = record {
 
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
+};
+
+type UpgradeJournalEntry = record {
+  event : opt variant {
+    UpgradeStepsRefreshed : UpgradeStepsRefreshed;
+    UpgradeStepsReset : UpgradeStepsReset;
+    TargetVersionSet : TargetVersionSet;
+    TargetVersionReset : TargetVersionReset;
+    UpgradeStarted : UpgradeStarted;
+    UpgradeOutcome : UpgradeOutcome;
+  };
+  timestamp_seconds : opt nat64;
+};
+
+type UpgradeStepsRefreshed = record {
+  upgrade_steps : opt Versions;
+};
+
+type UpgradeStepsReset = record {
+  human_readable : opt text;
+  upgrade_steps : opt Versions;
+};
+
+type TargetVersionSet = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+};
+
+type TargetVersionReset = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+  human_readable : opt text;
+};
+
+type UpgradeStarted = record {
+  current_version : opt Version;
+  expected_version : opt Version;
+  reason : opt variant {
+    UpgradeSnsToNextVersionProposal : ProposalId;
+    BehindTargetVersion : record {};
+  }
+};
+
+type UpgradeOutcome = record {
+  human_readable : opt text;
+  status : opt variant {
+    Success : record {};
+    Timeout : record {};
+    InvalidState : record { version : opt Version };
+    ExternalFailure : record {};
+  };
+};
+
+type UpgradeJournal = record {
+  entries : vec UpgradeJournalEntry;
+};
+
+type GetUpgradeJournalRequest = record {
+  limit : opt nat64;
+  offset : opt nat64;
+};
+
+type GetUpgradeJournalResponse = record {
+  upgrade_steps : opt Versions;
+  response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
+  deployed_version : opt Version;
+  upgrade_journal : opt UpgradeJournal;
+  upgrade_journal_entry_count: opt nat64;
 };
 
 service : (Governance) -> {
@@ -712,14 +835,13 @@ service : (Governance) -> {
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResultV2);
   get_running_sns_version : (record {}) -> (GetRunningSnsVersionResponse) query;
-  get_sns_initialization_parameters : (record {}) -> (
-      GetSnsInitializationParametersResponse,
-    ) query;
-  list_nervous_system_functions : () -> (
-      ListNervousSystemFunctionsResponse,
-    ) query;
+  get_sns_initialization_parameters : (record {}) -> (GetSnsInitializationParametersResponse) query;
+  get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
+  list_nervous_system_functions : () -> (ListNervousSystemFunctionsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
+  reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

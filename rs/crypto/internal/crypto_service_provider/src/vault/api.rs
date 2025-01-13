@@ -5,7 +5,7 @@ use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -22,10 +22,11 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -386,6 +387,7 @@ pub trait CspVault:
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
     + ThresholdSchnorrSignerCspVault
+    + VetKdCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -404,6 +406,7 @@ impl<T> CspVault for T where
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
         + ThresholdSchnorrSignerCspVault
+        + VetKdCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
@@ -902,6 +905,7 @@ pub trait ThresholdSchnorrSignerCspVault {
         &self,
         derivation_path: ExtendedDerivationPath,
         message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presignature_transcript_raw: IDkgTranscriptInternalBytes,
@@ -949,6 +953,29 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
     SecretSharesNotFound { commitment_string: String },
     /// On other internal errors than described above, e.g., invalid points.
     InternalError(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
+/// Operations of `CspVault` related to verifiably encrypted threshold key derivation (vetKD)
+/// (cf. [`ic_interfaces::crypto::VetKdProtocol`]).
+pub trait VetKdCspVault {
+    /// Generates an encrypted vetKD key share.
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        encryption_public_key: Vec<u8>,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
+}
+
+/// Vault-level error for vetKD key share creation.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum VetKdEncryptedKeyShareCreationVaultError {
+    /// If some arguments are invalid
+    InvalidArgument(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
 }

@@ -426,6 +426,18 @@ impl<'a> Runtime {
             .await
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
     }
+
+    pub async fn tick(&'a self) {
+        match self {
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Runtime::StateMachine(state_machine) => {
+                state_machine.tick();
+                state_machine.advance_time(Duration::from_millis(1000));
+            }
+        }
+    }
 }
 
 /// An Internet Computer test runtime that talks to the IC using http
@@ -811,7 +823,8 @@ impl<'a> Canister<'a> {
 
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
-        self.runtime
+        () = self
+            .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("delete_canister", candid_multi_arity, (self.as_record(),))
             .await?;

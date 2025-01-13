@@ -1,7 +1,7 @@
 = ckETH +
 
 The ckETH minter canister converts ETH to ckETH and back, where ckETH is a token issued on the Internet Computer that is backed 1:1 by ETH.
-The minter works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
+The minter works with a link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
 
 TIP: A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
 
@@ -17,13 +17,13 @@ You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] 
 |Ethereum Chain |ckETH helper smart contract |Minter dashboard|Ledger|`dfx` commands in
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
-|link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175[0x7574eB42cA208A4f6960ECCAfDF186D627dCC175]
+|link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68[0x18901044688D3756C35Ed2b36D93e6a5B8e00E68]
 |link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[ckETH minter]
 |link:https://dashboard.internetcomputer.org/canister/ss2fx-dyaaa-aaaar-qacoq-cai[ckETH ledger]
 | `ic/rs/ethereum/cketh/mainnet`
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
-|link:https://sepolia.etherscan.io/address/0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34[0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34]
+|link:https://sepolia.etherscan.io/address/0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38[0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38]
 |link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
 |link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
 | `ic/rs/ethereum/cketh/testnet`
@@ -40,24 +40,24 @@ Please feel free to reach out by leaving a comment in this link:https://forum.df
 == Deposit: ETH to ckETH
 
 ----
- ┌────┐               ┌───────────────┐              ┌──────┐
- │User│               │Helper Contract│              │Minter│
- └─┬──┘               └───────┬───────┘              └──┬───┘
-   │                          │                         │
-   │deposit(amount, principal)│                         │
-   │─────────────────────────>│                         │
-   │                          │                         │
-   │                          │       get_events        │
-   │                          │<────────────────────────│
-   │                          │                         │
-   │                          │Events(amount, principal)│
-   │                          │────────────────────────>│
-   │                          │                         │
-   │              mint(amount, principal)               │
-   │<───────────────────────────────────────────────────│
- ┌─┴──┐               ┌───────┴───────┐              ┌──┴───┐
- │User│               │Helper Contract│              │Minter│
- └────┘               └───────────────┘              └──────┘
+ ┌────┐                               ┌───────────────┐                                                ┌──────┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └─┬──┘                               └───────┬───────┘                                                └──┬───┘
+   │                                          │                                                           │
+   │depositEth(amount, principal, subaccount) │                                                           │
+   │─────────────────────────────────────────>│                                                           │
+   │                                          │                                                           │
+   │                                          │       get_events                                          │
+   │                                          │<──────────────────────────────────────────────────────────│
+   │                                          │                                                           │
+   │                                          │ReceivedEthOrErc20(`0x`, user, amount, principal, subaccount)│
+   │                                          │──────────────────────────────────────────────────────────>│
+   │                                          │                                                           │
+   │                         mint (amount, principal, subaccount)                                         │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                               ┌───────┴───────┐                                                ┌──┴───┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └────┘                               └───────────────┘                                                └──────┘
 ----
 
 Converting ETH into ckETH requires a call to a smart contract on Ethereum and passing your IC principal as argument, in the form of a `bytes32` array.
@@ -77,11 +77,11 @@ dfx identity get-principal
 .Address of the helper smart contract
 ====
 The address of the helper smart contract may change in the future when the minter is upgraded.
-Please verify the address of the helper contract **before** any important transfer by querying the minter as follows
+Please verify the address of the helper contract **before** any important transfer by comparing it to the address specified in the field `deposit_with_subaccount_helper_contract_address` in the response of `get_minter_info`, which can be queried as follows
 
 [source,shell]
 ----
-dfx canister --network ic call minter smart_contract_address
+dfx canister --network ic call minter get_minter_info
 ----
 ====
 
@@ -106,7 +106,11 @@ bazel run //rs/ethereum/cketh/minter:principal_to_hex -- $(dfx identity get-prin
 ----
 ====
 
-Call the link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175#writeContract[minter helper contract] `deposit` function with your principal encoded and the amount as parameters.
+Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` method of the helper smart contract (can be called from the contract's Etherscan page) specifying
+
+. The amount of ETH being deposited.
+. The IC principal encoded as a `bytes32`.
+. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckETH should be minted.
 
 [WARNING]
 ====

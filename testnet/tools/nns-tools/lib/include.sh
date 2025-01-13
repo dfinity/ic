@@ -19,7 +19,6 @@ __dfx() {
 
 source "$NNS_TOOLS_DIR/../lib.sh"
 
-source "$LIB_DIR/boundary_node.sh"
 source "$LIB_DIR/canister_wasms.sh"
 source "$LIB_DIR/canisters.sh"
 source "$LIB_DIR/constants.sh"

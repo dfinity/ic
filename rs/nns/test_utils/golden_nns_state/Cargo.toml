@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
 ic-config = { path = "../../../config" }
+ic-registry-routing-table = { path = "../../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }

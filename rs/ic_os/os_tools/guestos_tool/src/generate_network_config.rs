@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 
-use config::config_map_from_path;
+use config::config_ini::config_map_from_path;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
@@ -287,7 +287,7 @@ fn is_valid_network_interface(path: &&PathBuf) -> bool {
 
 // Turn off duplicate address detection for testnets running on k8s
 fn is_k8s_testnet() -> Result<bool> {
-    let output = get_command_stdout("lsblk", ["--nodeps", "-o", "name,serial"])?;
+    let output = get_command_stdout("lsblk", &["--nodeps", "-o", "name,serial"])?;
     if output.contains("config") {
         eprintln!("K8S testnet detected. Turning off DAD for tnet on k8s.");
         Ok(true)

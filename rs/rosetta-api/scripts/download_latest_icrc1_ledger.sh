@@ -18,7 +18,7 @@ for COMMIT in $COMMITS; do
         "https://download.dfinity.systems/ic/$COMMIT/canisters/ic-icrc1-ledger.wasm.gz")
     if (($STATUS_CODE >= 200)) && (($STATUS_CODE < 300)); then
         echo "Found artifacts for commit $COMMIT. Downloading icrc1_ledger.did and icrc1_ledger.wasm.gz"
-        curl -sLf "https://raw.githubusercontent.com/dfinity/ic/$COMMIT/rs/rosetta-api/icrc1/ledger/ledger.did" \
+        curl -sLf "https://raw.githubusercontent.com/dfinity/ic/$COMMIT/rs/ledger_suite/icrc1/ledger/ledger.did" \
             -o icrc1_ledger.did
         if [ "$?" -ne "0" ]; then
             echo >&2 "Unable to download the icrc1 ledger did file. Please try again"

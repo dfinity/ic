@@ -1,13 +1,12 @@
 use std::{
     collections::{HashSet, VecDeque},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
-use ic_btc_validation::is_beyond_last_checkpoint;
 use ic_metrics::MetricsRegistry;
-use tokio::sync::{mpsc::Sender, Mutex};
-use tonic::{Code, Status};
+use tokio::sync::mpsc::Sender;
+use tonic::Status;
 
 use crate::{
     common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
@@ -98,19 +97,10 @@ impl GetSuccessorsHandler {
             .observe(request.processed_block_hashes.len() as f64);
 
         let response = {
-            let state = self.state.lock().await;
+            let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.height);
-
-            // Wait with downloading blocks until we synced the header chain above the last checkpoint
-            // to make sure we are following the correct chain.
-            if !is_beyond_last_checkpoint(&self.network, state.get_active_chain_tip().height) {
-                return Err(Status::new(
-                    Code::Unavailable,
-                    "Header chain not yet synced past last checkpoint",
-                ));
-            }
 
             let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
             let blocks = get_successor_blocks(
@@ -167,18 +157,16 @@ fn get_successor_blocks(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<BlockHash> = state
+    let mut queue: VecDeque<&BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.clone())
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        .map(|c| c.children.iter().collect())
+        .unwrap_or_default();
 
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
-        if !seen.contains(&block_hash) {
+        if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
-            match state.get_block(&block_hash) {
+            match state.get_block(block_hash) {
                 Some(block) => {
                     let block_size = block.size();
                     if response_block_size == 0
@@ -202,8 +190,8 @@ fn get_successor_blocks(
 
         queue.extend(
             state
-                .get_cached_header(&block_hash)
-                .map(|header| header.children.clone())
+                .get_cached_header(block_hash)
+                .map(|header| header.children.iter())
                 .unwrap_or_default(),
         );
     }
@@ -223,23 +211,23 @@ fn get_next_headers(
         .copied()
         .chain(blocks.iter().map(|b| b.block_hash()))
         .collect();
-    let mut queue: VecDeque<BlockHash> = state
+
+    let mut queue: VecDeque<&BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.clone())
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        .map(|c| c.children.iter().collect())
+        .unwrap_or_default();
+
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
-        if let Some(header_node) = state.get_cached_header(&block_hash) {
-            if !seen.contains(&block_hash) {
+        if let Some(header_node) = state.get_cached_header(block_hash) {
+            if !seen.contains(block_hash) {
                 next_headers.push(header_node.header);
             }
-            queue.extend(header_node.children.clone());
+            queue.extend(header_node.children.iter());
         }
     }
     next_headers
@@ -257,11 +245,11 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
 mod test {
     use super::*;
 
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
-    use tokio::sync::{mpsc::channel, Mutex};
+    use tokio::sync::mpsc::channel;
 
     use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
@@ -323,7 +311,7 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain.add_headers(&side_chain);
             blockchain.add_headers(&side_chain_2);
@@ -380,49 +368,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_successors_wait_header_sync_testnet() {
-        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
-        let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
-        let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            blockchain_manager_tx,
-            &MetricsRegistry::default(),
-        );
-        // Set up the following chain:
-        // 0 -> 1 ---> 2 ---> 3 -> 4
-        let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
-        previous_hashes.extend(
-            main_chain
-                .iter()
-                .map(|h| h.block_hash())
-                .collect::<Vec<_>>(),
-        );
-
-        // Create a request with the anchor block as the block 0 and processed block hashes contain
-        // block 1 and 2.x
-        let request = GetSuccessorsRequest {
-            anchor: genesis_hash,
-            processed_block_hashes: vec![],
-        };
-
-        {
-            let mut blockchain = handler.state.lock().await;
-            blockchain.add_headers(&main_chain);
-        }
-
-        let response = handler.get_successors(request).await;
-
-        // Since adapter is not yet passed highest checkpoint it should still be unavailbale.
-        // Highest checkpoint for testnet is 546.
-        assert_eq!(response.err().unwrap().code(), Code::Unavailable);
-    }
-
-    #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
@@ -449,7 +394,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain
                 .add_block(main_block_1.clone())
@@ -510,7 +455,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain.add_headers(&side_chain);
             blockchain
@@ -559,7 +504,7 @@ mod test {
         );
         let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             for header in main_chain {
                 let block = Block {
@@ -615,7 +560,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (_, maybe_err) = blockchain.add_headers(&main_chain);
             assert!(
                 maybe_err.is_none(),
@@ -706,7 +651,7 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (added_headers, _) = blockchain.add_headers(&headers);
             assert_eq!(added_headers.len(), 1);
             let (added_headers, _) = blockchain.add_headers(&additional_headers);
@@ -756,7 +701,7 @@ mod test {
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (added_headers, _) = blockchain.add_headers(&main_chain);
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain

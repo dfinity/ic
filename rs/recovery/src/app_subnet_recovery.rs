@@ -1,19 +1,20 @@
 use crate::{
     cli::{
         consent_given, print_height_info, read_optional, read_optional_node_ids,
-        read_optional_subnet_id, read_optional_version, wait_for_confirmation,
+        read_optional_subnet_id, read_optional_upload_method, read_optional_version,
+        wait_for_confirmation,
     },
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
+    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, UploadMethod, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
-use std::{iter::Peekable, net::IpAddr};
+use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
@@ -97,22 +98,22 @@ pub enum StepType {
 #[clap(version = "1.0")]
 pub struct AppSubnetRecoveryArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to upgrade the broken subnet to
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
     /// URL of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_url: Option<Url>,
 
     /// SHA256 hash of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
-    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
+    #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
 
@@ -132,12 +133,14 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
-    /// IP address of the node to upload the new subnet state to
-    #[clap(long)]
-    pub upload_node: Option<IpAddr>,
+    /// The method of uploading state. Possible values are either `local` (for a
+    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    #[clap(long, value_parser=crate::util::upload_method_from_str)]
+    pub upload_method: Option<UploadMethod>,
 
     /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub chain_key_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
@@ -168,7 +171,7 @@ impl AppSubnetRecovery {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         Self {
             step_iterator: StepType::iter().peekable(),
@@ -210,7 +213,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 if self.params.pub_key.is_none() {
                     self.params.pub_key = read_optional(
                         &self.logger,
-                        "Enter public key to add readonly SSH access to subnet: ",
+                        "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
+                        Format:   ssh-ed25519 <pubkey> <identity>\n\
+                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
+                        Enter your key: ",
                     );
                 }
             }
@@ -271,9 +277,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::UploadState => {
-                if self.params.upload_node.is_none() {
-                    self.params.upload_node =
-                        read_optional(&self.logger, "Enter IP of node with admin access: ");
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = read_optional_upload_method(
+                        &self.logger,
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    );
                 }
             }
 
@@ -298,10 +306,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::DownloadCertifications => {
                 if self.params.pub_key.is_some() {
-                    Ok(Box::new(
-                        self.recovery
-                            .get_download_certs_step(self.params.subnet_id, false),
-                    ))
+                    Ok(Box::new(self.recovery.get_download_certs_step(
+                        self.params.subnet_id,
+                        false,
+                        !self.interactive(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -341,8 +350,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             )),
 
             StepType::UploadState => {
-                if let Some(node_ip) = self.params.upload_node {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(node_ip)))
+                if let Some(method) = self.params.upload_method {
+                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -393,7 +402,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::WaitForCUP => {
-                if let Some(node_ip) = self.params.upload_node {
+                if let Some(method) = self.params.upload_method {
+                    let node_ip = match method {
+                        UploadMethod::Remote(ip) => ip,
+                        UploadMethod::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)

@@ -17,6 +17,5 @@ for ACCOUNT in root admin; do
         mkdir -p "${HOMEDIR}/.ssh"
         cp -L "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys"
         chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}/.ssh"
-        restorecon -vr "${HOMEDIR}/.ssh"
     fi
 done

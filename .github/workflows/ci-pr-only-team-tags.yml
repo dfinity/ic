@@ -15,6 +15,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  repository-projects: read
 
 env:
   REPO: "${{ github.repository }}"

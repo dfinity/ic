@@ -680,7 +680,7 @@ fn build_streams_with_oversized_payloads() {
             payment: Cycles::new(1),
             method_name: method_name.clone(),
             method_payload: oversized_request_payload.clone(),
-            metadata: None,
+            metadata: Default::default(),
             deadline: NO_DEADLINE,
         };
         assert!(local_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
@@ -693,7 +693,7 @@ fn build_streams_with_oversized_payloads() {
             payment: Cycles::new(2),
             method_name,
             method_payload: oversized_request_payload,
-            metadata: None,
+            metadata: Default::default(),
             deadline: NO_DEADLINE,
         };
         assert!(remote_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
@@ -1018,11 +1018,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     NO_DEADLINE,
                 );
                 push_input(canister_state, req.into());
-                canister_state
-                    .system_state
-                    .queues_mut()
-                    .pop_input()
-                    .unwrap();
+                canister_state.system_state.pop_input().unwrap();
 
                 canister_state.push_output_response(rep);
             }
@@ -1042,14 +1038,14 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 /// Pushes the message into the given canister's corresponding input queue.
 fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
-    canister_state
+    assert!(canister_state
         .push_input(
             msg,
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap()
+        .unwrap());
 }
 
 /// Asserts that the values of the `METRIC_ROUTED_MESSAGES` metric

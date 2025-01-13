@@ -1,9 +1,12 @@
-use crate::wasm_utils::instrumentation::WasmMemoryType;
-use crate::wasmtime_embedder::{
-    system_api_complexity::{overhead, overhead_native},
-    StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+use crate::{
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        convert_backtrace,
+        system_api_complexity::{overhead, overhead_native},
+        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+    },
+    InternalErrorCode,
 };
-use crate::InternalErrorCode;
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -19,8 +22,10 @@ use ic_system_api::SystemApiImpl;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
+
+use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
+
 use std::convert::TryFrom;
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -33,8 +38,9 @@ fn unexpected_err(s: String) -> HypervisorError {
 
 fn process_err(
     store: &mut impl AsContextMut<Data = StoreData>,
-    e: HypervisorError,
+    mut e: HypervisorError,
 ) -> anyhow::Error {
+    add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
             let result = anyhow::Error::msg(format! {"{}", e});
@@ -44,6 +50,24 @@ fn process_err(
         Err(_) => anyhow::Error::msg(
             format! {"Failed to access system api while processing error: {}", e},
         ),
+    }
+}
+
+fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
+    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
+        match e {
+            HypervisorError::Trapped {
+                trap_code: _,
+                backtrace,
+            }
+            | HypervisorError::CalledTrap {
+                message: _,
+                backtrace,
+            } => {
+                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -262,7 +286,9 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls<
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
+pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>
@@ -1058,7 +1084,10 @@ pub(crate) fn syscalls<
                         additional_pages as u64,
                         stable_memory_api
                             .try_into()
-                            .map_err(|()| HypervisorError::Trapped(TrapCode::Other))?,
+                            .map_err(|()| HypervisorError::Trapped {
+                                trap_code: TrapCode::Other,
+                                backtrace: None,
+                            })?,
                     )? {
                         StableGrowOutcome::Success => Ok(current_size),
                         StableGrowOutcome::Failure => Ok(-1),
@@ -1162,6 +1191,18 @@ pub(crate) fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "mint_cycles128", {
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "cycles_burn128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 with_memory_and_system_api(&mut caller, |s, memory| {
@@ -1211,38 +1252,52 @@ pub(crate) fn syscalls<
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
-                    InternalErrorCode::HeapOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryTooBigFor32Bit => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
-                    }
+                    InternalErrorCode::HeapOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::HeapOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryTooBigFor32Bit => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                        backtrace: None,
+                    },
                     InternalErrorCode::MemoryWriteLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and {} KB for queries.",
-                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024),
-                            stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            modified pages in the stable memory in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
+                            stable_memory_dirty_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.upgrade.get()
+                                * (PAGE_SIZE as u64 / 1024),
                             stable_memory_dirty_page_limit.query.get() * (PAGE_SIZE as u64 / 1024)
-                            )
-                        )
+                        ))
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit {} KB for regular messages and {} KB for queries.",
-                                    stable_memory_access_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
-                            )
-                        )
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            accessed pages in the stable memory in a single \
+                            message execution: limit {} KB for regular messages \
+                            and {} KB for queries.",
+                            stable_memory_access_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
+                        ))
                     }
-                    InternalErrorCode::StableGrowFailed => {
-                        HypervisorError::CalledTrap("Internal error: `memory.grow` instruction failed to grow stable memory".to_string())
-                    }
-                    InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
-                        "Trapped with internal error code: {}",
-                        err_code
-                    )),
+                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
+                        message:
+                            "Internal error: `memory.grow` instruction failed to grow stable memory"
+                                .to_string(),
+                        backtrace: None,
+                    },
+                    InternalErrorCode::Unknown => HypervisorError::CalledTrap {
+                        message: format!("Trapped with internal error code: {}", err_code),
+                        backtrace: None,
+                    },
                 };
                 Err(process_err(&mut caller, err))
             }

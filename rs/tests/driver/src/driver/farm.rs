@@ -96,7 +96,6 @@ impl Farm {
         group_name: &str,
         ttl: Option<Duration>,
         mut spec: GroupSpec,
-        env: &TestEnv,
     ) -> FarmResult<()> {
         spec.required_host_features = self
             .override_host_features
@@ -104,7 +103,7 @@ impl Farm {
             .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{}", group_name);
         let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
-        let spec = spec.add_meta(env, group_base_name);
+        let spec = spec.add_meta(group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
@@ -448,41 +447,34 @@ pub struct GroupSpec {
 }
 
 impl GroupSpec {
-    pub fn add_meta(mut self, env: &TestEnv, group_base_name: &str) -> Self {
-        let mut metadata = GroupMetadata {
-            user: None,
-            job_schedule: None,
-            test_name: Some(group_base_name.to_string()),
-        };
-
+    pub fn add_meta(mut self, group_base_name: &str) -> Self {
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
-        let version_file_path = std::env::var("VERSION_FILE_PATH")
-            .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
-        let version_file = read_dependency_to_string(version_file_path).unwrap();
-        let runtime_args_map = if Path::new(&version_file).exists() {
-            let volatile_status = std::fs::read_to_string(&version_file)
-                .unwrap_or_else(|e| {
-                    panic!("Couldn't read content of the VERSION_FILE file {version_file}: {e:?}")
-                })
-                .trim_end()
-                .to_string();
-            parse_volatile_status_file(volatile_status)
-        } else {
-            warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
-            HashMap::new()
+        let farm_metadata_path = std::env::var("FARM_METADATA_PATH")
+            .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
+        let farm_metadata = read_dependency_to_string(&farm_metadata_path)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Couldn't read content of the volatile status file {farm_metadata_path}: {e:?}"
+                )
+            })
+            .trim_end()
+            .to_string();
+        let runtime_args_map = parse_farm_metadata_file(farm_metadata);
+
+        // Read values from the runtime args and use sensible defaults if unset
+        let user = runtime_args_map
+            .get("USER")
+            .cloned()
+            .unwrap_or("CI".to_string());
+        let job_schedule = runtime_args_map
+            .get("CI_JOB_NAME")
+            .cloned()
+            .unwrap_or("manual".to_string());
+        let metadata = GroupMetadata {
+            user,
+            job_schedule,
+            test_name: group_base_name.to_string(),
         };
-
-        if let Some(user) = runtime_args_map.get("USER") {
-            metadata.user = Some(String::from(user));
-        } else {
-            metadata.user = Some(String::from("CI"));
-        }
-
-        if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
-            metadata.job_schedule = Some(String::from(ci_job_name));
-        } else {
-            metadata.job_schedule = Some(String::from("manual"));
-        }
         self.metadata = Some(metadata);
         self
     }
@@ -491,14 +483,14 @@ impl GroupSpec {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct GroupMetadata {
     #[serde(rename = "user")]
-    pub user: Option<String>,
+    pub user: String,
     #[serde(rename = "jobSchedule")]
-    pub job_schedule: Option<String>,
+    pub job_schedule: String,
     #[serde(rename = "testName")]
-    pub test_name: Option<String>,
+    pub test_name: String,
 }
 
-fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
+fn parse_farm_metadata_file(input: String) -> HashMap<String, String> {
     let mut map = HashMap::new();
     let lines = input.split('\n');
     for line in lines {

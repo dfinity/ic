@@ -22,6 +22,8 @@ _type_alias_dummy == TRUE
 VARIABLES
     \* @type: Int;
     counter,
+    \* @type: Int -> Int;
+    empty_fun,
     \* @type: $proc -> Int;
     my_local,
     \* @type: Seq({caller : $proc, method_and_args: $methodCall });

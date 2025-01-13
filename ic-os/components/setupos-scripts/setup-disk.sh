@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 function purge_partitions() {
     echo "* Purging partitions..."
 
@@ -60,7 +62,6 @@ function setup_storage() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     purge_partitions
     setup_storage

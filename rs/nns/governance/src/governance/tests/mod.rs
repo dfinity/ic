@@ -844,6 +844,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 
 mod metrics_tests {
 
+    use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
 
     use crate::{
@@ -858,6 +859,7 @@ mod metrics_tests {
     #[test]
     fn test_metrics_total_voting_power() {
         let proposal_1 = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::Motion(Motion {
@@ -875,6 +877,7 @@ mod metrics_tests {
         };
 
         let proposal_2 = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::default())),
@@ -923,6 +926,7 @@ mod metrics_tests {
         });
 
         let open_proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("open_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -932,6 +936,7 @@ mod metrics_tests {
         };
 
         let rejected_proposal = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("rejected_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -942,6 +947,7 @@ mod metrics_tests {
         };
 
         let motion_proposal = ProposalData {
+            id: Some(ProposalId { id: 3 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(motion_action.clone()),
@@ -1134,191 +1140,6 @@ mod neuron_archiving_tests {
     } // end proptest
 }
 
-mod cast_vote_and_cascade_follow {
-    use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
-        neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-        neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
-    };
-    use ic_base_types::PrincipalId;
-    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-    use icp_ledger::Subaccount;
-    use maplit::hashmap;
-    use std::collections::{BTreeMap, HashMap};
-
-    fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
-        Ballot {
-            voting_power,
-            vote: vote as i32,
-        }
-    }
-
-    fn make_test_neuron_with_followees(
-        id: u64,
-        topic: Topic,
-        followees: Vec<u64>,
-        aging_since_timestamp_seconds: u64,
-    ) -> Neuron {
-        NeuronBuilder::new(
-            NeuronId { id },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
-            PrincipalId::new_user_test_id(1),
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-                aging_since_timestamp_seconds,
-            },
-            123_456_789,
-        )
-        .with_followees(hashmap! {
-            topic as i32 => Followees {
-                followees: followees.into_iter().map(|id| NeuronId { id }).collect()
-            }
-        })
-        .build()
-    }
-
-    #[test]
-    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management() {
-        let now = 1000;
-        let topic = Topic::NeuronManagement;
-
-        let make_neuron = |id: u64, followees: Vec<u64>| {
-            make_test_neuron_with_followees(id, topic, followees, now)
-        };
-
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
-                                      ballots: &mut HashMap<u64, Ballot>,
-                                      id: u64,
-                                      followees: Vec<u64>,
-                                      vote: Vote| {
-            let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
-            neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
-        };
-
-        let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
-            };
-
-        let mut heap_neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-        for id in 1..=5 {
-            // Each neuron follows all neurons with a lower id
-            let followees = (1..id).collect();
-
-            add_neuron_with_ballot(
-                &mut heap_neurons,
-                &mut ballots,
-                id,
-                followees,
-                Vote::Unspecified,
-            );
-        }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(
-            &mut heap_neurons,
-            &mut ballots,
-            6,
-            vec![1, 7],
-            Vote::Unspecified,
-        );
-
-        // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
-
-        let mut neuron_store = NeuronStore::new(heap_neurons);
-
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-            &mut neuron_store,
-        );
-
-        assert_eq!(
-            ballots,
-            hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-            }
-        );
-    }
-
-    #[test]
-    fn test_cast_vote_and_cascade_works() {
-        let now = 1000;
-        let topic = Topic::NetworkCanisterManagement;
-
-        let make_neuron = |id: u64, followees: Vec<u64>| {
-            make_test_neuron_with_followees(id, topic, followees, now)
-        };
-
-        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
-                                      ballots: &mut HashMap<u64, Ballot>,
-                                      id: u64,
-                                      followees: Vec<u64>,
-                                      vote: Vote| {
-            let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
-            neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
-        };
-
-        let add_neuron_without_ballot =
-            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
-                neuron_map.insert(id, neuron);
-            };
-
-        let mut neurons = BTreeMap::new();
-        let mut ballots = HashMap::new();
-        for id in 1..=5 {
-            // Each neuron follows all neurons with a lower id
-            let followees = (1..id).collect();
-
-            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
-        }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
-
-        // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
-
-        let mut neuron_store = NeuronStore::new(neurons);
-
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-            &mut neuron_store,
-        );
-
-        assert_eq!(
-            ballots,
-            hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-            }
-        );
-    }
-}
-
 #[test]
 fn test_pre_and_post_upgrade_first_time() {
     let neuron1 = NeuronProto {
@@ -1353,6 +1174,8 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );
+
+    assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
     let mut extracted_proto = governance.take_heap_proto();
 
@@ -1367,7 +1190,6 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     );
 
-    assert_eq!(extracted_proto.neurons.len(), 1);
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 
     // We now simulate the post_upgrade
@@ -1378,6 +1200,7 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubCMC {}),
     );
 
+    assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
@@ -1644,6 +1467,43 @@ fn test_validate_execute_nns_function() {
 }
 
 #[test]
+fn test_deciding_voting_power_adjustment_factor() {
+    let voting_power_economics = VotingPowerEconomics {
+        start_reducing_voting_power_after_seconds: Some(60),
+        clear_following_after_seconds: Some(30),
+    };
+
+    let deciding_voting_power = |seconds_since_refresh| {
+        let time_since_refresh = Duration::from_secs(seconds_since_refresh);
+        voting_power_economics.deciding_voting_power_adjustment_factor(time_since_refresh)
+    };
+
+    // 100% at first.
+    for seconds_since_refresh in 0..=60 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(1),
+        );
+    }
+
+    // Slowly ramp down.
+    for seconds_since_refresh in 60..=90 {
+        let expected_value = Decimal::from(90 - seconds_since_refresh) / Decimal::from(30);
+
+        assert_eq!(deciding_voting_power(seconds_since_refresh), expected_value);
+    }
+    assert_eq!(deciding_voting_power(75), Decimal::try_from(0.5).unwrap());
+
+    // Stuck at 0% after a "very" long time.
+    for seconds_since_refresh in 90..200 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(0),
+        );
+    }
+}
+
+#[test]
 fn topic_min_max_test() {
     use strum::IntoEnumIterator;
 
@@ -1696,5 +1556,133 @@ fn test_update_neuron_errors_out_expectedly() {
                 neuron1_subaccount
             ),
         )),
+    );
+}
+
+#[test]
+fn test_compute_ballots_for_new_proposal() {
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+
+    fn new_neuron(i: u64) -> NeuronProto {
+        let controller = PrincipalId::new_user_test_id(i);
+        let d = i / 10_u64.pow(i.ilog10());
+
+        NeuronBuilder::new(
+            NeuronId { id: i },
+            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
+            controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+            CREATED_TIMESTAMP_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(i * E8)
+        .build()
+        .into_proto(
+            &VotingPowerEconomics::DEFAULT,
+            CREATED_TIMESTAMP_SECONDS + 999,
+        )
+    }
+
+    let mut neuron_10 = new_neuron(10);
+    neuron_10.followees = hashmap! {
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![
+                NeuronId { id: 10 },
+                NeuronId { id: 201 },
+                NeuronId { id: 202 },
+                NeuronId { id: 203 },
+                NeuronId { id: 204 },
+                NeuronId { id: 205 },
+                NeuronId { id: 206 },
+            ]
+        }
+    };
+    let neurons = btreemap! {10 => neuron_10, 200 => new_neuron(200), 3_000 => new_neuron(3_000)};
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
+        id: Some(NeuronId { id: 10 }),
+        neuron_id_or_subaccount: None,
+        command: None,
+    }));
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+
+    let expected = 7; // 7 followees
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+        10 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        201 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        202 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        203 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        204 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        205 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        206 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    let motion_action = Action::Motion(Default::default());
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    // Similar to previous; this time though, Action::ManageNeuron, the weird
+    // special case.
+    let expected_potential_voting_power: u64 =
+        governance.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+                .sum()
+        });
+
+    let deciding_vote = |g: &Governance, id, now| {
+        g.neuron_store
+            .with_neuron(&NeuronId { id }, |n| {
+                n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+            })
+            .unwrap()
+    };
+    assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    // Not affected by refresh.
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
+
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
+        iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+            .sum()
+    });
+
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
     );
 }

@@ -1,4 +1,4 @@
-use super::queue::CanisterQueue;
+use super::queue::InputQueue;
 use super::CanisterQueues;
 use crate::{InputQueueType, InputSource};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -174,7 +174,7 @@ impl InputSchedule {
     /// Time complexity: `O(n * log(n))`.
     pub(super) fn test_invariants<'a>(
         &self,
-        input_queues: impl Iterator<Item = (&'a CanisterId, &'a CanisterQueue)>,
+        input_queues: impl Iterator<Item = (&'a CanisterId, &'a InputQueue)>,
         input_queue_type_fn: &dyn Fn(&CanisterId) -> InputQueueType,
     ) -> Result<(), String> {
         let mut local_schedule: BTreeSet<_> = self.local_sender_schedule.iter().collect();

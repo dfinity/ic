@@ -50,8 +50,8 @@ registry-canister = { path = "../../registry/canister" }
 [dev-dependencies]
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-ic-icrc1 = { path = "../../rosetta-api/icrc1" }
-ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
@@ -63,7 +63,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

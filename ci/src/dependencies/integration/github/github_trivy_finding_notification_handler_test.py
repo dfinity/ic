@@ -35,37 +35,62 @@ FINDING_BINARY = Finding(
     more_info="https://dfinity.atlassian.net/browse/SCAVM-5",
 )
 
+
 def test_can_handle_trivy_osp_finding_with_patch_available():
-    event = FindingNotificationEvent(finding=FINDING_OS_PACKAGE, finding_needs_risk_assessment=False, finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=FINDING_OS_PACKAGE,
+        finding_needs_risk_assessment=False,
+        finding_has_patch_version=True,
+        finding_was_resolved=False,
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=Mock())
 
     assert handler.can_handle(event)
 
+
 def test_can_not_handle_trivy_osp_finding_without_patch():
-    event = FindingNotificationEvent(finding=FINDING_OS_PACKAGE, finding_needs_risk_assessment=False, finding_has_patch_version=False, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=FINDING_OS_PACKAGE,
+        finding_needs_risk_assessment=False,
+        finding_has_patch_version=False,
+        finding_was_resolved=False,
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=Mock())
 
     assert not handler.can_handle(event)
+
 
 def test_can_not_handle_trivy_bin_finding_with_patch_available():
-    event = FindingNotificationEvent(finding=FINDING_BINARY, finding_needs_risk_assessment=False, finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=FINDING_BINARY,
+        finding_needs_risk_assessment=False,
+        finding_has_patch_version=True,
+        finding_was_resolved=False,
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=Mock())
 
     assert not handler.can_handle(event)
+
 
 def test_can_not_handle_finding_from_different_scanner():
     finding = deepcopy(FINDING_OS_PACKAGE)
     finding.scanner = "OTHER_SCANNER"
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=False,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=True, finding_was_resolved=False
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=Mock())
 
     assert not handler.can_handle(event)
 
+
 def test_call_github_api_during_handle():
     api = Mock()
-    event = FindingNotificationEvent(finding=FINDING_OS_PACKAGE, finding_needs_risk_assessment=False,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=FINDING_OS_PACKAGE,
+        finding_needs_risk_assessment=False,
+        finding_has_patch_version=True,
+        finding_was_resolved=False,
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=api)
 
     assert handler.can_handle(event)
@@ -74,11 +99,16 @@ def test_call_github_api_during_handle():
 
     api.run_workflow.assert_called_once_with(GithubWorklow.IC_BUILD_PUSH_BASE_CONTAINER_IMAGES)
 
+
 def test_call_github_api_only_once():
     api = Mock()
     api.run_pipeline.return_value = True
-    event = FindingNotificationEvent(finding=FINDING_OS_PACKAGE, finding_needs_risk_assessment=False,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=FINDING_OS_PACKAGE,
+        finding_needs_risk_assessment=False,
+        finding_has_patch_version=True,
+        finding_was_resolved=False,
+    )
     handler = GithubTrivyFindingNotificationHandler(github_api=api)
 
     assert handler.can_handle(event)

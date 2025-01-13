@@ -331,7 +331,7 @@ fn run_n_rounds_and_check_pubkeys(
 
         let mut found_keys = 0;
         for key_id in test_threshold_key_ids() {
-            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+            if batch.chain_key_subnet_public_keys.contains_key(&key_id) {
                 found_keys += 1
             }
         }
@@ -356,8 +356,12 @@ fn equivocating_block_maker_test(
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
+            let malicious_flags = MaliciousFlags {
+                maliciously_propose_equivocating_blocks: true,
+                ..MaliciousFlags::default()
+            };
             for _ in 0..num_nodes_equivocating {
-                malicious.push(malicious::absent_notary_share());
+                malicious.push(malicious::with_malicious_flags(malicious_flags.clone()));
             }
             run_n_rounds_and_collect_hashes(config, malicious, finish);
         })

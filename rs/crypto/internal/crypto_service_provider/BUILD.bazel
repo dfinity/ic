@@ -16,10 +16,11 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
+    "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
     "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "//rs/crypto/internal/crypto_lib/tls",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/internal/logmon",
@@ -66,7 +67,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
@@ -80,6 +81,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities/in_memory_logger",
     "//rs/test_utilities/time",
+    "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:lazy_static",

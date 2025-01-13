@@ -1,0 +1,72 @@
+[package]
+name = "icp-ledger"
+description = "Like an accountant, but on the blockchain!"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+comparable = { version = "0.5", features = ["derive"] }
+crc32fast = "1.2.0"
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+hex = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-ledger-canister-core = { path = "../common/ledger_canister_core" }
+ic-ledger-core = { path = "../common/ledger_core" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+ic-stable-structures = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+lazy_static = { workspace = true }
+on_wire = { path = "../../rust_canisters/on_wire" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-icp-index = { path = "index" }
+ic-ledger-suite-state-machine-tests = { path = "../tests/sm-tests" }
+ic-ledger-test-utils = { path = "test_utils" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
+maplit = "1.0.2"
+pocket-ic = { path = "../../../packages/pocket-ic" }
+proptest = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+tempfile = { workspace = true }
+
+[[test]]
+name = "test"
+path = "tests/tests.rs"
+
+[[test]]
+name = "upgrade_downgrade"
+path = "tests/upgrade_downgrade.rs"
+
+[[test]]
+name = "check_generated_files"
+path = "tests/check_generated_files.rs"
+
+[[test]]
+name = "protobuf_encoding"
+path = "tests/protobuf_encoding.rs"
+
+[[bin]]
+name = "test-notified"
+path = "tests/notified/notified.rs"

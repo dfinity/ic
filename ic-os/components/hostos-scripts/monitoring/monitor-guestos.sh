@@ -5,7 +5,6 @@ set -e
 # Monitor the GuestOS virtual machine.
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -45,11 +44,13 @@ function monitor_guestos() {
             "GuestOS virtual machine state" \
             "gauge"
     else
-        write_log "GuestOS virtual machine is not running."
+        write_log "GuestOS virtual machine is not running, attempting to start."
         write_metric "hostos_guestos_state" \
             "2" \
             "GuestOS virtual machine state" \
             "gauge"
+
+        virsh start guestos
     fi
 }
 

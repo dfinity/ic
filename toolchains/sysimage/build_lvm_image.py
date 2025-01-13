@@ -17,8 +17,9 @@ import sys
 from crc import INITIAL_CRC, calc_crc
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
-BYTES_PER_MEBIBYTE = int(2 ** 20)
+BYTES_PER_MEBIBYTE = int(2**20)
 EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
+
 
 def main():
     parser = argparse.ArgumentParser()

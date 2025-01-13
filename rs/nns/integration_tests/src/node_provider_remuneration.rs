@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
-use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -186,7 +185,7 @@ fn test_list_node_provider_rewards() {
     for _ in 0..12 {
         // Assert that advancing time by a month triggers an automated monthly NP reward event
         state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS + 1));
-        state_machine.advance_time(Duration::from_secs(60));
+        state_machine.tick();
         state_machine.tick();
 
         let rewards = nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
@@ -764,7 +763,6 @@ fn set_icp_xdr_conversion_rate(
         state_machine,
         CYCLES_MINTING_CANISTER_ID,
         "set_icp_xdr_conversion_rate",
-        candid_one,
         payload,
         GOVERNANCE_CANISTER_ID.get(),
     )

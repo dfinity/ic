@@ -437,6 +437,7 @@ fn try_apply_canister_state_changes(
 /// - A mismatch between checks dones by the Wasm executor and checks done when
 ///   applying the changes due to a bug.
 /// - An escape from the Wasm sandbox that corrupts the execution output.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
     canister_state_changes: Option<CanisterStateChanges>,
     execution_state: &mut ExecutionState,
@@ -450,6 +451,7 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
+    deallocate: &dyn Fn(SystemState),
 ) {
     if let Some(CanisterStateChanges {
         globals,
@@ -460,6 +462,7 @@ pub fn apply_canister_state_changes(
     {
         let clean_system_state = system_state.clone();
         let clean_subnet_available_memory = round_limits.subnet_available_memory;
+        let callbacks_created = system_state_changes.callbacks_created();
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(
@@ -481,6 +484,8 @@ pub fn apply_canister_state_changes(
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
                 // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
+                round_limits.subnet_available_callbacks -= callbacks_created as i64;
+                deallocate(clean_system_state);
 
                 call_tree_metrics.observe(request_stats, call_context_creation_time, time);
             }
@@ -505,7 +510,8 @@ pub fn apply_canister_state_changes(
                         )
                     }
                 }
-                *system_state = clean_system_state;
+                let old_system_state = std::mem::replace(system_state, clean_system_state);
+                deallocate(old_system_state);
                 round_limits.subnet_available_memory = clean_subnet_available_memory;
                 output.wasm_result = Err(err);
             }

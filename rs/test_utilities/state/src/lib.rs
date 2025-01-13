@@ -9,21 +9,20 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{
-            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
-        },
-        system_state::CyclesUseCase,
+        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
-    metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+        },
+        Stream, SubnetMetrics,
     },
-    metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
-    SystemState,
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -34,13 +33,13 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
+    messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
-    PrincipalId, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -152,7 +151,7 @@ impl ReplicatedStateBuilder {
                 nodes: self.node_ids.into_iter().collect(),
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
 
@@ -345,29 +344,9 @@ impl CanisterStateBuilder {
             system_state.queues_mut().push_ingress(ingress)
         }
 
-        // Set call contexts. Because there is no way pass in a `CallContext`
-        // object to `CallContextManager`, we have to construct them in this
-        // bizarre way.
+        // Set call contexts.
         for call_context in self.call_contexts.into_iter() {
-            let call_context_manager = system_state.call_context_manager_mut().unwrap();
-            let call_context_id = call_context_manager.new_call_context(
-                call_context.call_origin().clone(),
-                call_context.available_cycles(),
-                call_context.time(),
-                call_context.metadata().clone(),
-            );
-
-            if call_context.has_responded() {
-                call_context_manager
-                    .mark_responded(call_context_id)
-                    .unwrap();
-            }
-            let call_context_in_call_context_manager = call_context_manager
-                .call_context_mut(call_context_id)
-                .unwrap();
-            if call_context.is_deleted() {
-                call_context_in_call_context_manager.mark_deleted();
-            }
+            system_state.with_call_context(call_context);
         }
 
         // Add inputs to the input queue.
@@ -482,6 +461,23 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn wasm_memory_limit(mut self, wasm_memory_limit: Option<NumBytes>) -> Self {
+        self.system_state.wasm_memory_limit = wasm_memory_limit;
+        self
+    }
+
+    pub fn on_low_wasm_memory_hook_status(
+        mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        self.system_state.task_queue = TaskQueue::from_checkpoint(
+            VecDeque::new(),
+            on_low_wasm_memory_hook_status,
+            &self.system_state.canister_id,
+        );
+        self
+    }
+
     pub fn freeze_threshold(mut self, threshold: NumSeconds) -> Self {
         self.system_state.freeze_threshold = threshold;
         self
@@ -525,7 +521,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
     }
 }
@@ -562,17 +558,15 @@ impl Default for ExecutionStateBuilder {
         let wasm_metadata = WasmMetadata::new(metadata);
 
         ExecutionStateBuilder {
-            execution_state: ExecutionState {
-                canister_root: "NOT_USED".into(),
-                wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
-                wasm_memory: Memory::new_for_testing(),
-                stable_memory: Memory::new_for_testing(),
-                exported_globals: vec![],
-                exports: ExportedFunctions::new(BTreeSet::new()),
-                metadata: wasm_metadata,
-                last_executed_round: ExecutionRound::from(0),
-                next_scheduled_method: NextScheduledMethod::default(),
-            },
+            execution_state: ExecutionState::new(
+                "NOT_USED".into(),
+                WasmBinary::new(CanisterModule::new(vec![])),
+                ExportedFunctions::new(BTreeSet::new()),
+                Memory::new_for_testing(),
+                Memory::new_for_testing(),
+                vec![],
+                wasm_metadata,
+            ),
         }
     }
 }
@@ -686,13 +680,6 @@ pub fn get_stopped_canister_with_controller(
         execution_state: None,
         scheduler_state: Default::default(),
     }
-}
-
-/// Convert a running canister into a stopped canister. This functionality
-/// is added here since it is only allowed in tests.
-pub fn running_canister_into_stopped(mut canister: CanisterState) -> CanisterState {
-    canister.system_state.status = CanisterStatus::Stopped;
-    canister
 }
 
 /// Returns a `ReplicatedState` with SubnetType::Application, variable amount of canisters, input
@@ -814,29 +801,31 @@ pub fn register_callback(
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
-    let call_context_manager = canister_state
+    let call_context_id = canister_state
         .system_state
-        .call_context_manager_mut()
+        .new_call_context(
+            CallOrigin::SystemTask,
+            Cycles::zero(),
+            Time::from_nanos_since_unix_epoch(0),
+            Default::default(),
+        )
         .unwrap();
-    let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::SystemTask,
-        Cycles::zero(),
-        Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
-    );
 
-    call_context_manager.register_callback(Callback::new(
-        call_context_id,
-        originator,
-        respondent,
-        Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
-        WasmClosure::new(0, 2),
-        WasmClosure::new(0, 2),
-        None,
-        deadline,
-    ))
+    canister_state
+        .system_state
+        .register_callback(Callback::new(
+            call_context_id,
+            originator,
+            respondent,
+            Cycles::zero(),
+            Cycles::new(42),
+            Cycles::new(84),
+            WasmClosure::new(0, 2),
+            WasmClosure::new(0, 2),
+            None,
+            deadline,
+        ))
+        .unwrap()
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -897,7 +886,7 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true, true),
+            arbitrary::request_or_response_with_config(true),
             min_size..=max_size
         ),
         (signals_end, reject_signals) in arb_reject_signals(
@@ -961,12 +950,11 @@ prop_compose! {
         min_signal_count: usize,
         max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
-        with_responses_only_flag: Vec<bool>,
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
         (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
-        responses_only in proptest::sample::select(with_responses_only_flag),
+        responses_only in any::<bool>(),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
         let end = StreamIndex::from(msg_start + msg_len);

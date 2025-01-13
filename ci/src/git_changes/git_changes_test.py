@@ -12,6 +12,7 @@ Typical example usage:
 
     pytest
 """
+
 import os
 import shutil
 
@@ -67,6 +68,7 @@ def setup_repo(tmpdir, testcase, branch="feature_branch"):
     # will grab the git branch from git not from the env variable.
     if "CI_COMMIT_REF_NAME" in os.environ:
         del os.environ["CI_COMMIT_REF_NAME"]
+
 
 @pytest.mark.fails_on_merge_train
 def test_change_one_file(tmpdir):

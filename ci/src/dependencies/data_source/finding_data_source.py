@@ -44,9 +44,7 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_deleted_findings(
-        self, repository: str, scanner: str, dependency_id: str
-    ) -> List[Finding]:
+    def get_deleted_findings(self, repository: str, scanner: str, dependency_id: str) -> List[Finding]:
         """Retrieve deleted findings with the given properties from data source, returns an empty list if no deleted findings exist or the data source doesn't support retrieval of deleted findings."""
         raise NotImplementedError
 

@@ -388,6 +388,7 @@ pub fn add_transport_to_sim<F>(
                     artifact_manager_event_rx,
                     artifact_sender,
                     downloader,
+                    usize::MAX,
                 );
                 router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 

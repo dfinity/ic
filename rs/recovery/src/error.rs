@@ -26,6 +26,7 @@ pub enum RecoveryError {
     RegistryError(String),
     ValidationFailed(String),
     AgentError(String),
+    RsyncFailed,
     StepSkipped,
 }
 
@@ -60,7 +61,6 @@ impl RecoveryError {
             e,
         )
     }
-
     pub fn validation_failed(message: impl Display, error: impl Display) -> Self {
         RecoveryError::ValidationFailed(format!("{}: {}", message, error))
     }
@@ -70,40 +70,58 @@ impl fmt::Display for RecoveryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RecoveryError::IoError(msg, e) => {
-                write!(f, "IO error, message: {}, error: {}", msg, e)
+                write!(f, "IO error: {}\nError: {}", msg, e)
             }
             RecoveryError::CommandError(code, msg) => {
-                write!(f, "Command error, message: {}, code: {:?}", msg, code)
+                write!(f, "Command error: {}\nCode: {:?}", msg, code)
             }
             RecoveryError::OutputError(msg) => {
-                write!(f, "Output error, message: {}", msg)
+                write!(f, "Output error: {}", msg)
             }
             RecoveryError::DownloadError(msg, e) => {
-                write!(f, "Download error, message: {}, error: {}", msg, e)
+                write!(f, "Download error: {}\nError: {}", msg, e)
             }
             RecoveryError::UnexpectedError(msg) => {
-                write!(f, "Unexpected error, message: {}", msg)
+                write!(f, "Unexpected error: {}", msg)
             }
             RecoveryError::StepSkipped => {
                 write!(f, "Recovery step skipped.")
             }
             RecoveryError::ParsingError(e) => {
-                write!(f, "Parsing error, error: {}", e)
+                write!(f, "Parsing error: {}", e)
             }
             RecoveryError::SerializationError(e) => {
-                write!(f, "Serialization error, error: {}", e)
+                write!(f, "Serialization error: {}", e)
             }
             RecoveryError::CheckpointError(msg, e) => {
-                write!(f, "Checkpoint error, message: {}, error: {}", msg, e)
+                write!(f, "Checkpoint error: {}\nError: {}", msg, e)
             }
-            RecoveryError::RegistryError(msg) => write!(f, "Registry error, message: {}", msg),
-            RecoveryError::StateToolError(msg) => write!(f, "State tool error, message: {}", msg),
+            RecoveryError::RegistryError(msg) => write!(f, "Registry error: {}", msg),
+            RecoveryError::StateToolError(msg) => write!(f, "State tool error: {}", msg),
             RecoveryError::ValidationFailed(msg) => {
-                write!(f, "Validation failed, message: {}", msg)
+                write!(f, "Validation failed: {}", msg)
             }
-            RecoveryError::AgentError(msg) => write!(f, "ic-agent error, message: {}", msg),
+            RecoveryError::AgentError(msg) => write!(f, "ic-agent error: {}", msg),
+            RecoveryError::RsyncFailed => write!(f, "Rsync command failed"),
         }
     }
 }
 
 impl Error for RecoveryError {}
+
+pub trait GracefulExpect<T> {
+    /// Print a human-readable error message, instead of a debug dump.
+    fn expect_graceful(self, context: &str) -> T;
+}
+
+impl<T> GracefulExpect<T> for RecoveryResult<T> {
+    fn expect_graceful(self, context: &str) -> T {
+        match self {
+            Ok(inner) => inner,
+            Err(e) => {
+                println!("\x1b[1;31mFatal error\x1B[0m: {context}\n{e}");
+                std::process::exit(1)
+            }
+        }
+    }
+}

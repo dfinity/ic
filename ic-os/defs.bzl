@@ -3,13 +3,13 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
+load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -22,6 +22,7 @@ def icos_build(
         visibility = None,
         tags = None,
         build_local_base_image = False,
+        installable = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -37,6 +38,7 @@ def icos_build(
       visibility: See Bazel documentation
       tags: See Bazel documentation
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
+      installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
     """
 
@@ -125,7 +127,7 @@ def icos_build(
             build_args = image_deps["build_args"],
             file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
@@ -152,8 +154,15 @@ def icos_build(
             "/run",
             "/boot",
             "/var",
-            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt",
+            "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
+            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
         ],
         target_compatible_with = [
             "@platforms//os:linux",
@@ -187,7 +196,7 @@ def icos_build(
     #            k: v
     #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
     #        },
-    #        tags = ["manual"],
+    #        tags = ["manual", "no-cache"],
     #    )
     native.alias(
         name = "partition-root-unsigned.img",
@@ -212,16 +221,16 @@ def icos_build(
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
             },
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.img", actual = ":partition-root-unsigned.img", tags = ["manual"])
+        native.alias(name = "partition-root.img", actual = ":partition-root-unsigned.img", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.img", actual = ":partition-root-test-unsigned.img", tags = ["manual"])
+            native.alias(name = "partition-root-test.img", actual = ":partition-root-test-unsigned.img", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
         native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
@@ -234,7 +243,7 @@ def icos_build(
             cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.img) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
             tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
         native.genrule(
@@ -256,7 +265,7 @@ def icos_build(
                 outs = ["partition-root-test.img", "partition-root-test-hash"],
                 cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.img) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
                 tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-                tags = ["manual"],
+                tags = ["manual", "no-cache"],
             )
 
             native.genrule(
@@ -284,7 +293,7 @@ def icos_build(
                 ]
             )
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     if upgrades:
@@ -302,7 +311,7 @@ def icos_build(
                     ]
                 )
             },
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # -------------------- Assemble disk partitions ---------------
@@ -325,7 +334,24 @@ def icos_build(
             ":partition-root.img",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    # Disk images just for testing.
+    disk_image_no_tar(
+        name = "disk.img",
+        layout = image_deps["partition_table"],
+        partitions = [
+            "//ic-os/bootloader:partition-esp.tzst",
+            ":partition-grub.tzst",
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
+        ] + custom_partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -338,20 +364,6 @@ def icos_build(
         tags = ["manual"],
     )
 
-    sha256sum(
-        name = "disk-img.tar.zst.sha256",
-        srcs = [":disk-img.tar.zst"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum2url(
-        name = "disk-img.tar.zst.cas-url",
-        src = ":disk-img.tar.zst.sha256",
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -359,6 +371,7 @@ def icos_build(
             name = "update-img.tar",
             boot_partition = ":partition-boot.img",
             root_partition = ":partition-root.img",
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -372,25 +385,11 @@ def icos_build(
             tags = ["manual"],
         )
 
-        sha256sum(
-            name = "update-img.tar.zst.sha256",
-            srcs = [":update-img.tar.zst"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum2url(
-            name = "update-img.tar.zst.cas-url",
-            src = ":update-img.tar.zst.sha256",
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.img",
             root_partition = ":partition-root-test.img",
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -400,20 +399,6 @@ def icos_build(
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img-test.tar.zst.sha256",
-            srcs = [":update-img-test.tar.zst"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum2url(
-            name = "update-img-test.tar.zst.cas-url",
-            src = ":update-img-test.tar.zst.sha256",
             visibility = visibility,
             tags = ["manual"],
         )
@@ -513,88 +498,119 @@ EOF
 
     # -------------------- VM Developer Tools --------------------
 
-    native.genrule(
+    native.sh_binary(
         name = "launch-remote-vm",
-        srcs = [
-            "//rs/ic_os/dev_test_tools/launch-single-vm",
-            ":disk-img.tar.zst.cas-url",
-            ":disk-img.tar.zst.sha256",
+        srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
+        data = [
+            "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+            ":disk-img.tar.zst",
             ":version.txt",
+            "//bazel:upload_systest_dep",
         ],
-        outs = ["launch_remote_vm_script"],
-        cmd = """
-        BIN="$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)"
-        VERSION="$$(cat $(location :version.txt))"
-        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
-        SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
-        SCRIPT="$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)"
-        cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-# Hack to switch nested for SetupOS
-nested=""
-if [[ "$@" =~ "setupos" ]]; then
-    nested="--nested"
-fi
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" \\$${nested}
-EOF
-        """,
-        executable = True,
-        tags = ["manual"],
+        env = {
+            "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
+            "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
+            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
+            "VERSION_FILE": "$(location :version.txt)",
+            "DISK_IMG": "$(location :disk-img.tar.zst)",
+        },
         testonly = True,
+        tags = ["manual"],
     )
 
     native.genrule(
-        name = "launch-local-vm",
-        srcs = [
-            ":disk-img.tar",
-        ],
+        name = "launch-local-vm-script",
         outs = ["launch_local_vm_script"],
         cmd = """
-        IMAGE="$(location :disk-img.tar)"
-        cat <<EOF > $@
+        cat <<"EOF" > $@
 #!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d)
-CID=\\$$((\\$$RANDOM + 3))
-cp $$IMAGE \\$$TEMP
-cd \\$$TEMP
-tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+set -eo pipefail
+IMG=$$1
+INSTALLABLE=$$2
+VIRT=$$3
+PREPROC=$$4
+PREPROC_FLAGS=$$5
+set -u
+TEMP=$$(mktemp -d --suffix=.qemu-launch-remote-vm)
+# Clean up after ourselves when exiting.
+trap 'rm -rf "$$TEMP"' EXIT
+CID=$$(($$RANDOM + 3))
+cd "$$TEMP"
+cp --reflink=auto --sparse=always --no-preserve=mode,ownership "$$IMG" disk.img
+if [ "$$PREPROC" != "" ] ; then
+    "$$PREPROC" $$PREPROC_FLAGS --image-path disk.img
+fi
+if [ "$$INSTALLABLE" == "yes" ]
+then
+    truncate -s 128G target.img
+    add_disk="-drive file=target.img,format=raw,if=virtio"
+else
+    add_disk=
+fi
+if [ "$$VIRT" == "kvm" ]; then
+    qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=$$CID -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    exit $$?
+else
+    qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    exit $$?
+fi
 EOF
         """,
         executable = True,
         tags = ["manual"],
     )
 
-    # Same as above but without KVM support to run inside VMs and containers
-    # VHOST for nested VMs is not configured at the moment (should be possible)
-    native.genrule(
-        name = "launch-local-vm-no-kvm",
-        srcs = [
-            ":disk-img.tar",
-        ],
-        outs = ["launch_local_vm_script_no_kvm"],
-        cmd = """
-        IMAGE="$(location :disk-img.tar)"
-        cat <<EOF > $@
+    for accel, variant in (("kvm", ""), ("qemu", " no kvm")):
+        if installable:
+            # Installable produces interactive-install{,-no-kvm} variants that
+            # cause the install to proceed fearlessly and reboot to HostOS.
+            # It also produces interactive-debug{,-no-kvm} variants that cause
+            # the installer to halt so SetupOS can be interactively debugged without
+            # worrying that the installation routine will install then reboot.
+            preproc_checks = ["//rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks"]
+            for action, action_flags in (("install", ""), ("debug", "--defeat-installer")):
+                native.genrule(
+                    name = "interactive-" + action + variant.replace(" ", "-"),
+                    srcs = [
+                        ":disk.img",
+                    ],
+                    tools = [
+                        ":launch-local-vm-script",
+                    ] + preproc_checks,
+                    outs = ["interactive_" + action + variant.replace(" ", "_")],
+                    cmd = """
+            cat <<"EOF" > $@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d)
-CID=\\$$((\\$$RANDOM + 3))
-cp $$IMAGE \\$$TEMP
-cd \\$$TEMP
-tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" yes """ + accel + """ "$$PWD/$(location //rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks)" """ + action_flags + """>&2
 EOF
-        """,
-        executable = True,
-        tags = ["manual"],
-    )
+                    """,
+                    executable = True,
+                    tags = ["manual"],
+                )
+        else:
+            # Variants provide KVM / non-KVM support to run inside VMs and containers.
+            # VHOST for nested VMs is not configured at the moment (should be possible).
+            native.genrule(
+                name = "launch-local-vm" + variant.replace(" ", "-"),
+                srcs = [
+                    ":disk.img",
+                ],
+                tools = [
+                    ":launch-local-vm-script",
+                ],
+                outs = ["launch_local_vm" + variant.replace(" ", "_")],
+                cmd = """
+                cat <<"EOF" > $@
+#!/usr/bin/env bash
+set -euo pipefail
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" no """ + accel + """ >&2
+EOF
+                """,
+                executable = True,
+                tags = ["manual"],
+            )
 
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.
@@ -663,7 +679,7 @@ def boundary_node_icos_build(
         build_args = image_deps["build_args"],
         file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     # Helpful tool to print a hash of all input component files
@@ -732,7 +748,7 @@ EOF
                 ]
             )
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
@@ -760,7 +776,7 @@ EOF
     #            k: v
     #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
     #        },
-    #        tags = ["manual"],
+    #        tags = ["manual", "no-cache"],
     #    )
 
     native.genrule(
@@ -770,7 +786,7 @@ EOF
         cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.img) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
         tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     native.genrule(
@@ -795,7 +811,7 @@ EOF
             ":partition-root.img",
         ],
         expanded_size = "50G",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -804,20 +820,6 @@ EOF
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.zst.sha256",
-        srcs = [":disk-img.tar.zst"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum2url(
-        name = "disk-img.tar.zst.cas-url",
-        src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
         tags = ["manual"],
     )

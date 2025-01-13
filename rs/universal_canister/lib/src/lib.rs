@@ -7,17 +7,35 @@
 
 pub mod management;
 
-use hex_literal::hex;
 use ic_types::Cycles;
+use lazy_static::lazy_static;
 use universal_canister::Ops;
-/// The binary of the universal canister as compiled from
-/// `rs/universal_canister/impl`.
-///
-/// For steps on how to produce it, please see the README in
-/// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
+
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
+    pub static ref UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = get_universal_canister_wasm_sha256();
+    pub static ref UNIVERSAL_CANISTER_SERIALIZED_MODULE: Vec<u8> = get_universal_canister_serialized_module();
+}
+
+pub fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+        .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+}
+
+pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
+    ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM)
+}
+
+pub fn get_universal_canister_serialized_module() -> Vec<u8> {
+    let serialized_module_path = std::env::var("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH")
+        .expect("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH not set");
+    std::fs::read(&serialized_module_path).unwrap_or_else(|e| {
+        panic!("Could not read serialized module from from {serialized_module_path:?}: {e:?}")
+    })
+}
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -498,6 +516,14 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn mint_cycles128(mut self, amount: Cycles) -> Self {
+        let (amount_high, amount_low) = amount.into_parts();
+        self = self.push_int64(amount_high);
+        self = self.push_int64(amount_low);
+        self.0.push(Ops::MintCycles128 as u8);
+        self
+    }
+
     pub fn cycles_burn128(mut self, amount: Cycles) -> Self {
         let (amount_high, amount_low) = amount.into_parts();
         self = self.push_int64(amount_high);
@@ -851,14 +877,6 @@ impl CallArgs {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(
-            UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
-        );
-    }
-
     #[test]
     fn try_from_macro_works() {
         assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());

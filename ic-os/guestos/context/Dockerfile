@@ -32,14 +32,14 @@ RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login && \
 # but this is per system (so backups are not persisted across upgrades)
 # and thus not very useful, and /etc is read-only.
 # So simply suppress generating backups.
-RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
+RUN sed -e 's/\(# \)\?\(backup *= *\)[01]/\20/' -e 's/\(# \)\?\(archive *= *\)[01]/\20/' -i /etc/lvm/lvm.conf
 
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id
@@ -88,14 +88,16 @@ RUN rm /etc/ssh/ssh*key*
 # strictly necessary to be explicit here.
 RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin prohibit-password/" -i /etc/ssh/sshd_config
 
-RUN \
-    for SERVICE in /etc/systemd/system/*; do \
-    if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
+RUN for SERVICE in /etc/systemd/system/*; do \
+        if [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] && ! echo "$SERVICE" | grep -Eq "@\.service$"; then \
+            systemctl enable "${SERVICE#/etc/systemd/system/}"; \
+        fi ; \
     done
 
 RUN systemctl enable \
     chrony \
     nftables \
+    ssh \
     systemd-networkd \
     systemd-networkd-wait-online \
     systemd-resolved \
@@ -111,10 +113,6 @@ RUN systemctl disable \
     fstrim.service \
     fstrim.timer
 
-# Clear additional files that may lead to indeterministic build.
-RUN find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm
-
 # ------ GUESTOS WORK --------------------------------------------
 
 # Divert symbolic link for dynamically generated nftables
@@ -129,19 +127,8 @@ RUN mkdir -p /var/lib/ic/backup \
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
-## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 
-## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
-## When systemd-sysusers writes the shadow entry for these users, the 2nd field in the row (# days since the epoch) is set to (today - unix epoch). 
-## This is not reproducible. 
-## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the password timestamp.
-## Why not use `faketime`? Doesn't work with `podman --timestamp=0`.
-RUN systemd-sysusers && \
-    usermod -p '!!' systemd-timesync && \
-    usermod -p '!!' systemd-coredump
-
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
+RUN ln -sf /bin/bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.
@@ -227,6 +214,11 @@ RUN addgroup node_exporter && \
 # stored in /etc/node_exporter.
 RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
     usermod -a -G node_exporter metrics-proxy
+
+# The user to run the SOCKS proxy
+RUN addgroup socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Dante SOCKS Proxy" socks && \
+    adduser socks socks && chmod +s /usr/sbin/danted
 
 # ------ INSTALL SCRIPTS -----------------------------------------
 

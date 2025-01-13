@@ -27,10 +27,12 @@ use std::{
     fmt::Write,
     thread::LocalKey,
 };
+use types::SnsCanisterType;
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
+mod request_impls;
 pub mod types;
 
 // The number of dapp canisters that can be registered with the SNS Root
@@ -118,6 +120,39 @@ impl GetSnsCanistersSummaryResponse {
     }
 }
 
+impl IntoIterator for GetSnsCanistersSummaryResponse {
+    type Item = (Option<CanisterSummary>, SnsCanisterType);
+
+    // Using Box<dyn Iterator<...>> because the type is very long otherwise.
+    // But this could be changed to a more specific type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let canisters = [
+            (self.root, SnsCanisterType::Root),
+            (self.governance, SnsCanisterType::Governance),
+            (self.ledger, SnsCanisterType::Ledger),
+            (self.swap, SnsCanisterType::Swap),
+            (self.index, SnsCanisterType::Index),
+        ];
+
+        Box::new(
+            canisters
+                .into_iter()
+                .chain(
+                    self.dapps
+                        .into_iter()
+                        .map(|d| (Some(d), SnsCanisterType::Dapp)),
+                )
+                .chain(
+                    self.archives
+                        .into_iter()
+                        .map(|a| (Some(a), SnsCanisterType::Archive)),
+                ),
+        )
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
@@ -160,6 +195,7 @@ impl ValidatedManageDappCanisterSettingsRequest {
             reserved_cycles_limit: request.reserved_cycles_limit.map(Nat::from),
             log_visibility: LogVisibility::try_from(request.log_visibility()).ok(),
             wasm_memory_limit: request.wasm_memory_limit.map(Nat::from),
+            wasm_memory_threshold: request.wasm_memory_threshold.map(Nat::from),
         };
         let invalid_dapp_canister_ids = request
             .canister_ids
@@ -959,6 +995,7 @@ mod tests {
             archive_canister_ids: vec![],
             index_canister_id: Some(PrincipalId::new_user_test_id(4)),
             testflight,
+            timers: None,
         }
     }
 
@@ -2165,6 +2202,7 @@ mod tests {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         };
         let validated_request = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,
@@ -2190,6 +2228,7 @@ mod tests {
                     reserved_cycles_limit: Some(Nat::from(1_000_000_000_000u64)),
                     log_visibility: Some(LogVisibility::Controllers),
                     wasm_memory_limit: Some(Nat::from(1_000_000_000u64)),
+                    wasm_memory_threshold: Some(Nat::from(1_000_000u64)),
                 },
             }
         );
@@ -2209,6 +2248,7 @@ mod tests {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         };
         let failure_reason = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,
@@ -2762,7 +2802,7 @@ mod tests {
     async fn test_get_sns_canisters_summary_reports_settings() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = const { RefCell::new(SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
@@ -2770,7 +2810,8 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-            });
+                timers: None,
+            }) };
         }
 
         let root_canister_id = CanisterId::from_u64(4);
@@ -2921,6 +2962,7 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
+                timers: None,
             });
         }
 
@@ -3149,6 +3191,7 @@ mod tests {
                 archive_canister_ids: EXPECTED_ARCHIVE_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
+                timers: None,
             });
         }
 

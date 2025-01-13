@@ -57,6 +57,7 @@ impl ConsensusManagerBuilder {
         outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
+        slot_limit: usize,
     ) {
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -78,6 +79,7 @@ impl ConsensusManagerBuilder {
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
+                slot_limit,
             )
         };
 
@@ -114,13 +116,14 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
+    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
+    slot_limit: usize,
 ) -> Vec<Shutdown>
 where
     Artifact: IdentifiableArtifact,
@@ -134,7 +137,7 @@ where
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
-        adverts_to_send,
+        outbound_transmits,
         assembler.clone(),
     );
 
@@ -146,27 +149,28 @@ where
         assembler,
         sender,
         topology_watcher,
+        slot_limit,
     );
     vec![shutdown_send_side, shutdown_receive_side]
 }
 
-pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
+struct SlotUpdate<Artifact: PbArtifact> {
     slot_number: SlotNumber,
     commit_id: CommitId,
     update: Update<Artifact>,
 }
 
-pub(crate) enum Update<Artifact: PbArtifact> {
+enum Update<Artifact: PbArtifact> {
     Artifact(Artifact),
     Id(Artifact::Id),
 }
 
-pub fn uri_prefix<Artifact: PbArtifact>() -> String {
+fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
 struct SlotNumberTag;
-pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
+type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
-pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
+type CommitId = AmountOf<CommitIdTag, u64>;

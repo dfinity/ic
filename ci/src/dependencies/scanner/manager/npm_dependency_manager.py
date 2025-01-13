@@ -56,13 +56,15 @@ class NPMDependencyManager(DependencyManager):
             # engines not specified in package.json. Using default should be fine
             return True
 
-        supported_engine_versions = str(data['engines']['node'])
+        supported_engine_versions = str(data["engines"]["node"])
         if satisfies(engine_version, supported_engine_versions, loose=True):
             # engine version is supported
             return True
 
         # We can't run the scan at this point
-        logging.error(f"Engine version is not supported for {repository_name}, Current: {engine_version}; Accepted: {supported_engine_versions}")
+        logging.error(
+            f"Engine version is not supported for {repository_name}, Current: {engine_version}; Accepted: {supported_engine_versions}"
+        )
         return False
 
     @staticmethod
@@ -194,7 +196,9 @@ class NPMDependencyManager(DependencyManager):
         can_run_scan = self.__npm_check_engine(repository_name, engine_version, path)
 
         if not can_run_scan:
-            raise RuntimeError(f"Dependency scan for {repository_name} can't be executed due to engine version mismatch")
+            raise RuntimeError(
+                f"Dependency scan for {repository_name} can't be executed due to engine version mismatch"
+            )
 
         npm_audit_output = self.__npm_audit_output(engine_version, path)
 

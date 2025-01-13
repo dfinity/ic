@@ -5,13 +5,12 @@ package(default_visibility = [
     "//rs/nns/integration_tests:__pkg__",
     "//rs/nns/test_utils:__pkg__",
     "//rs/rust_canisters:__subpackages__",
-    "//rs/scenario_tests:__pkg__",
     "//rs/tests:__subpackages__",
 ])
 
 rust_library(
     name = "dfn_json",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [
         # Keep sorted.
         "//rs/rust_canisters/on_wire",

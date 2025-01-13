@@ -122,7 +122,7 @@ impl SnsClient {
         let payload = {
             let mut payload =
                 open_sns_token_swap_payload(swap_id.get(), create_service_nervous_system_proposal);
-            // Make sure there's no delay. (Therefore, the sale will be opened immediately.)
+            // Make sure there's no delay. (Therefore, the swap will be opened immediately.)
             payload.params.as_mut().unwrap().sale_delay_seconds = Some(0);
             payload
         };
@@ -546,7 +546,7 @@ fn open_sns_token_swap_payload(
 /// Send open sns token swap proposal to governance and wait until it is executed.
 async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
     // Sanity check that params is valid
-    let params = payload.params.as_ref().unwrap().clone();
+    let params = *payload.params.as_ref().unwrap();
     let () = params
         .validate(&Init {
             should_auto_finalize: Some(true),

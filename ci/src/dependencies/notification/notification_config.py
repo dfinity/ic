@@ -27,7 +27,9 @@ class NotificationConfig:
     merge_request_base_url: str = "https://github.com/dfinity/ic/pull/"
     ci_pipeline_base_url: str = "https://github.com/dfinity/ic/actions/runs/"
 
-    notification_handlers: List[NotificationHandler] = field(default_factory=lambda: [SlackDefaultNotificationHandler()])
+    notification_handlers: List[NotificationHandler] = field(
+        default_factory=lambda: [SlackDefaultNotificationHandler()]
+    )
 
     def __post_init__(self):
         """Validate field values after initialization"""

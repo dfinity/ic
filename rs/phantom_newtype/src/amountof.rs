@@ -307,6 +307,17 @@ where
     }
 }
 
+impl<Unit, Repr> num_traits::SaturatingSub for AmountOf<Unit, Repr>
+where
+    Repr: num_traits::SaturatingSub,
+{
+    /// Saturating subtraction. Computes `self - other`, saturating
+    /// at the relevant high or low boundary of the type.
+    fn saturating_sub(&self, rhs: &Self) -> Self {
+        Self(self.0.saturating_sub(&rhs.0), PhantomData)
+    }
+}
+
 impl<Unit, Repr> AddAssign for AmountOf<Unit, Repr>
 where
     Repr: AddAssign,

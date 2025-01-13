@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ledger_canister_core",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ledger_canister_core",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/limits",
+        "//rs/rust_canisters/canister_log",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/utils",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)

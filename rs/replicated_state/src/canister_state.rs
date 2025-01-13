@@ -5,7 +5,7 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
+use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
@@ -144,12 +144,6 @@ impl CanisterState {
         }
     }
 
-    /// Apply priority credit
-    pub fn apply_priority_credit(&mut self) {
-        self.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut self.scheduler_state.priority_credit);
-    }
-
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id()
     }
@@ -192,7 +186,7 @@ impl CanisterState {
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state.push_input(
             msg,
             subnet_available_memory,
@@ -381,6 +375,13 @@ impl CanisterState {
             + self.system_state.snapshots_memory_usage
     }
 
+    /// Returns the amount of Wasm memory currently used by the canister in bytes.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.wasm_memory_usage())
+    }
+
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
     /// currently used by the canister in bytes.
     pub fn execution_memory_usage(&self) -> NumBytes {
@@ -503,11 +504,7 @@ impl CanisterState {
     }
 
     pub fn status(&self) -> CanisterStatusType {
-        match self.system_state.status {
-            CanisterStatus::Running { .. } => CanisterStatusType::Running,
-            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
-        }
+        self.system_state.status()
     }
 
     /// Returns next scheduled method.
@@ -547,31 +544,7 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        // Remove aborted install code task.
-        system_state.task_queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
-
-        // Roll back `Stopping` canister states to `Running` and drop all their stop
-        // contexts (the calls corresponding to the dropped stop contexts will be
-        // rejected by subnet A').
-        match &system_state.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => {
-                system_state.status = CanisterStatus::Running {
-                    call_context_manager: call_context_manager.clone(),
-                }
-            }
-        }
+        system_state.drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.
@@ -597,6 +570,12 @@ impl CanisterState {
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.heap_delta())
             + self.system_state.wasm_chunk_store.heap_delta()
+    }
+
+    /// Updates status of `OnLowWasmMemory` hook.
+    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
+        self.system_state
+            .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
     }
 }
 

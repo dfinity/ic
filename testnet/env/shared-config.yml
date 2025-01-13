@@ -68,7 +68,7 @@ nodes:
     orchestrator_metrics_listen_addr: "[{{ orchestrator_metrics_listen_ip }}]:{{ orchestrator_metrics_listen_port }}"
 
     elasticsearch_hosts:
-      - "elasticsearch.testnet.dfinity.network:443"
+      - "elasticsearch.ch1-obsdev1.dfinity.network:443"
 
 api:
   vars:
@@ -87,7 +87,7 @@ boundary:
   vars:
     api_listen_port: 443
     api_listen_protocol: https
-    elasticsearch_url: "https://elasticsearch.testnet.dfinity.network"
+    elasticsearch_url: "https://elasticsearch.ch1-obsdev1.dfinity.network"
     ipv4_http_ips: # See: https://www.cloudflare.com/ips-v4
       - "103.21.244.0/22" # Cloudflare: https://www.cloudflare.com/ips/
       - "103.22.200.0/22" # Cloudflare: https://www.cloudflare.com/ips/
@@ -145,25 +145,13 @@ boundary:
     node_exporter_metrics_port: 9100
     node_exporter_metrics_addr: "[{{ node_exporter_metrics_ip }}]:{{ node_exporter_metrics_port }}"
 
-    control_plane_metrics_ip: "{{ ipv6_address }}"
-    control_plane_metrics_port: 9312
-    control_plane_metrics_addr: "[{{ control_plane_metrics_ip }}]:{{ control_plane_metrics_port }}"
-
-    icx_proxy_metrics_ip: "{{ ipv6_address }}"
-    icx_proxy_metrics_port: 9314
-    icx_proxy_metrics_addr: "[{{ icx_proxy_metrics_ip }}]:{{ icx_proxy_metrics_port }}"
-
-    nginx_metrics_ip: "{{ ipv6_address }}"
-    nginx_metrics_port: 9316
-    nginx_metrics_addr: "[{{ nginx_metrics_ip }}]:{{ nginx_metrics_port }}"
+    ic_gateway_proxy_metrics_ip: "{{ ipv6_address }}"
+    ic_gateway_proxy_metrics_port: 9314
+    ic_gateway_proxy_metrics_addr: "[{{ ic_gateway_metrics_ip }}]:{{ ic_gateway_metrics_port }}"
 
     vector_metrics_ip: "{{ ipv6_address }}"
     vector_metrics_port: 9317
     vector_metrics_addr: "[{{ vector_metrics_ip }}]:{{ vector_metrics_port }}"
-
-    denylist_updater_metrics_ip: "{{ ipv6_address }}"
-    denylist_updater_metrics_port: 9318
-    denylist_updater_metrics_addr: "[{{ denylist_updater_metrics_ip }}]:{{ denylist_updater_metrics_port }}"
 
     process_exporter_metrics_ip: "{{ ipv6_address }}"
     process_exporter_metrics_port: 9319

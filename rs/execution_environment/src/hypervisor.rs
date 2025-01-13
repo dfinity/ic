@@ -2,17 +2,22 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
-use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
-use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
-use ic_embedders::{CompilationCache, CompilationResult};
-use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
+use ic_embedders::{
+    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_utils::decoding::decoded_wasm_size,
+    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
+use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
@@ -21,15 +26,15 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-
-#[cfg(test)]
-mod tests;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -204,6 +209,7 @@ pub struct Hypervisor {
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
+    canister_guaranteed_callback_quota: usize,
 }
 
 impl Hypervisor {
@@ -236,7 +242,7 @@ impl Hypervisor {
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
             self.compilation_cache
-                .insert(&canister_module, Err(err.clone().into()));
+                .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
         }
 
@@ -273,6 +279,10 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        // TODO(EXC-1821): Create a temp dir in this directory for use in the
+        // compilation cache.
+        _temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -285,6 +295,8 @@ impl Hypervisor {
                     metrics_registry,
                     &embedder_config,
                     Arc::clone(&fd_factory),
+                    Arc::clone(&state_reader),
+                    true,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -299,7 +311,6 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -307,12 +318,13 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
+            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
 
@@ -327,6 +339,7 @@ impl Hypervisor {
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
+        canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
             wasm_executor,
@@ -339,6 +352,7 @@ impl Hypervisor {
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota,
         }
     }
 
@@ -405,6 +419,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)
     }
@@ -434,18 +449,33 @@ impl Hypervisor {
                 execution_parameters.instruction_limits.slice()
             ),
         }
+        let caller = api_type.caller();
+        let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
+            // The default is never used (since we would never end up here with no
+            // `CallContextManager`) but preferrable to an `unwrap()`.
+            self.canister_guaranteed_callback_quota,
+            |ccm| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(ccm.callbacks().len())
+            },
+        ) as u64;
+        // Maximum between remaining canister quota and available subnet shared pool.
+        let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            available_callbacks,
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
+            execution_state.is_wasm64,
         );
         let api_type_str = api_type.as_str();
-        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -463,11 +493,59 @@ impl Hypervisor {
                 .observe_compilation_metrics(&compilation_result);
         }
         self.metrics.observe(&execution_result, api_type_str);
+
+        // If the caller does not have permission to view this canister's logs,
+        // then it shouldn't get a backtrace either. So in that case we remove
+        // the backtrace from the error.
+        fn remove_backtrace(err: &mut HypervisorError) {
+            match err {
+                HypervisorError::Trapped { backtrace, .. }
+                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+                HypervisorError::Cleanup {
+                    callback_err,
+                    cleanup_err,
+                } => {
+                    remove_backtrace(callback_err);
+                    remove_backtrace(cleanup_err);
+                }
+                _ => {}
+            }
+        }
+        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
+            if let Err(err) = &mut result.wasm_result {
+                let can_view = match &system_state.log_visibility {
+                    LogVisibilityV2::Controllers => {
+                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                    }
+                    LogVisibilityV2::Public => true,
+                    LogVisibilityV2::AllowedViewers(allowed) => {
+                        caller.map_or(false, |c| allowed.get().contains(&c))
+                    }
+                };
+                if !can_view {
+                    remove_backtrace(err);
+                }
+            }
+        }
+
         execution_result
     }
 
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
+    }
+
+    /// Insert a compiled module in the compilation cache speed up tests by
+    /// skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        let canister_module = CanisterModule::new(bytes);
+        self.compilation_cache
+            .insert_ok(&canister_module, compiled_module);
     }
 }

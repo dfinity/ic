@@ -36,7 +36,10 @@ impl StableMemory {
     pub(super) fn stable_size(&self) -> HypervisorResult<u32> {
         let size = self.stable_memory_size.get();
         if size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
-            return Err(HypervisorError::Trapped(StableMemoryTooBigFor32Bit));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryTooBigFor32Bit,
+                backtrace: None,
+            });
         }
 
         // Safe as we confirmed above the value is small enough to fit into 32-bits.
@@ -54,11 +57,17 @@ impl StableMemory {
         let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
         if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES) {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         if dst + size > heap.len() {
-            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: HeapOutOfBounds,
+                backtrace: None,
+            });
         }
         self.stable_memory_buffer
             .read(&mut heap[dst..dst + size], offset);
@@ -77,11 +86,17 @@ impl StableMemory {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES) {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         if src + size > heap.len() {
-            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: HeapOutOfBounds,
+                backtrace: None,
+            });
         }
 
         self.stable_memory_buffer
@@ -103,7 +118,10 @@ impl StableMemory {
     ) -> HypervisorResult<()> {
         let (heap_end, overflow) = dst.overflowing_add(size);
         if overflow || heap_end as usize > heap.len() {
-            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: HeapOutOfBounds,
+                backtrace: None,
+            });
         }
         self.stable_memory_buffer
             .read(&mut heap[dst as usize..heap_end as usize], offset as usize);
@@ -127,17 +145,26 @@ impl StableMemory {
             .get()
             .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         let (stable_memory_end, overflow) = offset.overflowing_add(size);
         if overflow || stable_memory_end > stable_memory_size_in_bytes {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         let (heap_end, overflow) = dst.overflowing_add(size);
         if overflow || heap_end > heap.len() {
-            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: HeapOutOfBounds,
+                backtrace: None,
+            });
         }
         self.stable_memory_buffer
             .read(&mut heap[dst..heap_end], offset);
@@ -162,17 +189,26 @@ impl StableMemory {
             .get()
             .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         let (stable_memory_end, overflow) = offset.overflowing_add(size);
         if overflow || stable_memory_end > stable_memory_size_in_bytes {
-            return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: StableMemoryOutOfBounds,
+                backtrace: None,
+            });
         }
 
         let (heap_end, overflow) = src.overflowing_add(size);
         if overflow || heap_end > heap.len() {
-            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+            return Err(HypervisorError::Trapped {
+                trap_code: HeapOutOfBounds,
+                backtrace: None,
+            });
         }
 
         self.stable_memory_buffer

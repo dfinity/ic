@@ -172,7 +172,6 @@ impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Arti
     }
 }
 
-#[allow(dead_code)]
 impl TestConsensus<U64Artifact> {
     pub fn new(
         log: ReplicaLogger,
@@ -274,7 +273,7 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     fn get(&self, id: &<U64Artifact as IdentifiableArtifact>::Id) -> Option<U64Artifact> {
         self.my_pool().get(id).map(|id| self.id_to_msg(*id).into())
     }
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = U64Artifact> + '_> {
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = U64Artifact> + '_> {
         Box::new(
             self.my_pool()
                 .into_iter()

@@ -7,20 +7,19 @@ DEPENDENCIES = [
     "//rs/crypto/prng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
-    "@crate_index//:hex",
+    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/consensus",
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",

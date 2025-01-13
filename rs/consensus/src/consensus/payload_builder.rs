@@ -25,6 +25,7 @@ use ic_types::{
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NodeId, NumBytes, SubnetId, Time,
 };
+use num_traits::SaturatingSub;
 use std::sync::Arc;
 
 /// Implementation of PayloadBuilder.
@@ -68,35 +69,6 @@ impl PayloadBuilderImpl {
             logger,
         }
     }
-
-    /// Helper to create PayloadBuilder for testing
-    pub fn new_for_testing(
-        subnet_id: SubnetId,
-        node_id: NodeId,
-        registry_client: Arc<dyn RegistryClient>,
-        ingress_selector: Arc<dyn IngressSelector>,
-        xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
-        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        metrics: MetricsRegistry,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let section_builder = vec![
-            BatchPayloadSectionBuilder::Ingress(ingress_selector),
-            BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
-            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
-            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
-        ];
-
-        Self {
-            subnet_id,
-            node_id,
-            registry_client,
-            section_builder,
-            metrics: PayloadBuilderMetrics::new(metrics),
-            logger,
-        }
-    }
 }
 
 impl PayloadBuilder for PayloadBuilderImpl {
@@ -126,29 +98,26 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.get_max_block_payload_size_bytes(&subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
-        let mut accumulated_size = 0;
+        let mut accumulated_size = NumBytes::new(0);
 
         for (priority, section_id) in section_select.into_iter().enumerate() {
-            accumulated_size += self.section_builder[section_id]
-                .build_payload(
-                    &mut batch_payload,
-                    height,
-                    &ProposalContext {
-                        proposer: self.node_id,
-                        validation_context: context,
-                    },
-                    NumBytes::new(
-                        max_block_payload_size
-                            .get()
-                            .saturating_sub(accumulated_size),
-                    ),
-                    past_payloads,
-                    priority,
-                    &self.metrics,
-                    &self.logger,
-                )
-                .get();
+            accumulated_size += self.section_builder[section_id].build_payload(
+                &mut batch_payload,
+                height,
+                &ProposalContext {
+                    proposer: self.node_id,
+                    validation_context: context,
+                },
+                max_block_payload_size.saturating_sub(&accumulated_size),
+                past_payloads,
+                priority,
+                &self.metrics,
+                &self.logger,
+            );
         }
+        self.metrics
+            .payload_size_bytes
+            .observe(accumulated_size.get() as f64);
 
         batch_payload
     }

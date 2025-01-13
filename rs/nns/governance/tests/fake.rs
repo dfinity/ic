@@ -14,7 +14,7 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential},
+    governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
@@ -39,6 +39,12 @@ use std::{
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
+
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{
+    self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
+use ic_nns_governance::{tla_log_request, tla_log_response};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -99,6 +105,7 @@ impl Default for FakeState {
 /// advanced, and ledger accounts manipulated.
 pub struct FakeDriver {
     pub state: Arc<Mutex<FakeState>>,
+    pub error_on_next_ledger_call: Arc<Mutex<Option<NervousSystemError>>>,
 }
 
 /// Create a default mock driver.
@@ -106,6 +113,7 @@ impl Default for FakeDriver {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(Default::default())),
+            error_on_next_ledger_call: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -175,6 +183,7 @@ impl FakeDriver {
     pub fn get_fake_env(&self) -> Box<dyn Environment> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -182,12 +191,14 @@ impl FakeDriver {
     pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -235,10 +246,18 @@ impl FakeDriver {
             num_accounts
         );
     }
+
+    pub fn fail_next_ledger_call(&self) {
+        self.error_on_next_ledger_call
+            .lock()
+            .unwrap()
+            .replace(NervousSystemError::new());
+    }
 }
 
 #[async_trait]
 impl IcpLedger for FakeDriver {
+    #[cfg_attr(feature = "tla", tla_function(async_trait_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -258,6 +277,30 @@ impl IcpLedger for FakeDriver {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
+        tla_log_request!(
+            "WaitForTransfer",
+            Destination::new("ledger"),
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), account_to_tla(from_account)),
+                ("to".to_string(), account_to_tla(to_account)),
+            ]))
+        );
+
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            println!("Failing the ledger transfer because we were instructed to fail the next ledger call");
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                }
+            );
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -268,6 +311,13 @@ impl IcpLedger for FakeDriver {
 
         if !is_minting_operation {
             if *from_e8s < requested_e8s {
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    tla::TlaValue::Variant {
+                        tag: "Fail".to_string(),
+                        value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                    }
+                );
                 return Err(NervousSystemError::new_with_message(format!(
                     "Insufficient funds. Available {} requested {}",
                     *from_e8s, requested_e8s
@@ -277,11 +327,22 @@ impl IcpLedger for FakeDriver {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "TransferOk".to_string(),
+                value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+            }
+        );
 
         Ok(0)
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         Ok(self.get_supply())
     }
 
@@ -289,8 +350,37 @@ impl IcpLedger for FakeDriver {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
+        tla_log_request!(
+            "WaitForBalanceQuery",
+            Destination::new("ledger"),
+            "AccountBalance",
+            tla::TlaValue::Record(BTreeMap::from([(
+                "account".to_string(),
+                account_to_tla(account)
+            )]))
+        );
+
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            );
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
+
         let account_e8s = accounts.get(&account).unwrap_or(&0);
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "BalanceQueryOk".to_string(),
+                value: Box::new(account_e8s.to_tla_value()),
+            }
+        );
         Ok(Tokens::from_e8s(*account_e8s))
     }
 
@@ -312,14 +402,22 @@ impl Environment for FakeDriver {
         self.state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
-        self.state.try_lock().unwrap().rng.next_u64()
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        Ok(self.state.try_lock().unwrap().rng.next_u64())
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         let mut bytes = [0u8; 32];
         self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
-        bytes
+        Ok(bytes)
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
     }
 
     fn execute_nns_function(
@@ -336,7 +434,7 @@ impl Environment for FakeDriver {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -604,6 +702,8 @@ impl ProposalNeuronBehavior {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap();
         // Vote
         for (voter, vote) in &self.votes {

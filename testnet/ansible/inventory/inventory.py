@@ -214,7 +214,7 @@ class IcDeploymentInventory:
                 # That didn't work, try to build IPv6 from the MAC address
                 if ic_host:
                     ipv6_prefix = self._get_ipv6_prefix_for_ic_host(ic_host)
-                    ipv6_subnet = '/64'
+                    ipv6_subnet = "/64"
                     # For the mainnet deployments, the MAC address is calculated based on the number of guests on
                     # the physical host, so we need to enumerate and count the guests on each physical host.
                     # Assign a unique ID to each physical host. This will be a serial number if

@@ -126,7 +126,18 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    prepare_diskimage(gpt_entries, out_file)
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+
+    if args.dflate:
+        disk_image = os.path.join(tmpdir, "disk.img")
+    else:
+        # Disk optimization.  If no dflate program is specified, we can
+        # simply attack the target file (out_file) directly, saving gigabytes
+        # of writes to disk.
+        disk_image = out_file
+    prepare_diskimage(gpt_entries, disk_image)
 
     for entry in gpt_entries:
         # Skip over any partitions starting with "B_". These are empty in our
@@ -150,7 +161,22 @@ def main():
 
     # Provide additional space for vda10, the final partition, for immediate QEMU use
     if args.expanded_size:
-        subprocess.run(["truncate", "--size", args.expanded_size, out_file], check=True)
+        subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
+
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    if args.dflate:
+        subprocess.run(
+            [
+                args.dflate,
+                "--input",
+                disk_image,
+                "--output",
+                out_file,
+            ],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

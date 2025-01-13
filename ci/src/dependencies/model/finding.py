@@ -160,7 +160,12 @@ class Finding:
                 self.owning_teams.append(team)
         self.owning_teams.sort()
 
-    def __copy_vulnerability_notes_and_update_risk(self, vulnerabilities: List[Vulnerability], determine_risk_from_vulnerabilities: bool, related_finding_risk: Optional[SecurityRisk] = None):
+    def __copy_vulnerability_notes_and_update_risk(
+        self,
+        vulnerabilities: List[Vulnerability],
+        determine_risk_from_vulnerabilities: bool,
+        related_finding_risk: Optional[SecurityRisk] = None,
+    ):
         if determine_risk_from_vulnerabilities:
             self.risk = SecurityRisk.INFORMATIONAL
 
@@ -173,18 +178,22 @@ class Finding:
                 if determine_risk_from_vulnerabilities:
                     vulnerability_risk = cur_vulnerability.get_risk()
                     # risk assessment might be only done on finding level and not on vulnerability level => if vulnerability doesn't have a risk, fallback to risk of finding
-                    self.risk = SecurityRisk.new_risk_from(self.risk, vulnerability_risk if vulnerability_risk else related_finding_risk)
+                    self.risk = SecurityRisk.new_risk_from(
+                        self.risk, vulnerability_risk if vulnerability_risk else related_finding_risk
+                    )
             else:
                 self.risk = None
 
-    def update_risk_and_vulnerabilities_for_same_finding(self, same_finding: 'Finding'):
+    def update_risk_and_vulnerabilities_for_same_finding(self, same_finding: "Finding"):
         if self.id() != same_finding.id():
-            raise RuntimeError(f"update_risk_and_vulnerabilities_for_same_finding called with finding with different id {self.id()} != {same_finding.id()}")
+            raise RuntimeError(
+                f"update_risk_and_vulnerabilities_for_same_finding called with finding with different id {self.id()} != {same_finding.id()}"
+            )
         old_vulnerabilities = self.vulnerabilities
         self.vulnerabilities = same_finding.vulnerabilities
         self.__copy_vulnerability_notes_and_update_risk(old_vulnerabilities, False)
 
-    def update_risk_and_vulnerabilities_for_related_findings(self, related_findings: List['Finding']):
+    def update_risk_and_vulnerabilities_for_related_findings(self, related_findings: List["Finding"]):
         if len(related_findings) == 0:
             return
 
@@ -192,8 +201,14 @@ class Finding:
         previous_vulnerabilities_by_id = {}
         related_finding_risk = related_findings[0].risk
         for finding in related_findings:
-            if self.repository != finding.repository or self.scanner != finding.scanner or self.vulnerable_dependency.id != finding.vulnerable_dependency.id:
-                raise RuntimeError(f"update_risk_and_vulnerabilities_for_related_findings called with finding with different id components {self.id()} != {finding.id()}")
+            if (
+                self.repository != finding.repository
+                or self.scanner != finding.scanner
+                or self.vulnerable_dependency.id != finding.vulnerable_dependency.id
+            ):
+                raise RuntimeError(
+                    f"update_risk_and_vulnerabilities_for_related_findings called with finding with different id components {self.id()} != {finding.id()}"
+                )
 
             # if all related findings have the same risk, we use this as fallback if a vulnerability doesn't have a risk set
             if finding.risk != related_finding_risk:
@@ -220,4 +235,6 @@ class Finding:
                     # first time we see this vul, remember it
                     previous_vulnerabilities_by_id[vulnerability.id] = vulnerability
 
-        self.__copy_vulnerability_notes_and_update_risk(list(previous_vulnerabilities_by_id.values()), True, related_finding_risk)
+        self.__copy_vulnerability_notes_and_update_risk(
+            list(previous_vulnerabilities_by_id.values()), True, related_finding_risk
+        )

@@ -35,7 +35,12 @@ async fn main() -> Result<()> {
     fs::copy(cli.input, &cli.output)?;
     fs::set_permissions(&cli.output, Permissions::from_mode(0o600))?;
 
-    let mut target = ExtPartition::open(cli.output, cli.index).await?;
+    let mut target = ExtPartition::open(cli.output, cli.index)
+        .await
+        .context(format!(
+            "Failed to open partition file {}",
+            temp_file.clone().display()
+        ))?;
 
     let contexts = cli
         .file_contexts
@@ -70,10 +75,23 @@ async fn main() -> Result<()> {
             })
             .transpose()?;
 
-        target.write_file(source_file, install_target).await?;
+        target
+            .write_file(source_file, install_target)
+            .await
+            .context(format!(
+                "Could not write file {} to {} in partition file {}",
+                source_file.display(),
+                install_target.display(),
+                temp_file.clone().display(),
+            ))?;
         target
             .fixup_metadata(install_target, inode_mode, context)
-            .await?;
+            .await
+            .context(format!(
+                "Could not fix up metadata of file {} in partition file {}",
+                install_target.display(),
+                temp_file.clone().display(),
+            ))?;
     }
 
     // Close data partition

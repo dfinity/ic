@@ -8,7 +8,6 @@ use canister_test::Wasm;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
 };
-use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -76,7 +75,6 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 use num_traits::ToPrimitive;
-use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
@@ -211,33 +209,30 @@ pub fn update(
     }
 }
 
-pub fn update_with_sender<Payload, ReturnType, Witness>(
+pub fn update_with_sender<Payload, ReturnType>(
     machine: &StateMachine,
     canister_target: CanisterId,
     method_name: &str,
-    _: Witness,
-    payload: Payload::Inner,
+    payload: Payload,
     sender: PrincipalId,
-) -> Result<ReturnType::Inner, String>
+) -> Result<ReturnType, String>
 where
-    Payload: IntoWire + NewType,
-    Witness: FnOnce(ReturnType, Payload::Inner) -> (ReturnType::Inner, Payload),
-    ReturnType: FromWire + NewType,
+    Payload: CandidType,
+    ReturnType: CandidType + for<'de> serde::Deserialize<'de>,
 {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
-    let payload = Payload::from_inner(payload);
     let result = machine
         .execute_ingress_as(
             sender,
             canister_target,
             method_name,
-            payload.into_bytes().unwrap(),
+            Encode!(&payload).unwrap(),
         )
         .map_err(|e| e.to_string())?;
 
     match result {
-        WasmResult::Reply(v) => FromWire::from_bytes(v).map(|x: ReturnType| x.into_inner()),
+        WasmResult::Reply(v) => Decode!(&v, ReturnType).map_err(|e| e.to_string()),
         WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
     }
 }
@@ -341,7 +336,6 @@ pub fn set_controllers(
         machine,
         CanisterId::ic_00(),
         "update_settings",
-        candid_one,
         UpdateSettingsArgs {
             canister_id: target.into(),
             settings: CanisterSettingsArgsBuilder::new()
@@ -364,8 +358,7 @@ pub fn get_controllers(
         machine,
         CanisterId::ic_00(),
         "canister_status",
-        candid_one,
-        &CanisterIdRecord::from(target),
+        CanisterIdRecord::from(target),
         sender,
     )
     .unwrap();
@@ -383,8 +376,7 @@ pub fn get_canister_status(
         machine,
         canister_target,
         "canister_status",
-        candid_one,
-        &CanisterIdRecord::from(target),
+        CanisterIdRecord::from(target),
         sender,
     )
 }
@@ -403,8 +395,7 @@ pub fn get_canister_status_from_root(
         machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
-        &CanisterIdRecord::from(target),
+        CanisterIdRecord::from(target),
         PrincipalId::new_anonymous(),
     )
     .unwrap()
@@ -420,7 +411,7 @@ pub fn set_up_universal_canister(machine: &StateMachine, cycles: Option<Cycles>)
         .install_wasm_in_mode(
             canister_id,
             CanisterInstallMode::Install,
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes(),
             vec![],
         )
         .unwrap();
@@ -998,7 +989,7 @@ pub fn nns_disburse_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    amount_e8s: u64,
+    amount_e8s: Option<u64>,
     to_account: Option<AccountIdentifier>,
 ) -> ManageNeuronResponse {
     manage_neuron(
@@ -1006,7 +997,8 @@ pub fn nns_disburse_neuron(
         sender,
         neuron_id,
         ManageNeuronCommandRequest::Disburse(Disburse {
-            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            amount: amount_e8s
+                .map(|amount_e8s| manage_neuron::disburse::Amount { e8s: amount_e8s }),
             to_account: to_account.map(|account| account.into()),
         }),
     )
@@ -1032,6 +1024,22 @@ pub fn nns_increase_dissolve_delay(
             additional_dissolve_delay_seconds,
         }
         .into_operation(),
+    )
+}
+
+pub fn nns_start_dissolving(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> Result<
+    nns_governance_pb::manage_neuron_response::ConfigureResponse,
+    nns_governance_pb::GovernanceError,
+> {
+    nns_configure_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
     )
 }
 
@@ -1711,14 +1719,8 @@ pub fn icrc1_transfer(
     sender: PrincipalId,
     args: TransferArg,
 ) -> Result<BlockIndex, String> {
-    let result: Result<Result<Nat, TransferError>, String> = update_with_sender(
-        machine,
-        ledger_id,
-        "icrc1_transfer",
-        candid_one,
-        args,
-        sender,
-    );
+    let result: Result<Result<Nat, TransferError>, String> =
+        update_with_sender(machine, ledger_id, "icrc1_transfer", args, sender);
 
     let result = result.unwrap();
     match result {
@@ -1767,7 +1769,6 @@ pub fn sns_claim_staked_neuron(
         machine,
         governance_canister_id,
         "manage_neuron",
-        candid_one,
         sns_pb::ManageNeuron {
             subaccount: to_subaccount.to_vec(),
             command: Some(sns_pb::manage_neuron::Command::ClaimOrRefresh(
@@ -1844,7 +1845,6 @@ pub fn sns_increase_dissolve_delay(
         machine,
         governance_canister_id,
         "manage_neuron",
-        candid_one,
         payload,
         sender,
     )
@@ -1879,7 +1879,6 @@ pub fn sns_make_proposal(
         machine,
         sns_governance_canister_id,
         "manage_neuron",
-        candid_one,
         sns_pb::ManageNeuron {
             subaccount: sub_account.to_vec(),
             command: Some(sns_pb::manage_neuron::Command::MakeProposal(proposal)),

@@ -167,7 +167,7 @@ impl<'a> WriteBuffer<'a> {
 /// operation. This allows us to simplify canister state management: we can
 /// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PageDelta(IntMap<Page>);
+pub(crate) struct PageDelta(IntMap<PageIndex, Page>);
 
 impl PageDelta {
     /// Gets content of the page at the specified index.
@@ -176,21 +176,19 @@ impl PageDelta {
     /// allocating pages in this `PageDelta`. It serves as a witness that
     /// the contents of the page is still valid.
     fn get_page(&self, page_index: PageIndex) -> Option<&PageBytes> {
-        self.0.get(page_index.get()).map(|p| p.contents())
+        self.0.get(&page_index).map(|p| p.contents())
     }
 
     /// Returns a reference to the page at the specified index.
     fn get_page_ref(&self, page_index: PageIndex) -> Option<&Page> {
-        self.0.get(page_index.get())
+        self.0.get(&page_index)
     }
 
     /// Returns (lower, upper), where:
     /// - lower is the largest index/page smaller or equal to the given page index.
     /// - upper is the smallest index/page larger or equal to the given page index.
     fn bounds(&self, page_index: PageIndex) -> Bounds<PageIndex, Page> {
-        let (lower, upper) = self.0.bounds(page_index.get());
-        let map_index = |(k, v)| (PageIndex::new(k), v);
-        (lower.map(map_index), upper.map(map_index))
+        self.0.bounds(&page_index)
     }
 
     /// Modifies this delta in-place by applying all the entries in `rhs` to it.
@@ -199,8 +197,8 @@ impl PageDelta {
     }
 
     /// Enumerates all the pages in this delta.
-    fn iter(&self) -> impl Iterator<Item = (PageIndex, &'_ Page)> {
-        self.0.iter().map(|(idx, page)| (PageIndex::new(idx), page))
+    fn iter(&self) -> impl Iterator<Item = (&PageIndex, &'_ Page)> {
+        self.0.iter()
     }
 
     /// Returns true if the page delta contains no pages.
@@ -210,8 +208,8 @@ impl PageDelta {
 
     /// Returns the largest page index in the page delta.
     /// If the page delta is empty, then it returns `None`.
-    fn max_page_index(&self) -> Option<PageIndex> {
-        self.0.max_key().map(PageIndex::from)
+    fn max_page_index(&self) -> Option<&PageIndex> {
+        self.0.max_key()
     }
 
     /// Returns the number of pages in the page delta.
@@ -225,7 +223,7 @@ where
     I: IntoIterator<Item = (PageIndex, Page)>,
 {
     fn from(delta: I) -> Self {
-        Self(delta.into_iter().map(|(i, p)| (i.get(), p)).collect())
+        Self(delta.into_iter().collect())
     }
 }
 
@@ -468,6 +466,10 @@ pub struct PageMap {
 }
 
 impl PageMap {
+    pub fn is_loaded(&self) -> bool {
+        self.storage.is_loaded()
+    }
+
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.
@@ -498,12 +500,12 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        storage_layout: &dyn StorageLayout,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
-            storage: Storage::load(storage_layout)?,
+            storage: Storage::lazy_load(storage_layout)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -558,7 +560,7 @@ impl PageMap {
         self.page_allocator.serialize_page_delta(
             pages
                 .iter()
-                .map(|index| (*index, self.page_delta.get_page_ref(*index).unwrap())),
+                .map(|index| (index, self.page_delta.get_page_ref(*index).unwrap())),
         )
     }
 
@@ -648,7 +650,7 @@ impl PageMap {
     }
 
     /// Returns the iterator over delta pages in this `PageMap`
-    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
+    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (&PageIndex, &PageBytes)> + '_ {
         self.page_delta
             .iter()
             .map(|(index, page)| (index, page.contents()))
@@ -695,7 +697,7 @@ impl PageMap {
             if result_range.end < max_range.end {
                 let (_, upper_bound) = page_delta.bounds(result_range.end);
                 match upper_bound {
-                    Some((key, page)) if key < max_range.end => {
+                    Some((&key, page)) if key < max_range.end => {
                         if include {
                             let end = PageIndex::new(key.get() + 1);
                             instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
@@ -725,7 +727,7 @@ impl PageMap {
                 let (lower_bound, _) =
                     page_delta.bounds(PageIndex::new(result_range.start.get() - 1));
                 match lower_bound {
-                    Some((key, page)) if key >= max_range.start => {
+                    Some((&key, page)) if key >= max_range.start => {
                         let end = PageIndex::new(key.get() + 1);
                         if include {
                             instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
@@ -845,7 +847,7 @@ impl PageMap {
     }
 
     pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {
-        self.page_delta.iter().map(|(index, _)| index).collect()
+        self.page_delta.iter().map(|(index, _)| *index).collect()
     }
 
     /// Whether there are any page deltas
@@ -886,6 +888,7 @@ impl PageMap {
         assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
         assert!(checkpointed_page_map.unflushed_delta.is_empty());
+        assert!(!checkpointed_page_map.is_loaded());
         // Keep the page allocators of the states disjoint.
     }
 
@@ -932,10 +935,10 @@ impl PageMap {
         let mut last_applied_index: Option<PageIndex> = None;
         let num_host_pages = self.num_host_pages() as u64;
         for (index, _) in page_delta.iter() {
-            debug_assert!(self.page_delta.0.get(index.get()).is_some());
-            assert!(index < num_host_pages.into());
+            debug_assert!(self.page_delta.0.get(index).is_some());
+            assert!(*index < num_host_pages.into());
 
-            if last_applied_index.is_some() && last_applied_index.unwrap() >= index {
+            if last_applied_index.is_some() && last_applied_index.unwrap() >= *index {
                 continue;
             }
 

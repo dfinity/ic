@@ -24,7 +24,7 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,
@@ -237,8 +237,19 @@ fn compile_inner(
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
-    let serialized_module =
-        SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
+
+    let is_wasm64 = module
+        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
+        .map_or(false, |export| {
+            export.memory().map_or(false, |mem| mem.is_64())
+        });
+
+    let serialized_module = SerializedModule::new(
+        &module,
+        instrumentation_output,
+        wasm_validation_details,
+        is_wasm64,
+    )?;
     Ok((
         instance_pre,
         CompilationResult {

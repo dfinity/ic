@@ -9,10 +9,9 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata},
-        manage_neuron,
+        governance::{MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
-            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+            self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
         manage_neuron_response::{
             self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
@@ -38,7 +37,7 @@ use std::{
 
 pub mod environment_fixture;
 
-const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
 /// Constructs a neuron id from a principal_id and memo. This is a
 /// convenient helper method in tests.
@@ -433,6 +432,13 @@ impl GovernanceCanisterFixture {
         self
     }
 
+    /// Ensures that SNS upgrade features are not going to produce any external calls that are
+    /// orthogonal to this test scenario, as they would require setting up mock responses.
+    pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
+        assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
     pub fn capture_state(&mut self) -> &mut Self {
         self.initial_state = Some(self.get_state());
         self
@@ -465,8 +471,8 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn heartbeat(&mut self) -> &mut Self {
-        self.governance.heartbeat().now_or_never();
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
+        self.governance.run_periodic_tasks().now_or_never();
         self
     }
 
@@ -740,7 +746,7 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn get_sale_canister_id(&self) -> PrincipalId {
+    pub fn get_swap_canister_id(&self) -> PrincipalId {
         self.governance
             .proto
             .swap_canister_id
@@ -854,7 +860,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
-                migrated_root_wasm_memory_limit: Some(true),
+                deployed_version: Some(Version::default()),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),
@@ -917,7 +923,8 @@ impl GovernanceCanisterFixtureBuilder {
                 sns_ledger,
                 icp_ledger,
                 Box::new(self.cmc_fixture),
-            ),
+            )
+            .enable_test_features(),
             initial_state: None,
         };
         governance.capture_state();
@@ -1074,11 +1081,6 @@ impl GovernanceCanisterFixtureBuilder {
 
         // Set up the canister fixture with our neuron.
         self.add_neuron(neuron)
-    }
-
-    pub fn set_migrated_root_wasm_memory_limit(mut self, value: bool) -> Self {
-        self.governance.migrated_root_wasm_memory_limit = Some(value);
-        self
     }
 }
 

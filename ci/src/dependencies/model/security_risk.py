@@ -10,7 +10,7 @@ class SecurityRisk(Enum):
     CRITICAL = 5
 
     @staticmethod
-    def of(word: Optional[str]) -> Optional['SecurityRisk']:
+    def of(word: Optional[str]) -> Optional["SecurityRisk"]:
         if word is None:
             return None
         word = word.strip().upper()
@@ -23,7 +23,7 @@ class SecurityRisk(Enum):
         return None
 
     @staticmethod
-    def new_risk_from(risk_a: Optional['SecurityRisk'], risk_b: Optional['SecurityRisk']):
+    def new_risk_from(risk_a: Optional["SecurityRisk"], risk_b: Optional["SecurityRisk"]):
         if risk_a is None or risk_b is None:
             # if one of the risks is undetermined, new risk should be undetermined
             return None

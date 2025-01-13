@@ -4,17 +4,17 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config",
+    "//rs/ic_os/config_types",
+    "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
-    "@crate_index//:hex",
+    "@crate_index//:macaddr",
     "@crate_index//:ping",
     "@crate_index//:rayon",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
-    "@crate_index//:sha2",
 ]
 
 rust_library(
@@ -24,7 +24,6 @@ rust_library(
     ),
     aliases = {},
     crate_name = "network",
-    edition = "2021",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )

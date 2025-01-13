@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -22,7 +22,7 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-registry-transport = { path = "../../registry/transport" }
 ic-sys = { path = "../../sys" }
 ic-test-identity = { path = "../../test_utilities/identity" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 prost = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

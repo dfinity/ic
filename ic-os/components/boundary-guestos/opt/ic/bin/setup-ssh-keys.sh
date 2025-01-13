@@ -17,5 +17,3 @@ fi
 cp -ar /etc/ssh/* /run/ic-node/etc/ssh/
 cp /boot/config/ssh/* /run/ic-node/etc/ssh/
 mount --bind /run/ic-node/etc/ssh /etc/ssh
-# Fix security labels
-restorecon -v -r /etc/ssh

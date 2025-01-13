@@ -124,7 +124,9 @@ def test_on_scan_job_succeeded_notify_if_enabled(selected_job_type):
     notify_on_scan_job_succeeded = {}
     for job_type in ScannerJobType:
         notify_on_scan_job_succeeded[job_type] = job_type == selected_job_type
-    config = NotificationConfig(notify_on_scan_job_succeeded=notify_on_scan_job_succeeded, notification_handlers=[handler])
+    config = NotificationConfig(
+        notify_on_scan_job_succeeded=notify_on_scan_job_succeeded, notification_handlers=[handler]
+    )
     notifier = NotificationCreator(config)
 
     notifier.on_scan_job_succeeded("scanner_id", selected_job_type, "job_id")
@@ -145,7 +147,9 @@ def test_on_scan_job_succeeded_dont_notify_if_disabled(selected_job_type):
     notify_on_scan_job_succeeded = {}
     for job_type in ScannerJobType:
         notify_on_scan_job_succeeded[job_type] = job_type != selected_job_type
-    config = NotificationConfig(notify_on_scan_job_succeeded=notify_on_scan_job_succeeded, notification_handlers=[handler])
+    config = NotificationConfig(
+        notify_on_scan_job_succeeded=notify_on_scan_job_succeeded, notification_handlers=[handler]
+    )
     notifier = NotificationCreator(config)
 
     notifier.on_scan_job_succeeded("scanner_id", selected_job_type, "job_id")
@@ -347,7 +351,9 @@ def test_on_finding_created_or_updated_notify_if_risk_not_set_and_patch_set_if_e
     finding = FINDING_WITH_RISK_NO_PATCH_YES
     handler = MockNotificationHandler()
     config = NotificationConfig(
-        notify_on_finding_risk_assessment_needed=True, notify_on_finding_patch_version_available=True, notification_handlers=[handler]
+        notify_on_finding_risk_assessment_needed=True,
+        notify_on_finding_patch_version_available=True,
+        notification_handlers=[handler],
     )
     notifier = NotificationCreator(config)
 
@@ -379,6 +385,7 @@ def test_on_finding_deleted():
     assert not event.finding_has_patch_version
     assert event.finding_was_resolved
 
+
 def test_on_finding_deleted_dont_notify_if_disabled():
     handler = MockNotificationHandler()
     notifier = NotificationCreator(NotificationConfig(notify_on_finding_deleted=False, notification_handlers=[handler]))
@@ -386,6 +393,7 @@ def test_on_finding_deleted_dont_notify_if_disabled():
     notifier.on_finding_deleted(FINDING_WITH_RISK_NO_PATCH_YES)
 
     assert len(handler.events) == 0
+
 
 def test_send_notification_to_app_owners():
     handler = MockNotificationHandler()
@@ -398,8 +406,8 @@ def test_send_notification_to_app_owners():
     assert isinstance(event, AppOwnerNotificationEvent)
     assert event.message == "some message"
 
-class MockNotificationHandler(NotificationHandler):
 
+class MockNotificationHandler(NotificationHandler):
     def __init__(self):
         self.events = []
 

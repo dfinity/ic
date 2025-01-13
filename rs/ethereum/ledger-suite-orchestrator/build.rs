@@ -17,7 +17,7 @@ fn main() {
                 // The included WASMS binary for ledger, index and archive canisters are built by BAZEL tasks
                 // which would need here to be somehow spawned by Cargo. To avoid this, we just use a wasm binary that
                 // happens to be already checked-in in the repo.
-                .join("../../rosetta-api/icrc1/wasm/ic-icrc1-archive.wasm.gz")
+                .join("../../ledger_suite/icrc1/wasm/ic-icrc1-archive.wasm.gz")
                 .canonicalize()
                 .expect("failed to canonicalize a path"),
         };

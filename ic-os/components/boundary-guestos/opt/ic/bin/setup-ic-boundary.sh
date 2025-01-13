@@ -5,7 +5,6 @@ source '/opt/ic/bin/helpers.shlib'
 
 readonly SERVICE_NAME='ic-boundary'
 
-readonly IC_BOUNDARY_CONFIG="${BOOT_DIR}/ic_boundary.conf"
 readonly IC_BOUNDARY_RATELIMITS="${BOOT_DIR}/canister-ratelimit.yml"
 
 readonly NNS_CONFIG="${BOOT_DIR}/nns.conf"
@@ -41,15 +40,6 @@ function read_variables() {
         err "missing NNS configuration value(s): $(cat "${NNS_CONFIG}")"
         exit 1
     fi
-
-    if [ -f "${IC_BOUNDARY_CONFIG}" ]; then
-        while IFS="=" read -r key value; do
-            case "${key}" in
-                "max_concurrency") MAX_CONCURRENCY+=("${value}") ;;
-                "shed_ewma_param") SHED_EWMA_PARAM+=("${value}") ;;
-            esac
-        done <"${IC_BOUNDARY_CONFIG}"
-    fi
 }
 
 function generate_config() {
@@ -60,12 +50,22 @@ function generate_config() {
 
     # Generate Configuration
     cat >"${ENV_FILE}" <<EOF
-NNS_URL=${NNS_URL}
-CACHE_SIZE=1073741824
-CACHE_ITEM_MAX_SIZE=10485760
-CACHE_TTL=1
-MAX_CONCURRENCY=${MAX_CONCURRENCY:-}
-SHED_EWMA_PARAM=${SHED_EWMA_PARAM:-}
+LISTEN_HTTP_PORT="9000"
+NETWORK_HTTP_CLIENT_COUNT="2"
+OBS_METRICS_ADDR="[::]:9324"
+OBS_LOG_STDOUT="true"
+OBS_LOG_FAILED_REQUESTS_ONLY="true"
+HTTP_CLIENT_TIMEOUT_CONNECT="3s"
+NFTABLES_SYSTEM_REPLICAS_PATH="/run/ic-node/etc/nftables/system_replicas.ruleset"
+RETRY_UPDATE_CALL="true"
+RATE_LIMIT_PER_SECOND_PER_SUBNET="1000"
+RATE_LIMIT_GENERIC_FILE="/run/ic-node/etc/ic-boundary/canister-ratelimit.yml"
+REGISTRY_NNS_URLS="${NNS_URL}"
+REGISTRY_NNS_PUB_KEY_PEM="/run/ic-node/etc/default/nns_public_key.pem"
+REGISTRY_LOCAL_STORE_PATH="/var/opt/registry/store"
+CACHE_SIZE="1GB"
+CACHE_MAX_ITEM_SIZE="10MB"
+CACHE_TTL="1s"
 EOF
 }
 

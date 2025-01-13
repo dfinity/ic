@@ -7,7 +7,6 @@ set -e
 # This script is executed by HostOS right before booting GuestOS VM.
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename "$0")[$$]"

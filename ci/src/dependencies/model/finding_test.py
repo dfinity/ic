@@ -252,8 +252,11 @@ def test_update_risk_and_vulnerabilities_for_related_findings_set_risk_from_vul(
         "repo",
         "scanner",
         Dependency("dep_id", "dep_name", "dep_version1"),
-        [Vulnerability("v1", "vn1", "vd1", -1, "low"), Vulnerability("v2", "vn2", "vd2", -1, "medium"),
-         Vulnerability("v3", "vn3", "vd3", -1, "critical")],
+        [
+            Vulnerability("v1", "vn1", "vd1", -1, "low"),
+            Vulnerability("v2", "vn2", "vd2", -1, "medium"),
+            Vulnerability("v3", "vn3", "vd3", -1, "critical"),
+        ],
         [],
         [],
         [],
@@ -331,7 +334,6 @@ def test_update_risk_and_vulnerabilities_for_related_findings_set_risk_from_find
     assert finding.risk == SecurityRisk.LOW
     assert len(finding.vulnerabilities) == 1
     assert finding.vulnerabilities[0].risk_note == " "
-
 
 
 def test_update_risk_and_vulnerabilities_for_related_findings_reset_risk_if_new_vul_appears():

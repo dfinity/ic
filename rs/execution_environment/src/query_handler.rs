@@ -33,7 +33,7 @@ use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
+    CanisterId, NumInstructions, PrincipalId, SubnetId,
 };
 use prometheus::Histogram;
 use serde::Serialize;
@@ -53,6 +53,9 @@ pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
+
+const DISTRIKT_SUBNET_PRINCIPAL: &str =
+    "shefu-t3kr5-t5q3w-mqmdq-jabyv-vyvtf-cyyey-3kmo4-toyln-emubw-4qe";
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -100,6 +103,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -139,6 +143,7 @@ impl InternalHttpQueryHandler {
     pub fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -152,6 +157,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -204,6 +210,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.allowed_viewers_feature,
                     );
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
@@ -247,11 +254,16 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
+        // We apply the (rather high) subnet soft limit for callbacks because the
+        // instruction limit for the whole composite query tree imposes a much lower
+        // implicit bound anyway.
+        let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
+            self.own_subnet_id,
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -259,6 +271,8 @@ impl InternalHttpQueryHandler {
             state.clone(),
             data_certificate,
             subnet_available_memory,
+            subnet_available_callbacks,
+            self.config.canister_guaranteed_callback_quota as u64,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
@@ -290,14 +304,11 @@ impl InternalHttpQueryHandler {
     }
 }
 
-// TODO(EXC-1678): remove after release.
-/// Feature flag to enable/disable allowed viewers for canister log visibility.
-const ALLOWED_VIEWERS_ENABLED: bool = false;
-
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
+    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -309,7 +320,7 @@ fn fetch_canister_logs(
 
     let log_visibility = match canister.log_visibility() {
         // If the feature is disabled override `AllowedViewers` with default value.
-        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
             &LogVisibilityV2::default()
         }
         other => other,

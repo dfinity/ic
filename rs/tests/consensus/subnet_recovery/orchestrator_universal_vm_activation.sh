@@ -1,8 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 ##########################################################################################
 ############ Configures Universal VM to run static file serving on HTTP ##################
 ##########################################################################################
 
+set -euo pipefail
+
+# set up registry, read by orchestrator tests
 mkdir web
 cd web
 cp /config/registry.tar .

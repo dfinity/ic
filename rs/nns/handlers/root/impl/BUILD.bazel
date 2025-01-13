@@ -10,7 +10,7 @@ exports_files(["canister/root.did"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -30,13 +30,13 @@ BASE_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/transport",
     "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -54,7 +54,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "//rs/rust_canisters/dfn_macro",
+    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -128,7 +128,7 @@ rust_library(
 
 rust_test(
     name = "root_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [":root--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -200,25 +200,27 @@ rust_ic_test_suite(
     data = [
         ":root-canister",
         ":upgrade-test-canister",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/gtc:genesis-token-canister",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/registry/canister:registry-canister",
-        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],

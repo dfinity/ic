@@ -427,8 +427,13 @@ pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
 
         // Call instructions are of cost 20. Validated in benchmarks.
         // The cost is adjusted to 5 and 10 after benchmarking with real canisters.
-        Operator::Call { .. } | Operator::ReturnCall { .. } => 5,
-        Operator::CallIndirect { .. } | Operator::ReturnCallIndirect { .. } => 10,
+        Operator::Call { .. } => 5,
+        Operator::CallIndirect { .. } => 10,
+
+        // ReturnCall instructions are on average approx. 1.5 times faster than Call
+        // instructions (shown by relative benchmarks).
+        Operator::ReturnCall { .. } => 3,
+        Operator::ReturnCallIndirect { .. } => 6,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
@@ -803,6 +808,18 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
+    }
+
+    if let Some(name_section) = module.name_section.as_mut() {
+        for (index, _name) in &mut name_section.function_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.local_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.label_names {
+            *index = f(*index);
+        }
     }
 }
 

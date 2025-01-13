@@ -11,7 +11,7 @@ backoff = { workspace = true }
 byte-unit = "4.0.14"
 candid = { workspace = true }
 chrono = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 console = "0.11"
 futures = { workspace = true }
 hex = { workspace = true }

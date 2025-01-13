@@ -111,14 +111,6 @@
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}</td>
                     </tr>
-                    <tr id="eth-helper-contract-address">
-                        <th>ETH helper contract address</th>
-                        <td>{% call etherscan_address_link(eth_helper_contract_address) %}</td>
-                    </tr>
-                    <tr id="erc20-helper-contract-address">
-                        <th>ERC20 helper contract address</th>
-                        <td>{% call etherscan_address_link(erc20_helper_contract_address) %}</td>
-                    </tr>
                     <tr id="cketh-ledger-canister-id">
                         <th>ckETH ledger canister ID</th>
                         <td><code>{{ cketh_ledger_id }}</code></td>
@@ -166,16 +158,6 @@
                         <td>{% call etherscan_block_link(last_observed_block.unwrap()) %}</td>
                     </tr>
                     {%- endif %}
-                    <tr id="last-eth-synced-block-number">
-                        <th>Last ETH synced block number</th>
-                        <td>{% call etherscan_block_link(last_eth_synced_block) %}</td>
-                    </tr>
-                    {% if last_erc20_synced_block.is_some() -%}
-                    <tr id="last-erc20-synced-block-number">
-                        <th>Last ERC20 synced block number</th>
-                        <td>{% call etherscan_block_link(last_erc20_synced_block.unwrap()) %}</td>
-                    </tr>
-                    {%- endif %}
                     {% if !skipped_blocks.is_empty() -%}
                     {% for (contract_address, blocks) in skipped_blocks -%}
                     <tr id="skipped-blocks-{{ contract_address }}">
@@ -193,6 +175,29 @@
                 </tbody>
             </table>
 
+            <h3 id="helper-smart-contracts">Helper Smart Contracts</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Deposit</th>
+                    <th>Address</th>
+                    <th>Status</th>
+                    <th>Last synced block number</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for (id, scraping_state) in log_scrapings.iter() -%}
+                {% if scraping_state.contract_address().is_some() %}
+                <tr id="helper-smart-contract-{{ id|lower_alphanumeric }}">
+                    <td>{{ id }}</td>
+                    <td>{% call etherscan_address_link(scraping_state.contract_address().unwrap()) %}</td>
+                    <td>{{ scraping_state.status() }}</td>
+                    <td><code>{% call etherscan_block_link(scraping_state.last_scraped_block_number()) %}</code></td>
+                </tr>
+                {% endif %}
+                {%- endfor %}
+                </tbody>
+            </table>
 
             {% if !supported_ckerc20_tokens.is_empty() %}
             <h3 id="supported-ckerc20-tokens">Supported ckERC20 tokens</h3>
@@ -249,7 +254,7 @@
             {% endif %}
 
 
-            {% if !minted_events.is_empty() %}
+            {% if !minted_events_table.is_empty() %}
             <h3 id="minted-events">Minted events</h3>
             <table>
                 <thead>
@@ -264,17 +269,18 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for event in minted_events %}
+                    {% for event in minted_events_table.current_page %}
                     <tr>
                         <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash().to_string()) %}</td>
                         <td class="numeric">{{ event.deposit_event.log_index() }}</td>
                         <td>{% call etherscan_address_link(event.deposit_event.from_address().to_string()) %}</td>
                         <td class="numeric">{{ event.token_symbol }}</td>
                         <td class="numeric">{{ event.deposit_event.value() }}</td>
-                        <td><code>{{ event.deposit_event.principal() }}</code></td>
+                        <td><code>{{ event.deposit_event.beneficiary() }}</code></td>
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}
+                    {% if minted_events_table.has_more_than_one_page() %}{{ minted_events_table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
@@ -353,7 +359,7 @@
             </table>
             {% endif %}
 
-            {% if !finalized_transactions.is_empty() %}
+            {% if !finalized_transactions_table.is_empty() %}
             <h3 id="finalized-transactions">Finalized Transactions ckETH → ETH and ckERC20 → ERC20</h3>
             <table>
                 <thead>
@@ -369,7 +375,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                {% for tx in finalized_transactions %}
+                {% for tx in finalized_transactions_table.current_page %}
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
@@ -381,11 +387,12 @@
                     <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
+                {% if finalized_transactions_table.has_more_than_one_page() %}{{ finalized_transactions_table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
 
-            {% if !reimbursed_transactions.is_empty() %}
+            {% if !reimbursed_transactions_table.is_empty() %}
             <h3 id="reimbursed-transactions">Reimbursed Transactions</h3>
             <table>
                 <thead>
@@ -399,7 +406,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for r in reimbursed_transactions %}
+                    {% for r in reimbursed_transactions_table.current_page %}
                     {% match r %}
                     {% when DashboardReimbursedTransaction::Reimbursed with {cketh_ledger_burn_index, reimbursed_in_block, reimbursed_amount, token_symbol, transaction_hash} %}
                     <tr>
@@ -421,6 +428,7 @@
                     </tr>
                     {% endmatch %}
                     {% endfor %}
+                    {% if reimbursed_transactions_table.has_more_than_one_page() %}{{ reimbursed_transactions_table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}

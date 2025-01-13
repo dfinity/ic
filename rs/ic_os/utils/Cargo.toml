@@ -5,11 +5,3 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_with = "1.6.2"
-url = { workspace = true }
-
-[dev-dependencies]
-once_cell = "1.8"
-

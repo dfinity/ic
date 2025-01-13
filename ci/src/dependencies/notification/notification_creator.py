@@ -38,7 +38,13 @@ class NotificationCreator(ScannerSubscriber, FindingDataSourceSubscriber, AppOwn
     def on_merge_request_blocked(self, scanner_id: str, job_id: str, merge_request_id: str):
         logging.debug(f"on_merge_request_blocked({scanner_id},{job_id},{merge_request_id})")
         if self.config.notify_on_merge_request_blocked:
-            self.__handle(MRBlockedNotificationEvent(scanner_id, f"{self.config.ci_pipeline_base_url}{job_id}", f"{self.config.merge_request_base_url}{merge_request_id}"))
+            self.__handle(
+                MRBlockedNotificationEvent(
+                    scanner_id,
+                    f"{self.config.ci_pipeline_base_url}{job_id}",
+                    f"{self.config.merge_request_base_url}{merge_request_id}",
+                )
+            )
 
     def on_release_build_blocked(self, scanner_id: str, job_id: str):
         logging.debug(f"on_release_build_blocked({scanner_id},{job_id})")
@@ -48,12 +54,18 @@ class NotificationCreator(ScannerSubscriber, FindingDataSourceSubscriber, AppOwn
     def on_scan_job_succeeded(self, scanner_id: str, job_type: ScannerJobType, job_id: str):
         logging.debug(f"on_scan_job_succeeded({scanner_id},{job_type},{job_id})")
         if self.config.notify_on_scan_job_succeeded[job_type]:
-            self.__handle(ScanJobSucceededNotificationEvent(scanner_id, job_type, f"{self.config.ci_pipeline_base_url}{job_id}"))
+            self.__handle(
+                ScanJobSucceededNotificationEvent(scanner_id, job_type, f"{self.config.ci_pipeline_base_url}{job_id}")
+            )
 
     def on_scan_job_failed(self, scanner_id: str, job_type: ScannerJobType, job_id: str, reason: str):
         logging.debug(f"on_scan_job_failed({scanner_id},{job_type},{job_id},{reason})")
         if self.config.notify_on_scan_job_failed[job_type]:
-            self.__handle(ScanJobFailedNotificationEvent(scanner_id, job_type, f"{self.config.ci_pipeline_base_url}{job_id}", reason))
+            self.__handle(
+                ScanJobFailedNotificationEvent(
+                    scanner_id, job_type, f"{self.config.ci_pipeline_base_url}{job_id}", reason
+                )
+            )
 
     def __is_risk_assessment_needed(self, finding: Finding) -> bool:
         return self.config.notify_on_finding_risk_assessment_needed and finding.risk is None

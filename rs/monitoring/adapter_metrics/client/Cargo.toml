@@ -7,8 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+hyper-util = { workspace = true }
 ic-adapter-metrics-service = { path = "../service" }
-ic-async-utils = { path = "../../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../../http_endpoints/async_utils" }
 prometheus = { workspace = true }
 protobuf = { workspace = true }
 slog = { workspace = true }

@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//rs/certification",
+    "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:chrono",
+    "@crate_index//:ciborium",
+    "@crate_index//:ic-agent",
+    "@crate_index//:reqwest",
+    "@crate_index//:rusqlite",
+    "@crate_index//:serde",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:url",
+]
+
+PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+TEST_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "@crate_index//:actix-rt",
+    "@crate_index//:proptest",
+]
+
+rust_library(
+    name = "ledger_canister_blocks_synchronizer_lib",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ledger_canister_blocks_synchronizer",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ledger_canister_blocks_synchronizer_test",
+    crate = ":ledger_canister_blocks_synchronizer_lib",
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ledger_canister_blocks_synchronizer_test_suite",
+    srcs = glob(["tests/**"]),
+    deps = [":ledger_canister_blocks_synchronizer_lib"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)

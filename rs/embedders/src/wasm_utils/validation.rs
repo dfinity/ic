@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -26,6 +26,8 @@ use crate::{
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
 use wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType};
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -526,6 +528,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "mint_cycles128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "call_cycles_add128",
             vec![(
                 API_VERSION_IC0,
@@ -708,6 +720,13 @@ fn get_valid_exported_functions() -> HashMap<String, FunctionSignature> {
                 return_type: vec![],
             },
         ),
+        (
+            "canister_on_low_wasm_memory",
+            FunctionSignature {
+                param_types: vec![],
+                return_type: vec![],
+            },
+        ),
     ];
 
     valid_exported_functions
@@ -880,6 +899,7 @@ fn validate_export_section(
             "canister_inspect_message",
             "canister_heartbeat",
             "canister_global_timer",
+            "canister_on_low_wasm_memory",
         ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
@@ -1044,6 +1064,29 @@ fn validate_function_section(
             defined: module.functions.len(),
             allowed: max_functions,
         });
+    }
+    Ok(())
+}
+
+// Checks that the initial size of the wasm (heap) memory is not larger than
+// the allowed maximum size. This is only needed for Wasm64, because in Wasm32 this
+// is checked by Wasmtime.
+fn validate_initial_wasm_memory_size(
+    module: &Module,
+    max_wasm_memory_size_in_bytes: NumBytes,
+) -> Result<(), WasmValidationError> {
+    for memory in &module.memories {
+        if memory.memory64 {
+            let declared_size_in_wasm_pages = memory.initial;
+            let allowed_size_in_wasm_pages =
+                max_wasm_memory_size_in_bytes.get() / WASM_PAGE_SIZE as u64;
+            if declared_size_in_wasm_pages > allowed_size_in_wasm_pages {
+                return Err(WasmValidationError::InitialWasm64MemoryTooLarge {
+                    declared_size: declared_size_in_wasm_pages,
+                    allowed_size: allowed_size_in_wasm_pages,
+                });
+            }
+        }
     }
     Ok(())
 }
@@ -1399,7 +1442,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.generate_address_map(false);
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
-    config.wasm_backtrace(false);
+    config.wasm_backtrace(embedders_config.feature_flags.canister_backtrace == FlagStatus::Enabled);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
@@ -1416,8 +1459,9 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.wasm_reference_types(true);
     // The relaxed SIMD instructions are disable for determinism.
     config.wasm_relaxed_simd(false);
-    // Tail calls may be enabled in the future.
-    config.wasm_tail_call(false);
+    config.wasm_tail_call(true);
+    // WebAssembly extended-const proposal is disabled.
+    config.wasm_extended_const(false);
 
     config
         // The maximum size in bytes where a linear memory is considered
@@ -1428,9 +1472,9 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
         // expect to see then the changes will likely need to be coordinated
         // with a change in how we create the memories in the implementation
         // of `wasmtime::MemoryCreator`.
-        .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .memory_reservation(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
-        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
+        .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(MAX_WASM_STACK_SIZE);
     config
 }
@@ -1447,11 +1491,8 @@ fn can_compile(
 ) -> Result<(), WasmValidationError> {
     let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
-    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
-        WasmValidationError::WasmtimeValidation(format!(
-            "wasmtime::Module::validate() failed with {}",
-            err
-        ))
+    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|_err| {
+        WasmValidationError::WasmtimeValidation("wasmtime::Module::validate() failed".into())
     })
 }
 
@@ -1511,6 +1552,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
+    validate_initial_wasm_memory_size(&module, config.max_wasm_memory_size)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((

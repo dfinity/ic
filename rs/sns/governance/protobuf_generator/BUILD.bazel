@@ -15,7 +15,7 @@ ALIASES = {}
 
 rust_library(
     name = "lib",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_sns_governance_protobuf_generator",
     proc_macro_deps = MACRO_DEPENDENCIES,

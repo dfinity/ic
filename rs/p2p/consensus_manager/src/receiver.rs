@@ -38,7 +38,6 @@ use tracing::instrument;
 
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
-#[allow(unused)]
 pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
@@ -174,7 +173,6 @@ impl PeerCounter {
     }
 }
 
-#[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<
     Artifact: IdentifiableArtifact,
     WireArtifact: IdentifiableArtifact,
@@ -197,9 +195,10 @@ pub(crate) struct ConsensusManagerReceiver<
     artifact_processor_tasks: JoinSet<(watch::Receiver<PeerCounter>, WireArtifact::Id)>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
+
+    slot_limit: usize,
 }
 
-#[allow(unused)]
 impl<Artifact, WireArtifact, Assembler>
     ConsensusManagerReceiver<
         Artifact,
@@ -220,6 +219,7 @@ where
         artifact_assembler: Assembler,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         topology_watcher: watch::Receiver<SubnetTopology>,
+        slot_limit: usize,
     ) -> Shutdown {
         let receive_manager = Self {
             log,
@@ -232,6 +232,7 @@ where
             slot_table: HashMap::new(),
             artifact_processor_tasks: JoinSet::new(),
             topology_watcher,
+            slot_limit,
         };
 
         Shutdown::spawn_on_with_cancellation(
@@ -284,9 +285,9 @@ where
                 self.artifact_processor_tasks.len()
                     >= HashSet::<WireArtifact::Id>::from_iter(
                         self.slot_table
-                            .iter()
-                            .flat_map(|(k, v)| v.iter())
-                            .map(|(_, s)| s.id.clone())
+                            .values()
+                            .flat_map(HashMap::values)
+                            .map(|s| s.id.clone())
                     )
                     .len(),
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
@@ -326,9 +327,9 @@ where
         }
         debug_assert!(
             self.slot_table
-                .iter()
-                .flat_map(|(k, v)| v.iter())
-                .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
+                .values()
+                .flat_map(HashMap::values)
+                .all(|v| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
     }
@@ -363,12 +364,9 @@ where
             id: id.clone(),
         };
 
-        let (to_add, to_remove) = match self
-            .slot_table
-            .entry(peer_id)
-            .or_default()
-            .entry(slot_number)
-        {
+        let peer_slot_table = self.slot_table.entry(peer_id).or_default();
+        let peer_slot_table_len = peer_slot_table.len();
+        let (to_add, to_remove) = match peer_slot_table.entry(slot_number) {
             Entry::Occupied(mut slot_entry_mut) => {
                 if slot_entry_mut.get().should_be_replaced(&new_slot_entry) {
                     self.metrics.slot_table_overwrite_total.inc();
@@ -379,13 +377,24 @@ where
                     (false, None)
                 }
             }
-            Entry::Vacant(empty_slot) => {
+            // Only insert slot update if we are below peer slot table limit.
+            Entry::Vacant(empty_slot) if peer_slot_table_len < self.slot_limit => {
                 empty_slot.insert(new_slot_entry);
                 self.metrics
                     .slot_table_new_entry_total
                     .with_label_values(&[peer_id.to_string().as_str()])
                     .inc();
                 (true, None)
+            }
+            Entry::Vacant(_) => {
+                self.metrics.slot_table_limit_exceeded_total.inc();
+                warn!(
+                    self.log,
+                    "Peer {} tries to exceed slot limit {}. Dropping slot update",
+                    peer_id,
+                    self.slot_limit
+                );
+                (false, None)
             }
         };
 
@@ -398,7 +407,7 @@ where
                 None => {
                     self.metrics.assemble_task_started_total.inc();
 
-                    let mut peer_counter = PeerCounter::new();
+                    let peer_counter = PeerCounter::new();
                     let (tx, rx) = watch::channel(peer_counter);
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_assembles.insert(id.clone(), tx);
@@ -448,10 +457,10 @@ where
         log: ReplicaLogger,
         id: WireArtifact::Id,
         // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(WireArtifact, NodeId)>,
+        artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        mut artifact_assembler: Assembler,
+        artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
         cancellation_token: CancellationToken,
     ) -> (watch::Receiver<PeerCounter>, WireArtifact::Id) {
@@ -462,13 +471,13 @@ where
             loop {
                 match peer_rx_clone.changed().await {
                     Err(_) => break,
-                    Ok(x) if peer_rx_clone.borrow().is_empty() => break,
+                    Ok(_) if peer_rx_clone.borrow().is_empty() => break,
                     _ => {}
                 }
             }
         };
 
-        let mut peer_rx_c = peer_rx.clone();
+        let peer_rx_c = peer_rx.clone();
         let id_c = id.clone();
         let assemble_artifact = async move {
             artifact_assembler
@@ -482,13 +491,18 @@ where
                     Ok((artifact, peer_id)) => {
                         let id = artifact.id();
                         // Send artifact to pool
-                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
+                        if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).is_err() {
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                        }
 
                         // wait for deletion from peers
-                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        // TODO: NET-1774
+                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
                         // Purge from the unvalidated pool
-                        sender.send(UnvalidatedArtifactMutation::Remove(id));
+                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).is_err() {
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                        }
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
@@ -496,7 +510,8 @@ where
                     }
                     Err(Aborted) => {
                         // wait for deletion from peers
-                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        // TODO: NET-1774
+                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_DROP])
@@ -527,7 +542,8 @@ where
         self.slot_table.retain(|node_id, _| {
             if !new_topology.is_member(node_id) {
                 nodes_leaving_topology.insert(*node_id);
-                self.metrics
+                let _ = self
+                    .metrics
                     .slot_table_new_entry_total
                     .remove_label_values(&[node_id.to_string().as_str()]);
                 false
@@ -607,6 +623,7 @@ mod tests {
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         artifact_assembler: MockArtifactAssembler,
         topology_watcher: watch::Receiver<SubnetTopology>,
+        slot_limit: usize,
 
         channels: Channels,
     }
@@ -645,6 +662,7 @@ mod tests {
                 sender,
                 topology_watcher,
                 artifact_assembler,
+                slot_limit: usize::MAX,
                 channels: Channels {
                     unvalidated_artifact_receiver,
                 },
@@ -656,6 +674,11 @@ mod tests {
             topology_watcher: watch::Receiver<SubnetTopology>,
         ) -> Self {
             self.topology_watcher = topology_watcher;
+            self
+        }
+
+        fn with_slot_limit(mut self, slot_limit: usize) -> Self {
+            self.slot_limit = slot_limit;
             self
         }
 
@@ -682,6 +705,7 @@ mod tests {
                     active_assembles: HashMap::new(),
                     slot_table: HashMap::new(),
                     artifact_processor_tasks: JoinSet::new(),
+                    slot_limit: self.slot_limit,
                 });
 
             (consensus_manager_receiver, self.channels)
@@ -820,6 +844,49 @@ mod tests {
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
         assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn slot_table_limit_exceeded() {
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().with_slot_limit(2).build();
+        let cancellation = CancellationToken::new();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Id(0),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(2),
+                update: Update::Id(1),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
+        assert_eq!(mgr.active_assembles.len(), 2);
+        // Send slot update that exceeds limit
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(3),
+                commit_id: CommitId::from(3),
+                update: Update::Id(2),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
+        assert_eq!(mgr.active_assembles.len(), 2);
     }
 
     /// Check that adverts updates with higher connection ids take precedence.

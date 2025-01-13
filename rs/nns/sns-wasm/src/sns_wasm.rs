@@ -1,22 +1,18 @@
 use crate::{
     canister_api::CanisterApi,
-    pb::{
-        hash_to_hex_string,
-        v1::{
-            add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
-            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
-            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
-            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
-            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
-            InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-            ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse,
-            MetadataSection as MetadataSectionPb, SnsCanisterIds, SnsCanisterType, SnsUpgrade,
-            SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
-        },
+    pb::v1::{
+        add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
+        DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetDeployedSnsByProposalIdRequest,
+        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+        GetSnsSubnetIdsResponse, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+        GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
+        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
+        ListUpgradeStepsRequest, ListUpgradeStepsResponse, MetadataSection as MetadataSectionPb,
+        SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListRequest,
+        UpdateSnsSubnetListResponse,
     },
     stable_memory::SnsWasmStableMemory,
     wasm_metadata::MetadataSection,
@@ -25,7 +21,7 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
+use ic_nervous_system_common::{hash_to_hex_string, ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{
     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
@@ -55,7 +51,7 @@ use dfn_core::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
-const INITIAL_CANISTER_CREATION_CYCLES: u64 = ONE_TRILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
 
 /// The number of canisters that the SNS-WASM canister will install when deploying
 /// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
@@ -472,6 +468,23 @@ where
             }
         };
 
+        // Get the new latest version.
+        // This function is fallible (as it checks for cycles in the upgrade path), but it has no side-effects.
+        // So we want to try it first, and only if it succeeds, proceed to write the WASM to stable memory.
+        let new_latest_version = self
+            .upgrade_path
+            .get_new_latest_version(sns_canister_type, &hash);
+        let new_latest_version = match new_latest_version {
+            Ok(new_latest_version) => new_latest_version,
+            Err(err) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: err,
+                    })),
+                };
+            }
+        };
+
         let result = match self.stable_memory.write_wasm(wasm) {
             Ok((offset, size)) => {
                 self.wasm_indexes.insert(
@@ -484,18 +497,19 @@ where
                     },
                 );
 
-                self.upgrade_path.add_wasm(sns_canister_type, &hash);
+                self.upgrade_path.add_wasm(new_latest_version);
 
-                Some(add_wasm_response::Result::Hash(hash.to_vec()))
+                add_wasm_response::Result::Hash(hash.to_vec())
             }
             Err(e) => {
                 println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
 
-                Some(add_wasm_response::Result::Error(SnsWasmError {
+                add_wasm_response::Result::Error(SnsWasmError {
                     message: format!("Unable to persist WASM: {}", e),
-                }))
+                })
             }
         };
+        let result = Some(result);
 
         AddWasmResponse { result }
     }
@@ -996,7 +1010,9 @@ where
     }
 
     /// Sets the controllers of the SNS canisters so that Root controls Governance + Ledger, and
-    /// Governance controls Root
+    /// Governance controls Root.
+    ///
+    /// WARNING: This function should be kept in sync with `remove_self_as_controller`.
     async fn add_controllers(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
@@ -1046,17 +1062,21 @@ where
                         e
                     )
                 }),
-
-            // Set NNS-Root as controller of Swap
+            // Set SNS Root and NNS Root as controllers of Swap.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![this_canister_id, ROOT_CANISTER_ID.get()],
+                    vec![
+                        this_canister_id,
+                        canisters.root.unwrap(),
+                        ROOT_CANISTER_ID.get(),
+                    ],
                 )
                 .await
                 .map_err(|e| {
                     format!(
-                        "Unable to set NNS-Root and Swap canister (itself) as Swap canister controller: {}",
+                        "Unable to set SNS Root and NNS Root and Swap canister (itself) \
+                         as Swap canister controller: {}",
                         e
                     )
                 }),
@@ -1071,7 +1091,7 @@ where
         canisters: &SnsCanisterIds,
     ) -> Result<(), String> {
         let set_controllers_results = vec![
-            // Removing self, leaving root.
+            // Removing self, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
@@ -1084,7 +1104,7 @@ where
                         e
                     )
                 }),
-            // Removing self, leaving root.
+            // Removing self, leaving SNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
@@ -1092,7 +1112,7 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
-            // Removing self, leaving governance.
+            // Removing self, leaving SNS Governance.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.root.unwrap()),
@@ -1100,11 +1120,11 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
-            // Removing self, leaving NNS-Root
+            // Removing self, leaving SNS Root and NNS Root.
             canister_api
                 .set_controllers(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
-                    vec![ROOT_CANISTER_ID.get()],
+                    vec![canisters.root.unwrap(), ROOT_CANISTER_ID.get()],
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
@@ -1811,7 +1831,11 @@ pub struct UpgradePath {
 }
 
 impl UpgradePath {
-    pub fn add_wasm(&mut self, canister_type: SnsCanisterType, wasm_hash: &[u8; 32]) {
+    pub fn get_new_latest_version(
+        &self,
+        canister_type: SnsCanisterType,
+        wasm_hash: &[u8; 32],
+    ) -> Result<SnsVersion, String> {
         let mut new_latest_version = self.latest_version.clone();
 
         match canister_type {
@@ -1826,6 +1850,24 @@ impl UpgradePath {
             SnsCanisterType::Index => new_latest_version.index_wasm_hash = wasm_hash.to_vec(),
         }
 
+        if self.upgrade_path.contains_key(&new_latest_version) {
+            return Err(format!(
+                "Version {} already exists along the upgrade path - cannot add it again",
+                new_latest_version
+            ));
+        }
+
+        if self.latest_version == new_latest_version {
+            return Err(format!(
+                "Version {} is already the latest version",
+                new_latest_version
+            ));
+        }
+
+        Ok(new_latest_version)
+    }
+
+    pub fn add_wasm(&mut self, new_latest_version: SnsVersion) {
         self.upgrade_path
             .insert(self.latest_version.clone(), new_latest_version.clone());
         self.latest_version = new_latest_version;
@@ -2438,6 +2480,65 @@ mod test {
             proposal_id_response.proposal_id.unwrap(),
             expected_proposal_id
         );
+    }
+
+    #[test]
+    fn test_api_add_wasm_fails_on_duplicate_version() {
+        let mut canister = new_wasm_canister();
+
+        // Add first wasm
+        let wasm = SnsWasm {
+            canister_type: SnsCanisterType::Root.into(),
+            ..small_valid_wasm_with_id("Root")
+        };
+        let wasm_hash = wasm.sha256_hash().to_vec();
+        let response = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        });
+        assert_eq!(
+            response.result.unwrap(),
+            add_wasm_response::Result::Hash(wasm_hash.clone())
+        );
+
+        // Try to add same wasm again - should fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
+
+        // Try to add a different wasm - should succeed
+        {
+            let wasm = SnsWasm {
+                canister_type: SnsCanisterType::Ledger.into(),
+                ..small_valid_wasm_with_id("Ledger")
+            };
+            let wasm_hash = wasm.sha256_hash().to_vec();
+            let response = canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm),
+                hash: wasm_hash.clone(),
+            });
+            assert_eq!(
+                response.result.unwrap(),
+                add_wasm_response::Result::Hash(wasm_hash)
+            );
+        }
+
+        // Re-add the first wasm - should still fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
     }
 
     #[test]
@@ -3526,7 +3627,10 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![],
             vec![],
@@ -3606,7 +3710,10 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
@@ -3700,11 +3807,14 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -3811,11 +3921,14 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![
@@ -3977,11 +4090,14 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![],
@@ -4558,11 +4674,14 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (
+                    swap_id,
+                    vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()],
+                ),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![
@@ -4939,11 +5058,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![this_id.get(), root_id.get(), ROOT_CANISTER_ID.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             vec![

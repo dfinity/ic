@@ -1,0 +1,24 @@
+[package]
+name = "anonymization_backend"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "anonymization_backend"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = { workspace = true }
+ic-nns-constants = { path = "../../../nns/constants" }
+lazy_static = { workspace = true }
+prometheus = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dependencies.anonymization-interface]
+path = "../interface"

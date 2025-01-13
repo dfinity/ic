@@ -11,6 +11,7 @@ use ic_management_canister_types::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -21,7 +22,7 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
@@ -43,6 +44,7 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
         canister_memory_limit: NumBytes::new(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: 50,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode,
@@ -181,13 +183,14 @@ pub fn get_system_api(
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -208,6 +211,7 @@ pub fn get_system_api(
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
@@ -216,14 +220,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
-        );
+            Default::default(),
+        )
+        .unwrap();
     system_state
 }
 
