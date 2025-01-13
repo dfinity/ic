@@ -94,7 +94,6 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        //TODO(mihailjianu): Add Testnet4 checkpoints.
         Network::Testnet4 => &[],
         Network::Signet => &[],
         Network::Regtest => &[],
@@ -104,7 +103,7 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
         .iter()
         .cloned()
         .map(|(height, hash)| {
-            //TODO(mihailjianu): check that this is correct.
+            //TODO: handle this unwrap without crashing
             let hash = BlockHash::from_str(hash).expect("Programmer error: invalid hash");
             (height, hash)
         })
@@ -115,7 +114,6 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        //TODO(mihailjianu): Add Testnet4 checkpoints.
         Network::Testnet4 => &[],
         Network::Signet => &[],
         Network::Regtest => &[],
