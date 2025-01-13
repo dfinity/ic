@@ -347,8 +347,6 @@ fn induct_loopback_stream_reroute_response() {
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-            // `available_guaranteed_response_memory` does not keep track of gc'ing
-            // the response @22 in the loopback stream after inducting it.
             assert_eq!(
                 available_guaranteed_response_memory,
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
@@ -512,8 +510,6 @@ fn induct_loopback_stream_success() {
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-            // `available_guaranteed_response_memory` is a lower bound as it doesn't include garbage
-            // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
                 available_guaranteed_response_memory,
@@ -1415,7 +1411,7 @@ fn garbage_collect_local_state_with_illegal_reject_signal_for_response_success()
     );
 }
 
-/// Tests tha tan incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
+/// Tests that an incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
 /// `REMOTE_SUBNET` triggers locally generating and successfully inducting a corresponding
 /// reject response.
 #[test]
