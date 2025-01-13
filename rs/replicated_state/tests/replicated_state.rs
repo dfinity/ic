@@ -156,7 +156,7 @@ impl ReplicatedStateFixture {
     fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
-            streams.push(SUBNET_ID, msg);
+            streams.entry(SUBNET_ID).or_default().push(msg);
         }
         self.state.put_streams(streams);
     }

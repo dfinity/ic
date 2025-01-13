@@ -433,14 +433,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            streams.push(dst_subnet_id, msg);
+                            streams.entry(dst_subnet_id).or_default().push(msg);
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_subnet_id, msg);
+                            streams.entry(dst_subnet_id).or_default().push(msg);
                         }
                     };
                 }

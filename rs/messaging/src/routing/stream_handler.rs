@@ -16,7 +16,7 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_replicated_state::{
-    metadata_state::{Stream, Streams},
+    metadata_state::{Stream, StreamMap},
     replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
@@ -391,7 +391,7 @@ impl StreamHandlerImpl {
         state
     }
 
-    /// Garbage collects outgoing `Streams` based on the headers (signals and
+    /// Garbage collects outgoing `StreamMap` based on the headers (signals and
     /// `begin` indices) of the provided stream slices.
     fn garbage_collect_local_state(
         &self,
@@ -551,13 +551,13 @@ impl StreamHandlerImpl {
         rejected_messages: Vec<(RejectReason, RequestOrResponse)>,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        streams: &mut Streams,
+        streams: &mut StreamMap,
         available_guaranteed_response_memory: &mut i64,
     ) {
         fn reroute_response(
             response: RequestOrResponse,
             state: &ReplicatedState,
-            streams: &mut Streams,
+            streams: &mut StreamMap,
             log: &ReplicaLogger,
         ) {
             let new_destination = state
@@ -573,7 +573,7 @@ impl StreamHandlerImpl {
                 new_destination,
                 response,
             );
-            streams.get_mut_or_insert(new_destination).push(response);
+            streams.entry(new_destination).or_default().push(response);
         }
 
         for (reason, msg) in rejected_messages {
@@ -674,7 +674,7 @@ impl StreamHandlerImpl {
         for (remote_subnet_id, mut stream_slice) in stream_slices {
             // Output stream, for resulting signals and (in the initial iteration) reject
             // `Responses`.
-            let stream = streams.get_mut_or_insert(remote_subnet_id);
+            let stream = streams.entry(remote_subnet_id).or_default();
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
                 assert_eq!(

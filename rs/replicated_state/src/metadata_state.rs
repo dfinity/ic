@@ -71,7 +71,7 @@ pub struct SystemMetadata {
     pub ingress_history: IngressHistoryState,
 
     /// XNet stream state indexed by the _destination_ subnet id.
-    pub(super) streams: Arc<Streams>,
+    pub(super) streams: Arc<StreamMap>,
 
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
@@ -729,7 +729,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.
             ingress_history: Default::default(),
-            streams: Arc::new(Streams { streams }),
+            streams: Arc::new(streams),
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
@@ -796,7 +796,7 @@ impl SystemMetadata {
     }
 
     /// Returns a reference to the streams.
-    pub fn streams(&self) -> &Streams {
+    pub fn streams(&self) -> &StreamMap {
         &self.streams
     }
 
@@ -995,7 +995,7 @@ impl SystemMetadata {
     ///
     /// In the first phase (see [`Self::split()`]), the ingress history was left
     /// untouched on both subnets, in order to make it trivial to verify that no
-    /// tampering had occurred. Streams, subnet call contexts and metrics and all
+    /// tampering had occurred. StreamMap, subnet call contexts and metrics and all
     /// other metadata were preserved on subnet A' and set to default on subnet B.
     ///
     /// In this second phase, `ingress_history` is pruned, retaining only messages
@@ -1508,75 +1508,6 @@ impl From<Stream> for StreamSlice {
     fn from(val: Stream) -> Self {
         StreamSlice::new(val.header(), val.messages)
     }
-}
-
-/// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct Streams {
-    /// Map of streams by destination `SubnetId`.
-    streams: StreamMap,
-}
-
-impl Streams {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Returns a reference to the wrapped `StreamMap`.
-    pub fn streams(&self) -> &StreamMap {
-        &self.streams
-    }
-
-    /// Returns a reference to the stream for the given destination subnet.
-    pub fn get(&self, destination: &SubnetId) -> Option<&Stream> {
-        self.streams.get(destination)
-    }
-
-    /// Returns an iterator over all `(&SubnetId, &Stream)` pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&SubnetId, &Stream)> {
-        self.streams.iter()
-    }
-
-    /// Returns an iterator over all `&SubnetId` keys.
-    pub fn keys(&self) -> impl Iterator<Item = &SubnetId> {
-        self.streams.keys()
-    }
-
-    /// Pushes the given message onto the stream for the given destination
-    /// subnet.
-    pub fn push(&mut self, destination: SubnetId, msg: RequestOrResponse) {
-        self.streams.entry(destination).or_default().push(msg);
-
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet.
-    pub fn get_mut(&mut self, destination: &SubnetId) -> Option<&mut Stream> {
-        // Can't (easily) validate stats when `Stream` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        self.streams.get_mut(destination)
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet, inserting it if it doesn't already exist.
-    pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> &mut Stream {
-        // Can't (easily) validate stats when `Stream` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        self.streams.entry(destination).or_default()
-    }
-
-    /// Checks that the running accounting of the sizes of responses in streams is
-    /// accurate.
-    #[cfg(debug_assertions)]
-    fn debug_validate_stats(&self) {}
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -2170,20 +2101,6 @@ impl
 
 pub(crate) mod testing {
     use super::*;
-
-    /// Testing only: Exposes `Streams` internals for use in other modules'
-    /// tests.
-    pub trait StreamsTesting {
-        /// Testing only: Modifies `SystemMetadata::streams` by applying the
-        /// provided function.
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
-    }
-
-    impl StreamsTesting for Streams {
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
-            f(&mut self.streams);
-        }
-    }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
     /// or removing replicated state fields to think about and/or ask the Message

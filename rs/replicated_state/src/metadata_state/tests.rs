@@ -444,9 +444,8 @@ fn system_metadata_split() {
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
 
-    let streams = Streams {
-        streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
-    };
+    let streams =
+        btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) };
 
     // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
     // detect a regression in the subnet type assigned to subnet B.

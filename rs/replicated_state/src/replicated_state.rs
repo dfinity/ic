@@ -1,16 +1,15 @@
 use super::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        IngressHistoryState, Stream, StreamMap, SystemMetadata,
+    },
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
-    },
-    metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
-        StreamMap,
     },
     CanisterQueues,
 };
@@ -1268,24 +1267,24 @@ pub trait ReplicatedStateMessageRouting {
     fn streams(&self) -> &StreamMap;
 
     /// Removes the streams from this `ReplicatedState`.
-    fn take_streams(&mut self) -> Streams;
+    fn take_streams(&mut self) -> StreamMap;
 
     /// Atomically replaces the streams.
-    fn put_streams(&mut self, streams: Streams);
+    fn put_streams(&mut self, streams: StreamMap);
 }
 
 impl ReplicatedStateMessageRouting for ReplicatedState {
     fn streams(&self) -> &StreamMap {
-        self.metadata.streams.streams()
+        &self.metadata.streams
     }
 
-    fn take_streams(&mut self) -> Streams {
+    fn take_streams(&mut self) -> StreamMap {
         std::mem::take(Arc::make_mut(&mut self.metadata.streams))
     }
 
-    fn put_streams(&mut self, streams: Streams) {
-        // Should never replace a non-empty Streams via `put_streams()`.
-        assert!(self.metadata.streams.streams().is_empty());
+    fn put_streams(&mut self, streams: StreamMap) {
+        // Should never replace a non-empty StreamMap via `put_streams()`.
+        assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
     }
@@ -1293,7 +1292,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use crate::metadata_state::testing::StreamsTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1338,7 +1336,7 @@ pub mod testing {
 
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             let mut streams = self.take_streams();
-            streams.modify_streams(f);
+            f(&mut streams);
             self.put_streams(streams);
         }
 
