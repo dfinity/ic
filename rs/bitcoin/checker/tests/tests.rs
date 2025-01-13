@@ -10,10 +10,11 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
-use ic_metrics_assert::{MetricsAssert, QueryCall};
+use ic_metrics_assert::{MetricsAssert, PocketIcQueryCall};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
@@ -377,7 +378,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
+        MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -422,7 +423,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -466,7 +467,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from_query_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -754,7 +755,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from_query_metrics(&setup)
+    MetricsAssert::from_query_call(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -834,15 +835,12 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-impl QueryCall<UserError> for &Setup {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
-        self.env
-            .query_call(
-                self.btc_checker_canister,
-                Principal::anonymous(),
-                "http_request",
-                request,
-            )
-            .map(assert_reply)
+impl<'a> PocketIcQueryCall<'a> for &'a Setup {
+    fn get_pocket_ic(&self) -> &'a PocketIc {
+        &self.env
+    }
+
+    fn get_canister_id(&self) -> CanisterId {
+        self.btc_checker_canister
     }
 }

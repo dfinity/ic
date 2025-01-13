@@ -1,6 +1,10 @@
 //! Fluent assertions for metrics.
 
+#[cfg(feature = "pocket_ic")]
+use candid::Principal;
 use candid::{CandidType, Decode, Deserialize, Encode};
+#[cfg(feature = "pocket_ic")]
+use pocket_ic::{management_canister::CanisterId, PocketIc, UserError, WasmResult};
 use regex::Regex;
 use serde_bytes::ByteBuf;
 use std::fmt::Debug;
@@ -30,7 +34,7 @@ pub trait QueryCall<E: Debug> {
 }
 
 impl<T> MetricsAssert<T> {
-    pub fn from_query_metrics<E>(actual: T) -> Self
+    pub fn from_query_call<E>(actual: T) -> Self
     where
         T: QueryCall<E>,
         E: Debug,
@@ -89,5 +93,34 @@ impl<T> MetricsAssert<T> {
             .filter(|line| regex.is_match(line))
             .cloned()
             .collect()
+    }
+}
+
+#[cfg(feature = "pocket_ic")]
+pub trait PocketIcQueryCall<'a> {
+    fn get_pocket_ic(&self) -> &'a PocketIc;
+    fn get_canister_id(&self) -> CanisterId;
+
+    fn assert_reply(result: WasmResult) -> Vec<u8> {
+        match result {
+            WasmResult::Reply(bytes) => bytes,
+            WasmResult::Reject(reject) => {
+                panic!("Expected a successful reply, got a reject: {}", reject)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "pocket_ic")]
+impl<'a, T: PocketIcQueryCall<'a>> QueryCall<UserError> for T {
+    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.get_pocket_ic()
+            .query_call(
+                self.get_canister_id(),
+                Principal::anonymous(),
+                "http_request",
+                request,
+            )
+            .map(Self::assert_reply)
     }
 }

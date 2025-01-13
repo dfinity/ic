@@ -12,6 +12,10 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic", optional = true }
 regex = "1.11.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+
+[features]
+pocket_ic = ["dep:pocket-ic"]

@@ -32,7 +32,7 @@ url = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-metrics-assert = { path = "../../../packages/ic-metrics-assert" }
+ic-metrics-assert = { path = "../../../packages/ic-metrics-assert", features = ["pocket_ic"] }
 ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

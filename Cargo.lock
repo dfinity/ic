@@ -9623,6 +9623,7 @@ name = "ic-metrics-assert"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "pocket-ic",
  "regex",
  "serde",
  "serde_bytes",

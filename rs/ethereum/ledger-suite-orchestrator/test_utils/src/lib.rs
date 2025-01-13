@@ -305,7 +305,7 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
-        MetricsAssert::from_query_metrics(self)
+        MetricsAssert::from_query_call(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
