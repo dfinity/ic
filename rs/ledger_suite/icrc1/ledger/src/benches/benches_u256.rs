@@ -1,7 +1,7 @@
 use crate::{
     benches::{
         assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
-        upgrade, NUM_APPROVALS, NUM_GET_BLOCKS, NUM_TRANSFERS, NUM_TRANSFERS_FROM,
+        upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
     },
     icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, Account, LOG,
 };
@@ -34,7 +34,7 @@ fn bench_icrc1_transfers() -> BenchResult {
     canbench_rs::bench_fn(|| {
         {
             let _p = canbench_rs::bench_scope("icrc1_transfer");
-            for i in 0..NUM_TRANSFERS {
+            for i in 0..NUM_OPERATIONS {
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
                     to: test_account(i),
@@ -45,11 +45,11 @@ fn bench_icrc1_transfers() -> BenchResult {
                 assert_matches!(result, Ok(_));
                 emulate_archive_blocks::<Access>(&LOG);
             }
-            assert_has_num_balances(NUM_TRANSFERS + 2);
+            assert_has_num_balances(NUM_OPERATIONS + 2);
         }
         {
             let _p = canbench_rs::bench_scope("icrc2_approve");
-            for i in 0..NUM_APPROVALS {
+            for i in 0..NUM_OPERATIONS {
                 let approve = ApproveArgs {
                     from_subaccount: account_with_tokens.subaccount,
                     spender: test_account(i),
@@ -67,7 +67,7 @@ fn bench_icrc1_transfers() -> BenchResult {
         }
         {
             let _p = canbench_rs::bench_scope("icrc2_transfer_from");
-            for i in 0..NUM_TRANSFERS_FROM {
+            for i in 0..NUM_OPERATIONS {
                 let spender = test_account(i);
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
@@ -80,7 +80,7 @@ fn bench_icrc1_transfers() -> BenchResult {
                 assert_matches!(result, Ok(_));
                 emulate_archive_blocks::<Access>(&LOG);
             }
-            assert_has_num_balances(NUM_TRANSFERS_FROM + NUM_TRANSFERS + 2);
+            assert_has_num_balances(2 * NUM_OPERATIONS + 2);
         }
         for i in 0..NUM_GET_BLOCKS {
             let spender = test_account(i);
@@ -95,7 +95,7 @@ fn bench_icrc1_transfers() -> BenchResult {
         }
         {
             let req = GetBlocksRequest {
-                start: Nat::from(NUM_TRANSFERS_FROM + NUM_TRANSFERS + NUM_APPROVALS),
+                start: Nat::from(3 * NUM_OPERATIONS),
                 length: Nat::from(NUM_GET_BLOCKS),
             };
             let _p = canbench_rs::bench_scope("icrc3_get_blocks");
