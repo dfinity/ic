@@ -41,7 +41,6 @@ mod interim_sns_helpers {
 
     use candid::{Decode, Encode};
     use pocket_ic::nonblocking::PocketIc;
-    use pocket_ic::WasmResult;
 
     /// Interim test function for calling Root.change_canister.
     ///
@@ -62,10 +61,6 @@ mod interim_sns_helpers {
             )
             .await
             .unwrap();
-        let result = match result {
-            WasmResult::Reply(result) => result,
-            WasmResult::Reject(s) => panic!("Call to change_canister failed: {:#?}", s),
-        };
         Decode!(&result, ()).unwrap()
     }
 }

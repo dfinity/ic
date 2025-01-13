@@ -13,7 +13,7 @@ use pocket_ic::{
         RawEffectivePrincipal, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, WasmResult,
+    PocketIc, PocketIcBuilder,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
@@ -49,13 +49,13 @@ fn test_counter_canister() {
 
     // Make some calls to the canister.
     let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+    assert_eq!(reply, vec![0, 0, 0, 0]);
     let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    assert_eq!(reply, vec![1, 0, 0, 0]);
     let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    assert_eq!(reply, vec![2, 0, 0, 0]);
     let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    assert_eq!(reply, vec![2, 0, 0, 0]);
 }
 
 fn counter_wasm() -> Vec<u8> {
@@ -81,7 +81,7 @@ fn counter_wasm() -> Vec<u8> {
     wat::parse_str(COUNTER_WAT).unwrap()
 }
 
-fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> WasmResult {
+fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> Vec<u8> {
     ic.update_call(
         can_id,
         Principal::anonymous(),
@@ -290,15 +290,15 @@ fn test_routing_with_multiple_subnets() {
 
     // Call canister 1 on subnet 1.
     let reply = call_counter_can(&pic, canister_id_1, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+    assert_eq!(reply, vec![0, 0, 0, 0]);
     let reply = call_counter_can(&pic, canister_id_1, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Call canister 2 on subnet 2.
     let reply = call_counter_can(&pic, canister_id_2, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+    assert_eq!(reply, vec![0, 0, 0, 0]);
     let reply = call_counter_can(&pic, canister_id_2, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Creating a canister without specifying a subnet should still work.
     let _canister_id = pic.create_canister();
@@ -333,7 +333,7 @@ fn test_multiple_large_xnet_payloads() {
                     // Self-calls with 10M and xnet-calls with up to 2M arguments work just fine
                     // and return the length of the blob sent in the inter-canister call.
                     match xnet_result {
-                        Ok(WasmResult::Reply(reply)) => {
+                        Ok(reply) => {
                             let blob_len = Decode!(&reply, usize).unwrap();
                             assert_eq!(blob_len, size);
                         }
@@ -342,8 +342,8 @@ fn test_multiple_large_xnet_payloads() {
                 } else {
                     // An inter-canister call to a different subnet with 10M argument traps.
                     match xnet_result {
-                        Err(user_error) => {
-                            assert_eq!(user_error.code, ErrorCode::CanisterCalledTrap);
+                        Err(reject_response) => {
+                            assert_eq!(reject_response.error_code, ErrorCode::CanisterCalledTrap);
                         }
                         _ => panic!("Unexpected update call result: {:?}", xnet_result),
                     };
@@ -719,7 +719,7 @@ async fn test_counter_canister_async() {
         )
         .await
         .expect("Failed to call counter canister");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+    assert_eq!(reply, vec![0, 0, 0, 0]);
 
     // Drop the PocketIc instance.
     pic.drop().await;
@@ -768,10 +768,7 @@ fn install_very_large_wasm() {
     let res = pic
         .update_call(can_id, Principal::anonymous(), "read", vec![])
         .unwrap();
-    match res {
-        WasmResult::Reply(data) => assert_eq!(data, vec![b'X'; 4]),
-        _ => panic!("Unexpected update call response: {:?}", res),
-    };
+    assert_eq!(res, vec![b'X'; 4]);
 }
 
 #[test]
@@ -895,7 +892,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
                     Encode!(&canister_b).unwrap(),
                 );
                 match xnet_result {
-                    Ok(WasmResult::Reply(reply)) => {
+                    Ok(reply) => {
                         let identity = Decode!(&reply, String).unwrap();
                         assert_eq!(identity, canister_b.to_string());
                     }
@@ -1171,14 +1168,9 @@ fn test_canister_http() {
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
     let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
-            assert_eq!(http_response.unwrap().body, body);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
-    };
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    assert_eq!(http_response.unwrap().body, body);
 }
 
 #[test]
@@ -1233,17 +1225,12 @@ fn test_canister_http_with_transform() {
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
     let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: HttpRequestResult = decode_one(&data).unwrap();
-            // http response headers are cleared by the transform function
-            assert!(http_response.headers.is_empty());
-            // mocked non-empty response body is transformed to the transform context
-            // by the transform function
-            assert_eq!(http_response.body, b"this is my transform context".to_vec());
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
-    };
+    let http_response: HttpRequestResult = decode_one(&reply).unwrap();
+    // http response headers are cleared by the transform function
+    assert!(http_response.headers.is_empty());
+    // mocked non-empty response body is transformed to the transform context
+    // by the transform function
+    assert_eq!(http_response.body, b"this is my transform context".to_vec());
 }
 
 #[test]
@@ -1300,17 +1287,12 @@ fn test_canister_http_with_diverging_responses() {
     // and reply to the ingress message from the test driver
     // relaying the error.
     let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
-            let (reject_code, err) = http_response.unwrap_err();
-            assert!(matches!(reject_code, RejectionCode::SysTransient));
-            let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
-            assert_eq!(err, expected);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
-    };
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    let (reject_code, err) = http_response.unwrap_err();
+    assert!(matches!(reject_code, RejectionCode::SysTransient));
+    let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
+    assert_eq!(err, expected);
 }
 
 #[test]
@@ -1403,19 +1385,14 @@ fn test_canister_http_timeout() {
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
     let reply = pic.await_call(call_id).unwrap();
-    match reply {
-        WasmResult::Reply(data) => {
-            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
-            let (reject_code, err) = http_response.unwrap_err();
-            match reject_code {
-                RejectionCode::SysTransient => (),
-                _ => panic!("Unexpected reject code {:?}", reject_code),
-            };
-            assert_eq!(err, "Canister http request timed out");
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+        decode_one(&reply).unwrap();
+    let (reject_code, err) = http_response.unwrap_err();
+    match reject_code {
+        RejectionCode::SysTransient => (),
+        _ => panic!("Unexpected reject code {:?}", reject_code),
     };
+    assert_eq!(err, "Canister http request timed out");
 }
 
 #[test]
@@ -1754,9 +1731,9 @@ fn test_canister_snapshots() {
 
     // We bump the counter to make the counter different from its initial value.
     let reply = call_counter_can(&pic, canister_id, "write");
-    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
     let reply = call_counter_can(&pic, canister_id, "read");
-    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
 
     // We haven't taken any snapshot so far and thus listing snapshots yields an empty result.
     let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
@@ -1779,9 +1756,9 @@ fn test_canister_snapshots() {
 
     // We bump the counter once more to test loading snapshots in a subsequent step.
     let reply = call_counter_can(&pic, canister_id, "write");
-    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
     let reply = call_counter_can(&pic, canister_id, "read");
-    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
     // We load the snapshot (it is recommended to only load a snapshot on a stopped canister).
     pic.stop_canister(canister_id, None).unwrap();
@@ -1791,13 +1768,13 @@ fn test_canister_snapshots() {
 
     // We verify that the snapshot was successfully loaded.
     let reply = call_counter_can(&pic, canister_id, "read");
-    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
 
     // We bump the counter again.
     let reply = call_counter_can(&pic, canister_id, "write");
-    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
     let reply = call_counter_can(&pic, canister_id, "read");
-    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
     // We take one more snapshot: since we already have an active snapshot,
     // taking another snapshot fails unless we specify the active snapshot to be replaced.
@@ -1978,9 +1955,9 @@ fn create_instance_from_existing() {
 
     // Bump and check the counter value;
     let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    assert_eq!(reply, vec![1, 0, 0, 0]);
     let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Create a new PocketIC handle to the existing PocketIC instance.
     let pic_handle =
@@ -1988,9 +1965,9 @@ fn create_instance_from_existing() {
 
     // Bump and check the counter value;
     let reply = call_counter_can(&pic_handle, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    assert_eq!(reply, vec![2, 0, 0, 0]);
     let reply = call_counter_can(&pic_handle, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    assert_eq!(reply, vec![2, 0, 0, 0]);
 
     // Drop the newly created PocketIC handle.
     // This should not delete the existing PocketIC instance.
@@ -1998,9 +1975,9 @@ fn create_instance_from_existing() {
 
     // Bump and check the counter value;
     let reply = call_counter_can(&pic, can_id, "write");
-    assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
+    assert_eq!(reply, vec![3, 0, 0, 0]);
     let reply = call_counter_can(&pic, can_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
+    assert_eq!(reply, vec![3, 0, 0, 0]);
 }
 
 #[test]
@@ -2035,10 +2012,7 @@ fn ingress_status() {
         IngressStatusResult::Success(result) => result.unwrap(),
         status => panic!("Unexpected ingress status: {:?}", status),
     };
-    let principal = match reply {
-        WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
-        WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
-    };
+    let principal = Decode!(&reply, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
 
     // now that the ingress status is available, the caller must match
@@ -2122,9 +2096,6 @@ fn await_call_no_ticks() {
         .unwrap();
 
     let result = pic.await_call_no_ticks(msg_id).unwrap();
-    let principal = match result {
-        WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
-        WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
-    };
+    let principal = Decode!(&result, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
 }

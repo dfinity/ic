@@ -2,7 +2,6 @@
 //! The types in this module are used to serialize and deserialize data
 //! from and to JSON, and are used by both crates.
 
-use crate::UserError;
 use candid::Principal;
 use hex;
 use reqwest::Response;
@@ -129,12 +128,6 @@ pub struct RawIngressStatusArgs {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawSubmitIngressResult {
-    Ok(RawMessageId),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -147,25 +140,6 @@ pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub payload: Vec<u8>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawCanisterResult {
-    Ok(RawWasmResult),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawWasmResult {
-    /// Raw response, returned in a "happy" case
-    Reply(
-        #[serde(deserialize_with = "base64::deserialize")]
-        #[serde(serialize_with = "base64::serialize")]
-        Vec<u8>,
-    ),
-    /// Returned with an error message when the canister decides to reject the
-    /// message
-    Reject(String),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
