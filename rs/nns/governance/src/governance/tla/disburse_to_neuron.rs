@@ -1,8 +1,4 @@
-use super::{
-    account_to_tla, extract_common_constants,
-    post_process_trace,
-};
-use crate::governance::governance_minting_account;
+use super::{extract_common_constants, post_process_trace};
 use lazy_static::lazy_static;
 use tla_instrumentation::{Label, TlaConstantAssignment, ToTla, Update, VarAssignment};
 
@@ -26,10 +22,6 @@ lazy_static! {
                     constants: extract_common_constants(PID, trace).into_iter().collect(),
                 };
                 post_process_trace(trace);
-                constants.constants.insert(
-                    "Minting_Account_Id".to_string(),
-                    account_to_tla(governance_minting_account()),
-                );
                 constants
             },
         }
