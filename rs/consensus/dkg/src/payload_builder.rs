@@ -482,12 +482,13 @@ pub fn get_dkg_summary_from_cup_contents(
             .expect("Missing initial high-threshold DKG transcript"),
     );
 
+    // Add transcripts for vetkeys from the `chain_key_initializations` to the summary block
     let vet_key_transcripts = cup_contents
         .chain_key_initializations
-        .iter()
+        .into_iter()
         .filter_map(|init| {
-            let key_id = &init.key_id.expect("Initialization without a key id");
-            let init = &init.initialization.expect("Empty initialization");
+            let key_id = init.key_id.expect("Initialization without a key id");
+            let init = init.initialization.expect("Empty initialization");
 
             // IDkg initializations are handled in a different place. This is to include NiDkgTranscripts into the Summary only
             let Initialization::TranscriptRecord(record) = init else {
