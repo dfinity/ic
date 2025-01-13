@@ -17124,6 +17124,7 @@ version = "6.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
+ "bitcoin 0.28.2",
  "candid",
  "candid_parser",
  "ed25519-dalek",

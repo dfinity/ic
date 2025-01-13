@@ -455,6 +455,18 @@ pub struct SignWithSchnorrArgs {
     pub key_id: SignWithSchnorrArgsKeyId,
     pub derivation_path: Vec<Vec<u8>>,
     pub message: Vec<u8>,
+    pub aux: Option<SignWithSchnorrAux>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum SignWithSchnorrAux {
+    #[serde(rename = "bip341")]
+    Bip341(SignWithBip341Aux),
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SignWithBip341Aux {
+    pub merkle_root_hash: Vec<u8>,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
