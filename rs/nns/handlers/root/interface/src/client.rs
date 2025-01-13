@@ -223,7 +223,7 @@ impl SpyNnsRootCanisterClientReply {
                 wasm_memory_threshold: Some(candid::Nat::from(6_u32)),
             },
             cycles: candid::Nat::from(42_u32),
-            idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),
+            idle_cycles_burned_per_day: candid::Nat::from(43_u32),
             reserved_cycles: Some(candid::Nat::from(44_u32)),
         }))
     }
