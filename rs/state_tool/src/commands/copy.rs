@@ -1,0 +1,263 @@
+use ic_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
+use ic_protobuf::state::v1 as pb;
+use ic_state_layout::StateLayout;
+use ic_types::Height;
+use prost::Message;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+/// Copy checkpoints from the state directory at `source` to the state directory at `destination`.
+///
+/// If `heights` is not provided, all checkpoints from the source are copied. Otherwise, only listed checkpoints are copied.
+/// Optionally, the copied checkpoints can be given a different height in the destination.
+///
+/// Apart from copying the checkpoints, the relevant entries are also copied from the `states_metadata.pbuf` file, containing the manifest.
+pub fn do_copy(
+    source: PathBuf,
+    destination: PathBuf,
+    heights: Option<Vec<(Height, Option<Height>)>>,
+) -> Result<(), String> {
+    let src_layout = StateLayout::new_no_init(no_op_logger(), source, &MetricsRegistry::new());
+    let dst_layout =
+        StateLayout::try_new(no_op_logger(), destination, &MetricsRegistry::new()).unwrap();
+
+    let heights = heights.unwrap_or_else(|| {
+        src_layout
+            .checkpoint_heights()
+            .unwrap()
+            .into_iter()
+            .map(|h| (h, None))
+            .collect()
+    });
+
+    let heights = heights
+        .into_iter()
+        .map(|(src, dst)| {
+            let dst = dst.unwrap_or(src);
+            (src, dst)
+        })
+        .collect();
+
+    do_copy_with_state_layouts(&src_layout, &dst_layout, heights)
+}
+
+fn do_copy_with_state_layouts(
+    src_layout: &StateLayout,
+    dst_layout: &StateLayout,
+    heights: Vec<(Height, Height)>,
+) -> Result<(), String> {
+    let src_metadata = load_metadata_proto(&src_layout.states_metadata());
+    let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata());
+
+    for (src_height, dst_height) in heights {
+        if let Ok(cp_layout) = dst_layout.checkpoint_verified(dst_height) {
+            return Err(format!(
+                "Checkpoint {} already exists at {}",
+                dst_height,
+                cp_layout.raw_path().display()
+            ));
+        }
+
+        dst_layout
+            .copy_and_sync_checkpoint(
+                &format!("import_{}", dst_height),
+                &src_layout
+                    .checkpoints()
+                    .join(StateLayout::checkpoint_name(src_height)),
+                &dst_layout
+                    .checkpoints()
+                    .join(StateLayout::checkpoint_name(dst_height)),
+                None,
+            )
+            .map_err(|e| format!("Failed to import checkpoint: {}", e))?;
+
+        if let Some(src_metadata_entry) = src_metadata.by_height.get(&src_height.get()) {
+            dst_metadata
+                .by_height
+                .insert(dst_height.get(), src_metadata_entry.clone());
+        }
+    }
+
+    let mut w = std::fs::File::create(dst_layout.states_metadata()).unwrap();
+    let mut buf = vec![];
+    dst_metadata.encode(&mut buf).unwrap();
+    w.write_all(&buf[..]).unwrap();
+
+    Ok(())
+}
+
+fn load_metadata_proto(path: &Path) -> pb::StatesMetadata {
+    if path.exists() {
+        let mut file = std::fs::File::open(path).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+        pb::StatesMetadata::decode(&buf[..]).unwrap_or_default()
+    } else {
+        pb::StatesMetadata::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_state_machine_tests::StateMachineBuilder;
+    use tempfile::TempDir;
+
+    #[test]
+    fn copy_test() {
+        let env = StateMachineBuilder::new().build();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let tmp_dir = TempDir::new().unwrap();
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            tmp_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .by_height
+            .is_empty());
+
+        do_copy_with_state_layouts(
+            env.state_manager.state_layout(),
+            &dst_layout,
+            vec![(Height::new(1), Height::new(1))],
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(1)]
+        );
+        assert_eq!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .by_height
+                .len(),
+            1
+        );
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata()).by_height[&1]
+                .manifest
+                .is_some()
+        );
+
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        do_copy_with_state_layouts(
+            env.state_manager.state_layout(),
+            &dst_layout,
+            vec![(Height::new(3), Height::new(3))],
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(1), Height::new(3)]
+        );
+    }
+
+    #[test]
+    fn multiple_copy_test() {
+        let env = StateMachineBuilder::new()
+            .with_remove_old_states(false)
+            .build();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let tmp_dir = TempDir::new().unwrap();
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            tmp_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .by_height
+            .is_empty());
+
+        do_copy_with_state_layouts(
+            env.state_manager.state_layout(),
+            &dst_layout,
+            vec![
+                (Height::new(1), Height::new(1)),
+                (Height::new(3), Height::new(3)),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(1), Height::new(3)]
+        );
+        assert_eq!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .by_height
+                .len(),
+            2
+        );
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata()).by_height[&1]
+                .manifest
+                .is_some()
+        );
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata()).by_height[&3]
+                .manifest
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn rename_copy_test() {
+        let env = StateMachineBuilder::new().build();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let tmp_dir = TempDir::new().unwrap();
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            tmp_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .by_height
+            .is_empty());
+
+        do_copy_with_state_layouts(
+            env.state_manager.state_layout(),
+            &dst_layout,
+            vec![(Height::new(1), Height::new(4))],
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(4)]
+        );
+        assert_eq!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .by_height
+                .len(),
+            1
+        );
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata()).by_height[&4]
+                .manifest
+                .is_some()
+        );
+    }
+}

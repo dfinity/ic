@@ -8,8 +8,8 @@ use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_tool::commands;
-use ic_types::{PrincipalId, Time};
-use std::path::PathBuf;
+use ic_types::{Height, PrincipalId, Time};
+use std::{error::Error, path::PathBuf};
 
 /// Supported `state_tool` commands and their arguments.
 #[derive(Debug, Parser)]
@@ -41,6 +41,24 @@ enum Opt {
         /// The height to label the state with.
         #[clap(long = "height", short = 'h')]
         height: u64,
+    },
+
+    /// Copies states from one ic_state directory to another.
+    #[clap(name = "copy")]
+    CopyStates {
+        /// Path to the source ic_state directory.
+        source: PathBuf,
+        /// Path to the destination ic_state directory.
+        destination: PathBuf,
+        /// List of heights to copy. If not specified, all heights are copied.
+        ///
+        /// Heights can be specified as a comma separated list of heights. Optionally, a state can be renamed by specifiying the source and destination height separated by '->'.
+        ///
+        /// Examples:
+        ///     - `--heights 1,2,3` copies states at heights 1, 2, and 3.
+        ///     - `--heights 1->2` copies the state at height 1 and renames it to height 2.
+        #[clap(long = "heights", value_parser = parse_height_pair, value_delimiter = ',', verbatim_doc_comment)]
+        heights: Option<Vec<(Height, Option<Height>)>>,
     },
 
     /// Computes manifest of a checkpoint.
@@ -149,8 +167,27 @@ enum Opt {
     },
 }
 
+/// Parser for either a single height or a pair of heights separated by '->'.
+/// Used to parse the `--heights` argument of the `copy` command.
+fn parse_height_pair(
+    s: &str,
+) -> Result<(Height, Option<Height>), Box<dyn Error + Send + Sync + 'static>> {
+    match s.find("->") {
+        Some(pos) => Ok((
+            Height::new(s[..pos].parse()?),
+            Some(Height::new(s[pos + 2..].parse()?)),
+        )),
+        None => Ok((Height::new(s.parse()?), None)),
+    }
+}
+
 fn main() {
-    let opt = Parser::parse();
+    let args = std::env::args().collect();
+    main_inner(args);
+}
+
+pub(crate) fn main_inner(args: Vec<String>) {
+    let opt = Parser::parse_from(args);
     let result = match opt {
         Opt::CDiff { path_a, path_b } => commands::cdiff::do_diff(path_a, path_b),
         Opt::CHash { path } => commands::chash::do_hash(path),
@@ -159,6 +196,11 @@ fn main() {
             config,
             height,
         } => commands::import_state::do_import(state, config, height),
+        Opt::CopyStates {
+            source,
+            destination,
+            heights,
+        } => commands::copy::do_copy(source, destination, heights),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
         Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
         Opt::ListStates { config } => commands::list::do_list(config),
@@ -205,5 +247,119 @@ fn main() {
     if let Err(e) = result {
         eprintln!("{}", e);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_state_layout::StateLayout;
+    use ic_state_machine_tests::StateMachineBuilder;
+    use tempfile::TempDir;
+
+    #[test]
+    fn copy_command_line_test() {
+        let env = StateMachineBuilder::new().build();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let dst_dir = TempDir::new().unwrap();
+
+        main_inner(vec![
+            "state-tool".to_string(),
+            "copy".to_string(),
+            env.state_manager
+                .state_layout()
+                .raw_path()
+                .display()
+                .to_string(),
+            dst_dir.path().display().to_string(),
+        ]);
+
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            dst_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(1)]
+        );
+    }
+
+    #[test]
+    fn copy_command_line_rename_test() {
+        let env = StateMachineBuilder::new().build();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let dst_dir = TempDir::new().unwrap();
+
+        main_inner(vec![
+            "state-tool".to_string(),
+            "copy".to_string(),
+            env.state_manager
+                .state_layout()
+                .raw_path()
+                .display()
+                .to_string(),
+            dst_dir.path().display().to_string(),
+            "--heights".to_string(),
+            "1->2".to_string(),
+        ]);
+
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            dst_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(2)]
+        );
+    }
+
+    #[test]
+    fn copy_command_line_filter_test() {
+        let env = StateMachineBuilder::new()
+            .with_remove_old_states(false)
+            .build();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let dst_dir = TempDir::new().unwrap();
+
+        main_inner(vec![
+            "state-tool".to_string(),
+            "copy".to_string(),
+            env.state_manager
+                .state_layout()
+                .raw_path()
+                .display()
+                .to_string(),
+            dst_dir.path().display().to_string(),
+            "--heights".to_string(),
+            "1,3".to_string(),
+        ]);
+
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            dst_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(1), Height::new(3)]
+        );
     }
 }

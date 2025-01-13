@@ -329,7 +329,7 @@ impl MergeMetrics {
 // very first metric update should be visible to Prometheus.
 
 impl StateManagerMetrics {
-    fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         let checkpoint_op_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_op_duration_seconds",
             "Duration of checkpoint operations in seconds.",
@@ -1815,7 +1815,7 @@ impl StateManagerImpl {
                     match StateMetadata::try_from(pb) {
                         Ok(meta) => {
                             if let Some(root_hash) = meta.root_hash() {
-                                info!(log, "Recomputed root hash {:?} when loading state metadata at height {}", root_hash, h);
+                                info!(log, "Root hash {:?} when loading state metadata at height {}", root_hash, h);
                             }
                             map.insert(Height::new(h), meta);
                         }
