@@ -21,7 +21,7 @@ function check_ntp() {
 
     if [ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]; then
         local service_logs=$(journalctl -u chrony.service --no-pager)
-        local log_message="System clock is not synchronized. Please check NTP configuration.\n\nChrony service logs:\n${service_logs}"
+        local log_message="System clock is not synchronized.\n\nChrony service logs:\n${service_logs}"
         log_and_halt_installation_on_error 1 "${log_message}"
     fi
 
