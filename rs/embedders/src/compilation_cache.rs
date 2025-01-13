@@ -19,6 +19,8 @@ use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumBytes, NumInstructions};
 use ic_utils_lru_cache::LruCache;
 use ic_wasm_types::{CanisterModule, WasmHash};
 
+const GB: u64 = 1024 * 1024 * 1024;
+
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
 pub enum CompilationCache {
@@ -55,7 +57,7 @@ impl MemoryDiskBytes for CompilationCache {
 impl CompilationCache {
     pub fn new(capacity: NumBytes) -> Self {
         Self::Memory {
-            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(1024 * 1024 * 1024))),
+            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(GB))),
         }
     }
 
