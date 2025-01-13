@@ -108,7 +108,7 @@ pub struct InputRule {
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct OutputRule {
-    pub id: RuleId,
+    pub rule_id: RuleId,
     pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
@@ -116,7 +116,7 @@ pub struct OutputRule {
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct OutputRuleMetadata {
-    pub id: RuleId,
+    pub rule_id: RuleId,
     pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
@@ -158,7 +158,7 @@ impl std::fmt::Display for OutputConfig {
         writeln!(f, "{INDENT}Is redacted: {}", self.is_redacted)?;
         for (i, rule) in self.rules.iter().enumerate() {
             writeln!(f, "{DOUBLE_INDENT}Rule {}:", i + 1)?;
-            writeln!(f, "{DOUBLE_INDENT}ID: {}", rule.id)?;
+            writeln!(f, "{DOUBLE_INDENT}ID: {}", rule.rule_id)?;
             writeln!(f, "{DOUBLE_INDENT}Incident ID: {}", rule.incident_id)?;
             if let Some(ref description) = rule.description {
                 writeln!(f, "{DOUBLE_INDENT}Description: {description}")?;
@@ -175,7 +175,7 @@ impl std::fmt::Display for OutputConfig {
 impl std::fmt::Display for OutputRuleMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "\nOutputRuleMetadata")?;
-        writeln!(f, "{INDENT}ID: {}", self.id)?;
+        writeln!(f, "{INDENT}ID: {}", self.rule_id)?;
         writeln!(
             f,
             "{INDENT}Disclosed at: {}",

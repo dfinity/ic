@@ -310,7 +310,7 @@ def system_test(
 
     run_system_test(
         name = name + "_colocate",
-        src = "//rs/tests/testing_verification:colocate_test_bin",
+        src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/tests:colocate_uvm_config_image",

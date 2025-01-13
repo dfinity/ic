@@ -83,7 +83,7 @@ system_test_nns(
     name = "bn_update_workload_test",
     flaky = True,
     tags = [
-        "manual",  # TODO(BOUN-1039): remove "manual" and add back "system_test_hourly" and "system_test_nightly" when the test is not flaky anymore
+        "manual",  # TODO(BOUN-1039): remove "manual" and add back "long_test" when the test is not flaky anymore
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -130,6 +130,7 @@ system_test_nns(
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
+    proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
     ],
@@ -140,8 +141,13 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
@@ -152,6 +158,7 @@ system_test_nns(
         "@crate_index//:regex",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+        "@crate_index//:wat",
     ],
 )
 

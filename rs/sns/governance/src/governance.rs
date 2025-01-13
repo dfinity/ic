@@ -166,6 +166,10 @@ pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 ho
 /// Past this duration, the lock will be automatically released.
 const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 
+/// Adopted-but-not-yet-executed upgrade proposals block other upgrade proposals from executing.
+/// But this is only true for proposals that are less than 1 day old, to prevent a stuck proposal from blocking all upgrades forever.
+const UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS: u64 = 60 * 60 * 24; // 1 day
+
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
     bytes: &[u8],
@@ -2455,8 +2459,14 @@ impl Governance {
             .proposals
             .iter()
             .filter_map(|(id, proposal_data)| {
+                let proposal_expiry_time = proposal_data
+                    .decided_timestamp_seconds
+                    .checked_add(UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS)
+                    .unwrap_or_default();
+                let proposal_recent_enough = proposal_expiry_time > self.env.now();
                 if proposal_data.status() == ProposalDecisionStatus::Adopted
                     && proposal_data.is_upgrade_proposal()
+                    && proposal_recent_enough
                 {
                     Some(*id)
                 } else {
@@ -2567,7 +2577,7 @@ impl Governance {
         proposal_id: Option<u64>,
     ) -> Result<(), GovernanceError> {
         let upgrade_proposals_in_progress = self.upgrade_proposals_in_progress();
-        if upgrade_proposals_in_progress != proposal_id.into_iter().collect() {
+        if !upgrade_proposals_in_progress.is_subset(&proposal_id.into_iter().collect()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::ResourceExhausted,
                 format!(
