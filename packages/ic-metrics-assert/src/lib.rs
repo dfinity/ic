@@ -97,8 +97,8 @@ impl<T> MetricsAssert<T> {
 }
 
 #[cfg(feature = "pocket_ic")]
-pub trait PocketIcQueryCall<'a> {
-    fn get_pocket_ic(&self) -> &'a PocketIc;
+pub trait PocketIcQueryCall {
+    fn get_pocket_ic(&self) -> &PocketIc;
     fn get_canister_id(&self) -> CanisterId;
 
     fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -112,7 +112,7 @@ pub trait PocketIcQueryCall<'a> {
 }
 
 #[cfg(feature = "pocket_ic")]
-impl<'a, T: PocketIcQueryCall<'a>> QueryCall<UserError> for T {
+impl<T: PocketIcQueryCall> QueryCall<UserError> for T {
     fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.get_pocket_ic()
             .query_call(

@@ -835,8 +835,8 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-impl<'a> PocketIcQueryCall<'a> for &'a Setup {
-    fn get_pocket_ic(&self) -> &'a PocketIc {
+impl PocketIcQueryCall for &Setup {
+    fn get_pocket_ic(&self) -> &PocketIc {
         &self.env
     }
 
