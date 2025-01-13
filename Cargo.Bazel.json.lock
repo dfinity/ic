@@ -1,5 +1,5 @@
 {
-  "checksum": "194342fc37fdddbf3dceb1e96cdf4ce10a63ff4ec17867d1a241e3e034c1ad0c",
+  "checksum": "709022d390c2c986b8a769aafe9ed3a6ba3ebc0d092dda4b92fb8dc642860f03",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4677,7 +4677,7 @@
               "target": "tokio"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -4714,6 +4714,173 @@
           "selects": {}
         },
         "version": "0.7.9"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "axum 0.8.1": {
+      "name": "axum",
+      "version": "0.8.1",
+      "package_url": "https://github.com/tokio-rs/axum",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/axum/0.8.1/download",
+          "sha256": "6d6fd624c75e18b3b4c6b9caf42b1afe24437daaee904069137d8bab077be8b8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "form",
+            "http1",
+            "json",
+            "matched-path",
+            "original-uri",
+            "query",
+            "tokio",
+            "tower-log",
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum-core 0.5.0",
+              "target": "axum_core"
+            },
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "form_urlencoded 1.2.1",
+              "target": "form_urlencoded"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
+            },
+            {
+              "id": "itoa 1.0.9",
+              "target": "itoa"
+            },
+            {
+              "id": "matchit 0.8.4",
+              "target": "matchit"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_path_to_error 0.1.14",
+              "target": "serde_path_to_error"
+            },
+            {
+              "id": "serde_urlencoded 0.7.1",
+              "target": "serde_urlencoded"
+            },
+            {
+              "id": "sync_wrapper 1.0.1",
+              "target": "sync_wrapper"
+            },
+            {
+              "id": "tokio 1.42.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tower 0.5.2",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.8.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -4827,14 +4994,116 @@
       ],
       "license_file": "LICENSE"
     },
-    "axum-extra 0.9.6": {
-      "name": "axum-extra",
-      "version": "0.9.6",
+    "axum-core 0.5.0": {
+      "name": "axum-core",
+      "version": "0.5.0",
       "package_url": "https://github.com/tokio-rs/axum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/axum-extra/0.9.6/download",
-          "sha256": "c794b30c904f0a1c2fb7740f7df7f7972dfaa14ef6f57cb6178dc63e5dca2f04"
+          "url": "https://static.crates.io/crates/axum-core/0.5.0/download",
+          "sha256": "df1362f362fd16024ae199c1970ce98f9661bf5ef94b9808fee734bc3698b733"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "sync_wrapper 1.0.1",
+              "target": "sync_wrapper"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.5.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "axum-extra 0.10.0": {
+      "name": "axum-extra",
+      "version": "0.10.0",
+      "package_url": "https://github.com/tokio-rs/axum",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/axum-extra/0.10.0/download",
+          "sha256": "460fc6f625a1f7705c6cf62d0d070794e94668988b1c38111baeec177c715f7b"
         }
       },
       "targets": [
@@ -4859,7 +5128,6 @@
         "crate_features": {
           "common": [
             "default",
-            "multipart",
             "tracing",
             "typed-header"
           ],
@@ -4868,20 +5136,16 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.9",
+              "id": "axum 0.8.1",
               "target": "axum"
             },
             {
-              "id": "axum-core 0.4.5",
+              "id": "axum-core 0.5.0",
               "target": "axum_core"
             },
             {
               "id": "bytes 1.9.0",
               "target": "bytes"
-            },
-            {
-              "id": "fastrand 2.1.0",
-              "target": "fastrand"
             },
             {
               "id": "futures-util 0.3.31",
@@ -4908,10 +5172,6 @@
               "target": "mime"
             },
             {
-              "id": "multer 3.1.0",
-              "target": "multer"
-            },
-            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
             },
@@ -4920,7 +5180,7 @@
               "target": "serde"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -4935,7 +5195,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.6"
+        "version": "0.10.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -18214,11 +18474,11 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.7.9",
+              "id": "axum 0.8.1",
               "target": "axum"
             },
             {
-              "id": "axum-extra 0.9.6",
+              "id": "axum-extra 0.10.0",
               "target": "axum_extra"
             },
             {
@@ -19305,7 +19565,7 @@
               "target": "tonic_build"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -30169,7 +30429,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -40401,6 +40661,51 @@
       ],
       "license_file": "LICENSE"
     },
+    "matchit 0.8.4": {
+      "name": "matchit",
+      "version": "0.8.4",
+      "package_url": "https://github.com/ibraheemdev/matchit",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/matchit/0.8.4/download",
+          "sha256": "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "matchit",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "matchit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.4"
+      },
+      "license": "MIT AND BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "maxminddb 0.24.0": {
       "name": "maxminddb",
       "version": "0.24.0",
@@ -42325,120 +42630,6 @@
         },
         "edition": "2018",
         "version": "2.1.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "multer 3.1.0": {
-      "name": "multer",
-      "version": "3.1.0",
-      "package_url": "https://github.com/rwf2/multer",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/multer/3.1.0/download",
-          "sha256": "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "multer",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "multer",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.9.0",
-              "target": "bytes"
-            },
-            {
-              "id": "encoding_rs 0.8.32",
-              "target": "encoding_rs"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 1.2.0",
-              "target": "http"
-            },
-            {
-              "id": "httparse 1.8.0",
-              "target": "httparse"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
-              "id": "mime 0.3.17",
-              "target": "mime"
-            },
-            {
-              "id": "multer 3.1.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "spin 0.9.8",
-              "target": "spin"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "3.1.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -74319,14 +74510,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower 0.5.1": {
+    "tower 0.5.2": {
       "name": "tower",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower/0.5.1/download",
-          "sha256": "2873938d487c3cfb9aed7546dc9f2711d867c9f90c46b889989a2cb84eba6b4f"
+          "url": "https://static.crates.io/crates/tower/0.5.2/download",
+          "sha256": "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
         }
       },
       "targets": [
@@ -74409,7 +74600,7 @@
               "target": "slab"
             },
             {
-              "id": "sync_wrapper 0.1.2",
+              "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
             },
             {
@@ -74436,7 +74627,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -74645,7 +74836,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.5.1",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -87112,8 +87303,8 @@
     "async-scoped 0.8.0",
     "async-stream 0.3.6",
     "async-trait 0.1.83",
-    "axum 0.7.9",
-    "axum-extra 0.9.6",
+    "axum 0.8.1",
+    "axum-extra 0.10.0",
     "axum-server 0.6.0",
     "backoff 0.4.0",
     "backon 0.4.1",
@@ -87394,7 +87585,7 @@
     "toml 0.5.11",
     "tonic 0.12.3",
     "tonic-build 0.12.3",
-    "tower 0.5.1",
+    "tower 0.5.2",
     "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",

@@ -228,10 +228,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.7.9",
+                version = "^0.8.1",
             ),
             "axum-extra": crate.spec(
-                version = "^0.9.6",
+                version = "^0.10.0",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
