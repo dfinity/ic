@@ -65,7 +65,7 @@ pub fn fuzzer_main() {
 
 fn syscall_monitor<F>(name: &str, sandbox: F)
 where
-    F: FnOnce() -> (),
+    F: FnOnce(),
 {
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
