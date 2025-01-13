@@ -31,6 +31,7 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
@@ -101,7 +102,7 @@ def _custom_partitions(mode):
         src = guest_image,
         out = "guest-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     copy_file(
@@ -109,7 +110,7 @@ def _custom_partitions(mode):
         src = host_image,
         out = "host-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     config_dict = {
@@ -158,7 +159,7 @@ def _custom_partitions(mode):
         ],
         mode = "0644",
         package_dir = "data",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
@@ -169,7 +170,7 @@ def _custom_partitions(mode):
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     return [

@@ -59,7 +59,7 @@ system_test_nns(
     flaky = True,
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
-        #"system_test_hourly",
+        #"long_test",
         #"system_test_nightly",
         "manual",
     ],
@@ -133,7 +133,7 @@ system_test_nns(
     flaky = True,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -147,7 +147,7 @@ system_test_nns(
     name = "firewall_max_connections_test",
     flaky = True,
     tags = [
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
@@ -161,7 +161,7 @@ system_test_nns(
     name = "firewall_priority_test",
     flaky = True,
     tags = [
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,

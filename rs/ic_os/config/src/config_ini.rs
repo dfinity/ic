@@ -89,7 +89,10 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .get("verbose")
         .is_some_and(|s| s.eq_ignore_ascii_case("true"));
 
-    let node_reward_type = config_map.get("node_reward_type").cloned();
+    let node_reward_type = config_map
+        .get("node_reward_type")
+        .filter(|s| !s.is_empty())
+        .cloned();
 
     Ok(ConfigIniSettings {
         ipv6_prefix,

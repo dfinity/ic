@@ -26,6 +26,7 @@ pub enum RecoveryError {
     RegistryError(String),
     ValidationFailed(String),
     AgentError(String),
+    RsyncFailed,
     StepSkipped,
 }
 
@@ -101,6 +102,7 @@ impl fmt::Display for RecoveryError {
                 write!(f, "Validation failed: {}", msg)
             }
             RecoveryError::AgentError(msg) => write!(f, "ic-agent error: {}", msg),
+            RecoveryError::RsyncFailed => write!(f, "Rsync command failed"),
         }
     }
 }

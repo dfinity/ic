@@ -66,6 +66,7 @@ pub struct DownloadCertificationsStep {
     pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
+    pub auto_retry: bool,
     pub key_file: Option<PathBuf>,
     pub admin: bool,
 }
@@ -98,9 +99,10 @@ impl Step for DownloadCertificationsStep {
                 &target.display().to_string(),
                 self.require_confirmation,
                 self.key_file.as_ref(),
+                self.auto_retry,
                 5,
             )
-            .map_err(|e| warn!(self.logger, "Failed to download certifications: {:?}", e));
+            .map_err(|e| warn!(self.logger, "Skipping download: {:?}", e));
 
             success || res.is_ok()
         });
