@@ -36,71 +36,71 @@ def icos_container_filesystem(name, apt_packages, component_files, build_args, c
             "@platforms//os:linux",
         ],
         tars = [
-            #            #            "@ubuntu-base-24.04.1-base-amd64.tar.gz//file",
-            #            #            "@noble//linux-image-virtual-hwe-24.04/amd64",
+            "@ubuntu-base-24.04.1-base-amd64.tar.gz//file",
+            #            "@noble//linux-image-virtual-hwe-24.04/amd64",
             "@noble//initramfs-tools/amd64",
             #
-            #            # Need systemd for boot process
-            #            "@noble//systemd/amd64",
-            #            "@noble//systemd-sysv/amd64",
-            #            "@noble//systemd-journal-remote/amd64",
-            #            "@noble//systemd-resolved/amd64",
-            #
-            #            # Third-party services we will be running
-            #            #            "@noble//chrony/amd64",
-            #            #            "@noble//openssh-server/amd64",
-            #            #
-            #            # Runtime libraries for replica
-            #            "@noble//liblmdb0/amd64",
-            #            "@noble//libunwind8/amd64",
-            #            "@noble//libselinux1/amd64",
-            #            #
-            #            # Smartcard support for replica
-            #            "@noble//pcsc-tools/amd64",
-            #            "@noble//pcscd/amd64",
-            #            "@noble//opensc/amd64",
-            #
-            #            # Required system setup tools
-            #            "@noble//attr/amd64",
-            #            "@noble//ca-certificates/amd64",
-            #            "@noble//cryptsetup/amd64",
-            #            "@noble//curl/amd64",
-            #            "@noble//faketime/amd64",
-            #            "@noble//fdisk/amd64",
-            #            "@noble//iproute2/amd64",
-            #            "@noble//isc-dhcp-client/amd64",
-            #            "@noble//jq/amd64",
-            #            "@noble//less/amd64",
-            #            "@noble//lvm2/amd64",
-            #            "@noble//net-tools/amd64",
-            #            "@noble//nftables/amd64",
-            #            "@noble//parted/amd64",
-            #            "@noble//rsync/amd64",
-            #            #            "@noble//sudo/amd64",
-            #            "@noble//sysfsutils/amd64",
-            #            "@noble//udev/amd64",
-            #            "@noble//usbutils/amd64",
-            #            "@noble//xfsprogs/amd64",
-            #            "@noble//zstd/amd64",
-            #
-            #            # This is unclear -- why is this here? This should "probably" be dev tool.
-            #            "@noble//protobuf-compiler/amd64",
-            #
-            #            # SELinux support
-            #            "@noble//selinux-policy-default/amd64",
-            #            "@noble//selinux-utils/amd64",
-            #            "@noble//semodule-utils/amd64",
-            #            "@noble//policycoreutils/amd64",
-            #            # this is required for policy building -- presently policy modules are built
-            #            # inside the target which is not fully proper. When the build is moved out,
-            #            # this package can be removed
-            #            "@noble//selinux-policy-dev/amd64",
-            #            "@noble//checkpolicy/amd64",
+            # Need systemd for boot process
+            "@noble//systemd/amd64",
+            "@noble//systemd-sysv/amd64",
+            "@noble//systemd-journal-remote/amd64",
+            "@noble//systemd-resolved/amd64",
+
+            # Third-party services we will be running
+            "@noble//chrony/amd64",
+            "@noble//openssh-server/amd64",
+
+            # Runtime libraries for replica
+            "@noble//liblmdb0/amd64",
+            "@noble//libunwind8/amd64",
+            "@noble//libselinux1/amd64",
+
+            # Smartcard support for replica
+            "@noble//pcsc-tools/amd64",
+            "@noble//pcscd/amd64",
+            "@noble//opensc/amd64",
+
+            # Required system setup tools
+            "@noble//attr/amd64",
+            "@noble//ca-certificates/amd64",
+            "@noble//cryptsetup/amd64",
+            "@noble//curl/amd64",
+            "@noble//faketime/amd64",
+            "@noble//fdisk/amd64",
+            "@noble//iproute2/amd64",
+            "@noble//isc-dhcp-client/amd64",
+            "@noble//jq/amd64",
+            "@noble//less/amd64",
+            "@noble//lvm2/amd64",
+            "@noble//net-tools/amd64",
+            "@noble//nftables/amd64",
+            "@noble//parted/amd64",
+            "@noble//rsync/amd64",
+            "@noble//sudo/amd64",
+            "@noble//sysfsutils/amd64",
+            "@noble//udev/amd64",
+            "@noble//usbutils/amd64",
+            "@noble//xfsprogs/amd64",
+            "@noble//zstd/amd64",
+
+            # This is unclear -- why is this here? This should "probably" be dev tool.
+            "@noble//protobuf-compiler/amd64",
+
+            # SELinux support
+            "@noble//selinux-policy-default/amd64",
+            "@noble//selinux-utils/amd64",
+            "@noble//semodule-utils/amd64",
+            "@noble//policycoreutils/amd64",
+            # this is required for policy building -- presently policy modules are built
+            # inside the target which is not fully proper. When the build is moved out,
+            # this package can be removed
+            "@noble//selinux-policy-dev/amd64",
+            "@noble//checkpolicy/amd64",
         ],
     )
 
     oci_tar(
-        name = name + "_base_image_test_export.tar",
+        name = "rootfs_base_image_test_export.tar",
         image = name + "_base_image_test",
     )
 
