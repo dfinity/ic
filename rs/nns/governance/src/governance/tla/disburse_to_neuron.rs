@@ -18,7 +18,7 @@ lazy_static! {
             process_id: PID.to_string(),
             canister_name: "governance".to_string(),
             post_process: |trace| {
-                let mut constants = TlaConstantAssignment {
+                let constants = TlaConstantAssignment {
                     constants: extract_common_constants(PID, trace).into_iter().collect(),
                 };
                 post_process_trace(trace);

@@ -3708,7 +3708,7 @@ impl Governance {
             parent_neuron_id: parent_nid.id,
             disburse_amount: disburse_to_neuron.amount_e8s,
             child_neuron_id: child_nid.id,
-            child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount.clone()))
+            child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount))
         };
         let result: Result<u64, NervousSystemError> = self
             .ledger
