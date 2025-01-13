@@ -19,33 +19,20 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::BTreeMap, sync::Arc};
 
-fn empty_ni_dkg_transcripts_with_committee(
-    committee: Vec<NodeId>,
+fn empty_ni_dkg_transcript_with_committee(
+    committee: &[NodeId],
     registry_version: u64,
-) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-    BTreeMap::from([
-        (
-            NiDkgTag::LowThreshold,
-            dummy_transcript_for_tests_with_params(
-                committee.clone(),
-                NiDkgTag::LowThreshold,
-                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
-                registry_version,
-            ),
-        ),
-        (
-            NiDkgTag::HighThreshold,
-            dummy_transcript_for_tests_with_params(
-                committee.clone(),
-                NiDkgTag::HighThreshold,
-                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
-                registry_version,
-            ),
-        ),
-    ])
+    tag: NiDkgTag,
+) -> NiDkgTranscript {
+    dummy_transcript_for_tests_with_params(
+        committee.to_vec(),
+        tag.clone(),
+        tag.threshold_for_subnet_of_size(committee.len()) as u32,
+        registry_version,
+    )
 }
 
 /// Returns the registry with provided subnet records.
@@ -95,17 +82,13 @@ pub fn insert_initial_dkg_transcript(
         .membership
         .iter()
         .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
-        .collect();
-    let mut transcripts = empty_ni_dkg_transcripts_with_committee(committee, version);
+        .collect::<Vec<_>>();
+
     let high_threshold_transcript = InitialNiDkgTranscriptRecord::from(
-        transcripts
-            .remove(&NiDkgTag::HighThreshold)
-            .expect("Missing HighThreshold Transcript"),
+        empty_ni_dkg_transcript_with_committee(&committee, version, NiDkgTag::HighThreshold),
     );
     let low_threshold_transcript = InitialNiDkgTranscriptRecord::from(
-        transcripts
-            .remove(&NiDkgTag::LowThreshold)
-            .expect("Missing LowThreshold Transcript"),
+        empty_ni_dkg_transcript_with_committee(&committee, version, NiDkgTag::LowThreshold),
     );
 
     let cup_contents = CatchUpPackageContents {
