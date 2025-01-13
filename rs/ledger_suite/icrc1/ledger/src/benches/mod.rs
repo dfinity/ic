@@ -56,6 +56,13 @@ pub fn max_length_principal(index: u32) -> Principal {
     Principal::from_slice(&principal)
 }
 
+pub fn test_account(i: u32) -> Account {
+    Account {
+        owner: max_length_principal(i),
+        subaccount: Some([11_u8; 32]),
+    }
+}
+
 fn mint_tokens<T: Into<Nat>>(minter: Principal, amount: T) -> Account {
     let account_with_tokens = Account {
         owner: max_length_principal(u32::MAX),

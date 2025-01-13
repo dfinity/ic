@@ -1,6 +1,6 @@
 use crate::benches::{
-    assert_has_num_balances, emulate_archive_blocks, icrc_transfer, max_length_principal,
-    mint_tokens, upgrade, NUM_APPROVALS, NUM_GET_BLOCKS, NUM_TRANSFERS, NUM_TRANSFERS_FROM,
+    assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
+    upgrade, NUM_APPROVALS, NUM_GET_BLOCKS, NUM_TRANSFERS, NUM_TRANSFERS_FROM,
 };
 use crate::{icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, LOG};
 use assert_matches::assert_matches;
@@ -36,10 +36,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             for i in 0..NUM_TRANSFERS {
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
-                    to: Account {
-                        owner: max_length_principal(i),
-                        subaccount: Some([11_u8; 32]),
-                    },
+                    to: test_account(i),
                     created_at_time: Some(start_time + i as u64),
                     ..ckbtc_transfer()
                 };
@@ -54,10 +51,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             for i in 0..NUM_APPROVALS {
                 let approve = ApproveArgs {
                     from_subaccount: account_with_tokens.subaccount,
-                    spender: Account {
-                        owner: max_length_principal(i),
-                        subaccount: Some([11_u8; 32]),
-                    },
+                    spender: test_account(i),
                     created_at_time: Some(start_time + i as u64),
                     amount: u64::MAX.into(),
                     expected_allowance: Some(0u64.into()),
@@ -73,16 +67,10 @@ fn bench_icrc1_transfers() -> BenchResult {
         {
             let _p = canbench_rs::bench_scope("icrc2_transfer_from");
             for i in 0..NUM_TRANSFERS_FROM {
-                let spender = Account {
-                    owner: max_length_principal(i),
-                    subaccount: Some([11_u8; 32]),
-                };
+                let spender = test_account(i);
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
-                    to: Account {
-                        owner: max_length_principal(1_000_000_000 + i),
-                        subaccount: Some([11_u8; 32]),
-                    },
+                    to: test_account(1_000_000_000 + i),
                     created_at_time: Some(start_time + i as u64),
                     ..ckbtc_transfer()
                 };
@@ -94,16 +82,10 @@ fn bench_icrc1_transfers() -> BenchResult {
             assert_has_num_balances(NUM_TRANSFERS_FROM + NUM_TRANSFERS + 2);
         }
         for i in 0..NUM_GET_BLOCKS {
-            let spender = Account {
-                owner: max_length_principal(i),
-                subaccount: Some([11_u8; 32]),
-            };
+            let spender = test_account(i);
             let transfer = TransferArg {
                 from_subaccount: account_with_tokens.subaccount,
-                to: Account {
-                    owner: max_length_principal(1_000_000_000 + i),
-                    subaccount: Some([11_u8; 32]),
-                },
+                to: test_account(1_000_000_000 + i),
                 created_at_time: Some(1_000_000_000 + start_time + i as u64),
                 ..ckbtc_transfer()
             };
