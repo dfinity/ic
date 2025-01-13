@@ -1,3 +1,4 @@
+use futures::stream::Stream;
 use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
@@ -23,6 +24,7 @@ use tokio::{
     sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
+use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 use tracing::instrument;
 
 /// Metrics for a client artifact processor.
@@ -141,6 +143,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     let shutdown = Arc::new(AtomicBool::new(false));
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
+    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
@@ -154,7 +157,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
                 time_source,
                 client,
                 outbound_tx,
-                inbound_rx,
+                inbound_rx_stream,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
@@ -168,7 +171,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactTransmit<Artifact>>,
-    mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    mut inbound_stream: UnboundedReceiverStream<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -188,10 +191,14 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
         };
 
         let batched_artifact_events = current_thread_rt.block_on(async {
-            match timeout(recv_timeout, receiver.recv()).await {
+            match timeout(recv_timeout, inbound_stream.next()).await {
                 Ok(Some(artifact_event)) => {
                     let mut artifacts = vec![artifact_event];
-                    while let Ok(artifact) = receiver.try_recv() {
+                    while let Some(artifact) = std::future::poll_fn(|cx| {
+                        std::pin::Pin::new(&mut inbound_stream).poll_next(cx)
+                    })
+                    .await
+                    {
                         artifacts.push(artifact);
                     }
                     Some(artifacts)
@@ -231,6 +238,7 @@ pub fn create_ingress_handlers<
 >(
     outbound_tx: Sender<ArtifactTransmit<SignedIngress>>,
     inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
