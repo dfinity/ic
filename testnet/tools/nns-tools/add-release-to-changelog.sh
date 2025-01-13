@@ -60,7 +60,7 @@ print_purple "Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." 
 
 # Extract which canister was upgraded, and to what commit.
 TITLE=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].title[0]')
-if grep 'Upgrade the .* Canister to Commit .*' <<< "${TITLE}" &> /dev/null ; then
+if grep 'Upgrade the .* Canister to Commit .*' <<<"${TITLE}" &>/dev/null; then
     GOVERNANCE_TYPE='NNS'
     CANISTER_NAME=$(
         echo "${TITLE}" \
@@ -68,7 +68,7 @@ if grep 'Upgrade the .* Canister to Commit .*' <<< "${TITLE}" &> /dev/null ; the
             | tr '[:upper:]' '[:lower:]'
     )
     DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/Upgrade the .* Canister to Commit //')
-elif grep 'Publish SNS .* WASM Built at Commit .*' <<< "${TITLE}" &> /dev/null ; then
+elif grep 'Publish SNS .* WASM Built at Commit .*' <<<"${TITLE}" &>/dev/null; then
     GOVERNANCE_TYPE='SNS'
     CANISTER_NAME=$(
         echo "${TITLE}" \
