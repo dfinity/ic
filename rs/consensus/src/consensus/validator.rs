@@ -8,8 +8,9 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, idkg,
+    idkg,
 };
+use ic_consensus_dkg as dkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,

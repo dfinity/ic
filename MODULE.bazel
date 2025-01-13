@@ -518,6 +518,15 @@ http_file(
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
 )
 
+# Asset canister that certifies long assets chunk-wise
+
+http_file(
+    name = "long_asset_canister",
+    downloaded_file_path = "http_gateway_canister_custom_assets.wasm.gz",
+    sha256 = "eedcbf986c67fd4ebe3042094604a9a5703e825e56433e2509a6a4d0384ccf95",
+    url = "https://github.com/dfinity/http-gateway/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
+)
+
 # Old version of wallet canister
 
 http_file(

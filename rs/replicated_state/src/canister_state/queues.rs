@@ -10,6 +10,7 @@ use self::message_pool::{
     Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
@@ -164,7 +165,7 @@ pub struct CanisterQueues {
     ///
     /// Used for response deduplication (whether due to a locally generated reject
     /// response to a best-effort call; or due to a malicious / buggy subnet).
-    callbacks_with_enqueued_response: BTreeSet<CallbackId>,
+    callbacks_with_enqueued_response: MutableIntMap<CallbackId, ()>,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -364,13 +365,13 @@ struct MessageStoreImpl {
     /// `CanisterInput::DeadlineExpired` by `peek_input()` / `pop_input()` (and
     /// "inflated" by `SystemState` into `SysUnknown` reject responses based on the
     /// callback).
-    expired_callbacks: BTreeMap<InboundReference, CallbackId>,
+    expired_callbacks: MutableIntMap<InboundReference, CallbackId>,
 
     /// Compact reject responses (`CallbackIds`) replacing best-effort responses
     /// that were shed. These are returned as `CanisterInput::ResponseDropped` by
     /// `peek_input()` / `pop_input()` (and "inflated" by `SystemState` into
     /// `SysUnknown` reject responses based on the callback).
-    shed_responses: BTreeMap<InboundReference, CallbackId>,
+    shed_responses: MutableIntMap<InboundReference, CallbackId>,
 }
 
 impl MessageStoreImpl {
@@ -554,7 +555,7 @@ trait InboundMessageStore: MessageStore<CanisterInput> {
     fn callbacks_with_enqueued_response(
         &self,
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
-    ) -> Result<BTreeSet<CallbackId>, String>;
+    ) -> Result<MutableIntMap<CallbackId, ()>, String>;
 }
 
 impl InboundMessageStore for MessageStoreImpl {
@@ -567,8 +568,8 @@ impl InboundMessageStore for MessageStoreImpl {
     fn callbacks_with_enqueued_response(
         &self,
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
-    ) -> Result<BTreeSet<CallbackId>, String> {
-        let mut callbacks = BTreeSet::new();
+    ) -> Result<MutableIntMap<CallbackId, ()>, String> {
+        let mut callbacks = MutableIntMap::new();
         canister_queues
             .values()
             .flat_map(|(input_queue, _)| input_queue.iter())
@@ -603,7 +604,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     }
                 };
 
-                if callbacks.insert(callback_id) {
+                if callbacks.insert(callback_id, ()).is_none() {
                     Ok(())
                 } else {
                     Err(format!(
@@ -758,9 +759,10 @@ impl CanisterQueues {
                 match self.canister_queues.get_mut(&sender) {
                     Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => {
                         // Check against duplicate responses.
-                        if !self
+                        if self
                             .callbacks_with_enqueued_response
-                            .insert(response.originator_reply_callback)
+                            .insert(response.originator_reply_callback, ())
+                            .is_some()
                         {
                             debug_assert_eq!(Ok(()), self.test_invariants());
                             if response.deadline == NO_DEADLINE {
@@ -796,7 +798,8 @@ impl CanisterQueues {
                             // aleady checked for a matching callback). Silently drop it.
                             debug_assert!(self
                                 .callbacks_with_enqueued_response
-                                .contains(&response.originator_reply_callback));
+                                .get(&response.originator_reply_callback)
+                                .is_some());
                             return Ok(false);
                         }
                     }
@@ -853,7 +856,11 @@ impl CanisterQueues {
         };
 
         // Check against duplicate responses.
-        if !self.callbacks_with_enqueued_response.insert(callback_id) {
+        if self
+            .callbacks_with_enqueued_response
+            .insert(callback_id, ())
+            .is_some()
+        {
             // There is already a response enqueued for the callback.
             return Ok(false);
         }
@@ -920,7 +927,10 @@ impl CanisterQueues {
 
             if let Some(msg_) = &msg {
                 if let Some(callback_id) = msg_.response_callback_id() {
-                    assert!(self.callbacks_with_enqueued_response.remove(&callback_id));
+                    assert!(self
+                        .callbacks_with_enqueued_response
+                        .remove(&callback_id)
+                        .is_some());
                 }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
@@ -1559,7 +1569,8 @@ impl CanisterQueues {
                 // request that was still in an output queue.
                 assert!(self
                     .callbacks_with_enqueued_response
-                    .insert(response.originator_reply_callback));
+                    .insert(response.originator_reply_callback, ())
+                    .is_none());
                 let reference = self.store.insert_inbound(response.into());
                 Arc::make_mut(input_queue).push_response(reference);
 
@@ -1742,7 +1753,7 @@ fn input_queue_type_fn<'a>(
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
         fn callback_references_to_proto(
-            callback_references: &BTreeMap<message_pool::InboundReference, CallbackId>,
+            callback_references: &MutableIntMap<message_pool::InboundReference, CallbackId>,
         ) -> Vec<pb_queues::canister_queues::CallbackReference> {
             callback_references
                 .iter()
@@ -1791,7 +1802,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         fn callback_references_try_from_proto(
             callback_references: Vec<pb_queues::canister_queues::CallbackReference>,
-        ) -> Result<BTreeMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
+        ) -> Result<MutableIntMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
         {
             callback_references
                 .into_iter()

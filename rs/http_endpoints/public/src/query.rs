@@ -194,7 +194,7 @@ pub(crate) async fn query(
     {
         Ok(Ok(_)) => {}
         Ok(Err(err)) => {
-            let http_err = validation_error_to_http_error(request.id(), err, &log);
+            let http_err = validation_error_to_http_error(&request, err, &log);
             return (http_err.status, http_err.message).into_response();
         }
         Err(_) => {
