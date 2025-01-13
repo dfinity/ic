@@ -38,7 +38,6 @@ pub struct Config {
 }
 
 impl Default for Config {
-    /// Default using the full range of payloads and no delayed responses.
     fn default() -> Self {
         Self {
             receivers: vec![],
@@ -160,7 +159,7 @@ impl std::fmt::Debug for Record {
 
         // A timeout indicates a best-effort message.
         if let Some(timeout_secs) = self.timeout_secs {
-            write!(f, "to[s]: {} ", timeout_secs)?;
+            write!(f, "timeout[s]: {} ", timeout_secs)?;
         }
 
         // A caller indicates a downstream call.
@@ -173,7 +172,7 @@ impl std::fmt::Debug for Record {
             )?;
         }
 
-        write!(f, "| sending {} bytes | ", self.sent_bytes)?;
+        write!(f, " sending {} bytes | ", self.sent_bytes)?;
 
         match &self.duration_and_reply {
             None => write!(f, "..."),

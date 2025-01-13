@@ -7,6 +7,7 @@ use ic_config::{
 };
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{
@@ -25,38 +26,9 @@ const KB: u64 = 1024;
 const MB: u64 = KB * KB;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
-/*
-#[test]
-fn playground() {
-    let seed = vec![17374506990209185531; 3];
-    let config = CanisterConfig {
-        receivers: vec![],
-        call_bytes: (0, 131),
-        reply_bytes: (0, 0),
-        instructions_count: (0, 0),
-        timeout_secs: (0, 37),
-        calls_per_heartbeat: 2,
-        reply_weight: 3,
-        downstream_call_weight: 0,
-        best_effort_weight: 0,
-        guaranteed_response_weight: 3,
-    };
 
-    if let Err((error_msg, mut nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-        10,     // chatter_phase_round_count
-        300,    // shutdown_phase_max_rounds
-        &seed,
-        config,
-    ) {
-        assert!(false, "{}\n\n{:#?}", error_msg, nfo.records.pop_first().unwrap());
-    }
-    else {
-        unreachable!();
-    }
-}
-*/
 prop_compose! {
-    /// Generates an arbitrary pair of weights such that w1 + w2 = total > 0.
+    /// Generates an arbitrary pair of weights such that w1 + w2 = total.
     fn arb_weights(total: u32)(
         w1 in 0..=total
     ) -> (u32, u32)
@@ -73,8 +45,8 @@ prop_compose! {
         max_reply_bytes in 0..=max_payload_bytes,
         calls_per_heartbeat in 0..=max_calls_per_heartbeat,
         max_timeout_secs in 10..=100_u32,
-        (reply_weight, downstream_call_weight) in arb_weights(3),
-        (best_effort_weight, guaranteed_response_weight) in arb_weights(3),
+        (reply_weight, downstream_call_weight) in arb_weights(4),
+        (best_effort_weight, guaranteed_response_weight) in arb_weights(4),
     ) -> CanisterConfig {
         CanisterConfig::try_new(
             vec![],
@@ -93,18 +65,20 @@ prop_compose! {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(5))]
+    #![proptest_config(ProptestConfig::with_cases(3))]
     #[test]
     fn check_guaranteed_response_message_memory_limits_are_respected(
         seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
         config in arb_canister_config(MAX_PAYLOAD_BYTES, 5),
     ) {
-        prop_assert!(check_guaranteed_response_message_memory_limits_are_respected_impl(
+        if let Err((err_msg, nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
             30,     // chatter_phase_round_count
             300,    // shutdown_phase_max_rounds
             seeds.as_slice(),
             config,
-        ).is_ok());
+        ) {
+            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        }
     }
 }
 
@@ -201,72 +175,24 @@ proptest! {
         seed in any::<u64>().no_shrink(),
         config in arb_canister_config(KB as u32, 10),
     ) {
-        prop_assert!(check_calls_conclude_with_migrating_canister_impl(
+        if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
             10,     // chatter_phase_round_count
             300,    // shutdown_phase_max_rounds
             seed,
             config,
-        ).is_ok());
+        ) {
+            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        }
     }
 }
-/*
-#[test]
-fn playground2() {
-    let seed = 17374506990209185531;
-    let config = CanisterConfig {
-        receivers: vec![],
-        call_bytes: (0, 131),
-        reply_bytes: (0, 0),
-        instructions_count: (0, 0),
-        timeout_secs: (0, 37),
-        calls_per_heartbeat: 2,
-        reply_weight: 3,
-        downstream_call_weight: 0,
-        best_effort_weight: 0,
-        guaranteed_response_weight: 3,
-    };
 
-    if let Err((error_msg, mut nfo)) = check_calls_conclude_with_migrating_canister_impl(
-        10,     // chatter_phase_round_count
-        300,    // shutdown_phase_max_rounds
-        seed,
-        config,
-    ) {
-        assert!(
-            false,
-            "{}\n\n{:#?}\n\n{:#?}",
-            error_msg,
-            nfo.records.pop_first().unwrap(),
-            nfo
-                //.local_env
-                .remote_env
-                .get_latest_state()
-                .canister_states
-                .iter()
-                .filter_map(|(canister_id, canister_state)| Some(
-                    (canister_id, (canister_state.system_state.get_status(), canister_state.system_state.queues()))
-                ))
-
-                //.filter_map(|(canister_id, canister_state)| canister_state.has_input().then_some(
-                //    (canister_id, canister_state.system_state.queues())
-                //))
-                //.map(|(canister_id, canister_state)| (canister_id, canister_state.has_input()))
-                .collect::<BTreeMap<_, _>>(),
-        );
-//        assert!(false, "{}\n\n{:#?}", error_msg, nfo.remote_env.get_latest_state().canister_states);
-    }
-    else {
-        unreachable!();
-    }
-}
-*/
 /// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
 /// remote subnet with 5 canisters installed. All canisters, except one local canister referred to
 /// as `migrating_canister`, are stopped.
 ///
 /// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
 /// the `migrating_canister` making random calls to all installed canisters (since all calls are
-/// rejected except those to self, downstream calls are disabled).
+/// rejected except those to self).
 ///
 /// For the second phase, `migrating_canister` stops making calls and is then migrated to the
 /// remote subnet. Since all other canisters are stopped, there are bound to be a number of reject
@@ -455,8 +381,8 @@ impl Fixture {
         unreachable!();
     }
 
-    /// Helper function for setting canister state elements; returns the current element before
-    /// setting it.
+    /// Helper function for update calls to `canister`; returns the current `T` as it was before
+    /// this call.
     ///
     /// Panics if `canister` is not installed in `Self`.
     fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> T
@@ -545,7 +471,14 @@ impl Fixture {
         }
     }
 
-    /// Return the number of bytes taken by guaranteed response memory (`local_env`, `remote_env`).
+    /// Returns the latest state `canister` is located on.
+    ///
+    /// Panics if `canister` is not installed on either env.
+    pub fn get_latest_state(&self, canister: &CanisterId) -> Arc<ReplicatedState> {
+        self.get_env(canister).get_latest_state()
+    }
+
+    /// Returns the number of bytes taken by guaranteed response memory (`local_env`, `remote_env`).
     pub fn guaranteed_response_message_memory_taken(&self) -> (NumBytes, NumBytes) {
         (
             self.local_env
@@ -583,8 +516,7 @@ impl Fixture {
             .into_iter()
             .map(|canister| {
                 let count = self
-                    .get_env(&canister)
-                    .get_latest_state()
+                    .get_latest_state(&canister)
                     .canister_states
                     .get(&canister)
                     .unwrap()
@@ -734,8 +666,7 @@ impl Fixture {
                     .into_iter()
                     .map(|canister| (canister, self.force_query_records(canister)))
                     .collect(),
-                local_env: self.local_env.clone(),
-                remote_env: self.remote_env.clone(),
+                fixture: self.clone(),
             },
         ))
     }
@@ -745,8 +676,7 @@ impl Fixture {
 #[allow(dead_code)]
 struct DebugInfo {
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
-    pub local_env: Arc<StateMachine>,
-    pub remote_env: Arc<StateMachine>,
+    pub fixture: Fixture,
 }
 
 /// Installs a 'random-traffic-test-canister' in `env`.

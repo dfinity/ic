@@ -29,8 +29,8 @@ thread_local! {
     static HASHER: RefCell<DefaultHasher> = RefCell::default();
     /// An index for each attempted call; starts at 0 and then increments with each call.
     static CALL_INDEX: Cell<u32> = Cell::default();
-    /// A collection of timestamps and records; one record for each call. Keeps track of how each call went,
-    /// whether it was rejected or not and how many bytes were received.
+    /// A collection of timestamps and records; one record for each call. Keeps track of whether it was
+    /// rejected or not and how many bytes were sent and received.
     static RECORDS: RefCell<BTreeMap<u32, (u64, Record)>> = RefCell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
@@ -182,7 +182,7 @@ fn should_make_downstream_call() -> bool {
     })
 }
 
-/// Determines whether to make a downstream call or reply.
+/// Determines whether to make a best-effort call or a guaranteed response call.
 fn make_best_effort_call() -> bool {
     RNG.with_borrow_mut(|rng| {
         BEST_EFFORT_CALL_DISTRIBUTION.with_borrow(|distr| distr.sample(rng)) == 0
@@ -190,7 +190,7 @@ fn make_best_effort_call() -> bool {
 }
 
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
-/// that must updated (or removed) after awaiting the call. For each call, the call index is
+/// that must be updated (or removed) after awaiting the call. For each call, the call index is
 /// incremented by 1, such that successive calls have adjacent indices.
 fn setup_call(
     call_tree_id: u32,
@@ -279,8 +279,8 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
     }
 }
 
-/// Generates `MAX_CALLS_PER_HEARTBEAT` calls as futures. The records are updated whenever a
-/// reply comes in, i.e. not only after all of them have completed.
+/// Generates `calls_per_heartbeat` call futures. They are awaited; whenever a call concludes
+/// its record is updated (or removed in case of a synchronous rejection).
 #[heartbeat]
 async fn heartbeat() {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
@@ -309,10 +309,7 @@ async fn heartbeat() {
 /// - if it tells us not to do so but the attempted downstream call fails for any reason.
 #[update]
 async fn handle_call(msg: Message) -> Vec<u8> {
-    // Make downstream calls until
-    // - sampling the distribution tells us to stop.
-    // - setting up a call fails.
-    // - a downstream call is rejected for any reason.
+    // Make downstream calls as long as sampling the distribution tells us to do so.
     while should_make_downstream_call() {
         let (future, record_index) = setup_call(msg.call_tree_id, msg.call_depth + 1);
 
