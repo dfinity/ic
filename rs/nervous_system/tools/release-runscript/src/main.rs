@@ -10,9 +10,11 @@ fn main() {
     let steps = vec![
         Step {
             title: "Pick Release Candidate Commit",
-            description: "1. Go to https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch%3Amaster+event%3Apush+is%3Asuccess
-2. Find a recent commit with passing CI Main in the master branch
-3. Record this commit (e.g., post to Slack)
+            description: "Run `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.
+If you would like to pick a different commit, follow these steps:
+2. Go to https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch%3Amaster+event%3Apush+is%3Asuccess
+3. Find a recent commit with passing CI Main in the master branch
+4. Record this commit (e.g., post to Slack)
 
 Pre-built artifacts check:
 - Install aws tool if needed
@@ -39,14 +41,15 @@ For SNS ledger suite (ledger, archive, and index canisters):
         },
         Step {
             title: "Run NNS Upgrade Tests",
-            description: "1. Run NNS upgrade tests:
-   - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
+            description: "Verify the commit you chose at the previous step has a green check on this page: https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch:master+event:push+is:success
+
+If not, you can also run the upgrade tests manually:
+    - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
    
 2. SNS Testing Note:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
-   - Example: Test at rs/nervous_system/integration_tests/tests/sns_release_qualification.rs
-   - Verify this passed in CI (e.g., https://dash.zh1-idx1.dfinity.network/invocation/...)",
+   - Example: Test at rs/nervous_system/integration_tests/tests/sns_release_qualification.rs",
         },
         Step {
             title: "Create Proposal Texts",
@@ -138,27 +141,6 @@ Calendar Event Setup:
    - Click 'Save' to create event
    - Send email invitations when prompted
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
-        },
-        Step {
-            title: "Post to Slack",
-            description: "1. Post to #eng-nns-releases:
-   - Paste the proposal text
-   - Include dashboard link (https://dashboard.internetcomputer.org/proposal/<PROPOSAL_ID>)
-   - Command to copy proposal: cat /path/to/proposal_text.md | pbcopy
-
-2. For bigger feature releases:
-   - Ping comms team in #social-media
-   - They may share additional information over forum/socials
-   - They can encourage manual voting",
-        },
-        Step {
-            title: "Alert FITS",
-            description: "Important: Upgrades might trigger IC_NNS_SubnetMessageInstructionsNearLimit or similar alerts
-
-Required Communications:
-1. Notify FITS oncall in #first-incident-responder-team:
-   - Alert them ahead of time about the upcoming upgrade
-   - Send another notification right before trusted neurons vote",
         },
         Step {
             title: "Update Mainnet Canisters",
