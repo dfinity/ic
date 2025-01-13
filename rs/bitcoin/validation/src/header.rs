@@ -4,7 +4,8 @@ use bitcoin::{
 
 use crate::{
     constants::{
-        max_target, no_pow_retargeting, pow_limit_bits, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
+        checkpoints, latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
+        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
     },
     BlockHeight,
 };
@@ -15,6 +16,8 @@ pub enum ValidateHeaderError {
     /// Used when the timestamp in the header is lower than
     /// the median of timestamps of past 11 headers.
     HeaderIsOld,
+    /// Used when the header doesn't match with a checkpoint.
+    DoesNotMatchCheckpoint,
     /// Used when the timestamp in the header is more than 2 hours
     /// from the current time.
     HeaderIsTooFarInFuture {
@@ -30,6 +33,8 @@ pub enum ValidateHeaderError {
     /// Used when the target in the header is greater than the max possible
     /// value.
     TargetDifficultyAboveMax,
+    /// The next height is less than the tip height - 52_596 (one year worth of blocks).
+    HeightTooLow,
     /// Used when the predecessor of the input header is not found in the
     /// HeaderStore.
     PrevHeaderNotFound,
@@ -41,6 +46,8 @@ pub trait HeaderStore {
 
     /// Returns the initial hash the store starts from.
     fn get_initial_hash(&self) -> BlockHash;
+
+    fn get_height(&self) -> BlockHeight;
 }
 
 /// Validates a header. If a failure occurs, a
@@ -50,12 +57,25 @@ pub fn validate_header(
     store: &impl HeaderStore,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
+    let chain_height = store.get_height();
     let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
         Some(result) => result,
         None => {
             return Err(ValidateHeaderError::PrevHeaderNotFound);
         }
     };
+
+    if !is_header_within_one_year_of_tip(prev_height, chain_height) {
+        return Err(ValidateHeaderError::HeightTooLow);
+    }
+
+    if !is_timestamp_valid(store, header) {
+        return Err(ValidateHeaderError::HeaderIsOld);
+    }
+
+    if !is_checkpoint_valid(network, prev_height, header, chain_height) {
+        return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
+    }
 
     let header_target = header.target();
     if header_target > max_target(network) {
@@ -82,6 +102,60 @@ pub fn validate_header(
     }
 
     Ok(())
+}
+
+/// This validates the header against the network's checkpoints.
+/// 1. If the next header is at a checkpoint height, the checkpoint is compared to the next header's block hash.
+/// 2. If the header is not the same height, the function then compares the height to the latest checkpoint.
+///    If the next header's height is less than the last checkpoint's height, the header is invalid.
+fn is_checkpoint_valid(
+    network: &Network,
+    prev_height: BlockHeight,
+    header: &BlockHeader,
+    chain_height: BlockHeight,
+) -> bool {
+    let checkpoints = checkpoints(network);
+    let next_height = prev_height.saturating_add(1);
+    if let Some(next_hash) = checkpoints.get(&next_height) {
+        return *next_hash == header.block_hash();
+    }
+
+    let checkpoint_height = latest_checkpoint_height(network, chain_height);
+    next_height > checkpoint_height
+}
+
+/// This validates that the header has a height that is within 1 year of the tip height.
+fn is_header_within_one_year_of_tip(prev_height: BlockHeight, chain_height: BlockHeight) -> bool {
+    // perhaps checked_add would be preferable here, if the next height would cause an overflow,
+    // we should know about it instead of being swallowed.
+    let header_height = prev_height
+        .checked_add(1)
+        .expect("next height causes an overflow");
+
+    let height_one_year_ago = chain_height.saturating_sub(BLOCKS_IN_ONE_YEAR);
+    header_height >= height_one_year_ago
+}
+
+/// Validates if a header's timestamp is valid.
+/// Bitcoin Protocol Rules wiki https://en.bitcoin.it/wiki/Protocol_rules says,
+/// "Reject if timestamp is the median time of the last 11 blocks or before"
+fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
+    let mut times = vec![];
+    let mut current_header = *header;
+    let initial_hash = store.get_initial_hash();
+    for _ in 0..11 {
+        if let Some((prev_header, _)) = store.get_header(&current_header.prev_blockhash) {
+            times.push(prev_header.time);
+            if current_header.prev_blockhash == initial_hash {
+                break;
+            }
+            current_header = prev_header;
+        }
+    }
+
+    times.sort_unstable();
+    let median = times[times.len() / 2];
+    header.time > median
 }
 
 // Returns the next required target at the given timestamp.
@@ -304,6 +378,10 @@ mod test {
 
         fn get_initial_hash(&self) -> BlockHash {
             self.initial_hash
+        }
+
+        fn get_height(&self) -> BlockHeight {
+            self.height
         }
     }
 
