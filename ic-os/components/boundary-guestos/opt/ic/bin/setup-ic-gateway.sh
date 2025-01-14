@@ -150,7 +150,7 @@ SHED_SYSTEM_CPU="0.95"
 SHED_SYSTEM_MEMORY="0.95"
 SHED_SHARDED_EWMA="0.6"
 SHED_SHARDED_PASSTHROUGH="20000"
-SHED_SHARDED_LATENCY="query:1s,call:1s,sync_call:13s,read_state:1s,read_state_subnet:1s,status:100ms,health:100ms,registrations:5s,http:5s"
+SHED_SHARDED_LATENCY="query:2s,call:2s,sync_call:13s,read_state:2s,read_state_subnet:2s,status:100ms,health:100ms,registrations:5s,http:5s"
 EOF
 
     if [ ! -z "${DENYLIST_URL:-}" ]; then

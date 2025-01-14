@@ -751,3 +751,38 @@ fn check_candid_interface_compatibility() {
     )
     .unwrap();
 }
+
+#[test]
+fn check_index_and_ledger_encoded_block_compatibility() {
+    // check that ledger.did and index.did agree on the encoded block format
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../ledger.did");
+    let index_did_file = manifest_dir.join("./index.did");
+    let mut ledger_env = candid_parser::utils::CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let index_env = candid_parser::utils::CandidSource::File(index_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let ledger_encoded_block_response_type = ledger_env
+        .find_type("QueryEncodedBlocksResponse")
+        .unwrap()
+        .to_owned();
+    let index_encoded_block_response_type =
+        index_env.find_type("GetBlocksResponse").unwrap().to_owned();
+
+    let mut gamma = std::collections::HashSet::new();
+    let index_encoded_block_response_type =
+        ledger_env.merge_type(index_env, index_encoded_block_response_type.clone());
+    // Check if the ledger `query_encoded_blocks` response <: the index `get_blocks` response,
+    // i.e., if the index response type is a subtype of the ledger response type.
+    candid::types::subtype::subtype(
+        &mut gamma,
+        &ledger_env,
+        &ledger_encoded_block_response_type,
+        &index_encoded_block_response_type,
+    )
+    .expect("Ledger and Index encoded block types are different");
+}
