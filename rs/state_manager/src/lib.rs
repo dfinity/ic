@@ -1815,7 +1815,12 @@ impl StateManagerImpl {
                     match StateMetadata::try_from(pb) {
                         Ok(meta) => {
                             if let Some(root_hash) = meta.root_hash() {
-                                info!(log, "Root hash {:?} when loading state metadata at height {}", root_hash, h);
+                                info!(
+                                    log,
+                                    "Root hash {:?} when loading state metadata at height {}",
+                                    root_hash,
+                                    h
+                                );
                             }
                             map.insert(Height::new(h), meta);
                         }
