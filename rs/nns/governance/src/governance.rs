@@ -146,9 +146,9 @@ use crate::storage::with_voting_state_machines_mut;
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
-    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
-    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
+    MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -251,10 +251,14 @@ const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
-/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
-/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
-/// this constant can be used to obtain an upper bound for the number of SNS neurons created
-/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
+/// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
+/// constant can be used to obtain an upper bound for the number of SNS neurons created for the
+/// Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`. In addition, this constant
+/// also affects the upperbound of instructions needed to draw/refund maturity from/to the Neurons'
+/// Fund, so before increasing this constant, the impact on the instructions used by
+/// `CreateServiceNervousSystem` proposal execution also needs to be evaluated (currently, each
+/// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
@@ -2655,6 +2659,7 @@ impl Governance {
     /// - The neuron exists.
     /// - The caller is the controller of the the neuron.
     /// - The neuron's state is `Dissolved` at the current timestamp.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone()))]
     pub async fn disburse_neuron(
         &mut self,
         id: &NeuronId,
@@ -2759,6 +2764,13 @@ impl Governance {
         // an amount less than the transaction fee.
         if fees_amount_e8s > transaction_fee_e8s {
             let now = self.env.now();
+            tla_log_label!("DisburseNeuron_Fee");
+            tla_log_locals! {
+                fees_amount: fees_amount_e8s,
+                neuron_id: id.id,
+                to_account: tla::account_to_tla(to_account),
+                disburse_amount: disburse_amount_e8s
+            };
             let _result = self
                 .ledger
                 .transfer_funds(
@@ -2786,6 +2798,15 @@ impl Governance {
         // user told us to disburse more than they had in their account (but
         // the burn still happened).
         let now = self.env.now();
+
+        tla_log_label!("DisburseNeuron_Stake");
+        tla_log_locals! {
+            fees_amount: fees_amount_e8s,
+            neuron_id: id.id,
+            to_account: tla::account_to_tla(to_account),
+            disburse_amount: disburse_amount_e8s
+        };
+
         let block_height = self
             .ledger
             .transfer_funds(
