@@ -70,7 +70,6 @@ impl XNetPayloadBuilderFixture {
         let rng = Arc::new(None);
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             Arc::clone(&state_manager) as Arc<_>,
-            OWN_SUBNET,
             &fixture.metrics,
         )));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
@@ -710,7 +709,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Ok(slice.clone()));
             let metrics_registry = MetricsRegistry::new();
-            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, OWN_SUBNET, &metrics_registry)));
+            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
             pool.lock()
                 .unwrap()
                 .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -801,7 +800,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Ok(slice.clone()));
             let metrics_registry = MetricsRegistry::new();
-            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, OWN_SUBNET, &metrics_registry)));
+            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
             let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().count_bytes();
             {
                 let mut pool = pool.lock().unwrap();
@@ -881,7 +880,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let metrics_registry = MetricsRegistry::new();
-            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, OWN_SUBNET, &metrics_registry)));
+            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
             pool.lock()
                 .unwrap()
                 .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -975,7 +974,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let metrics_registry = MetricsRegistry::new();
-            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, OWN_SUBNET, &metrics_registry)));
+            let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
             let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().count_bytes();
 
             {

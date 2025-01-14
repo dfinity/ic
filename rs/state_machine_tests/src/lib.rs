@@ -153,8 +153,8 @@ use ic_types::{
     CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
-    certified_slice_pool::CertifiedSlicePool, RefillTaskHandle, XNetPayloadBuilderImpl,
-    XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices, RefillTaskHandle,
+    XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
 };
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
@@ -622,7 +622,8 @@ impl PocketXNetImpl {
     }
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
-        let refill_stream_slice_indices = self.pool.lock().unwrap().refill_stream_slice_indices();
+        let refill_stream_slice_indices =
+            refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             let sm = self.subnets.get(subnet_id).unwrap();
@@ -1218,7 +1219,6 @@ impl StateMachineBuilder {
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             certified_stream_store,
-            subnet_id,
             &sm.metrics_registry,
         )));
         let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));

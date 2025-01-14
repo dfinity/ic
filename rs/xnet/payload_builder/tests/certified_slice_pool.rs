@@ -522,7 +522,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &MetricsRegistry::new());
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &MetricsRegistry::new());
 
             // Empty pool is empty.
             assert!(pool.peers().next().is_none());
@@ -545,7 +545,7 @@ proptest! {
             assert!(take_slice(SRC_SUBNET, &mut pool).is_none());
 
             // Create a fresh, populated pool.
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
             pool.garbage_collect(btreemap! {SRC_SUBNET => ExpectedIndices::default()});
             pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()).unwrap();
 
@@ -710,7 +710,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // `append()` with no slice present is equivalent to `put()`.
             pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()).unwrap();
@@ -815,7 +815,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // Append an empty slice.
             let empty_prefix_slice = fixture.get_slice(DST_SUBNET, from, 0);
@@ -866,7 +866,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // Slice midpoint.
             let prefix_len = msg_count / 2;
@@ -961,7 +961,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // `put()` should fail.
             assert_matches!(
@@ -1021,7 +1021,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // Populate the pool with the prefix.
             pool.put(SRC_SUBNET, prefix.clone(), REGISTRY_VERSION, log.clone()).unwrap();
@@ -1089,7 +1089,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             // `append()` should fail.
             assert_matches!(
@@ -1145,7 +1145,7 @@ proptest! {
                 .expect_decode_certified_stream_slice()
                 .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
             let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), OWN_SUBNET, &fixture.metrics);
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
             pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone()).unwrap();
             let _ = pool.take_slice(SRC_SUBNET, Some(&begin), None, None).unwrap().unwrap();
