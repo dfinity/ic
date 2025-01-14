@@ -59,13 +59,28 @@ EXECUTED_ON=$(
 print_purple "Proposal ${PROPOSAL_ID} was executed ${SECONDS_AGO} seconds ago." >&2
 
 # Extract which canister was upgraded, and to what commit.
-TITLE=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].summary' | head -n 1)
-CANISTER_NAME=$(
-    echo "${TITLE}" \
-        | sed 's/# Upgrade the //' | sed 's/ Canister to Commit .*//' \
-        | tr '[:upper:]' '[:lower:]'
-)
-DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/# Upgrade the .* Canister to Commit //')
+TITLE=$(echo "${PROPOSAL_INFO}" | jq -r '.proposal[0].title[0]')
+if grep 'Upgrade the .* Canister to Commit .*' <<<"${TITLE}" &>/dev/null; then
+    GOVERNANCE_TYPE='NNS'
+    CANISTER_NAME=$(
+        echo "${TITLE}" \
+            | sed 's/Upgrade the //' | sed 's/ Canister to Commit .*//' \
+            | tr '[:upper:]' '[:lower:]'
+    )
+    DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/Upgrade the .* Canister to Commit //')
+elif grep 'Publish SNS .* WASM Built at Commit .*' <<<"${TITLE}" &>/dev/null; then
+    GOVERNANCE_TYPE='SNS'
+    CANISTER_NAME=$(
+        echo "${TITLE}" \
+            | sed 's/Publish SNS //' | sed 's/ WASM Built at Commit .*//' \
+            | tr '[:upper:]' '[:lower:]'
+    )
+    DESTINATION_COMMIT_ID=$(echo "${TITLE}" | sed 's/Publish SNS .* WASM Built at Commit //')
+else
+    print_red "💀 Unable to parse proposal title: ${TITLE}" >&2
+    print_red "(In particular, unable to determine which canister and commit.)" >&2
+    exit 1
+fi
 
 # Fail if the proposal's commit is not checked out.
 if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
@@ -78,7 +93,8 @@ fi
 
 # cd to the canister's primary code path.
 CANISTER_CODE_PATH=$(
-    get_nns_canister_code_location "${CANISTER_NAME}" \
+    get_"$(echo "${GOVERNANCE_TYPE}" | tr '[:upper:]' '[:lower:]')"_canister_code_location \
+        "${CANISTER_NAME}" \
         | sed "s^${PWD}^.^g" \
         | cut -d' ' -f1
 )
