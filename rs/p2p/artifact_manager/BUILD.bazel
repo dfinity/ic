@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:prometheus",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tokio-stream",
     "@crate_index//:tracing",
 ]

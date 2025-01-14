@@ -17,15 +17,12 @@ use std::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
     },
-    task::Poll,
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
-use tokio::{
-    sync::mpsc::{Sender, UnboundedReceiver},
-    time::timeout,
-};
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 use tokio_stream::StreamExt;
+use tokio_util::time::FutureExt;
 use tracing::instrument;
 
 /// Metrics for a client artifact processor.
@@ -169,12 +166,6 @@ pub fn run_artifact_processor<
     Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
-enum StreamState<T> {
-    Value(T),
-    NoNewValueAvailable,
-    EndOfStream,
-}
-
 // The artifact processor thread loop
 fn process_messages<
     Artifact: IdentifiableArtifact + 'static,
@@ -183,7 +174,7 @@ fn process_messages<
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactTransmit<Artifact>>,
-    mut inbound_stream: I,
+    inbound_stream: I,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -193,6 +184,9 @@ fn process_messages<
         .build()
         .unwrap();
     let mut last_on_state_change_result = false;
+
+    const BUFFER_SIZE: usize = 100_000;
+    let mut inbound_stream = futures::stream::StreamExt::ready_chunks(inbound_stream, BUFFER_SIZE);
     while !shutdown.load(SeqCst) {
         // TODO: assess impact of continued processing in same
         // iteration if StateChanged
@@ -202,38 +196,13 @@ fn process_messages<
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
 
-        let batched_artifact_events = current_thread_rt.block_on(async {
-            let mut inbound_stream = std::pin::Pin::new(&mut inbound_stream);
-            match timeout(recv_timeout, inbound_stream.next()).await {
-                Ok(Some(artifact_event)) => {
-                    let mut artifacts = vec![artifact_event];
-                    while let StreamState::Value(artifact) =
-                        std::future::poll_fn(|cx| match inbound_stream.as_mut().poll_next(cx) {
-                            Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
-                            Poll::Ready(Some(artifact)) => {
-                                Poll::Ready(StreamState::Value(artifact))
-                            }
-                            Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
-                        })
-                        .await
-                    {
-                        artifacts.push(artifact);
-                    }
-                    Some(artifacts)
-                }
-                Ok(None) => {
-                    // p2p is stopped
-                    None
-                }
-                Err(_) => Some(vec![]),
-            }
-        });
-        let batched_artifact_events = match batched_artifact_events {
-            Some(v) => v,
-            None => {
-                return;
-            }
-        };
+        let batched_artifact_events =
+            match current_thread_rt.block_on(inbound_stream.next().timeout(recv_timeout)) {
+                Ok(Some(artifacts)) => artifacts,
+                Ok(None) => return,
+                Err(_) => vec![],
+            };
+
         let ArtifactTransmits {
             transmits,
             poll_immediately,
