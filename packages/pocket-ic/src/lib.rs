@@ -1551,8 +1551,8 @@ pub struct RejectResponse {
 
 impl std::fmt::Display for RejectResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // E.g. "IC0301"
-        write!(f, "{}", self.error_code)
+        // Follows [agent-rs](https://github.com/dfinity/agent-rs/blob/a651dbbe69e61d4e8508c144cd60cfa3118eeb3a/ic-agent/src/agent/agent_error.rs#L54)
+        write!(f, "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}", self.reject_code, self.reject_message, self.error_code)
     }
 }
 
