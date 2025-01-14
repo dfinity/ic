@@ -5456,6 +5456,7 @@ dependencies = [
  "prometheus",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
 ]
 
