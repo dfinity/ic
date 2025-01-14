@@ -20,7 +20,7 @@ function check_ntp() {
     log_and_halt_installation_on_error "$?" "Chrony service not running or not active."
 
     retries=0
-    max_retries=5
+    max_retries=30
     while [ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]; do
         if [ $retries -ge $max_retries ]; then
             local service_logs=$(journalctl -u chrony.service --no-pager)
