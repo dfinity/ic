@@ -24,6 +24,11 @@ pub enum ListSnsCanistersError<E> {
     CallFailed(#[from] E),
 }
 
+pub struct SnsCanisters {
+    pub sns: Sns,
+    pub dapps: Vec<PrincipalId>,
+}
+
 impl RootCanister {
     pub fn new(canister_id: impl Into<PrincipalId>) -> Self {
         let canister_id = canister_id.into();
@@ -47,7 +52,7 @@ impl RootCanister {
     pub async fn list_sns_canisters<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<(Sns, Vec<PrincipalId>), ListSnsCanistersError<C::Error>> {
+    ) -> Result<SnsCanisters, ListSnsCanistersError<C::Error>> {
         let response = agent
             .call(self.canister_id, ListSnsCanistersRequest {})
             .await?;
@@ -66,16 +71,15 @@ impl RootCanister {
             ));
         };
 
-        Ok((
-            Sns {
-                root: RootCanister::new(sns_root_canister_id),
-                governance: GovernanceCanister::new(sns_governance_canister_id),
-                ledger: LedgerCanister::new(sns_ledger_canister_id),
-                swap: SwapCanister::new(swap_canister_id),
-                index: IndexCanister::new(index_canister_id),
-                archive: archives.into_iter().map(ArchiveCanister::new).collect(),
-            },
-            dapps,
-        ))
+        let sns = Sns {
+            root: RootCanister::new(sns_root_canister_id),
+            governance: GovernanceCanister::new(sns_governance_canister_id),
+            ledger: LedgerCanister::new(sns_ledger_canister_id),
+            swap: SwapCanister::new(swap_canister_id),
+            index: IndexCanister::new(index_canister_id),
+            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
+        };
+
+        Ok(SnsCanisters { sns, dapps })
     }
 }

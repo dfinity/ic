@@ -8,6 +8,7 @@ use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
     management_canister::{self, CHUNK_SIZE},
     nns, sns,
+    sns::root::SnsCanisters,
 };
 use ic_sns_governance::pb::v1::{
     manage_neuron, manage_neuron_response, proposal::Action, ManageNeuronResponse, NeuronId,
@@ -84,7 +85,7 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     let root_canister = sns::root::RootCanister {
         canister_id: root_canister_id.get(),
     };
-    let (sns, dapps) = root_canister.list_sns_canisters(agent).await?;
+    let SnsCanisters { sns, dapps } = root_canister.list_sns_canisters(agent).await?;
 
     if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
         bail!(
