@@ -199,6 +199,7 @@ fn process_messages<
         let batched_artifact_events =
             match current_thread_rt.block_on(inbound_stream.next().timeout(recv_timeout)) {
                 Ok(Some(artifacts)) => artifacts,
+                // P2P is stopped.
                 Ok(None) => return,
                 Err(_) => vec![],
             };
