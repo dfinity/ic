@@ -139,12 +139,12 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         canister_id: sns.governance.canister_id,
     };
 
-    let command = manage_neuron::Command::MakeProposal(Proposal {
+    let proposal = Proposal {
         title: format!(
             "Upgrade SNS-controlled canister {}",
             target_canister_id.get()
         ),
-        summary: format!(""),
+        summary: format!(""), // TODO: allow the user to specify a summary
         url: proposal_url.to_string(),
         action: Some(Action::UpgradeSnsControlledCanister(
             UpgradeSnsControlledCanister {
@@ -155,22 +155,11 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
                 // TODO: use `uploaded_chunk_hashes` / `sha256_hash`
             },
         )),
-    });
-
-    let ManageNeuronResponse { command } = sns_governance
-        .manage_neuron(agent, sns_neuron_id.0, command)
-        .await?;
-
-    let proposal_id = match command {
-        Some(manage_neuron_response::Command::MakeProposal(
-            manage_neuron_response::MakeProposalResponse {
-                proposal_id: Some(proposal_id),
-            },
-        )) => proposal_id,
-        _ => {
-            bail!("SNS Governance did not confirm that the proposal was made ({command:?}).")
-        }
     };
+
+    let proposal_id = sns_governance
+        .submit_proposal(agent, sns_neuron_id.0, proposal)
+        .await?;
 
     let proposal_url = format!(
         "https://nns.ic0.app/proposal/?u={}&proposal={}",

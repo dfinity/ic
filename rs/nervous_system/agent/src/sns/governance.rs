@@ -1,15 +1,24 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{
-    manage_neuron, GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse,
-    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId,
+    manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
+    GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, ManageNeuron,
+    ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SubmitProposalError<C: Error> {
+    #[error("Failed to call SNS Governance")]
+    CallGovernanceError(#[source] C),
+    #[error("SNS Governance did not confirm that the proposal was made: {0:?}")]
+    ProposalNotMade(ManageNeuronResponse),
 }
 
 impl GovernanceCanister {
@@ -56,6 +65,33 @@ impl GovernanceCanister {
             command: Some(command),
         };
         agent.call(self.canister_id, request).await
+    }
+
+    pub async fn submit_proposal<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        proposal: Proposal,
+    ) -> Result<ProposalId, SubmitProposalError<C::Error>> {
+        let response = self
+            .manage_neuron(
+                agent,
+                neuron_id,
+                manage_neuron::Command::MakeProposal(proposal),
+            )
+            .await
+            .map_err(SubmitProposalError::CallGovernanceError)?;
+
+        if let Some(manage_neuron_response::Command::MakeProposal(
+            manage_neuron_response::MakeProposalResponse {
+                proposal_id: Some(proposal_id),
+            },
+        )) = response.command
+        {
+            Ok(proposal_id)
+        } else {
+            Err(SubmitProposalError::ProposalNotMade(response))
+        }
     }
 }
 
