@@ -1024,12 +1024,9 @@ fn test_schnorr() {
                         use ed25519_dalek::{Signature, Verifier, VerifyingKey};
                         let pk: [u8; 32] = schnorr_public_key.public_key.try_into().unwrap();
                         let vk = VerifyingKey::from_bytes(&pk).unwrap();
-                        let verification_result = schnorr_signature_result.and_then(|signature| {
-                            {
-                                let s = Signature::from_slice(&signature).unwrap();
-                                vk.verify(message, &s)
-                            }
-                            .map_err(|e| format!("{:?}", e))
+                        let verification_result = schnorr_signature_result.map(|signature| {
+                            let s = Signature::from_slice(&signature).unwrap();
+                            vk.verify(message, &s).unwrap();
                         });
                         assert!(
                             verification_result.is_ok() == aux.is_none(),
