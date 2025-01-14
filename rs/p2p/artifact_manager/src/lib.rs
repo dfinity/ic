@@ -17,6 +17,7 @@ use std::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
     },
+    task::Poll,
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
@@ -168,6 +169,12 @@ pub fn run_artifact_processor<
     Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
 }
 
+enum StreamState<T> {
+    Value(T),
+    NoNewValueAvailable,
+    EndOfStream,
+}
+
 // The artifact processor thread loop
 fn process_messages<
     Artifact: IdentifiableArtifact + 'static,
@@ -196,13 +203,19 @@ fn process_messages<
         };
 
         let batched_artifact_events = current_thread_rt.block_on(async {
+            let mut inbound_stream = std::pin::Pin::new(&mut inbound_stream);
             match timeout(recv_timeout, inbound_stream.next()).await {
                 Ok(Some(artifact_event)) => {
                     let mut artifacts = vec![artifact_event];
-                    while let Some(artifact) = std::future::poll_fn(|cx| {
-                        std::pin::Pin::new(&mut inbound_stream).poll_next(cx)
-                    })
-                    .await
+                    while let StreamState::Value(artifact) =
+                        std::future::poll_fn(|cx| match inbound_stream.as_mut().poll_next(cx) {
+                            Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
+                            Poll::Ready(Some(artifact)) => {
+                                Poll::Ready(StreamState::Value(artifact))
+                            }
+                            Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
+                        })
+                        .await
                     {
                         artifacts.push(artifact);
                     }
