@@ -2,8 +2,8 @@ use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{
     manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, ManageNeuron,
-    ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
+    GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GovernanceError,
+    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -17,6 +17,8 @@ pub struct GovernanceCanister {
 pub enum SubmitProposalError<C: Error> {
     #[error("Failed to call SNS Governance")]
     CallGovernanceError(#[source] C),
+    #[error("SNS Governance returned an error")]
+    GovernanceError(#[source] GovernanceError),
     #[error("SNS Governance did not confirm that the proposal was made: {0:?}")]
     ProposalNotMade(ManageNeuronResponse),
 }
@@ -82,15 +84,16 @@ impl GovernanceCanister {
             .await
             .map_err(SubmitProposalError::CallGovernanceError)?;
 
-        if let Some(manage_neuron_response::Command::MakeProposal(
-            manage_neuron_response::MakeProposalResponse {
-                proposal_id: Some(proposal_id),
-            },
-        )) = response.command
-        {
-            Ok(proposal_id)
-        } else {
-            Err(SubmitProposalError::ProposalNotMade(response))
+        match response.command {
+            Some(manage_neuron_response::Command::MakeProposal(
+                manage_neuron_response::MakeProposalResponse {
+                    proposal_id: Some(proposal_id),
+                },
+            )) => Ok(proposal_id),
+            Some(manage_neuron_response::Command::Error(e)) => {
+                Err(SubmitProposalError::GovernanceError(e))
+            }
+            _ => Err(SubmitProposalError::ProposalNotMade(response)),
         }
     }
 }
