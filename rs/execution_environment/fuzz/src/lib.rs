@@ -63,6 +63,7 @@ pub fn fuzzer_main() {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn syscall_monitor<F>(name: &str, sandbox: F)
 where
     F: FnOnce(),
@@ -94,4 +95,12 @@ where
             panic!("{} fork() failed: {}", name, err);
         }
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn syscall_monitor<F>(name: &str, sandbox: F)
+where
+    F: FnOnce(),
+{
+    sandbox();
 }
