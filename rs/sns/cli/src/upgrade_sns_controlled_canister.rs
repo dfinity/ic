@@ -98,12 +98,7 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     // 3. Create a store canister on the same subnet as the target.
     let subnet = nns::registry::get_subnet_for_canister(agent, target_canister_id).await?;
 
-    let caller_principal = match agent.get_principal() {
-        Ok(principal) => principal,
-        Err(err) => {
-            bail!(err);
-        }
-    };
+    let caller_principal = agent.get_principal().map_err(|err| anyhow::anyhow!(err))?;
 
     let store_canister_id = nns::cmc::create_canister(
         agent,
