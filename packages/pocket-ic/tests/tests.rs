@@ -2171,3 +2171,35 @@ fn await_call_no_ticks() {
     };
     assert_eq!(principal, canister_id.to_string());
 }
+
+#[test]
+fn many_intersubnet_calls() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_1 = pic.create_canister_on_subnet(None, None, pic.topology().get_app_subnets()[0]);
+    pic.add_cycles(canister_1, 100_000_000_000_000_000);
+    pic.install_canister(canister_1, test_canister_wasm(), vec![], None);
+    let canister_2 = pic.create_canister_on_subnet(None, None, pic.topology().get_app_subnets()[1]);
+    pic.add_cycles(canister_2, 100_000_000_000_000_000);
+    pic.install_canister(canister_2, test_canister_wasm(), vec![], None);
+
+    let mut msg_ids = vec![];
+    let num_msgs: usize = 500;
+    let msg_size: usize = 10000;
+    for _ in 0..num_msgs {
+        let msg_id = pic
+            .submit_call(
+                canister_1,
+                Principal::anonymous(),
+                "call_with_large_blob",
+                Encode!(&canister_2, &msg_size).unwrap(),
+            )
+            .unwrap();
+        msg_ids.push(msg_id);
+    }
+    for msg_id in msg_ids {
+        pic.await_call(msg_id).unwrap();
+    }
+}
