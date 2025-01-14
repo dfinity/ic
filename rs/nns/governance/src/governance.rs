@@ -251,10 +251,14 @@ const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
-/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
-/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
-/// this constant can be used to obtain an upper bound for the number of SNS neurons created
-/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
+/// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
+/// constant can be used to obtain an upper bound for the number of SNS neurons created for the
+/// Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`. In addition, this constant
+/// also affects the upperbound of instructions needed to draw/refund maturity from/to the Neurons'
+/// Fund, so before increasing this constant, the impact on the instructions used by
+/// `CreateServiceNervousSystem` proposal execution also needs to be evaluated (currently, each
+/// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
