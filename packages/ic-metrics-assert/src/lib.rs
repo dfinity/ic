@@ -100,15 +100,6 @@ impl<T> MetricsAssert<T> {
 pub trait PocketIcQueryCall {
     fn get_pocket_ic(&self) -> &PocketIc;
     fn get_canister_id(&self) -> CanisterId;
-
-    fn assert_reply(result: WasmResult) -> Vec<u8> {
-        match result {
-            WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(reject) => {
-                panic!("Expected a successful reply, got a reject: {}", reject)
-            }
-        }
-    }
 }
 
 #[cfg(feature = "pocket_ic")]
@@ -121,6 +112,11 @@ impl<T: PocketIcQueryCall> QueryCall<UserError> for T {
                 "http_request",
                 request,
             )
-            .map(Self::assert_reply)
+            .map(|result| match result {
+                WasmResult::Reply(bytes) => bytes,
+                WasmResult::Reject(reject) => {
+                    panic!("Expected a successful reply, got a reject: {}", reject)
+                }
+            })
     }
 }
