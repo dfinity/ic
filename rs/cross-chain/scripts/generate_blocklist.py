@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 #
 # SDN_XML.ZIP
 #
-# and decompress it, which creates the folder 'sdn_xml' containing the file 'SDN.XML'.
+# and decompress it to retrieve the file 'SDN.XML'.
 #
 # 2) Run this script as follows:
 #
