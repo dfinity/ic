@@ -180,7 +180,7 @@ impl CanisterHttp {
             Some(client.clone())
         } else {
             let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
-            self.metrics.socks_cache_miss.inc();
+            self.metrics.socks_cache_misses.inc();
             self.maybe_add_socks_client_for_address(&mut cache_guard, address);
             match cache_guard.get(address) {
                 Some(client) => Some(client.clone()),
