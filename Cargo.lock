@@ -5445,6 +5445,7 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "futures",
  "ic-artifact-pool",
  "ic-config",
  "ic-interfaces",
@@ -5454,6 +5455,7 @@ dependencies = [
  "ic-types",
  "prometheus",
  "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
