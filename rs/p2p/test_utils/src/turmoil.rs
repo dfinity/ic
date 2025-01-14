@@ -451,7 +451,7 @@ pub fn start_test_processor(
         MetricsRegistry::default(),
         Box::new(client),
         outbound_tx,
-        inbound_rx,
+        inbound_rx.into(),
         vec![],
     )
 }

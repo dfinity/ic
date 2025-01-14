@@ -58,7 +58,10 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedSender},
+    watch,
+};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
@@ -366,7 +369,8 @@ fn start_consensus(
         join_handles.push(jh);
     };
 
-    let ingress_sender = {
+    let user_ingress_tx = {
+        let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
         let bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
@@ -389,7 +393,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        inbound_tx
+        user_ingress_tx
     };
 
     {
@@ -545,7 +549,7 @@ fn start_consensus(
 
     (
         artifact_pools.ingress_pool,
-        ingress_sender,
+        user_ingress_tx,
         join_handles,
         new_p2p_consensus,
     )

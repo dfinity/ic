@@ -24,7 +24,7 @@ use tokio::{
     sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
-use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
+use tokio_stream::StreamExt;
 use tracing::instrument;
 
 /// Metrics for a client artifact processor.
@@ -132,18 +132,20 @@ impl Drop for ArtifactProcessorJoinGuard {
 }
 
 // TODO: make it private, it is used only for tests outside of this crate
-pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
+pub fn run_artifact_processor<
+    Artifact: IdentifiableArtifact,
+    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
+>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     outbound_tx: Sender<ArtifactTransmit<Artifact>>,
-    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    inbound_rx_stream: I,
     initial_artifacts: Vec<Artifact>,
 ) -> Box<dyn JoinGuard> {
     let shutdown = Arc::new(AtomicBool::new(false));
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
-    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
@@ -167,11 +169,14 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
 }
 
 // The artifact processor thread loop
-fn process_messages<Artifact: IdentifiableArtifact + 'static>(
+fn process_messages<
+    Artifact: IdentifiableArtifact + 'static,
+    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
+>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactTransmit<Artifact>>,
-    mut inbound_stream: UnboundedReceiverStream<UnvalidatedArtifactMutation<Artifact>>,
+    mut inbound_stream: I,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -251,12 +256,15 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
 ) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
+    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
+    let user_ingress_rx_stream =
+        tokio_stream::wrappers::UnboundedReceiverStream::new(user_ingress_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         outbound_tx,
-        inbound_rx,
+        inbound_rx_stream.merge(user_ingress_rx_stream),
         vec![],
     )
 }
@@ -276,12 +284,13 @@ pub fn create_artifact_handler<
 ) -> Box<dyn JoinGuard> {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
+    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         outbound_tx,
-        inbound_rx,
+        inbound_rx_stream,
         inital_artifacts,
     )
 }
@@ -413,6 +422,7 @@ mod tests {
     use ic_interfaces::time_source::SysTimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
+    use tokio_stream::wrappers::UnboundedReceiverStream;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
 
@@ -464,12 +474,15 @@ mod tests {
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
         #[allow(clippy::disallowed_methods)]
         let (_, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
-        run_artifact_processor::<DummyArtifact>(
+        run_artifact_processor::<
+            DummyArtifact,
+            UnboundedReceiverStream<UnvalidatedArtifactMutation<DummyArtifact>>,
+        >(
             time_source,
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
-            inbound_rx,
+            inbound_rx.into(),
             (0..10).map(Into::into).collect(),
         );
 
