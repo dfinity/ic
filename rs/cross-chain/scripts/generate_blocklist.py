@@ -25,8 +25,8 @@ import xml.etree.ElementTree as ET
 # The ID type prefix for digital currencies.
 DIGITAL_CURRENCY_TYPE_PREFIX = 'Digital Currency Address - '
 
-# The blocked addresses are stored in this Rust file.
-BLOCKLIST_FILENAME = 'blocklist.rs'
+# The blocked addresses are stored in this Rust file by default.
+DEFAULT_BLOCKLIST_FILENAME = 'blocklist.rs'
 
 # Invalid addresses in the OFAC SDN list to be commented out.
 INVALID_ADDRESSES = ['TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq']
@@ -89,8 +89,8 @@ def write_eth_postamble(blocklist_file):
     blocklist_file.write('    ' + 'ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()\n')
     blocklist_file.write('}')
 
-def store_blocklist(currency, addresses):
-    blocklist_file = open(BLOCKLIST_FILENAME, 'w')
+def store_blocklist(currency, addresses, filename):
+    blocklist_file = open(filename, 'w')
     
     if currency == 'BTC':
         write_btc_preamble(blocklist_file)
@@ -123,8 +123,9 @@ def store_blocklist(currency, addresses):
 
 if __name__ == '__main__':  
     if len(sys.argv) < 3:
-        print('Usage: ' + sys.argv[0] + ' [currency (BTC or ETH)] [path to SDN.XML file]')
+        print('Usage: ' + sys.argv[0] + ' [currency (BTC or ETH)] [path to SDN.XML file] (output file)')
     else:
+        filename = DEFAULT_BLOCKLIST_FILENAME if len(sys.argv) == 3 else sys.argv[3]
         currency = sys.argv[1].upper()
         if currency not in ['BTC', 'ETH']:
             print('Error: The currency must be BTC or ETH.')
@@ -133,6 +134,6 @@ if __name__ == '__main__':
             print('Extracting addresses from ' + file_path + '...')
             addresses = extract_addresses(currency, file_path)
             print('Done. Found ' + str(len(addresses)) + ' addresses.')
-            print('Storing the addresses in the file ' + BLOCKLIST_FILENAME + '...')
-            store_blocklist(currency, addresses)
+            print('Storing the addresses in the file ' + filename + '...')
+            store_blocklist(currency, addresses, filename)
             print('Done.')
