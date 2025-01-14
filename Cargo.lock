@@ -10710,6 +10710,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "turmoil",
 ]
 
