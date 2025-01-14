@@ -534,30 +534,56 @@ pub trait CountBytes {
     fn count_bytes(&self) -> usize;
 }
 
-impl CountBytes for Time {
-    fn count_bytes(&self) -> usize {
+/// Allow an object to reprt its own byte size on disk and in memory. Not
+/// necessarilly exact.
+pub trait MemoryDiskBytes {
+    fn memory_bytes(&self) -> usize;
+    fn disk_bytes(&self) -> usize;
+}
+
+impl MemoryDiskBytes for Time {
+    fn memory_bytes(&self) -> usize {
         8
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
-impl<T: CountBytes, E: CountBytes> CountBytes for Result<T, E> {
-    fn count_bytes(&self) -> usize {
+impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
+    fn memory_bytes(&self) -> usize {
         match self {
-            Ok(result) => result.count_bytes(),
-            Err(err) => err.count_bytes(),
+            Ok(result) => result.memory_bytes(),
+            Err(err) => err.memory_bytes(),
+        }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        match self {
+            Ok(result) => result.disk_bytes(),
+            Err(err) => err.disk_bytes(),
         }
     }
 }
 
-impl<T: CountBytes> CountBytes for Arc<T> {
-    fn count_bytes(&self) -> usize {
-        self.as_ref().count_bytes()
+impl<T: MemoryDiskBytes> MemoryDiskBytes for Arc<T> {
+    fn memory_bytes(&self) -> usize {
+        self.as_ref().memory_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        self.as_ref().disk_bytes()
     }
 }
 
-// Implementing `CountBytes` in `ic_error_types` introduces a circular dependency.
-impl CountBytes for ic_error_types::UserError {
-    fn count_bytes(&self) -> usize {
+// Implementing `MemoryDiskBytes` in `ic_error_types` introduces a circular dependency.
+impl MemoryDiskBytes for ic_error_types::UserError {
+    fn memory_bytes(&self) -> usize {
         self.count_bytes()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }

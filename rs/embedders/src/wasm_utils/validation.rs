@@ -1477,7 +1477,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
         // expect to see then the changes will likely need to be coordinated
         // with a change in how we create the memories in the implementation
         // of `wasmtime::MemoryCreator`.
-        .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .memory_reservation(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
         .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(MAX_WASM_STACK_SIZE);
@@ -1496,11 +1496,8 @@ fn can_compile(
 ) -> Result<(), WasmValidationError> {
     let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
-    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
-        WasmValidationError::WasmtimeValidation(format!(
-            "wasmtime::Module::validate() failed with {}",
-            err
-        ))
+    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|_err| {
+        WasmValidationError::WasmtimeValidation("wasmtime::Module::validate() failed".into())
     })
 }
 

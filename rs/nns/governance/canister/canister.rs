@@ -158,7 +158,7 @@ fn set_governance(gov: Governance) {
 
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
@@ -167,6 +167,9 @@ fn schedule_timers() {
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
+
+    // Schedule the fix for the locked neuron
+    schedule_locked_spawning_neuron_fix();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -277,19 +280,15 @@ const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
 // id.
 const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
 
-fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdProto) {
+fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
     ic_cdk_timers::set_timer(delay, move || {
-        let next_neuron_id = governance_mut().batch_adjust_neurons_storage(start_neuron_id);
-        match next_neuron_id {
-            Some(next_neuron_id) => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_BATCH_INTERVAL,
-                next_neuron_id,
-            ),
-            None => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_ROUND_INTERVAL,
-                NeuronIdProto { id: 0 },
-            ),
+        let next = governance_mut().batch_adjust_neurons_storage(next);
+        let next_delay = if next == Bound::Unbounded {
+            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
+        } else {
+            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
         };
+        schedule_adjust_neurons_storage(next_delay, next);
     });
 }
 
@@ -322,6 +321,18 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
         spawn(governance_mut().process_voting_state_machines());
+    });
+}
+
+// TODO(NNS1-3526): Remove this method once it is released.
+fn schedule_locked_spawning_neuron_fix() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        spawn(async {
+            governance_mut()
+                .fix_locked_spawn_neuron()
+                .await
+                .expect("Failed to fix locked neuron");
+        });
     });
 }
 

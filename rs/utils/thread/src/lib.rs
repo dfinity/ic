@@ -1,5 +1,7 @@
 use std::thread;
 
+pub mod deallocator_thread;
+
 /// An object that joins a thread when it's dropped. Mostly helpful to implement
 /// graceful shutdowns.
 ///
