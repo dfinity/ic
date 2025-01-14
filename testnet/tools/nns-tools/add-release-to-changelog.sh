@@ -88,7 +88,7 @@ if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
     print_red "💀 You currently have $(git rev-parse HEAD)" >&2
     print_red "checked out, but this command only supports being run when" >&2
     print_red "the proposal's commit (${DESTINATION_COMMIT_ID}) is checked out." >&2
-    # DO NOT MERGE exit 1
+    exit 1
 fi
 
 # cd to the canister's primary code path.
