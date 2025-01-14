@@ -7,6 +7,7 @@ members = [
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
     "packages/ic-ethereum-types",
+    "packages/ic-management-types",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
