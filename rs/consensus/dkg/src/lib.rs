@@ -421,7 +421,9 @@ mod tests {
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_registry::RegistryClient;
+    use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_metrics::MetricsRegistry;
+    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -1875,5 +1877,21 @@ mod tests {
 
         mngr.on_state_change(&PoolReader::new(pool));
         mngr.sync();
+    }
+
+    /// Get a test [`ChainKeyConfig`] containing a single vet key configuration
+    pub(super) fn test_vet_key() -> ChainKeyConfig {
+        ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: String::from("vet_kd_key"),
+                }),
+                pre_signatures_to_create_in_advance: 20,
+                max_queue_size: 20,
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        }
     }
 }

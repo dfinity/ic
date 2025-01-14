@@ -881,6 +881,8 @@ pub fn make_genesis_summary(
 
 #[cfg(test)]
 mod tests {
+    use crate::tests::test_vet_key;
+
     use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
@@ -888,8 +890,7 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
-    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -1040,7 +1041,7 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
-                            .with_chain_key_config(one_vet_key())
+                            .with_chain_key_config(test_vet_key())
                             .build(),
                     )],
                 );
@@ -1196,7 +1197,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(one_vet_key())
+                        .with_chain_key_config(test_vet_key())
                         .build(),
                 )],
             );
@@ -1277,7 +1278,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(one_vet_key())
+                        .with_chain_key_config(test_vet_key())
                         .build(),
                 )],
             );
@@ -1366,7 +1367,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(one_vet_key())
+                        .with_chain_key_config(test_vet_key())
                         .build(),
                 )],
             );
@@ -1469,20 +1470,5 @@ mod tests {
                 }
             }
         });
-    }
-
-    fn one_vet_key() -> ChainKeyConfig {
-        ChainKeyConfig {
-            key_configs: vec![KeyConfig {
-                key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
-                    curve: VetKdCurve::Bls12_381_G2,
-                    name: String::from("vet_kd_key"),
-                }),
-                pre_signatures_to_create_in_advance: 20,
-                max_queue_size: 20,
-            }],
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }
     }
 }
