@@ -102,7 +102,7 @@ def _custom_partitions(mode):
         src = guest_image,
         out = "guest-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     copy_file(
@@ -110,7 +110,7 @@ def _custom_partitions(mode):
         src = host_image,
         out = "host-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     config_dict = {
@@ -159,7 +159,7 @@ def _custom_partitions(mode):
         ],
         mode = "0644",
         package_dir = "data",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
@@ -170,7 +170,7 @@ def _custom_partitions(mode):
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     return [
