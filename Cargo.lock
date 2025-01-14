@@ -1941,7 +1941,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "clap 4.5.23",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
+ "cloudflare",
  "flate2",
  "futures",
  "http 1.2.0",
@@ -2244,24 +2244,6 @@ dependencies = [
 name = "cloudflare"
 version = "0.12.0"
 source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
-dependencies = [
- "chrono",
- "http 0.2.12",
- "percent-encoding",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "thiserror 1.0.69",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "cloudflare"
-version = "0.12.0"
-source = "git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae#f14720e42184ee176a97676e85ef2d2d85bc3aae"
 dependencies = [
  "chrono",
  "http 0.2.12",
@@ -5589,7 +5571,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=d74a6527fbaf8a2c1a7076983cc84f5c5a727923#d74a6527fbaf8a2c1a7076983cc84f5c5a727923"
+source = "git+https://github.com/luc-blaeser/ic-bn-lib?branch=luc/drun-build#102a64253d1ce7e58a31829b4dcc82ea44e7cf03"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5602,7 +5584,7 @@ dependencies = [
  "chacha20poly1305",
  "clap 4.5.23",
  "clap_derive 4.5.18",
- "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
+ "cloudflare",
  "derive-new",
  "fqdn 0.4.4",
  "futures",
