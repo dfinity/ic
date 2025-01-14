@@ -1,9 +1,80 @@
 use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Affine, G2Affine, Polynomial, Scalar,
+    verify_bls_signature, G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar,
 };
 use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{prelude::SliceRandom, CryptoRng, Rng, RngCore, SeedableRng};
+
+#[derive(Copy, Clone, Debug)]
+/// Deserialization of a transport secret key failed
+pub enum TransportSecretKeyDeserializationError {
+    /// Error indicating the key was not a valid scalar
+    InvalidSecretKey,
+}
+
+#[derive(Clone)]
+/// Secret key of the transport key pair
+pub struct TransportSecretKey {
+    secret_key: Scalar,
+}
+
+impl TransportSecretKey {
+    /// The length of the serialized encoding of this type
+    pub const BYTES: usize = Scalar::BYTES;
+
+    /// Create a new transport secret key
+    pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
+        let secret_key = Scalar::random(rng);
+        Self { secret_key }
+    }
+
+    /// Serialize the transport secret key to a bytestring
+    pub fn serialize(&self) -> [u8; Self::BYTES] {
+        self.secret_key.serialize()
+    }
+
+    /// Deserialize a previously serialized transport secret key
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, TransportSecretKeyDeserializationError> {
+        let secret_key = Scalar::deserialize(&bytes)
+            .map_err(|_| TransportSecretKeyDeserializationError::InvalidSecretKey)?;
+        Ok(Self { secret_key })
+    }
+
+    /// Return the public key associated with this secret key
+    pub fn public_key(&self) -> TransportPublicKey {
+        let public_key = G1Affine::generator() * &self.secret_key;
+        let pk_bytes = public_key.to_affine().serialize();
+        TransportPublicKey::deserialize(&pk_bytes).expect("Invalid public key")
+    }
+
+    fn secret(&self) -> &Scalar {
+        &self.secret_key
+    }
+
+    /// Decrypt an encrypted key
+    ///
+    /// Returns None if decryption failed
+    pub fn decrypt(
+        &self,
+        ek: &EncryptedKey,
+        dpk: &DerivedPublicKey,
+        did: &[u8],
+    ) -> Option<G1Affine> {
+        let msg = G1Affine::augmented_hash(dpk.point(), did);
+
+        let k = G1Affine::from(G1Projective::from(ek.c3()) - ek.c1() * self.secret());
+
+        let dpk_prep = G2Prepared::from(dpk.point());
+        let k_is_valid_sig =
+            Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
+
+        if k_is_valid_sig {
+            Some(k)
+        } else {
+            None
+        }
+    }
+}
 
 #[test]
 fn transport_key_gen_is_stable() {
@@ -221,28 +292,12 @@ impl<'a> VetkdTestProtocolExecution<'a> {
 }
 
 fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &[T], include: usize) -> Vec<T> {
+    use rand::seq::SliceRandom;
+
     assert!(include <= items.len());
-
-    if items.len() == include {
-        return items.to_owned();
-    }
-
-    let mut result = Vec::with_capacity(include);
-
-    let mut taken = vec![false; items.len()];
-
-    while result.len() != include {
-        loop {
-            let idx = rng.gen::<usize>() % items.len();
-            if !taken[idx] {
-                result.push(items[idx].clone());
-                taken[idx] = true;
-                break;
-            }
-        }
-    }
-
+    let result: Vec<_> = items.choose_multiple(rng, include).cloned().collect();
     assert_eq!(result.len(), include);
+
     result
 }
 
@@ -272,6 +327,13 @@ fn test_protocol_execution() {
                 rec_threshold >= threshold,
                 "Recovery only works with sufficient quorum"
             );
+
+            assert!(ek.is_valid(
+                &setup.master_pk,
+                &proto.derivation_path,
+                &proto.did,
+                &setup.transport_pk
+            ));
 
             let k = setup
                 .transport_sk
@@ -306,6 +368,7 @@ fn test_protocol_execution() {
     // Check that if we introduce incorrect shares then combine_all will fail
 
     let other_did = rng.gen::<[u8; 24]>();
+    assert_ne!(proto.did, other_did);
     let node_info_wrong_did = proto.create_encrypted_key_shares(rng, Some(&other_did));
 
     let node_eks_wrong_did = node_info_wrong_did
@@ -317,12 +380,51 @@ fn test_protocol_execution() {
     // if any one share is invalid then combination will fail
     for rec_threshold in 2..nodes {
         let mut shares = random_subset(rng, &node_eks, rec_threshold - 1);
-        shares.append(&mut random_subset(rng, &node_eks_wrong_did, 1));
+
+        // Avoid using a duplicate index for this test
+        let random_unused_idx = loop {
+            let idx = (rng.gen::<usize>() % node_eks_wrong_did.len()) as u32;
+
+            if !shares.iter().map(|x| x.0).any(|x| x == idx) {
+                break idx as usize;
+            }
+        };
+
+        shares.push(node_eks_wrong_did[random_unused_idx].clone());
         shares.shuffle(rng);
-        assert!(proto.combine_all(&shares).is_err());
+
+        let expected_error = if rec_threshold < threshold {
+            EncryptedKeyCombinationError::InsufficientShares
+        } else {
+            EncryptedKeyCombinationError::InvalidShares
+        };
+        assert_eq!(proto.combine_all(&shares), Err(expected_error));
     }
 
-    // With combine_valid_shares OTOH we detect and reject the shares
+    // Check that duplicate node indexes are detected
+    for rec_threshold in 2..nodes {
+        let mut shares = random_subset(rng, &node_eks, rec_threshold - 1);
+
+        let random_duplicate_idx = loop {
+            let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
+
+            if shares.iter().map(|x| x.0).any(|x| x == idx) {
+                break idx as usize;
+            }
+        };
+
+        shares.push(node_eks[random_duplicate_idx].clone());
+        shares.shuffle(rng);
+
+        let expected_error = if rec_threshold < threshold {
+            EncryptedKeyCombinationError::InsufficientShares
+        } else {
+            EncryptedKeyCombinationError::DuplicateNodeIndex
+        };
+        assert_eq!(proto.combine_all(&shares), Err(expected_error));
+    }
+
+    // With combine_valid_shares OTOH we detect and reject the invalid shares
 
     for rec_threshold in threshold..nodes {
         let mut shares = random_subset(rng, &node_info, rec_threshold);
@@ -337,5 +439,43 @@ fn test_protocol_execution() {
             .expect("Decryption failed");
 
         assert_eq!(k, vetkey);
+    }
+
+    for rec_threshold in threshold..nodes {
+        let mut shares = random_subset(rng, &node_info, rec_threshold);
+
+        let random_duplicate_idx = loop {
+            let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
+
+            if shares.iter().map(|x| x.0).any(|x| x == idx) {
+                break idx as usize;
+            }
+        };
+
+        println!("dup {}", random_duplicate_idx);
+        shares.push(node_info[random_duplicate_idx].clone());
+        shares.shuffle(rng);
+
+        let result = proto.combine_valid(&shares);
+
+        if result.is_ok() {
+            // This can still suceed since we only look at the first threshold shares
+            // If success, verify that the duplicate appears later in the list
+
+            let indexes = shares
+                .iter()
+                .map(|s| s.0)
+                .enumerate()
+                .filter(|(_i, s)| *s == random_duplicate_idx as u32)
+                .map(|s| s.0)
+                .collect::<Vec<usize>>();
+            assert_eq!(indexes.len(), 2);
+            assert!(indexes[1] > threshold);
+        } else {
+            assert_eq!(
+                result,
+                Err(EncryptedKeyCombinationError::DuplicateNodeIndex)
+            );
+        }
     }
 }

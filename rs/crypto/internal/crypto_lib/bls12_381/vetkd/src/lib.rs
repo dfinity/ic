@@ -6,10 +6,9 @@
 #![forbid(missing_docs)]
 
 pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPoint, Scalar};
-use ic_crypto_internal_bls12_381_type::{G1Projective, G2Prepared, Gt, LagrangeCoefficients};
+use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
 
 use rand::{CryptoRng, RngCore};
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod ro;
 
@@ -42,107 +41,7 @@ impl DerivationPath {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-/// Deserialization of a transport secret key failed
-pub enum TransportSecretKeyDeserializationError {
-    /// Error indicating the key was not a valid scalar
-    InvalidSecretKey,
-}
-
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-/// Secret key of the transport key pair
-pub struct TransportSecretKey {
-    secret_key: Scalar,
-}
-
-impl TransportSecretKey {
-    /// The length of the serialized encoding of this type
-    pub const BYTES: usize = Scalar::BYTES;
-
-    /// Create a new transport secret key
-    pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let secret_key = Scalar::random(rng);
-        Self { secret_key }
-    }
-
-    /// Serialize the transport secret key to a bytestring
-    pub fn serialize(&self) -> [u8; Self::BYTES] {
-        self.secret_key.serialize()
-    }
-
-    /// Deserialize a previously serialized transport secret key
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, TransportSecretKeyDeserializationError> {
-        let secret_key = Scalar::deserialize(&bytes)
-            .map_err(|_| TransportSecretKeyDeserializationError::InvalidSecretKey)?;
-        Ok(Self { secret_key })
-    }
-
-    /// Return the public key associated with this secret key
-    pub fn public_key(&self) -> TransportPublicKey {
-        let public_key = G1Affine::generator() * &self.secret_key;
-        TransportPublicKey::new(public_key.to_affine())
-    }
-
-    fn secret(&self) -> &Scalar {
-        &self.secret_key
-    }
-
-    /// Decrypt an encrypted key
-    ///
-    /// Returns None if decryption failed
-    pub fn decrypt(
-        &self,
-        ek: &EncryptedKey,
-        dpk: &DerivedPublicKey,
-        did: &[u8],
-    ) -> Option<G1Affine> {
-        let msg = G1Affine::augmented_hash(&dpk.pt, did);
-
-        let k = G1Affine::from(G1Projective::from(&ek.c3) - &ek.c1 * self.secret());
-
-        let dpk_prep = G2Prepared::from(&dpk.pt);
-        let k_is_valid_sig =
-            Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
-
-        if k_is_valid_sig {
-            Some(k)
-        } else {
-            None
-        }
-    }
-
-    /// Decrypt an encrypted key, and hash it to a symmetric key
-    ///
-    /// Returns None if decryption failed
-    ///
-    /// The output length can be arbitrary and is specified by the caller
-    ///
-    /// The `symmetric_key_associated_data` field should include information about
-    /// the protocol and cipher that this key will be used for
-    pub fn decrypt_and_hash(
-        &self,
-        ek: &EncryptedKey,
-        dpk: &DerivedPublicKey,
-        did: &[u8],
-        symmetric_key_bytes: usize,
-        symmetric_key_associated_data: &[u8],
-    ) -> Option<Vec<u8>> {
-        match self.decrypt(ek, dpk, did) {
-            None => None,
-            Some(k) => {
-                let mut ro = ro::RandomOracle::new(&format!(
-                    "ic-crypto-vetkd-bls12-381-create-secret-key-{}-bytes",
-                    symmetric_key_bytes
-                ));
-                ro.update_bin(symmetric_key_associated_data);
-                ro.update_bin(&k.serialize());
-                Some(ro.finalize_to_vec(symmetric_key_bytes))
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing a transport public key failed
 pub enum TransportPublicKeyDeserializationError {
     /// Error indicating the public key was not a valid elliptic curve point
@@ -158,10 +57,6 @@ pub struct TransportPublicKey {
 impl TransportPublicKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = G1Affine::BYTES;
-
-    fn new(public_key: G1Affine) -> Self {
-        Self { public_key }
-    }
 
     /// Serialize this public key to a bytestring
     pub fn serialize(&self) -> [u8; Self::BYTES] {
@@ -180,7 +75,7 @@ impl TransportPublicKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing a derived public key failed
 pub enum DerivedPublicKeyDeserializationError {
     /// The public point was not a valid encoding
@@ -258,14 +153,14 @@ fn check_validity(
     true
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing an encrypted key failed
 pub enum EncryptedKeyDeserializationError {
     /// Error indicating one or more of the points was invalid
     InvalidEncryptedKey,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// Error indicating that combining shares into an encrypted key failed
 pub enum EncryptedKeyCombinationError {
     /// Two shares had the same node index
@@ -276,6 +171,8 @@ pub enum EncryptedKeyCombinationError {
     InsufficientValidKeyShares,
     /// Some of the key shares are invalid
     InvalidShares,
+    /// The reconstruction threshold was invalid
+    ReconstructionFailed,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -320,7 +217,7 @@ impl EncryptedKey {
     ///
     /// If the result is Ok(), the returned key is guaranteed to be valid.
     /// Returns the combined key, if it is valid.
-    /// Does not take the nodes individual public keys as input.
+    /// Does not take the nodes' individual public keys as input.
     pub fn combine_all(
         nodes: &[(NodeIndex, EncryptedKeyShare)],
         reconstruction_threshold: usize,
@@ -340,7 +237,7 @@ impl EncryptedKey {
     /// Filters the valid shares from the given ones, and combines them into a valid key, if possible.
     /// The returned key is guaranteed to be valid.
     /// Returns an error if not sufficient shares are given or if not sufficient valid shares are given.
-    /// Takes also the node's individual public keys as input, which means the individual public keys
+    /// Takes also the nodes' individual public keys as input, which means the individual public keys
     /// must be available: calculating them is comparatively expensive. Note that combine_all does not
     /// take the individual public keys as input.
     pub fn combine_valid_shares(
@@ -382,7 +279,7 @@ impl EncryptedKey {
         if c.is_valid(master_pk, derivation_path, did, tpk) {
             Ok(c)
         } else {
-            Err(EncryptedKeyCombinationError::InvalidShares)
+            Err(EncryptedKeyCombinationError::ReconstructionFailed)
         }
     }
 
@@ -431,6 +328,21 @@ impl EncryptedKey {
 
         output
     }
+
+    /// Return the c1 element
+    pub fn c1(&self) -> &G1Affine {
+        &self.c1
+    }
+
+    /// Return the c2 element
+    pub fn c2(&self) -> &G2Affine {
+        &self.c2
+    }
+
+    /// Return the c3 element
+    pub fn c3(&self) -> &G1Affine {
+        &self.c3
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -441,7 +353,7 @@ pub struct EncryptedKeyShare {
     c3: G1Affine,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserialization of an encrypted key share failed
 pub enum EncryptedKeyShareDeserializationError {
     /// One or more of the share points were not valid

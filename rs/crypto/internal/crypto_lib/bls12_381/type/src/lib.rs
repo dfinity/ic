@@ -1909,7 +1909,7 @@ impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
 
 impl G1Affine {
-    /// See draft-irtf-cfrg-bls-signature-01 §4.2.2 for details on BLS augmented signatures
+    /// See draft-irtf-cfrg-bls-signature-05 §4.2.2 for details on BLS augmented signatures
     pub fn augmented_hash(pk: &G2Affine, data: &[u8]) -> Self {
         let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
 
