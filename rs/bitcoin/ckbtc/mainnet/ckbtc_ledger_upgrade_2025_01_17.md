@@ -15,8 +15,8 @@ Previous ckBTC ledger proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+Upgrade the ckBTC ledger canister to the latest version ([ledger-suite-icrc-2025-01-07](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-01-07)) to continue the migration towards stable memory.
 
 ## Upgrade args
 
