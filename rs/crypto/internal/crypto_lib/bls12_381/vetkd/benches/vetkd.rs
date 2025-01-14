@@ -4,63 +4,13 @@ use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
-fn transport_key_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("crypto_bls12_381_transport_key");
-
-    let rng = &mut reproducible_rng();
-
-    group.bench_function("TransportSecretKey::generate", |b| {
-        b.iter(|| TransportSecretKey::generate(rng))
-    });
-
-    group.bench_function("TransportSecretKey::serialize", |b| {
-        b.iter_batched(
-            || TransportSecretKey::generate(rng),
-            |key| key.serialize(),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("TransportSecretKey::deserialize", |b| {
-        b.iter_batched(
-            || TransportSecretKey::generate(rng).serialize(),
-            |key| TransportSecretKey::deserialize(&key),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("TransportSecretKey::public_key", |b| {
-        b.iter_batched(
-            || TransportSecretKey::generate(rng),
-            |key| key.public_key(),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("TransportPublicKey::serialize", |b| {
-        b.iter_batched(
-            || TransportSecretKey::generate(rng).public_key(),
-            |key| key.serialize(),
-            BatchSize::SmallInput,
-        )
-    });
-
-    group.bench_function("TransportPublicKey::deserialize", |b| {
-        b.iter_batched(
-            || TransportSecretKey::generate(rng).public_key().serialize(),
-            |key| TransportPublicKey::deserialize(&key),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
 fn vetkd_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_vetkd");
 
     let rng = &mut reproducible_rng();
 
-    let tsk = TransportSecretKey::generate(rng);
-    let tpk = tsk.public_key();
+    let tsk = Scalar::random(rng);
+    let tpk = TransportPublicKey::deserialize(&(G1Affine::generator() * tsk).to_affine().serialize()).unwrap();
 
     let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
     let did = rng.gen::<[u8; 32]>();
@@ -76,8 +26,6 @@ fn vetkd_bench(c: &mut Criterion) {
         let node_id = (rng.gen::<usize>() % nodes) as u32;
         let node_sk = poly.evaluate_at(&Scalar::from_node_index(node_id));
         let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
-
-        let dpk = DerivedPublicKey::compute_derived_key(&master_pk, &derivation_path);
 
         if threshold == 9 {
             group.bench_function("EncryptedKeyShare::create", |b| {
@@ -141,24 +89,8 @@ fn vetkd_bench(c: &mut Criterion) {
                 })
             },
         );
-
-        if threshold == 9 {
-            let ek = EncryptedKey::combine_valid_shares(
-                &node_info,
-                threshold,
-                &master_pk,
-                &tpk,
-                &derivation_path,
-                &did,
-            )
-            .unwrap();
-
-            group.bench_function("TransportSecretKey::decrypt", |b| {
-                b.iter(|| tsk.decrypt(&ek, &dpk, &did).unwrap())
-            });
-        }
     }
 }
 
-criterion_group!(benches, transport_key_bench, vetkd_bench);
+criterion_group!(benches, vetkd_bench);
 criterion_main!(benches);
