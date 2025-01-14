@@ -11,8 +11,11 @@ use ic_stable_structures::{
 use serde::Deserialize;
 use std::cell::RefCell;
 
-const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
-const LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
+const OLD_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
+const OLD_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
+
+const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(2);
+const LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 type VMem = VirtualMemory<DefaultMemoryImpl>;
 type EventLog = StableLog<Vec<u8>, VMem, VMem>;
@@ -21,6 +24,17 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
         MemoryManager::init(DefaultMemoryImpl::default())
     );
+
+    /// The log of the ckBTC state modifications.
+    static OLD_EVENTS: RefCell<EventLog> = MEMORY_MANAGER
+        .with(|m|
+              RefCell::new(
+                  StableLog::init(
+                      m.borrow().get(OLD_LOG_INDEX_MEMORY_ID),
+                      m.borrow().get(OLD_LOG_DATA_MEMORY_ID)
+                  ).expect("failed to initialize stable log")
+              )
+        );
 
     /// The log of the ckBTC state modifications.
     static EVENTS: RefCell<EventLog> = MEMORY_MANAGER
@@ -63,7 +77,7 @@ impl Iterator for EventIterator {
 }
 
 /// Encodes an event into a byte array.
-fn encode_event(event: &Event) -> Vec<u8> {
+pub fn encode_event(event: &Event) -> Vec<u8> {
     let mut buf = Vec::new();
     ciborium::ser::into_writer(event, &mut buf).expect("failed to encode a minter event");
     buf
@@ -72,7 +86,7 @@ fn encode_event(event: &Event) -> Vec<u8> {
 /// # Panics
 ///
 /// This function panics if the event decoding fails.
-fn decode_event(buf: &[u8]) -> Event {
+pub fn decode_event(buf: &[u8]) -> Event {
     // For backwards compatibility, we have to handle two cases:
     //  1. Legacy events: raw instances of the event type enum
     //  2. New events: a struct containing a timestamp and an event type
@@ -99,6 +113,46 @@ pub fn events() -> impl Iterator<Item = Event> {
         buf: vec![],
         pos: 0,
     }
+}
+
+pub fn migrate_old_events_if_not_empty() -> Option<u64> {
+    let mut num_events_removed = None;
+    OLD_EVENTS.with(|old_events| {
+        let mut old = old_events.borrow_mut();
+        if old.len() > 0 {
+            EVENTS.with(|new| {
+                num_events_removed = Some(migrate_events(&old, &new.borrow()));
+            });
+            *old = MEMORY_MANAGER.with(|m| {
+                StableLog::new(
+                    m.borrow().get(OLD_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(OLD_LOG_DATA_MEMORY_ID),
+                )
+            });
+        }
+    });
+    assert_eq!(
+        OLD_EVENTS.with(|events| events.borrow().len()),
+        0,
+        "Old events is not emptied after data migration"
+    );
+    num_events_removed
+}
+
+pub fn migrate_events(old_events: &EventLog, new_events: &EventLog) -> u64 {
+    let mut removed = 0;
+    for bytes in old_events.iter() {
+        let event = decode_event(&bytes);
+        match event.payload {
+            EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => removed += 1,
+            _ => {
+                new_events
+                    .append(&bytes)
+                    .expect("failed to append an entry to the new event log");
+            }
+        }
+    }
+    removed
 }
 
 /// Returns the current number of events in the log.
