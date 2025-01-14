@@ -4,11 +4,11 @@ use ic_canister_sandbox_backend_lib::{
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
-use nix::sys::ptrace;
-use nix::sys::wait::waitpid;
-use nix::unistd::{fork, ForkResult};
 use std::ffi::CString;
 use std::os::raw::c_char;
+
+#[cfg(target_os = "linux")]
+use nix::{sys::ptrace, sys::wait::waitpid, unistd::fork, unistd::ForkResult};
 
 #[allow(improper_ctypes)]
 extern "C" {
@@ -98,7 +98,7 @@ where
 }
 
 #[cfg(not(target_os = "linux"))]
-fn syscall_monitor<F>(name: &str, sandbox: F)
+fn syscall_monitor<F>(_name: &str, sandbox: F)
 where
     F: FnOnce(),
 {
