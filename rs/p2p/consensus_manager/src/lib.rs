@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender},
         watch,
     },
 };
@@ -28,7 +28,13 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub struct ConsensusManagerBuilder {
+/// Same order of magnitude as the number of active artifacts.
+const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
+
+pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
+pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
+
+pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
@@ -36,7 +42,7 @@ pub struct ConsensusManagerBuilder {
     router: Option<Router>,
 }
 
-impl ConsensusManagerBuilder {
+impl AbortableBroadcastChannelBuilder {
     pub fn new(log: ReplicaLogger, rt_handle: Handle, metrics_registry: MetricsRegistry) -> Self {
         Self {
             log,
@@ -47,18 +53,32 @@ impl ConsensusManagerBuilder {
         }
     }
 
-    pub fn add_client<
+    /// Creates a channel for the corresponding artifact. The channel is used to broadcast artifacts within the subnet.
+    pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
         F: FnOnce(Arc<dyn Transport>) -> D + 'static,
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
-        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
+    ) -> (
+        AbortableBroadcastSender<Artifact>,
+        AbortableBroadcastReceiver<Artifact>,
+        // TODO: remove this by introducing a new channel from the http handler into the processor
+        UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) {
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
+        // Making this channel bounded can be problematic since we don't have true multiplexing
+        // of P2P messages.
+        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
+        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
+        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
+        // independent of consensus.
+        #[allow(clippy::disallowed_methods)]
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
+
         assert!(uri_prefix::<WireArtifact>()
             .chars()
             .all(char::is_alphabetic));
@@ -68,14 +88,15 @@ impl ConsensusManagerBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
+        let inbound_tx_c = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
                 &metrics_registry,
                 rt_handle,
-                outbound_artifacts_rx,
+                outbound_rx,
                 adverts_from_peers_rx,
-                inbound_artifacts_tx,
+                inbound_tx,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -92,6 +113,7 @@ impl ConsensusManagerBuilder {
         );
 
         self.clients.push(Box::new(builder));
+        (outbound_tx, inbound_rx, inbound_tx_c)
     }
 
     pub fn router(&mut self) -> Router {

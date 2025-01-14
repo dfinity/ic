@@ -21,11 +21,11 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
-    Time,
+    messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
+    NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -50,6 +50,7 @@ pub struct HypervisorMetrics {
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
+    compilation_cache_size: IntGaugeVec,
 }
 
 impl HypervisorMetrics {
@@ -124,6 +125,8 @@ impl HypervisorMetrics {
                 decimal_buckets_with_zero(0,8),
                 &["api_type", "memory_type"]
             ),
+            compilation_cache_size: metrics_registry.int_gauge_vec("hypervisor_compilation_cache_size", "Bytes in memory and on disk used by the compilation cache.", &["location"],
+            ),
         }
     }
 
@@ -184,7 +187,12 @@ impl HypervisorMetrics {
         }
     }
 
-    fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
+    fn observe_compilation_metrics(
+        &self,
+        compilation_result: &CompilationResult,
+        cache_memory_size: usize,
+        cache_disk_size: usize,
+    ) {
         let CompilationResult {
             largest_function_instruction_count,
             compilation_time,
@@ -194,6 +202,12 @@ impl HypervisorMetrics {
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
+        self.compilation_cache_size
+            .with_label_values(&["memory"])
+            .set(cache_memory_size as i64);
+        self.compilation_cache_size
+            .with_label_values(&["disk"])
+            .set(cache_disk_size as i64);
     }
 }
 
@@ -255,8 +269,11 @@ impl Hypervisor {
         match creation_result {
             Ok((execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
-                    self.metrics
-                        .observe_compilation_metrics(&compilation_result);
+                    self.metrics.observe_compilation_metrics(
+                        &compilation_result,
+                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.disk_bytes(),
+                    );
                 }
                 round_limits.instructions -= as_round_instructions(
                     compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
@@ -489,8 +506,11 @@ impl Hypervisor {
             execution_state,
         );
         if let Some(compilation_result) = compilation_result {
-            self.metrics
-                .observe_compilation_metrics(&compilation_result);
+            self.metrics.observe_compilation_metrics(
+                &compilation_result,
+                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.disk_bytes(),
+            );
         }
         self.metrics.observe(&execution_result, api_type_str);
 
