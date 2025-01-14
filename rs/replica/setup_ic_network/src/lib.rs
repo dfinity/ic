@@ -370,6 +370,7 @@ fn start_consensus(
     };
 
     let user_ingress_tx = {
+        #[allow(clippy::disallowed_methods)]
         let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
         let bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
