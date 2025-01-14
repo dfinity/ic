@@ -120,9 +120,6 @@ def store_blocklist(currency, addresses, filename):
         address_suffix = ')'
         offset = 2
     for address in addresses:
-        # Ethereum addresses are case-insensitive. By contrast, only Bech32 Bitcoin addresses are case-insensitive.
-        if currency == 'ETH':
-            address = address.lower()
         if address in INVALID_ADDRESSES:
             blocklist_file.write('    // ' + address_prefix + '"' + address[offset:] + '"' + address_suffix + ' (Invalid address prefix)\n')
             print('Invalid address:', address)
