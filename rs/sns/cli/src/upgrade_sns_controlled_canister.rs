@@ -1,12 +1,13 @@
-use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
-use candid::{CandidType, Deserialize, Encode, Principal};
-use ic_agent::Agent;
 use anyhow::{bail, Context, Result};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use clap::Parser;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_agent::{nns, sns::root::RootCanister, CallCanisters, Request};
 use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
+use ic_agent::Agent;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::BoundedVec;
+use ic_nervous_system_agent::{nns, sns::root::RootCanister, CallCanisters, Request};
+use ic_sns_governance::pb::v1::NeuronId;
+use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
 
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
 const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
@@ -19,6 +20,9 @@ pub struct UpgradeSnsControlledCanisterArgs {
     root_canister_id: CanisterId,
 
     #[clap(long)]
+    sns_neuron_id: NeuronId,
+
+    #[clap(long)]
     target_canister_id: CanisterId,
 
     #[clap(long)]
@@ -29,20 +33,16 @@ pub struct UpgradeSnsControlledCanisterArgs {
 }
 
 fn load_wasm(wasm_path: PathBuf) -> Result<Vec<u8>> {
-    let mut file = File::open(&wasm_path)
-        .context("Cannot open file.")?;
+    let mut file = File::open(&wasm_path).context("Cannot open file.")?;
 
     // Create a buffer to store the file's content
     let mut bytes = Vec::new();
 
     // Read the file's content into the buffer
-    file.read_to_end(&mut bytes)
-        .context("Cannot read file.")?;
+    file.read_to_end(&mut bytes).context("Cannot read file.")?;
 
     // Smoke test: Is this a ICP Wasm?
-    if bytes.len() < 4
-        || bytes[..4] != RAW_WASM_HEADER[..]
-        && bytes[..3] != GZIPPED_WASM_HEADER[..]
+    if bytes.len() < 4 || bytes[..4] != RAW_WASM_HEADER[..] && bytes[..3] != GZIPPED_WASM_HEADER[..]
     {
         bail!("The file does not look like a valid ICP Wasm module.");
     }
@@ -99,10 +99,13 @@ async fn upload_chunk<C: CallCanisters>(
     chunk: Vec<u8>,
 ) -> Result<ChunkHash, C::Error> {
     let response = agent
-        .call(Principal::management_canister(), UploadChunkArgs {
-            canister_id: store_canister_id.get().0,
-            chunk,
-        })
+        .call(
+            Principal::management_canister(),
+            UploadChunkArgs {
+                canister_id: store_canister_id.get().0,
+                chunk,
+            },
+        )
         .await?;
 
     Ok(response)
@@ -147,9 +150,12 @@ async fn stored_chunks<C: CallCanisters>(
     store_canister_id: CanisterId,
 ) -> Result<Vec<ChunkHash>, C::Error> {
     let response = agent
-        .call(Principal::management_canister(), StoredChunksArgs {
-            canister_id: store_canister_id.get().0,
-        })
+        .call(
+            Principal::management_canister(),
+            StoredChunksArgs {
+                canister_id: store_canister_id.get().0,
+            },
+        )
         .await?;
 
     Ok(response)
@@ -171,25 +177,19 @@ async fn upload_wasm_as_chunks(
     let mut uploaded_chunk_hashes = Vec::new();
 
     for chunk in wasm_bytes.chunks(CHUNK_SIZE) {
-        let uploaded_chunk_hash = upload_chunk(
-            agent,
-            store_canister_id,
-            chunk.to_vec()
-        ).await?;
+        let uploaded_chunk_hash = upload_chunk(agent, store_canister_id, chunk.to_vec()).await?;
 
         uploaded_chunk_hashes.push(uploaded_chunk_hash);
     }
 
     // Smoke test
     {
-        let stored_chunk_hashes = stored_chunks(
-            agent,
-            store_canister_id,
-        ).await?;
+        let stored_chunk_hashes = stored_chunks(agent, store_canister_id).await?;
 
-        let stored_chunk_hashes = stored_chunk_hashes.into_iter().map(|chunk_hash| {
-            format_full_hash(&chunk_hash.hash)
-        }).collect::<Vec<_>>();
+        let stored_chunk_hashes = stored_chunk_hashes
+            .into_iter()
+            .map(|chunk_hash| format_full_hash(&chunk_hash.hash))
+            .collect::<Vec<_>>();
 
         let stored_chunk_hashes = BTreeSet::from_iter(stored_chunk_hashes.iter());
 
@@ -209,10 +209,10 @@ async fn upload_wasm_as_chunks(
 pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Result<()> {
     eprintln!("Preparing to propose an SNS-controlled canister upgrade ...");
 
-
     // 1. Check that we have a viable Wasm.
     let UpgradeSnsControlledCanisterArgs {
         root_canister_id,
+        sns_neuron_id,
         target_canister_id,
         wasm_path,
         candid_arg,
@@ -230,7 +230,8 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
         bail!(
             "{} is not one of the canisters controlled by the SNS with Root canister {}",
-            target_canister_id, root_canister_id,
+            target_canister_id,
+            root_canister_id,
         );
     }
 
@@ -248,7 +249,8 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
             ])),
             ..Default::default()
         }),
-    ).await?;
+    )
+    .await?;
 
     // 4. Upload the chinks into the store canister.
     let num_chunks_expected = {
@@ -260,11 +262,6 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
             num_full_chunks + 1
         }
     };
-    let uploaded_chunk_hashes = upload_wasm_as_chunks(
-        agent,
-        store_canister_id,
-        wasm_bytes,
-        num_chunks_expected,
-    ).await?;
-
+    let uploaded_chunk_hashes =
+        upload_wasm_as_chunks(agent, store_canister_id, wasm_bytes, num_chunks_expected).await?;
 }

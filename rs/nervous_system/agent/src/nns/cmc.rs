@@ -1,7 +1,7 @@
-use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_base_types::CanisterId;
-use cycles_minting_canister::{CreateCanister, SubnetSelection, CanisterSettingsArgs};
 use crate::CallCanisters;
+use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
+use ic_base_types::CanisterId;
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 
 pub async fn create_canister<C: CallCanisters>(
     agent: &C,
@@ -11,7 +11,7 @@ pub async fn create_canister<C: CallCanisters>(
     let request = CreateCanister {
         subnet_selection,
         settings,
-        subnet_type: None,
+        ..Default::default()
     };
     let result: Result<CanisterId, _> = agent.call(CYCLES_MINTING_CANISTER_ID, request).await?;
 

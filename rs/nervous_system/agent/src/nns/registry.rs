@@ -1,6 +1,6 @@
-use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_base_types::{CanisterId, SubnetId};
-use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
+use ic_nns_constants::REGISTRY_CANISTER_ID;
+use registry_canister::pb::v1::GetSubnetForCanisterRequest;
 
 use crate::CallCanisters;
 
@@ -11,11 +11,19 @@ pub async fn get_subnet_for_canister<C: CallCanisters>(
     let request = GetSubnetForCanisterRequest {
         principal: Some(canister_id.get()),
     };
-    let result = agent.call(REGISTRY_CANISTER_ID, request)
+    let result = agent
+        .call(REGISTRY_CANISTER_ID, request)
         .await?
-        .unwrap_or_else(|err| panic!("Cannot get subnet ID for canister {}: {err}", canister_id.get()));
+        .unwrap_or_else(|err| {
+            panic!(
+                "Cannot get subnet ID for canister {}: {err}",
+                canister_id.get()
+            )
+        });
 
-    let subnet_id = result.subnet_id.expect("SubnetForCanister.subnet_id was not specified.");
+    let subnet_id = result
+        .subnet_id
+        .expect("SubnetForCanister.subnet_id was not specified.");
 
     Ok(SubnetId::from(subnet_id))
 }

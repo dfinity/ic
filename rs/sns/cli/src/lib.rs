@@ -39,8 +39,8 @@ pub mod prepare_canisters;
 pub mod propose;
 mod table;
 pub mod unit_helpers;
-mod utils;
 pub mod upgrade_sns_controlled_canister;
+mod utils;
 
 #[cfg(test)]
 mod tests;
