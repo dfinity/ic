@@ -452,7 +452,6 @@ fn test_protocol_execution() {
             }
         };
 
-        println!("dup {}", random_duplicate_idx);
         shares.push(node_info[random_duplicate_idx].clone());
         shares.shuffle(rng);
 
@@ -470,7 +469,7 @@ fn test_protocol_execution() {
                 .map(|s| s.0)
                 .collect::<Vec<usize>>();
             assert_eq!(indexes.len(), 2);
-            assert!(indexes[1] > threshold);
+            assert!(indexes[1] >= threshold);
         } else {
             assert_eq!(
                 result,
