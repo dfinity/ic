@@ -94,13 +94,10 @@ fi
 # TODO: Verify that there are no uncommited changes in this dir, the canister's primary code path.
 
 # Construct new entry for CHANGELOG.md
-#
-# Python is used to filter out empty sections.
-# Python is used because I cannot figure out how to do that using mac sed.
 NEW_FEATURES_AND_FIXES=$(
     sed '1,/^# Next Upgrade Proposal$/d' \
         unreleased_changelog.md \
-        | python3 -c 'import sys, re; s = sys.stdin.read(); print(re.sub(r"## [\w ]+\n+(?=##|\Z)", "", s).strip())'
+        | filter_out_empty_markdown_sections
 )
 if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
     echo >&2

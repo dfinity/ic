@@ -73,7 +73,10 @@ rust_test(
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
-    proc_macro_deps = [":proc_macros"],
+    proc_macro_deps = [
+        ":proc_macros",
+        "@crate_index//:async-trait",
+    ],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         ":local_key",
