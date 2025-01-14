@@ -21,7 +21,7 @@ arc-swap = "1.7.1"
 async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-extra = "0.9.3"
+axum-extra = "0.10.0"
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
