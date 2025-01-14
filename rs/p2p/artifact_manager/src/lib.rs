@@ -200,7 +200,7 @@ fn process_messages<
             match current_thread_rt.block_on(inbound_stream.next().timeout(recv_timeout)) {
                 Ok(Some(artifacts)) => artifacts,
                 // P2P is stopped.
-                Ok(None) => return,
+                Ok(None) => vec![],
                 Err(_) => vec![],
             };
 
