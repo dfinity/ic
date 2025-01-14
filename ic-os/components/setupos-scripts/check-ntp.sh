@@ -19,11 +19,19 @@ function check_ntp() {
     systemctl is-active --quiet chrony
     log_and_halt_installation_on_error "$?" "Chrony service not running or not active."
 
-    if [ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]; then
-        local service_logs=$(journalctl -u chrony.service --no-pager)
-        local log_message="System clock is not synchronized.\n\nChrony service logs:\n${service_logs}"
-        log_and_halt_installation_on_error 1 "${log_message}"
-    fi
+    retries=0
+    max_retries=5
+    while [ "$(timedatectl show -p NTPSynchronized --value)" != "yes" ]; do
+        if [ $retries -ge $max_retries ]; then
+            local service_logs=$(journalctl -u chrony.service --no-pager)
+            local log_message="System clock is not synchronized.\n\nChrony service logs:\n${service_logs}"
+            log_and_halt_installation_on_error 1 "${log_message}"
+        fi
+
+        echo "* Chrony not yet synchronized. Waiting 2 seconds before retry..."
+        sleep 2
+        ((retries++))
+    done
 
     echo "* Chrony is running and time is in sync."
 }
