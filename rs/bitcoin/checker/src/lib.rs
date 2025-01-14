@@ -1,5 +1,3 @@
-use bitcoin::Address;
-
 pub mod blocklist;
 mod types;
 
@@ -34,23 +32,4 @@ pub fn get_tx_cycle_cost(max_response_bytes: u32, num_subnet_nodes: u16) -> u128
     let request_fee = 400 * n * 1024;
     let response_fee = 800 * n * m;
     base_fee + request_fee + response_fee
-}
-
-pub fn blocklist_contains(address: &Address) -> bool {
-    blocklist::BTC_ADDRESS_BLOCKLIST
-        .binary_search(&address.to_string().as_ref())
-        .is_ok()
-}
-
-mod test {
-    #[test]
-    fn blocklist_is_sorted() {
-        use crate::blocklist::BTC_ADDRESS_BLOCKLIST;
-        for (l, r) in BTC_ADDRESS_BLOCKLIST
-            .iter()
-            .zip(BTC_ADDRESS_BLOCKLIST.iter().skip(1))
-        {
-            assert!(l < r, "the block list is not sorted: {} >= {}", l, r);
-        }
-    }
 }

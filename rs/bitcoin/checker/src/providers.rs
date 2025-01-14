@@ -119,16 +119,10 @@ impl Provider {
 fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestArgument {
     let host = "btcscan.org";
     let url = format!("https://{}/api/tx/{}/raw", host, txid);
-    let request_headers = vec![
-        HttpHeader {
-            name: "Host".to_string(),
-            value: format!("{host}:443"),
-        },
-        HttpHeader {
-            name: "User-Agent".to_string(),
-            value: "bitcoin_inputs_collector".to_string(),
-        },
-    ];
+    let request_headers = vec![HttpHeader {
+        name: "User-Agent".to_string(),
+        value: "bitcoin_inputs_collector".to_string(),
+    }];
     CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::GET,
@@ -150,10 +144,7 @@ fn make_get_request(
         BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
         BtcNetwork::Regtest { .. } => panic!("Request to regtest network requires POST"),
     };
-    let request_headers = vec![HttpHeader {
-        name: "Host".to_string(),
-        value: format!("{host}:443"),
-    }];
+    let request_headers = vec![];
     CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::GET,

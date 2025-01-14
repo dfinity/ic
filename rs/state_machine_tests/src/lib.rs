@@ -10,8 +10,8 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::{
-    consensus::payload_builder::PayloadBuilderImpl,
-    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+    consensus::payload_builder::PayloadBuilderImpl, make_registry_cup,
+    make_registry_cup_from_cup_contents,
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
@@ -1596,6 +1596,7 @@ impl StateMachine {
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
                 completed_execution_messages_tx,
+                &state_manager.state_layout().tmp(),
             )
         });
 
@@ -2168,8 +2169,22 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
-                    .to_vec()
+                if let Some(ref aux) = context.schnorr_args().taproot_tree_root {
+                    dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
+                        .map(|v| v.to_vec())
+                        .map_err(|_| {
+                            UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                format!(
+                                    "Invalid inputs for BIP341 signature with key {}",
+                                    context.key_id()
+                                ),
+                            )
+                        })?
+                } else {
+                    dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                        .to_vec()
+                }
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2177,6 +2192,13 @@ impl StateMachine {
                     &context.derivation_path[..],
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
+
+                if context.schnorr_args().taproot_tree_root.is_some() {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "Ed25519 does not use BIP341 aux parameter".to_string(),
+                    ));
+                }
 
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
@@ -2564,8 +2586,7 @@ impl StateMachine {
     /// After you import the canister, you can execute methods on it and upgrade it.
     /// The original directory is not modified.
     ///
-    /// The function is currently not used in code, but it is useful for local
-    /// testing and debugging. Do not remove it.
+    /// This function is useful for local testing and debugging. Do not remove it.
     ///
     /// # Panics
     ///
@@ -2575,6 +2596,8 @@ impl StateMachine {
         canister_directory: P,
         canister_id: CanisterId,
     ) {
+        use ic_replicated_state::testing::SystemStateTesting;
+
         let canister_directory = canister_directory.as_ref();
         assert!(
             canister_directory.is_dir(),
@@ -2627,7 +2650,7 @@ impl StateMachine {
             }
         }
 
-        let canister_state = ic_state_manager::checkpoint::load_canister_state(
+        let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
             ic_types::Height::new(0),
@@ -2644,7 +2667,14 @@ impl StateMachine {
         .0;
 
         let (h, mut state) = self.state_manager.take_tip();
+
+        // Repartition input schedules; Required step for migrating canisters.
+        canister_state
+            .system_state
+            .split_input_schedules(&canister_id, &state.canister_states);
+
         state.put_canister_state(canister_state);
+
         self.state_manager.commit_and_certify(
             state,
             h.increment(),
@@ -3231,6 +3261,11 @@ impl StateMachine {
     /// Returns the status of the ingress message with the specified ID.
     pub fn ingress_status(&self, msg_id: &MessageId) -> IngressStatus {
         (self.ingress_history_reader.get_latest_status())(msg_id)
+    }
+
+    /// Returns the caller of the ingress message with the specified ID if available.
+    pub fn ingress_caller(&self, msg_id: &MessageId) -> Option<UserId> {
+        self.get_latest_state().get_ingress_status(msg_id).user_id()
     }
 
     /// Starts the canister with the specified ID.

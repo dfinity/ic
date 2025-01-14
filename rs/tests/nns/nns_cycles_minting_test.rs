@@ -851,7 +851,7 @@ pub fn test(env: TestEnv) {
         /* Exceed the daily cycles minting limit. */
         info!(logger, "creating canister (exceeding daily limit)");
 
-        let amount = Tokens::new(100_000, 0).unwrap();
+        let amount = Tokens::new(300_000, 0).unwrap();
 
         let (err, refund_block) = user1
             .create_canister_cmc(amount, None, &controller_user, None, None)
@@ -873,7 +873,7 @@ pub fn test(env: TestEnv) {
 
         // remove when ledger notify goes away
         {
-            let amount = Tokens::new(100_000, 0).unwrap();
+            let amount = Tokens::new(300_000, 0).unwrap();
             user1
                 .transfer(
                     Tokens::from_e8s(amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),

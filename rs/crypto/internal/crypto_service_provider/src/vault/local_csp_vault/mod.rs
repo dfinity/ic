@@ -13,6 +13,7 @@ mod tests;
 mod threshold_sig;
 mod tls;
 mod tschnorr;
+mod vetkd;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
