@@ -10,7 +10,9 @@ fn vetkd_bench(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     let tsk = Scalar::random(rng);
-    let tpk = TransportPublicKey::deserialize(&(G1Affine::generator() * tsk).to_affine().serialize()).unwrap();
+    let tpk =
+        TransportPublicKey::deserialize(&(G1Affine::generator() * tsk).to_affine().serialize())
+            .unwrap();
 
     let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
     let did = rng.gen::<[u8; 32]>();
