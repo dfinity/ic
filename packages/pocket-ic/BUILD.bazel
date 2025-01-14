@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -48,6 +48,11 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "6.0.0",
     deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "pocket-ic-doc-test",
+    crate = ":pocket-ic",
 )
 
 rust_test(

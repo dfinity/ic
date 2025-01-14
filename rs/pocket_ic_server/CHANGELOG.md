@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
   are created on an arbitrary subnet.
 
+### Changed
+- The response types `pocket_ic::RawCanisterResult` and `pocket_ic::RawSubmitIngressResult` are replaced by
+  `Result<Vec<u8>, pocket_ic::RejectResponse` and `Result<pocket_ic::RawMessageId, pocket_ic::RejectResponse>`, respectively.
+
 ### Removed
 - The endpoint `/instances/<instance_id>/update/execute_ingress_message`:
   use the two endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/update/await_ingress_message`

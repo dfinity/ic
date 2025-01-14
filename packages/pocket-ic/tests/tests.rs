@@ -3,7 +3,7 @@ use ic_certification::Label;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
+    CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
     SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
@@ -40,21 +40,21 @@ fn test_counter_canister() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the counter canister wasm file on the canister.
     let counter_wasm = counter_wasm();
-    pic.install_canister(can_id, counter_wasm, vec![], None);
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     // Make some calls to the canister.
-    let reply = call_counter_can(&pic, can_id, "read");
+    let reply = call_counter_can(&pic, canister_id, "read");
     assert_eq!(reply, vec![0, 0, 0, 0]);
-    let reply = call_counter_can(&pic, can_id, "write");
+    let reply = call_counter_can(&pic, canister_id, "write");
     assert_eq!(reply, vec![1, 0, 0, 0]);
-    let reply = call_counter_can(&pic, can_id, "write");
+    let reply = call_counter_can(&pic, canister_id, "write");
     assert_eq!(reply, vec![2, 0, 0, 0]);
-    let reply = call_counter_can(&pic, can_id, "read");
+    let reply = call_counter_can(&pic, canister_id, "read");
     assert_eq!(reply, vec![2, 0, 0, 0]);
 }
 
@@ -81,9 +81,9 @@ fn counter_wasm() -> Vec<u8> {
     wat::parse_str(COUNTER_WAT).unwrap()
 }
 
-fn call_counter_can(ic: &PocketIc, can_id: CanisterId, method: &str) -> Vec<u8> {
+fn call_counter_can(ic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
     ic.update_call(
-        can_id,
+        canister_id,
         Principal::anonymous(),
         method,
         encode_one(()).unwrap(),
@@ -1122,18 +1122,18 @@ fn test_canister_http() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the test canister wasm file on the canister.
     let test_wasm = test_canister_wasm();
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
         .submit_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "canister_http",
             encode_one(()).unwrap(),

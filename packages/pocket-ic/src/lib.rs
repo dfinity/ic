@@ -9,27 +9,42 @@
 //!
 //! ```rust
 //! use candid::{Principal, encode_one};
-//! use pocket_ic::{WasmResult, PocketIc};
+//! use pocket_ic::PocketIc;
 //!
-//!  #[test]
-//!  fn test_counter_canister() {
+//! // 2T cycles
+//! const INIT_CYCLES: u128 = 2_000_000_000_000;
+//!
+//! #[test]
+//! fn test_counter_canister() {
 //!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal and add cycles.
-//!     let canister_id = pic.create_canister();
-//!     pic.add_cycles(canister_id, 2_000_000_000_000);
-//!  
-//!     let wasm_bytes = todo!();
-//!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
-//!     // 'inc' is a counter canister method.
-//!     call_counter_canister(&pic, canister_id, "inc");
-//!     // Check if it had the desired effect.
-//!     let reply = call_counter_canister(&pic, canister_id, "read");
-//!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
-//!  }
 //!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
-//!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
-//!         .expect("Failed to call counter canister")
+//!     // Create a canister and charge it with 2T cycles.
+//!     let canister_id = pic.create_canister();
+//!     pic.add_cycles(canister_id, INIT_CYCLES);
+//!
+//!     // Install the counter canister wasm file on the canister.
+//!     let counter_wasm = counter_wasm();
+//!     pic.install_canister(canister_id, counter_wasm, vec![], None);
+//!
+//!     // Make some calls to the canister.
+//!     let reply = call_counter_can(&pic, canister_id, "read");
+//!     assert_eq!(reply, vec![0, 0, 0, 0]);
+//!     let reply = call_counter_can(&pic, canister_id, "write");
+//!     assert_eq!(reply, vec![1, 0, 0, 0]);
+//!     let reply = call_counter_can(&pic, canister_id, "write");
+//!     assert_eq!(reply, vec![2, 0, 0, 0]);
+//!     let reply = call_counter_can(&pic, canister_id, "read");
+//!     assert_eq!(reply, vec![2, 0, 0, 0]);
+//! }
+//!
+//! fn call_counter_can(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+//!     pic.update_call(
+//!         canister_id,
+//!         Principal::anonymous(),
+//!         method,
+//!         encode_one(()).unwrap(),
+//!     )
+//!     .expect("Failed to call counter canister")
 //! }
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
@@ -1313,8 +1328,8 @@ where
     Output: for<'a> ArgumentDecoder<'a>,
 {
     let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes) {
-        Ok(out_bytes) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+    f(in_bytes).map(|out_bytes| {
+        decode_args(&out_bytes).unwrap_or_else(|e| {
             panic!(
                 "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
                 std::any::type_name::<Output>(),
@@ -1322,9 +1337,8 @@ where
                 out_bytes,
                 String::from_utf8_lossy(&out_bytes),
             )
-        })),
-        Err(reject_response) => Err(reject_response),
-    }
+        })
+    })
 }
 
 /// Error type for [`TryFrom<u64>`].
@@ -1540,7 +1554,7 @@ impl TryFrom<u64> for RejectCode {
     }
 }
 
-/// User-facing describing an unsuccessful (also called reject) call response.
+/// User-facing type describing an unsuccessful (also called reject) call response.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RejectResponse {
     pub reject_code: RejectCode,
