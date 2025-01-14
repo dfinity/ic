@@ -1,4 +1,4 @@
-use candid::{decode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,

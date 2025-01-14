@@ -1,16 +1,12 @@
 //! Fluent assertions for metrics.
 
-#[cfg(feature = "pocket_ic")]
-use candid::Principal;
 use candid::{CandidType, Decode, Deserialize, Encode};
-#[cfg(feature = "pocket_ic")]
-use pocket_ic::{management_canister::CanisterId, PocketIc, UserError, WasmResult};
 use regex::Regex;
 use serde_bytes::ByteBuf;
 use std::fmt::Debug;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct HttpRequest {
+struct HttpRequest {
     pub method: String,
     pub url: String,
     pub headers: Vec<(String, String)>,
@@ -18,7 +14,7 @@ pub struct HttpRequest {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct HttpResponse {
+struct HttpResponse {
     pub status_code: u16,
     pub headers: Vec<(String, String)>,
     pub body: ByteBuf,
@@ -97,26 +93,34 @@ impl<T> MetricsAssert<T> {
 }
 
 #[cfg(feature = "pocket_ic")]
-pub trait PocketIcQueryCall {
-    fn get_pocket_ic(&self) -> &PocketIc;
-    fn get_canister_id(&self) -> CanisterId;
-}
+pub use pocket_ic_query_call::PocketIcQueryCall;
 
 #[cfg(feature = "pocket_ic")]
-impl<T: PocketIcQueryCall> QueryCall<UserError> for T {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
-        self.get_pocket_ic()
-            .query_call(
-                self.get_canister_id(),
-                Principal::anonymous(),
-                "http_request",
-                request,
-            )
-            .map(|result| match result {
-                WasmResult::Reply(bytes) => bytes,
-                WasmResult::Reject(reject) => {
-                    panic!("Expected a successful reply, got a reject: {}", reject)
-                }
-            })
+mod pocket_ic_query_call {
+    use super::*;
+    use candid::Principal;
+    use pocket_ic::{management_canister::CanisterId, PocketIc, UserError, WasmResult};
+
+    pub trait PocketIcQueryCall {
+        fn get_pocket_ic(&self) -> &PocketIc;
+        fn get_canister_id(&self) -> CanisterId;
+    }
+
+    impl<T: PocketIcQueryCall> QueryCall<UserError> for T {
+        fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+            self.get_pocket_ic()
+                .query_call(
+                    self.get_canister_id(),
+                    Principal::anonymous(),
+                    "http_request",
+                    request,
+                )
+                .map(|result| match result {
+                    WasmResult::Reply(bytes) => bytes,
+                    WasmResult::Reject(reject) => {
+                        panic!("Expected a successful reply, got a reject: {}", reject)
+                    }
+                })
+        }
     }
 }
