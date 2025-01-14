@@ -1195,12 +1195,16 @@ pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
 /// the payload once we're this close to the payload size limit.
 pub const SLICE_BYTE_SIZE_MIN: usize = 1 << 10;
 
+/// This struct stores stream indices and byte limit used for refilling
+/// stream slices of a subnet in a certified slice pool.
 pub struct RefillStreamSliceIndices {
     pub witness_begin: StreamIndex,
     pub msg_begin: StreamIndex,
     pub byte_limit: usize,
 }
 
+/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
+/// in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
     pool_lock: Arc<Mutex<CertifiedSlicePool>>,
     own_subnet_id: SubnetId,
