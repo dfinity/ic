@@ -43,7 +43,7 @@ enum Opt {
         height: u64,
     },
 
-    /// Copies states from one ic_state directory to another.
+    /// Copies states from one ic_state directory to another including their metadata.
     #[clap(name = "copy")]
     CopyStates {
         /// Path to the source ic_state directory.
