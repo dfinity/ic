@@ -482,8 +482,8 @@ pub fn get_dkg_summary_from_cup_contents(
             .expect("Missing initial high-threshold DKG transcript"),
     );
 
-    // Add transcripts for vetkeys from the `chain_key_initializations` to the summary block
-    let vet_key_transcripts = cup_contents
+    // Get the transcripts for vetkeys from the `chain_key_initializations`
+    let mut vet_key_transcripts = cup_contents
         .chain_key_initializations
         .into_iter()
         .filter_map(|init| {
@@ -503,8 +503,21 @@ pub fn get_dkg_summary_from_cup_contents(
             );
 
             Some((NiDkgTag::HighThresholdForKey(key_id), transcript))
-        });
-    transcripts.extend(vet_key_transcripts);
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    // Extract vet key ids
+    let vet_key_ids = vet_key_transcripts
+        .keys()
+        .filter_map(|tag| match tag {
+            NiDkgTag::HighThresholdForKey(key) => Some(key),
+            _ => None,
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    // Add vet key transcripts to the summary block
+    transcripts.append(&mut vet_key_transcripts);
 
     // If we're in a NNS subnet recovery with failover nodes, we set the transcript versions to the
     // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
@@ -528,7 +541,7 @@ pub fn get_dkg_summary_from_cup_contents(
         // the recovered NNS so that the DKG configs point to the correct registry version and new
         // dealings can be created in the first DKG interval.
         registry_version_of_original_registry.unwrap_or(registry_version),
-        &[],
+        &vet_key_ids,
     )
     .expect("Couldn't generate configs for the genesis summary");
     // For the first 2 intervals we use the length value contained in the
@@ -1237,13 +1250,11 @@ mod tests {
             for (_, conf) in next_summary.configs.iter() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
-                    NiDkgTag::HighThreshold => assert_eq!(
-                        next_summary
-                            .clone()
-                            .current_transcript(&NiDkgTag::HighThreshold),
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
+                        next_summary.clone().current_transcript(tag),
                         &conf.resharing_transcript().clone().unwrap()
                     ),
-                    _ => (),
+                    NiDkgTag::LowThreshold => (),
                 }
             }
         });
@@ -1272,6 +1283,9 @@ mod tests {
 
             let summary = make_genesis_summary(&*registry, subnet_id, None);
 
+            let vet_kd_ids =
+                get_enabled_vet_keys(subnet_id, &*registry, summary.registry_version).unwrap();
+
             assert_eq!(
                 summary.registry_version,
                 RegistryVersion::from(initial_registry_version)
@@ -1279,12 +1293,15 @@ mod tests {
             assert_eq!(summary.height, Height::from(0));
             assert_eq!(summary.interval_length, Height::from(dkg_interval_len));
             assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
+            assert_eq!(summary.configs.len(), 3);
             assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
-            assert_eq!(summary.configs.len(), 2);
+            for vet_key_id in &vet_kd_ids {
+                assert!(summary
+                    .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
+                    .is_none());
+            }
 
-            let vet_kd_ids =
-                get_enabled_vet_keys(subnet_id, &*registry, summary.registry_version).unwrap();
             for tag in tags_iter(&vet_kd_ids) {
                 let (id, conf) = summary
                     .configs
@@ -1321,11 +1338,7 @@ mod tests {
                     conf.threshold().get().get(),
                     match tag {
                         NiDkgTag::LowThreshold => 3,
-                        NiDkgTag::HighThreshold => 5,
-                        /////////////////////////////////////////////////////
-                        // TODO(CON-1417): extend this test once we have support for vetKD transcripts in registry CUPs
-                        /////////////////////////////////////////////////////
-                        NiDkgTag::HighThresholdForKey(_) => todo!("CON-1417"),
+                        NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => 5,
                     }
                 );
             }
