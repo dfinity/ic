@@ -285,15 +285,15 @@ fn compute_next_difficulty(
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
     let actual_interval =
-        std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64; 
+        std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
 
     //TODO: ideally from_next_work_required works by itself
-    // On Testnet networks, prev_header.bits could be different than last_adjustment_header.bits 
-    // if prev_header took more than 20 minutes to be created. 
+    // On Testnet networks, prev_header.bits could be different than last_adjustment_header.bits
+    // if prev_header took more than 20 minutes to be created.
     // Testnet3 (mistakenly) uses the temporary difficulty drop of prev_header to calculate
     // the difficulty of th next epoch; this results in the whole epoch having a very low difficulty,
-    // and therefore likely blockstorms. 
-    // Testnet4 uses the last_adjustment_header.bits to calculate the next epoch's difficulty, making it 
+    // and therefore likely blockstorms.
+    // Testnet4 uses the last_adjustment_header.bits to calculate the next epoch's difficulty, making it
     // more stable.
     //TODO(mihailjianu): add a test for testnet4.
     let previous_difficulty = match network {
@@ -574,7 +574,7 @@ mod test {
             // Assert.
             assert_eq!(compact_target, expected_pow);
         }
-    } 
+    }
 
     #[test]
     fn test_compute_next_difficulty_for_temporary_difficulty_drops_testnet4() {
@@ -607,7 +607,8 @@ mod test {
         store.add(last_header_in_epoch);
 
         // Act.
-        let difficulty = compute_next_difficulty(&network, &store, &last_header_in_epoch, chain_length);
+        let difficulty =
+            compute_next_difficulty(&network, &store, &last_header_in_epoch, chain_length);
 
         // Assert.
         // Note: testnet3 would produce 473956288, as it depends on the previous header's difficulty.
