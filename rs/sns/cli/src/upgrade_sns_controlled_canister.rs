@@ -5,13 +5,20 @@ use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
 use ic_agent::{export::reqwest::Url, Agent};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
-use ic_nervous_system_agent::{nns, sns, CallCanisters, Request};
-use ic_sns_governance::pb::v1::{manage_neuron, manage_neuron_response, proposal::Action, ManageNeuronResponse, NeuronId, Proposal, UpgradeSnsControlledCanister};
+use ic_nervous_system_agent::{
+    management_canister::{self, CHUNK_SIZE},
+    nns, sns,
+};
+use ic_sns_governance::pb::v1::{
+    manage_neuron, manage_neuron_response, proposal::Action, ManageNeuronResponse, NeuronId,
+    Proposal, UpgradeSnsControlledCanister,
+};
 use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
+
+use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
 const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
-const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
 /// The arguments used to configure the upgrade_sns_controlled_canister command.
 #[derive(Debug, Parser)]
@@ -20,7 +27,7 @@ pub struct UpgradeSnsControlledCanisterArgs {
     root_canister_id: CanisterId,
 
     #[clap(long)]
-    sns_neuron_id: NeuronId,
+    sns_neuron_id: ParsedSnsNeuron,
 
     #[clap(long)]
     target_canister_id: CanisterId,
@@ -53,162 +60,6 @@ fn load_wasm(wasm_path: PathBuf) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-// ```candid
-// type upload_chunk_args = record {
-//     canister_id : principal;
-//     chunk : blob;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-struct UploadChunkArgs {
-    pub canister_id: Principal,
-    pub chunk: Vec<u8>,
-}
-
-// ```candid
-// type chunk_hash = record {
-//   hash : blob;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-struct ChunkHash {
-    pub hash: Vec<u8>,
-}
-
-// ```candid
-// type upload_chunk_result = chunk_hash;
-// ```
-type UploadChunksResult = ChunkHash;
-
-impl Request for UploadChunkArgs {
-    fn method(&self) -> &'static str {
-        "upload_chunk"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> Vec<u8> {
-        Encode!(self).unwrap()
-    }
-
-    type Response = UploadChunksResult;
-}
-
-async fn upload_chunk<C: CallCanisters>(
-    agent: &C,
-    store_canister_id: CanisterId,
-    chunk: Vec<u8>,
-) -> Result<ChunkHash, C::Error> {
-    let response = agent
-        .call(
-            Principal::management_canister(),
-            UploadChunkArgs {
-                canister_id: store_canister_id.get().0,
-                chunk,
-            },
-        )
-        .await?;
-
-    Ok(response)
-}
-
-// ```candid
-// type stored_chunks_args = record {
-//     canister_id : canister_id;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-struct StoredChunksArgs {
-    pub canister_id: Principal,
-}
-
-// ```
-// type chunk_hash = record {
-//   hash : blob;
-// };
-// type stored_chunks_result = vec chunk_hash;
-// ```
-type StoredChunksResult = Vec<ChunkHash>;
-
-impl Request for StoredChunksArgs {
-    fn method(&self) -> &'static str {
-        "stored_chunks"
-    }
-
-    fn update(&self) -> bool {
-        false
-    }
-
-    fn payload(&self) -> Vec<u8> {
-        Encode!(self).unwrap()
-    }
-
-    type Response = StoredChunksResult;
-}
-
-async fn stored_chunks<C: CallCanisters>(
-    agent: &C,
-    store_canister_id: CanisterId,
-) -> Result<Vec<ChunkHash>, C::Error> {
-    let response = agent
-        .call(
-            Principal::management_canister(),
-            StoredChunksArgs {
-                canister_id: store_canister_id.get().0,
-            },
-        )
-        .await?;
-
-    Ok(response)
-}
-
-fn format_full_hash(hash: &[u8]) -> String {
-    hash.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-async fn upload_wasm_as_chunks(
-    agent: &Agent,
-    store_canister_id: CanisterId,
-    wasm_bytes: Vec<u8>,
-    num_chunks_expected: usize,
-) -> Result<Vec<ChunkHash>> {
-    let mut uploaded_chunk_hashes = Vec::new();
-
-    for chunk in wasm_bytes.chunks(CHUNK_SIZE) {
-        let uploaded_chunk_hash = upload_chunk(agent, store_canister_id, chunk.to_vec()).await?;
-
-        uploaded_chunk_hashes.push(uploaded_chunk_hash);
-    }
-
-    // Smoke test
-    {
-        let stored_chunk_hashes = stored_chunks(agent, store_canister_id).await?;
-
-        let stored_chunk_hashes = stored_chunk_hashes
-            .into_iter()
-            .map(|chunk_hash| format_full_hash(&chunk_hash.hash))
-            .collect::<Vec<_>>();
-
-        let stored_chunk_hashes = BTreeSet::from_iter(stored_chunk_hashes.iter());
-
-        let uploaded_chunk_hashes = uploaded_chunk_hashes
-            .iter()
-            .map(|chunk_hash| format_full_hash(&chunk_hash.hash))
-            .collect::<Vec<_>>();
-        let uploaded_chunk_hashes = BTreeSet::from_iter(uploaded_chunk_hashes.iter());
-
-        assert!(uploaded_chunk_hashes.is_subset(&stored_chunk_hashes));
-        assert_eq!(uploaded_chunk_hashes.len(), num_chunks_expected);
-    }
-
-    Ok(uploaded_chunk_hashes)
-}
-
 pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Result<()> {
     eprintln!("Preparing to propose an SNS-controlled canister upgrade ...");
 
@@ -226,7 +77,8 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     let sha256_hash = ic_crypto_sha2::Sha256::hash(&wasm_bytes);
 
     // TODO: Support candid args.
-    let canister_upgrade_arg = candid_arg.map(|candid_arg| unimplemented!("Candid args are not yet supported"));
+    let canister_upgrade_arg =
+        candid_arg.map(|candid_arg| unimplemented!("Candid args are not yet supported"));
 
     // 2. Check that the target is controlled by the SNS specified via the Root canister ID.
     let root_canister = sns::root::RootCanister {
@@ -245,12 +97,19 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     // 3. Create a store canister on the same subnet as the target.
     let subnet = nns::registry::get_subnet_for_canister(agent, target_canister_id).await?;
 
+    let caller_principal = match agent.get_principal() {
+        Ok(principal) => principal,
+        Err(err) => {
+            bail!(err);
+        }
+    };
+
     let store_canister_id = nns::cmc::create_canister(
         agent,
         Some(SubnetSelection::Subnet { subnet }),
         Some(CanisterSettingsArgs {
             controllers: Some(BoundedVec::new(vec![
-                PrincipalId(agent.get_principal()),
+                PrincipalId(caller_principal),
                 root_canister_id.get(),
                 sns.governance.canister_id,
             ])),
@@ -259,7 +118,9 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     )
     .await?;
 
-    // 4. Upload the chinks into the store canister.
+    // TODO: Add enough cycles to `store_canister_id`.
+
+    // 4. Upload the chunks into the store canister.
     let num_chunks_expected = {
         let num_full_chunks = wasm_bytes.len() / CHUNK_SIZE;
         let remainder = wasm_bytes.len() % CHUNK_SIZE;
@@ -269,8 +130,13 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
             num_full_chunks + 1
         }
     };
-    let uploaded_chunk_hashes =
-        upload_wasm_as_chunks(agent, store_canister_id, wasm_bytes, num_chunks_expected).await?;
+    let uploaded_chunk_hashes = management_canister::upload_wasm_as_chunks(
+        agent,
+        store_canister_id,
+        wasm_bytes,
+        num_chunks_expected,
+    )
+    .await?;
 
     // 5. Propose to upgrade the target canister to a Wasm assembled from the uploaded chunks.
     let sns_governance = sns::governance::GovernanceCanister {
@@ -278,27 +144,33 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     };
 
     let command = manage_neuron::Command::MakeProposal(Proposal {
-        title: format!("Upgrade SNS-controlled canister {}", target_canister_id.get()),
+        title: format!(
+            "Upgrade SNS-controlled canister {}",
+            target_canister_id.get()
+        ),
         summary: format!(""),
         url: proposal_url.to_string(),
-        action: Some(Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
-            canister_id: Some(target_canister_id.get()),
-            new_canister_wasm: vec![],
-            canister_upgrade_arg,
-            mode: Some(CanisterInstallMode::Upgrade as i32),
-        })),
+        action: Some(Action::UpgradeSnsControlledCanister(
+            UpgradeSnsControlledCanister {
+                canister_id: Some(target_canister_id.get()),
+                new_canister_wasm: vec![],
+                canister_upgrade_arg,
+                mode: Some(CanisterInstallMode::Upgrade as i32),
+                // TODO: use `uploaded_chunk_hashes` / `sha256_hash`
+            },
+        )),
     });
 
-    let ManageNeuronResponse {
-        command,
-    } = sns_governance.manage_neuron(agent, sns_neuron_id, command).await?;
+    let ManageNeuronResponse { command } = sns_governance
+        .manage_neuron(agent, sns_neuron_id.0, command)
+        .await?;
 
     let proposal_id = match command {
-        Some(manage_neuron_response::Command::MakeProposal(manage_neuron_response::MakeProposalResponse {
-            proposal_id: Some(proposal_id),
-        })) => {
-            proposal_id
-        }
+        Some(manage_neuron_response::Command::MakeProposal(
+            manage_neuron_response::MakeProposalResponse {
+                proposal_id: Some(proposal_id),
+            },
+        )) => proposal_id,
         _ => {
             bail!("SNS Governance did not confirm that the proposal was made ({command:?}).")
         }
@@ -306,7 +178,8 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
 
     let proposal_url = format!(
         "https://nns.ic0.app/proposal/?u={}&proposal={}",
-        root_canister_id.get(), proposal_id,
+        root_canister_id.get(),
+        proposal_id.id,
     );
 
     eprintln!(

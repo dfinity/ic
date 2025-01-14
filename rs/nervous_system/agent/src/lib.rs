@@ -1,4 +1,5 @@
 pub mod agent_impl;
+pub mod management_canister;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
