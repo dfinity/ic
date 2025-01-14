@@ -136,12 +136,9 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
 
         {
             let _timer = SectionTimer::new("advance the target version to the latest version.");
-            sns::governance::propose_to_advance_sns_target_version(
-                &pocket_ic,
-                sns.governance.canister_id,
-            )
-            .await
-            .unwrap();
+            sns::governance::propose_to_advance_sns_target_version(&pocket_ic, sns.governance)
+                .await
+                .unwrap();
         }
 
         {

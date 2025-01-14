@@ -5,6 +5,20 @@ use thiserror::Error;
 
 use crate::CallCanisters;
 
+/// A wrapper around PocketIc that specifies a sender for the requests.
+/// The name is an analogy for `ic_agent::Agent`, since each `ic_agent::Agent` specifies a sender.
+pub struct PocketIcAgent<'a> {
+    pub pocket_ic: &'a PocketIc,
+    pub sender: Principal,
+}
+
+impl<'a> PocketIcAgent<'a> {
+    pub fn new(pocket_ic: &'a PocketIc, sender: impl Into<Principal>) -> Self {
+        let sender = sender.into();
+        Self { pocket_ic, sender }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum PocketIcCallError {
     #[error("pocket_ic error: {0}")]
@@ -18,8 +32,9 @@ pub enum PocketIcCallError {
 }
 
 impl crate::sealed::Sealed for PocketIc {}
+impl crate::sealed::Sealed for PocketIcAgent<'_> {}
 
-impl CallCanisters for PocketIc {
+impl CallCanisters for PocketIcAgent<'_> {
     type Error = PocketIcCallError;
     async fn call<R: Request>(
         &self,
@@ -29,21 +44,13 @@ impl CallCanisters for PocketIc {
         let canister_id = canister_id.into();
         let request_bytes = request.payload();
         let response = if request.update() {
-            self.update_call(
-                canister_id,
-                Principal::anonymous(),
-                request.method(),
-                request_bytes,
-            )
-            .await
+            self.pocket_ic
+                .update_call(canister_id, self.sender, request.method(), request_bytes)
+                .await
         } else {
-            self.query_call(
-                canister_id,
-                Principal::anonymous(),
-                request.method(),
-                request_bytes,
-            )
-            .await
+            self.pocket_ic
+                .query_call(canister_id, self.sender, request.method(), request_bytes)
+                .await
         }
         .map_err(PocketIcCallError::PocketIc)?;
 
@@ -55,5 +62,18 @@ impl CallCanisters for PocketIc {
             }
             pocket_ic::WasmResult::Reject(reject) => Err(PocketIcCallError::Reject(reject)),
         }
+    }
+}
+
+impl CallCanisters for PocketIc {
+    type Error = PocketIcCallError;
+    async fn call<R: Request>(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+        request: R,
+    ) -> Result<R::Response, Self::Error> {
+        PocketIcAgent::new(self, Principal::anonymous())
+            .call(canister_id, request)
+            .await
     }
 }

@@ -961,6 +961,8 @@ impl fmt::Display for GovernanceError {
     }
 }
 
+impl std::error::Error for crate::pb::v1::GovernanceError {}
+
 impl From<NervousSystemError> for GovernanceError {
     fn from(nervous_system_error: NervousSystemError) -> Self {
         GovernanceError {

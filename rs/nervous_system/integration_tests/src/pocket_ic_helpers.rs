@@ -4,7 +4,7 @@ use futures::stream;
 use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
+use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -1363,11 +1363,8 @@ pub mod sns {
             canister_version_from_sns_pov
         };
 
-        governance::propose_to_upgrade_sns_to_next_version_and_wait(
-            pocket_ic,
-            sns.governance.canister_id,
-        )
-        .await;
+        governance::propose_to_upgrade_sns_to_next_version_and_wait(pocket_ic, sns.governance)
+            .await;
 
         for _ in 0..20 {
             pocket_ic.advance_time(Duration::from_secs(10)).await;
@@ -1428,7 +1425,7 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
         use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
@@ -1486,38 +1483,27 @@ pub mod sns {
 
         pub async fn propose_and_wait(
             pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
+            governance: GovernanceCanister,
             sender: PrincipalId,
             neuron_id: sns_pb::NeuronId,
             proposal: sns_pb::Proposal,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-            let response = manage_neuron(
-                pocket_ic,
-                canister_id,
-                sender,
-                neuron_id,
-                sns_pb::manage_neuron::Command::MakeProposal(proposal),
-            )
-            .await;
-            use sns_pb::manage_neuron_response::Command;
-            let response = match response.command {
-                Some(Command::MakeProposal(response)) => Ok(response),
-                Some(Command::Error(err)) => Err(err),
-                _ => panic!("Proposal failed unexpectedly: {:#?}", response),
-            }?;
-            let proposal_id = response.proposal_id.unwrap_or_else(|| {
-                panic!(
-                    "First SNS proposal response did not contain a proposal_id: {:#?}",
-                    response
-                )
-            });
-            wait_for_proposal_execution(pocket_ic, canister_id, proposal_id).await
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let proposal_id = governance
+                .submit_proposal(&agent, neuron_id, proposal)
+                .await
+                .map_err(|err| match err {
+                    SubmitProposalError::GovernanceError(e) => e,
+                    e => panic!("Unexpected error: {e}"),
+                })?;
+
+            wait_for_proposal_execution(pocket_ic, governance, proposal_id).await
         }
 
         /// This function assumes that the proposal submission succeeded (and panics otherwise).
         async fn wait_for_proposal_execution(
             pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
+            governance: GovernanceCanister,
             proposal_id: sns_pb::ProposalId,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
             // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
@@ -1527,7 +1513,7 @@ pub mod sns {
                 pocket_ic.advance_time(Duration::from_secs(1)).await;
                 let proposal_result = get_proposal(
                     pocket_ic,
-                    canister_id,
+                    governance.canister_id,
                     proposal_id,
                     PrincipalId::new_anonymous(),
                 )
@@ -1656,7 +1642,7 @@ pub mod sns {
 
         pub async fn propose_to_advance_sns_target_version(
             pocket_ic: &PocketIc,
-            sns_governance_canister_id: PrincipalId,
+            governance: GovernanceCanister,
         ) -> Result<sns_pb::ProposalData, String> {
             // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
             // neuron either holds the majority of the voting power or the follow graph is set up
@@ -1665,14 +1651,14 @@ pub mod sns {
             let (sns_neuron_id, sns_neuron_principal_id) =
                 sns::governance::find_neuron_with_majority_voting_power(
                     pocket_ic,
-                    sns_governance_canister_id,
+                    governance.canister_id,
                 )
                 .await
                 .expect("cannot find SNS neuron with dissolve delay over 6 months.");
 
             sns::governance::propose_and_wait(
                 pocket_ic,
-                sns_governance_canister_id,
+                governance,
                 sns_neuron_principal_id,
                 sns_neuron_id.clone(),
                 sns_pb::Proposal {
@@ -1691,20 +1677,20 @@ pub mod sns {
         // Upgrade; one canister at a time.
         pub async fn propose_to_upgrade_sns_to_next_version_and_wait(
             pocket_ic: &PocketIc,
-            sns_governance_canister_id: PrincipalId,
+            governance: GovernanceCanister,
         ) {
             // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
             // neuron either holds the majority of the voting power or the follow graph is set up
             // s.t. when this neuron submits a proposal, that proposal gets through without the need
             // for any voting.
             let (sns_neuron_id, sns_neuron_principal_id) =
-                find_neuron_with_majority_voting_power(pocket_ic, sns_governance_canister_id)
+                find_neuron_with_majority_voting_power(pocket_ic, governance.canister_id)
                     .await
                     .expect("cannot find SNS neuron with dissolve delay over 6 months.");
 
             let proposal_data = propose_and_wait(
                 pocket_ic,
-                sns_governance_canister_id,
+                governance,
                 sns_neuron_principal_id,
                 sns_neuron_id.clone(),
                 sns_pb::Proposal {
@@ -1730,12 +1716,12 @@ pub mod sns {
         #[allow(dead_code)]
         async fn get_neuron(
             pocket_ic: &PocketIc,
-            sns_governance_canister_id: PrincipalId,
+            governance: GovernanceCanister,
             neuron_id: sns_pb::NeuronId,
         ) -> Result<sns_pb::Neuron, sns_pb::GovernanceError> {
             let result = pocket_ic
                 .query_call(
-                    sns_governance_canister_id.into(),
+                    governance.canister_id.into(),
                     Principal::anonymous(),
                     "get_neuron",
                     Encode!(&sns_pb::GetNeuron {
