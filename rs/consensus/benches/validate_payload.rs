@@ -380,41 +380,36 @@ fn serialization_benchmark(criterion: &mut Criterion) {
     group.sample_size(50);
     group.measurement_time(std::time::Duration::from_secs(10));
 
-    for (message_count, message_size) in [
-        (1_000, 4_000),
-        (2_000, 4_000),
-        (1, 4_000_000),
-        (1, 8_000_000),
+    for (message_count, message_size_kb, tag) in [
+        (1_000, 4_000, "1000x4KB"),
+        (2_000, 4_000, "2000x4KB"),
+        (1, 4_000_000, "1x4MB"),
+        (1, 8_000_000, "1x8MB"),
     ] {
         run_test(
             |now: Time, _: &mut ConsensusPoolImpl, _: &dyn PayloadBuilder| {
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
-                let ingress = prepare_ingress_payload(now, message_count, message_size, seed as u8);
+                let ingress =
+                    prepare_ingress_payload(now, message_count, message_size_kb, seed as u8);
 
-                group.bench_function(
-                    format!("serialization_{}x{}", message_count, message_size),
-                    |bench| {
-                        bench.iter(|| {
-                            let proto: pb::IngressPayload = (&ingress).into();
-                            black_box(proto);
-                        })
-                    },
-                );
+                group.bench_function(format!("serialization_{tag}"), |bench| {
+                    bench.iter(|| {
+                        let proto: pb::IngressPayload = (&ingress).into();
+                        black_box(proto);
+                    })
+                });
 
-                group.bench_function(
-                    format!("deserialization_{}x{}", message_count, message_size),
-                    |bench| {
-                        let p: pb::IngressPayload = (&ingress).into();
-                        bench.iter_batched(
-                            || p.clone(),
-                            |proto| {
-                                let deser: IngressPayload = proto.try_into().unwrap();
-                                black_box(deser);
-                            },
-                            BatchSize::LargeInput,
-                        )
-                    },
-                );
+                group.bench_function(format!("deserialization_{tag}"), |bench| {
+                    let p: pb::IngressPayload = (&ingress).into();
+                    bench.iter_batched(
+                        || p.clone(),
+                        |proto| {
+                            let deser: IngressPayload = proto.try_into().unwrap();
+                            black_box(deser);
+                        },
+                        BatchSize::LargeInput,
+                    )
+                });
             },
         )
     }
