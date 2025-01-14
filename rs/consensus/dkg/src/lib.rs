@@ -436,6 +436,7 @@ mod tests {
         RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
+    use utils::{get_enabled_vet_keys, tags_iter};
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -1627,6 +1628,7 @@ mod tests {
                     5,
                     SubnetRecordBuilder::from(&committee1)
                         .with_dkg_interval_length(dkg_interval_length)
+                        .with_chain_key_config(test_vet_key())
                         .build(),
                 )],
             );
@@ -1641,14 +1643,24 @@ mod tests {
             );
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_summary.registry_version,
+            )
+            .unwrap();
+
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(0));
             assert_eq!(
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
-            for tag in TAGS.iter() {
-                let current_transcript = dkg_summary.current_transcript(tag);
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
+                let current_transcript = dkg_summary.current_transcript(&tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -1663,7 +1675,7 @@ mod tests {
                 );
                 // The genesis summary cannot have next transcripts, instead we'll reuse in
                 // round 1 the active transcripts from round 0.
-                assert!(dkg_summary.next_transcript(tag).is_none());
+                assert!(dkg_summary.next_transcript(&tag).is_none());
             }
 
             // Advance for one round and update the registry to version 6 with new
@@ -1676,6 +1688,7 @@ mod tests {
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&committee2)
                     .with_dkg_interval_length(dkg_interval_length)
+                    .with_chain_key_config(test_vet_key())
                     .build(),
             );
             registry.update_to_latest_version();
@@ -1692,6 +1705,14 @@ mod tests {
             );
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_summary.registry_version,
+            )
+            .unwrap();
+
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
@@ -1700,9 +1721,11 @@ mod tests {
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
-            for tag in TAGS.iter() {
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
                 // We reused the transcript.
-                let current_transcript = dkg_summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(&tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -1712,7 +1735,7 @@ mod tests {
                 let (_, conf) = dkg_summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
                 assert_eq!(conf.registry_version(), RegistryVersion::from(6));
                 assert_eq!(
@@ -1731,6 +1754,7 @@ mod tests {
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&committee3)
                     .with_dkg_interval_length(dkg_interval_length)
+                    .with_chain_key_config(test_vet_key())
                     .build(),
             );
             registry.update_to_latest_version();
@@ -1747,6 +1771,14 @@ mod tests {
             );
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_summary.registry_version,
+            )
+            .unwrap();
+
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
@@ -1755,22 +1787,24 @@ mod tests {
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
-            for tag in TAGS.iter() {
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
                 let (_, conf) = dkg_summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
                 assert_eq!(
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(&tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
                 );
-                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(&tag).unwrap();
                 // The DKG id start height refers to height 5, where we started computing this
                 // DKG.
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(5));
@@ -1787,6 +1821,14 @@ mod tests {
             );
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_summary.registry_version,
+            )
+            .unwrap();
+
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
@@ -1795,22 +1837,24 @@ mod tests {
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(6)
             );
-            for tag in TAGS.iter() {
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
                 let (_, conf) = dkg_summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
                 assert_eq!(
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(&tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(5)
                 );
-                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(&tag).unwrap();
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(10));
             }
 
@@ -1825,6 +1869,14 @@ mod tests {
             );
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_summary.registry_version,
+            )
+            .unwrap();
+
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
@@ -1833,22 +1885,24 @@ mod tests {
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(10)
             );
-            for tag in TAGS.iter() {
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
                 let (_, conf) = dkg_summary
                     .configs
                     .iter()
-                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
                 assert_eq!(
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(tag);
+                let current_transcript = dkg_summary.current_transcript(&tag);
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(10)
                 );
-                let next_transcript = dkg_summary.next_transcript(tag).unwrap();
+                let next_transcript = dkg_summary.next_transcript(&tag).unwrap();
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(15));
             }
         });
