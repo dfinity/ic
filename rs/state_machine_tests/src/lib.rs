@@ -1177,7 +1177,7 @@ impl StateMachineBuilder {
             self.is_root_subnet,
             self.seed,
             self.log_level,
-            self.remove_old_states
+            self.remove_old_states,
         )
     }
 
