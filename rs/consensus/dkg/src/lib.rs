@@ -17,7 +17,7 @@ use ic_metrics::{
 use ic_types::{
     consensus::dkg::{DealingContent, DkgMessageId, Message},
     crypto::{
-        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTargetSubnet},
         Signed,
     },
     Height, NodeId, ReplicaVersion,
@@ -53,9 +53,6 @@ const MAX_REMOTE_DKG_ATTEMPTS: u32 = 5;
 
 // Generic error string for failed remote DKG requests.
 const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeatedly failed";
-
-// Currently we assume that we run DKGs for all of these tags.
-const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 
 struct Metrics {
     on_state_change_duration: Histogram,
@@ -410,6 +407,7 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 #[cfg(test)]
 mod tests {
     use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,
@@ -431,7 +429,9 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{Block, BlockPayload},
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
+        },
         time::UNIX_EPOCH,
         RegistryVersion, ReplicaVersion,
     };
@@ -447,6 +447,7 @@ mod tests {
                 let dkg_interval_len = 30;
                 let subnet_id = subnet_test_id(222);
                 let initial_registry_version = 112;
+                let vet_key_ids = vec![NiDkgMasterPublicKeyId::VetKd(test_vet_key())];
                 let Dependencies {
                     crypto,
                     mut pool,
@@ -459,6 +460,7 @@ mod tests {
                         initial_registry_version,
                         SubnetRecordBuilder::from(&nodes)
                             .with_dkg_interval_length(dkg_interval_len)
+                            .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
                 );
@@ -476,13 +478,13 @@ mod tests {
                     logger.clone(),
                 );
 
-                // Creates two dealings for both thresholds and add them to the pool.
+                // Creates dealings for both thresholds and vet key and add them to the pool.
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
-                assert_eq!(change_set.len(), 2);
+                assert_eq!(change_set.len(), 3);
                 dkg_pool.write().unwrap().apply(change_set);
 
-                // Advance the consensus pool for one round and make sure both dealings made it
+                // Advance the consensus pool for one round and make sure all dealings made it
                 // into the block.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
@@ -494,10 +496,10 @@ mod tests {
                         dealings.start_height
                     )
                 }
-                assert_eq!(dealings.messages.len(), 2);
-                for tag in &TAGS {
+                assert_eq!(dealings.messages.len(), 3);
+                for tag in tags_iter(&vet_key_ids) {
                     assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_1 && m.content.dkg_id.dkg_tag == *tag
+                        |m| m.signature.signer == replica_1 && m.content.dkg_id.dkg_tag == tag
                     ));
                 }
 
@@ -510,7 +512,7 @@ mod tests {
 
                 // Now we empty the dkg pool, add new dealings from this dealer and make sure
                 // they are still not included.
-                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 2);
+                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 3);
                 dkg_pool
                     .write()
                     .unwrap()
@@ -519,10 +521,10 @@ mod tests {
                 assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 0);
                 // Create new dealings; this works, because we cleaned the pool before.
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
-                assert_eq!(change_set.len(), 2);
+                assert_eq!(change_set.len(), 3);
                 dkg_pool.write().unwrap().apply(change_set);
                 // Make sure the new dealings are in the pool.
-                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 2);
+                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 3);
                 // Advance the pool and make sure the dealing are not included.
                 pool.advance_round_normal_operation();
                 let block = pool.get_cache().finalized_block();
@@ -544,32 +546,31 @@ mod tests {
                 );
                 let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
                 sync_dkg_key_manager(&dkg_key_manager_2, &pool);
-                match &dkg_2.on_state_change(&dkg_pool_2).as_slice() {
-                    &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
-                    {
-                        dkg_pool.write().unwrap().insert(UnvalidatedArtifact {
-                            message: message.clone(),
-                            peer_id: replica_1,
-                            timestamp: UNIX_EPOCH,
-                        });
-                        dkg_pool.write().unwrap().insert(UnvalidatedArtifact {
-                            message: message2.clone(),
-                            peer_id: replica_1,
-                            timestamp: UNIX_EPOCH,
-                        });
+                let change_set = dkg_2.on_state_change(&dkg_pool_2);
+                assert_eq!(change_set.len(), 3);
+                for action in change_set {
+                    match action {
+                        ChangeAction::AddToValidated(message) => {
+                            dkg_pool.write().unwrap().insert(UnvalidatedArtifact {
+                                message: message.clone(),
+                                peer_id: replica_1,
+                                timestamp: UNIX_EPOCH,
+                            })
+                        }
+                        action => panic!("Unexpected action {:?} in changeset", action),
                     }
-                    val => panic!("Unexpected change set: {:?}", val),
-                };
+                }
 
                 // Now we validate these dealings on replica 1 and move them to the validated
                 // pool.
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 match &change_set.as_slice() {
-                    &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] => {}
+                    &[ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_), ChangeAction::MoveToValidated(_)] =>
+                        {}
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 dkg_pool.write().unwrap().apply(change_set);
-                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 4);
+                assert_eq!(dkg_pool.read().unwrap().get_validated().count(), 6);
 
                 // Now we create a new block and make sure, the dealings made into the payload.
                 pool.advance_round_normal_operation();
@@ -582,10 +583,10 @@ mod tests {
                         dealings.start_height
                     )
                 }
-                assert_eq!(dealings.messages.len(), 2);
-                for tag in &TAGS {
+                assert_eq!(dealings.messages.len(), 3);
+                for tag in tags_iter(&vet_key_ids) {
                     assert!(dealings.messages.iter().any(
-                        |m| m.signature.signer == replica_2 && m.content.dkg_id.dkg_tag == *tag
+                        |m| m.signature.signer == replica_2 && m.content.dkg_id.dkg_tag == tag
                     ));
                 }
             });
@@ -1628,7 +1629,7 @@ mod tests {
                     5,
                     SubnetRecordBuilder::from(&committee1)
                         .with_dkg_interval_length(dkg_interval_length)
-                        .with_chain_key_config(test_vet_key())
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
@@ -1688,7 +1689,7 @@ mod tests {
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&committee2)
                     .with_dkg_interval_length(dkg_interval_length)
-                    .with_chain_key_config(test_vet_key())
+                    .with_chain_key_config(test_vet_key_config())
                     .build(),
             );
             registry.update_to_latest_version();
@@ -1754,7 +1755,7 @@ mod tests {
                 replica_config.subnet_id,
                 SubnetRecordBuilder::from(&committee3)
                     .with_dkg_interval_length(dkg_interval_length)
-                    .with_chain_key_config(test_vet_key())
+                    .with_chain_key_config(test_vet_key_config())
                     .build(),
             );
             registry.update_to_latest_version();
@@ -1934,18 +1935,22 @@ mod tests {
     }
 
     /// Get a test [`ChainKeyConfig`] containing a single vet key configuration
-    pub(super) fn test_vet_key() -> ChainKeyConfig {
+    pub(super) fn test_vet_key_config() -> ChainKeyConfig {
         ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
-                    curve: VetKdCurve::Bls12_381_G2,
-                    name: String::from("vet_kd_key"),
-                }),
+                key_id: MasterPublicKeyId::VetKd(test_vet_key()),
                 pre_signatures_to_create_in_advance: 20,
                 max_queue_size: 20,
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+        }
+    }
+
+    fn test_vet_key() -> VetKdKeyId {
+        VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: String::from("vet_kd_key"),
         }
     }
 }

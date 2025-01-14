@@ -9,8 +9,6 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, HashSet};
 
-use crate::TAGS;
-
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
@@ -82,6 +80,8 @@ pub(crate) fn get_enabled_vet_keys(
 pub(crate) fn tags_iter(
     vet_keys: &[NiDkgMasterPublicKeyId],
 ) -> impl Iterator<Item = NiDkgTag> + use<'_> {
+    // Currently we assume that we run DKGs for all of these tags.
+    const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
     TAGS.iter()
         .cloned()
         .chain(vet_keys.iter().cloned().map(NiDkgTag::HighThresholdForKey))

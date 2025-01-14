@@ -881,7 +881,7 @@ pub fn make_genesis_summary(
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_vet_key;
+    use crate::tests::test_vet_key_config;
 
     use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_consensus_mocks::{
@@ -1041,7 +1041,7 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
-                            .with_chain_key_config(test_vet_key())
+                            .with_chain_key_config(test_vet_key_config())
                             .build(),
                     )],
                 );
@@ -1197,7 +1197,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(test_vet_key())
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
@@ -1278,7 +1278,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(test_vet_key())
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
@@ -1368,7 +1368,7 @@ mod tests {
                     initial_registry_version,
                     SubnetRecordBuilder::from(&nodes)
                         .with_dkg_interval_length(dkg_interval_len)
-                        .with_chain_key_config(test_vet_key())
+                        .with_chain_key_config(test_vet_key_config())
                         .build(),
                 )],
             );
