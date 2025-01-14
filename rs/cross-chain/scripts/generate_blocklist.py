@@ -63,31 +63,48 @@ def extract_addresses(currency, xml_file_path):
     return addresses
 
 def write_btc_preamble(blocklist_file):
-    blocklist_file.write('#[cfg(test)]\nmod tests;\n\nuse bitcoin::Address;\n\n')
-    blocklist_file.write('/// The script to generate this file, including information about the source data, can be found here:\n')
-    blocklist_file.write('/// /rs/cross-chain/scripts/generate_blocklist.py\n\n')
-    blocklist_file.write('/// BTC is not accepted from nor sent to addresses on this list.\n')
-    blocklist_file.write('/// NOTE: Keep it sorted!\n')
-    blocklist_file.write('pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n')
+    blocklist_file.write('''#[cfg(test)]
+    mod tests;
+    
+    use bitcoin::Address;
+
+    /// The script to generate this file, including information about the source data, can be found here:
+    /// /rs/cross-chain/scripts/generate_blocklist.py
+
+    /// BTC is not accepted from nor sent to addresses on this list.
+    /// NOTE: Keep it sorted!
+    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n''')
 
 def write_eth_preamble(blocklist_file):
-    blocklist_file.write('#[cfg(test)]\nmod tests;\n\nuse ic_ethereum_types::Address;\n\n')
-    blocklist_file.write('macro_rules! ethereum_address {\n    ($address:expr) => {\n        Address::new(hex_literal::hex!($address))\n    };\n}\n\n')
-    blocklist_file.write('/// The script to generate this file, including information about the source data, can be found here:\n')
-    blocklist_file.write('/// /rs/cross-chain/scripts/generate_blocklist.py\n\n')
-    blocklist_file.write('/// ETH is not accepted from nor sent to addresses on this list.\n')
-    blocklist_file.write('/// NOTE: Keep it sorted!\n')
-    blocklist_file.write('const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n')
+    blocklist_file.write('''#[cfg(test)]
+    mod tests;
+    
+    use ic_ethereum_types::Address;
+
+    macro_rules! ethereum_address {
+        ($address:expr) => {
+            Address::new(hex_literal::hex!($address))
+        };
+    }
+
+    /// The script to generate this file, including information about the source data, can be found here:
+    /// /rs/cross-chain/scripts/generate_blocklist.py
+
+    /// ETH is not accepted from nor sent to addresses on this list.
+    /// NOTE: Keep it sorted!
+    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n''')
 
 def write_btc_postamble(blocklist_file):
-    blocklist_file.write('pub fn is_blocked(address: &Address) -> bool {\n')
-    blocklist_file.write('    ' + 'BTC_ADDRESS_BLOCKLIST\n        .binary_search(&address.to_string().as_ref())\n        .is_ok()\n')
-    blocklist_file.write('}')
+    blocklist_file.write('''pub fn is_blocked(address: &Address) -> bool {
+    BTC_ADDRESS_BLOCKLIST
+        .binary_search(&address.to_string().as_ref())
+        .is_ok()
+}''')
     
 def write_eth_postamble(blocklist_file):
-    blocklist_file.write('pub fn is_blocked(address: &Address) -> bool {\n')
-    blocklist_file.write('    ' + 'ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()\n')
-    blocklist_file.write('}')
+    blocklist_file.write('''pub fn is_blocked(address: &Address) -> bool {
+    ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
+}''')
 
 def store_blocklist(currency, addresses, filename):
     blocklist_file = open(filename, 'w')
