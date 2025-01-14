@@ -69,12 +69,12 @@ where
 {
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            ptrace::traceme().expect(&format!("{}: Failed at ptrace::traceme", name));
+            ptrace::traceme().unwrap_or_else(|_| panic!("{}: Failed at ptrace::traceme", name));
             sandbox();
         }
         Ok(ForkResult::Parent { child }) => {
             loop {
-                waitpid(child, None).expect(&format!("{}: Failed at waitpid", name));
+                waitpid(child, None).unwrap_or_else(|_| panic!("{}: Failed at waitpid", name));
 
                 match ptrace::getregs(child) {
                     Ok(x) => {
