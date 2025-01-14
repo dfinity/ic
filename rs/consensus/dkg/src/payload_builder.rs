@@ -238,7 +238,7 @@ pub(super) fn create_summary_payload(
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = last_summary.clone().into_next_transcripts();
 
-    let vet_kd_ids = get_enabled_vet_keys(subnet_id, registry_client, registry_version)
+    let vet_key_ids = get_enabled_vet_keys(subnet_id, registry_client, registry_version)
         .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?;
 
     // If the config for the currently computed DKG intervals requires a transcript
@@ -254,7 +254,7 @@ pub(super) fn create_summary_payload(
     // } else {
     //     &current_transcripts
     // };
-    let reshared_transcripts = tags_iter(&vet_kd_ids)
+    let reshared_transcripts = tags_iter(&vet_key_ids)
         .filter_map(|tag| {
             let transcript = next_transcripts
                 .get(&tag)
@@ -285,7 +285,7 @@ pub(super) fn create_summary_payload(
         height,
         &reshared_transcripts,
         validation_context.registry_version,
-        &vet_kd_ids,
+        &vet_key_ids,
     )?);
 
     Ok(Summary::new(
@@ -572,11 +572,11 @@ pub(crate) fn get_configs_for_local_transcripts(
     start_block_height: Height,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
-    vet_kd_ids: &[NiDkgMasterPublicKeyId],
+    vet_key_ids: &[NiDkgMasterPublicKeyId],
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
 
-    for tag in tags_iter(vet_kd_ids) {
+    for tag in tags_iter(vet_key_ids) {
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
@@ -911,7 +911,7 @@ mod tests {
         let subnet_id = subnet_test_id(123);
         let registry_version = RegistryVersion::from(888);
 
-        let vet_kd_ids = vec![
+        let vet_key_ids = vec![
             NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
                 curve: VetKdCurve::Bls12_381_G2,
                 name: String::from("first_key"),
@@ -932,7 +932,7 @@ mod tests {
                 888,
             ),
         );
-        for key in &vet_kd_ids {
+        for key in &vet_key_ids {
             let tag = NiDkgTag::HighThresholdForKey(key.clone());
 
             reshared_transcripts.insert(
@@ -956,13 +956,13 @@ mod tests {
             //&reshared_transcript.into_iter().collect(),
             &reshared_transcripts,
             registry_version,
-            &vet_kd_ids,
+            &vet_key_ids,
         )
         .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
 
         // We produced exactly four configs (high, low and two vetkeys), and with expected ids.
         assert_eq!(configs.len(), 4);
-        for (index, tag) in tags_iter(&vet_kd_ids).enumerate() {
+        for (index, tag) in tags_iter(&vet_key_ids).enumerate() {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
@@ -1285,7 +1285,7 @@ mod tests {
 
             let summary = make_genesis_summary(&*registry, subnet_id, None);
 
-            let vet_kd_ids =
+            let vet_key_ids =
                 get_enabled_vet_keys(subnet_id, &*registry, summary.registry_version).unwrap();
 
             assert_eq!(
@@ -1298,13 +1298,14 @@ mod tests {
             assert_eq!(summary.configs.len(), 3);
             assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
-            for vet_key_id in &vet_kd_ids {
+            assert_eq!(vet_key_ids.len(), 1);
+            for vet_key_id in &vet_key_ids {
                 assert!(summary
                     .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
                     .is_none());
             }
 
-            for tag in tags_iter(&vet_kd_ids) {
+            for tag in tags_iter(&vet_key_ids) {
                 let (id, conf) = summary
                     .configs
                     .iter()
@@ -1411,10 +1412,11 @@ mod tests {
                 );
                 assert_eq!(dkg_summary.configs.len(), 3);
 
-                let vet_kd_ids =
+                let vet_key_ids =
                     get_enabled_vet_keys(subnet_id, &*registry, dkg_summary.registry_version)
                         .unwrap();
-                for tag in tags_iter(&vet_kd_ids) {
+                assert_eq!(vet_key_ids.len(), 1);
+                for tag in tags_iter(&vet_key_ids) {
                     let (id, conf) = dkg_summary
                         .configs
                         .iter()
