@@ -1,5 +1,5 @@
 {
-  "checksum": "2c2d6f7eab72d46e93f2b998562f0f29dd67a0c847253063fa67916eb3fa1abb",
+  "checksum": "99f4f52ce63a30622e2c70091876a5090aa4e58dad64f5f6d1b5fab793d76d97",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6380,7 +6380,6 @@
             },
             {
               "id": "itertools 0.12.0",
-              "id": "itertools 0.12.0",
               "target": "itertools"
             },
             {
@@ -7095,7 +7094,7 @@
               "target": "secp256k1"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde",
               "alias": "actual_serde"
             }
@@ -7197,7 +7196,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             }
           ],
@@ -7385,7 +7384,7 @@
               "alias": "internals"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             }
           ],
@@ -7565,7 +7564,7 @@
               "alias": "hex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             }
           ],
@@ -36260,7 +36259,7 @@
               "target": "minreq"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             },
             {
@@ -41791,7 +41790,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             },
             {
@@ -52206,7 +52205,6 @@
             },
             {
               "id": "itertools 0.12.0",
-              "id": "itertools 0.12.0",
               "target": "itertools"
             },
             {
@@ -52360,7 +52358,6 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.12.0",
               "id": "itertools 0.12.0",
               "target": "itertools"
             },
@@ -63765,7 +63762,7 @@
               "target": "secp256k1_sys"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.217",
               "target": "serde"
             }
           ],

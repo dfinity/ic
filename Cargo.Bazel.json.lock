@@ -1,5 +1,5 @@
 {
-  "checksum": "f21e594e63e06dc65bcf1c283fbec2dbcb34fad4478d5a09b8077fb908613bf9",
+  "checksum": "4c6e999e0d04eed4610e0b4a09e4f72db9b9ad8b7c8d0ca9c9f2db557d7f1c9d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -53683,12 +53683,6 @@
                 "target": "libc"
               }
             ],
-            "aarch64-pc-windows-msvc": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -53737,12 +53731,6 @@
                 "target": "libc"
               }
             ],
-            "i686-pc-windows-msvc": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -53786,12 +53774,6 @@
               }
             ],
             "x86_64-linux-android": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -60766,11 +60748,6 @@
               "time",
               "use-libc-auxv"
             ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "termios",
-              "use-libc-auxv"
-            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -60861,11 +60838,6 @@
               "process",
               "termios",
               "time",
-              "use-libc-auxv"
-            ],
-            "i686-pc-windows-msvc": [
-              "default",
-              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -60980,11 +60952,6 @@
               "process",
               "termios",
               "time",
-              "use-libc-auxv"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "default",
-              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -61102,46 +61069,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61224,24 +61154,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61389,35 +61304,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
