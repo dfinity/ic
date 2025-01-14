@@ -35,6 +35,7 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch, Notify},
 };
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use turmoil::Sim;
 
 pub struct CustomUdp {
@@ -446,7 +447,10 @@ pub fn start_test_processor(
 ) -> Box<dyn JoinGuard> {
     let time_source = Arc::new(SysTimeSource::new());
     let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
-    run_artifact_processor(
+    run_artifact_processor::<
+        U64Artifact,
+        UnboundedReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>,
+    >(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),
