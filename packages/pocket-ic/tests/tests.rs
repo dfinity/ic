@@ -13,7 +13,7 @@ use pocket_ic::{
         RawEffectivePrincipal, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder,
+    PocketIc, PocketIcBuilder, RejectCode,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
@@ -2098,4 +2098,90 @@ fn await_call_no_ticks() {
     let result = pic.await_call_no_ticks(msg_id).unwrap();
     let principal = Decode!(&result, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
+}
+
+#[test]
+fn test_reject_response_type() {
+    let pic = PocketIc::new();
+
+    // We create a test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    for certified in [true, false] {
+        for action in ["reject", "trap"] {
+            for method in ["query", "update"] {
+                // updates are always certified
+                if !certified && method == "update" {
+                    continue;
+                }
+                let method_name = format!("{}_{}", action, method);
+                let (err, msg_id) = if certified {
+                    let msg_id = pic
+                        .submit_call(
+                            canister,
+                            Principal::anonymous(),
+                            &method_name,
+                            Encode!(&()).unwrap(),
+                        )
+                        .unwrap();
+                    let err = pic.await_call(msg_id.clone()).unwrap_err();
+                    (err, Some(msg_id))
+                } else {
+                    let err = pic
+                        .query_call(
+                            canister,
+                            Principal::anonymous(),
+                            &method_name,
+                            Encode!(&()).unwrap(),
+                        )
+                        .unwrap_err();
+                    (err, None)
+                };
+                if let Some(msg_id) = msg_id {
+                    let ingress_status_err = match pic.ingress_status(msg_id, None) {
+                        IngressStatusResult::Success(result) => result.unwrap_err(),
+                        status => panic!("Unexpected ingress status: {:?}", status),
+                    };
+                    assert_eq!(ingress_status_err, err);
+                }
+                if action == "reject" {
+                    assert_eq!(err.reject_code, RejectCode::CanisterReject);
+                    assert_eq!(err.error_code, ErrorCode::CanisterRejectedMessage);
+                } else {
+                    assert_eq!(action, "trap");
+                    assert_eq!(err.reject_code, RejectCode::CanisterError);
+                    assert_eq!(err.error_code, ErrorCode::CanisterCalledTrap);
+                }
+                assert!(err
+                    .reject_message
+                    .contains(&format!("{} in {} method", action, method)));
+                assert_eq!(err.certified, certified);
+            }
+        }
+    }
+
+    for action in [b"trap", b"skip"] {
+        let err = pic
+            .submit_call(
+                canister,
+                Principal::anonymous(),
+                "trap_update",
+                action.to_vec(),
+            )
+            .unwrap_err();
+        if action == b"trap" {
+            assert_eq!(err.reject_code, RejectCode::CanisterError);
+            assert!(err.reject_message.contains("trap in inspect message"));
+            assert_eq!(err.error_code, ErrorCode::CanisterCalledTrap);
+        } else {
+            assert_eq!(action, b"skip");
+            assert_eq!(err.reject_code, RejectCode::CanisterReject);
+            assert!(err.reject_message.contains("Canister rejected the message"));
+            assert_eq!(err.error_code, ErrorCode::CanisterRejectedMessage);
+        }
+        // inspect message is always uncertified
+        assert!(!err.certified);
+    }
 }
