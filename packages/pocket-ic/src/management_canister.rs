@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 
 pub type CanisterId = Principal;
+pub type SubnetId = Principal;
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct CanisterIdRecord {
@@ -235,6 +236,11 @@ pub struct CanisterInfoArgs {
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SubnetInfoArgs {
+    pub subnet_id: SubnetId,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum ChangeOrigin {
     #[serde(rename = "from_user")]
     FromUser { user_id: Principal },
@@ -290,6 +296,11 @@ pub struct CanisterInfoResult {
     pub module_hash: Option<Vec<u8>>,
     pub recent_changes: Vec<Change>,
     pub total_num_changes: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SubnetInfoResult {
+    pub replica_version: String,
 }
 
 // raw randomness
