@@ -5,7 +5,7 @@ use ic_transport_types::EnvelopeContent::ReadState;
 use pocket_ic::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
-    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
+    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
 };
 use pocket_ic::{
     common::rest::{
@@ -946,53 +946,96 @@ fn test_schnorr() {
     // We define the message, derivation path, and ECDSA key ID to use in this test.
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
+    let some_aux: Option<SignWithSchnorrAux> =
+        Some(SignWithSchnorrAux::Bip341(SignWithBip341Aux {
+            merkle_root_hash: b"Hello, aux!=====================".to_vec(),
+        }));
     for algorithm in [SchnorrAlgorithm::Bip340Secp256K1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key"] {
-            let key_id = SchnorrPublicKeyArgsKeyId {
-                algorithm: algorithm.clone(),
-                name: name.to_string(),
-            };
+            for aux in [None, some_aux.clone()] {
+                let key_id = SchnorrPublicKeyArgsKeyId {
+                    algorithm: algorithm.clone(),
+                    name: name.to_string(),
+                };
 
-            // We get the Schnorr public key and signature via update calls to the test canister.
-            let schnorr_public_key = update_candid::<
-                (Option<Principal>, _, _),
-                (Result<SchnorrPublicKeyResult, String>,),
-            >(
-                &pic,
-                canister,
-                "schnorr_public_key",
-                (None, derivation_path.clone(), key_id.clone()),
-            )
-            .unwrap()
-            .0
-            .unwrap();
-            let schnorr_signature = update_candid::<_, (Result<Vec<u8>, String>,)>(
-                &pic,
-                canister,
-                "sign_with_schnorr",
-                (message, derivation_path.clone(), key_id.clone()),
-            )
-            .unwrap()
-            .0
-            .unwrap();
+                // We get the Schnorr public key and signature via update calls to the test canister.
+                let schnorr_public_key = update_candid::<
+                    (Option<Principal>, _, _),
+                    (Result<SchnorrPublicKeyResult, String>,),
+                >(
+                    &pic,
+                    canister,
+                    "schnorr_public_key",
+                    (None, derivation_path.clone(), key_id.clone()),
+                )
+                .unwrap()
+                .0
+                .unwrap();
+                let schnorr_signature_result = update_candid::<_, (Result<Vec<u8>, String>,)>(
+                    &pic,
+                    canister,
+                    "sign_with_schnorr",
+                    (
+                        message,
+                        derivation_path.clone(),
+                        key_id.clone(),
+                        aux.clone(),
+                    ),
+                )
+                .unwrap()
+                .0;
 
-            // We verify the Schnorr signature.
-            match key_id.algorithm {
-                SchnorrAlgorithm::Bip340Secp256K1 => {
-                    use k256::ecdsa::signature::hazmat::PrehashVerifier;
-                    use k256::schnorr::{Signature, VerifyingKey};
-                    let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
-                    let sig = Signature::try_from(schnorr_signature.as_slice()).unwrap();
-                    vk.verify_prehash(message, &sig).unwrap();
-                }
-                SchnorrAlgorithm::Ed25519 => {
-                    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-                    let pk: [u8; 32] = schnorr_public_key.public_key.try_into().unwrap();
-                    let vk = VerifyingKey::from_bytes(&pk).unwrap();
-                    let signature = Signature::from_slice(&schnorr_signature).unwrap();
-                    vk.verify(message, &signature).unwrap();
-                }
-            };
+                // We verify the Schnorr signature.
+                match key_id.algorithm {
+                    SchnorrAlgorithm::Bip340Secp256K1 => {
+                        use k256::ecdsa::signature::hazmat::PrehashVerifier;
+                        use k256::schnorr::{Signature, VerifyingKey};
+                        let bip340_public_key = schnorr_public_key.public_key[1..].to_vec();
+                        let public_key = match aux {
+                            None => bip340_public_key,
+                            Some(SignWithSchnorrAux::Bip341(bip341_aux)) => {
+                                use bitcoin::hashes::Hash;
+                                use bitcoin::schnorr::TapTweak;
+                                let xonly = bitcoin::util::key::XOnlyPublicKey::from_slice(
+                                    bip340_public_key.as_slice(),
+                                )
+                                .unwrap();
+                                let merkle_root =
+                                    bitcoin::util::taproot::TapBranchHash::from_slice(
+                                        &bip341_aux.merkle_root_hash,
+                                    )
+                                    .unwrap();
+                                let secp256k1_engine = bitcoin::secp256k1::Secp256k1::new();
+                                xonly
+                                    .tap_tweak(&secp256k1_engine, Some(merkle_root))
+                                    .0
+                                    .to_inner()
+                                    .serialize()
+                                    .to_vec()
+                            }
+                        };
+                        let vk = VerifyingKey::from_bytes(&public_key).unwrap();
+                        let sig = Signature::try_from(schnorr_signature_result.unwrap().as_slice())
+                            .unwrap();
+
+                        vk.verify_prehash(message, &sig).unwrap();
+                    }
+                    SchnorrAlgorithm::Ed25519 => {
+                        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+                        let pk: [u8; 32] = schnorr_public_key.public_key.try_into().unwrap();
+                        let vk = VerifyingKey::from_bytes(&pk).unwrap();
+                        let verification_result = schnorr_signature_result.map(|signature| {
+                            let s = Signature::from_slice(&signature).unwrap();
+                            vk.verify(message, &s).unwrap();
+                        });
+                        assert!(
+                            verification_result.is_ok() == aux.is_none(),
+                            "{:?}",
+                            verification_result
+                        );
+                    }
+                };
+            }
         }
     }
 }
