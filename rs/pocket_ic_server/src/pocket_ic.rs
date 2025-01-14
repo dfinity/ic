@@ -465,6 +465,8 @@ impl Drop for PocketIc {
             .map(|subnet| subnet.state_machine.clone())
             .collect();
         self.subnets.clear();
+        // for every StateMachine, wait until nobody else has an Arc to that StateMachine
+        // and then drop that StateMachine
         let start = std::time::Instant::now();
         for state_machine in state_machines {
             let mut state_machine = Some(state_machine);
