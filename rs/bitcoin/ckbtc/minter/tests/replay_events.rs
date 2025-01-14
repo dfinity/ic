@@ -27,7 +27,7 @@ async fn should_migrate_events_for_mainnet() {
     });
     let removed = migrate_events(&old_events, &new_events);
     assert!(removed > 0);
-    assert!(new_events.len() > 0);
+    assert!(!new_events.is_empty());
     assert_eq!(new_events.len() + removed, old_events.len());
 
     let state =
