@@ -28,11 +28,64 @@ DIGITAL_CURRENCY_TYPE_PREFIX = 'Digital Currency Address - '
 # The blocked addresses are stored in this Rust file by default.
 DEFAULT_BLOCKLIST_FILENAME = 'blocklist.rs'
 
-# Invalid addresses in the OFAC SDN list to be commented out.
-INVALID_ADDRESSES = ['TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq']
-
 # This prefix is needed for each element in the XML tree.
 PREFIX = '{https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML}'
+
+# Handlers for different blocklists.
+class BitcoinBlocklistHandler:
+    
+    def preamble(self):
+        return '''#[cfg(test)]
+    mod tests;
+    
+    use bitcoin::Address;
+
+    /// The script to generate this file, including information about the source data, can be found here:
+    /// /rs/cross-chain/scripts/generate_blocklist.py
+
+    /// BTC is not accepted from nor sent to addresses on this list.
+    /// NOTE: Keep it sorted!
+    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n'''
+
+    def postamble(self):
+        return '''pub fn is_blocked(address: &Address) -> bool {
+    BTC_ADDRESS_BLOCKLIST
+        .binary_search(&address.to_string().as_ref())
+        .is_ok()
+}'''
+
+    def format_address(self, address):
+        return '"' + address + '"'
+
+class EthereumBlocklistHandler:
+
+    def preamble(self):
+        return '''#[cfg(test)]
+    mod tests;
+    
+    use ic_ethereum_types::Address;
+
+    macro_rules! ethereum_address {
+        ($address:expr) => {
+            Address::new(hex_literal::hex!($address))
+        };
+    }
+
+    /// The script to generate this file, including information about the source data, can be found here:
+    /// /rs/cross-chain/scripts/generate_blocklist.py
+
+    /// ETH is not accepted from nor sent to addresses on this list.
+    /// NOTE: Keep it sorted!
+    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n'''
+
+    def postamble(self):
+        return '''pub fn is_blocked(address: &Address) -> bool {
+    ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
+}'''
+
+    def format_address(self, address):
+        return 'ethereum_address!("' + address[2:] + '")'
+
 
 def extract_addresses(currency, xml_file_path):
     tree = ET.parse(xml_file_path)
@@ -62,77 +115,14 @@ def extract_addresses(currency, xml_file_path):
     addresses.sort()
     return addresses
 
-def write_btc_preamble(blocklist_file):
-    blocklist_file.write('''#[cfg(test)]
-    mod tests;
-    
-    use bitcoin::Address;
-
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
-
-    /// BTC is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n''')
-
-def write_eth_preamble(blocklist_file):
-    blocklist_file.write('''#[cfg(test)]
-    mod tests;
-    
-    use ic_ethereum_types::Address;
-
-    macro_rules! ethereum_address {
-        ($address:expr) => {
-            Address::new(hex_literal::hex!($address))
-        };
-    }
-
-    /// The script to generate this file, including information about the source data, can be found here:
-    /// /rs/cross-chain/scripts/generate_blocklist.py
-
-    /// ETH is not accepted from nor sent to addresses on this list.
-    /// NOTE: Keep it sorted!
-    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n''')
-
-def write_btc_postamble(blocklist_file):
-    blocklist_file.write('''pub fn is_blocked(address: &Address) -> bool {
-    BTC_ADDRESS_BLOCKLIST
-        .binary_search(&address.to_string().as_ref())
-        .is_ok()
-}''')
-    
-def write_eth_postamble(blocklist_file):
-    blocklist_file.write('''pub fn is_blocked(address: &Address) -> bool {
-    ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
-}''')
-
-def store_blocklist(currency, addresses, filename):
+def store_blocklist(blocklist_handler, addresses, filename):
     blocklist_file = open(filename, 'w')
-    
-    if currency == 'BTC':
-        write_btc_preamble(blocklist_file)
-        address_prefix = ''
-        address_suffix = ''
-        offset = 0
-    else:   # currency == 'ETH'
-        write_eth_preamble(blocklist_file)
-        address_prefix = 'ethereum_address!('
-        address_suffix = ')'
-        offset = 2
+    blocklist_file.write(blocklist_handler.preamble())
     for address in addresses:
-        if address in INVALID_ADDRESSES:
-            blocklist_file.write('    // ' + address_prefix + '"' + address[offset:] + '"' + address_suffix + ' (Invalid address prefix)\n')
-            print('Invalid address:', address)
-        else:
-            blocklist_file.write('    ' + address_prefix + '"' + address[offset:] + '"' + address_suffix + ',\n')
-            print(address)
+        blocklist_file.write('    ' + blocklist_handler.format_address(address) + ',\n')
+        print(address)
     blocklist_file.write('];\n\n')
-    
-    if currency == 'BTC':
-        write_btc_postamble(blocklist_file)
-    else:
-        write_eth_postamble(blocklist_file)
-    
+    blocklist_file.write(blocklist_handler.postamble())
     blocklist_file.close()
 
 if __name__ == '__main__':  
@@ -144,10 +134,14 @@ if __name__ == '__main__':
         if currency not in ['BTC', 'ETH']:
             print('Error: The currency must be BTC or ETH.')
         else:
+            if currency == 'BTC':
+                blocklist_handler = BitcoinBlocklistHandler()
+            else:
+                blocklist_handler = EthereumBlocklistHandler()
             file_path = sys.argv[2]
             print('Extracting addresses from ' + file_path + '...')
             addresses = extract_addresses(currency, file_path)
             print('Done. Found ' + str(len(addresses)) + ' addresses.')
             print('Storing the addresses in the file ' + filename + '...')
-            store_blocklist(currency, addresses, filename)
+            store_blocklist(blocklist_handler, addresses, filename)
             print('Done.')
