@@ -1805,13 +1805,30 @@ impl StateMachine {
         }
     }
 
-    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+    fn into_components_inner(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
+    }
+
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+        let state_manager = Arc::downgrade(&self.state_manager);
+        let result = self.into_components_inner();
+        let mut i = 0i32;
+        // StateManager is owned by an Arc, that is cloned into multiple components and different
+        // threads. If we return before all the asynchronous components release the Arc, we may
+        // end up with to StateManagers writing to the same directory, resulting in a crash.
+        while state_manager.upgrade().is_some() {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            i += 1;
+            if i >= 100 {
+                panic!("Failed to wait for StateManager drop");
+            }
+        }
+        result
     }
 
     /// Emulates a node restart, including checkpoint recovery.
