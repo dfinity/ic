@@ -1,12 +1,12 @@
 use anyhow::{bail, Context, Result};
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, IDLArgs, Principal};
 use clap::Parser;
 use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
-use ic_agent::Agent;
+use ic_agent::{export::reqwest::Url, Agent};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types::BoundedVec;
-use ic_nervous_system_agent::{nns, sns::root::RootCanister, CallCanisters, Request};
-use ic_sns_governance::pb::v1::NeuronId;
+use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
+use ic_nervous_system_agent::{nns, sns, CallCanisters, Request};
+use ic_sns_governance::pb::v1::{manage_neuron, manage_neuron_response, proposal::Action, ManageNeuronResponse, NeuronId, Proposal, UpgradeSnsControlledCanister};
 use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
 
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
@@ -30,6 +30,9 @@ pub struct UpgradeSnsControlledCanisterArgs {
 
     #[clap(long)]
     candid_arg: Option<String>,
+
+    #[clap(long)]
+    proposal_url: Url,
 }
 
 fn load_wasm(wasm_path: PathBuf) -> Result<Vec<u8>> {
@@ -209,20 +212,24 @@ async fn upload_wasm_as_chunks(
 pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Result<()> {
     eprintln!("Preparing to propose an SNS-controlled canister upgrade ...");
 
-    // 1. Check that we have a viable Wasm.
+    // 1. Check that we have a viable Wasm and a suitable upgrade arg.
     let UpgradeSnsControlledCanisterArgs {
         root_canister_id,
         sns_neuron_id,
         target_canister_id,
         wasm_path,
         candid_arg,
+        proposal_url,
     } = args;
 
     let wasm_bytes = load_wasm(wasm_path)?;
     let sha256_hash = ic_crypto_sha2::Sha256::hash(&wasm_bytes);
 
+    // TODO: Support candid args.
+    let canister_upgrade_arg = candid_arg.map(|candid_arg| unimplemented!("Candid args are not yet supported"));
+
     // 2. Check that the target is controlled by the SNS specified via the Root canister ID.
-    let root_canister = RootCanister {
+    let root_canister = sns::root::RootCanister {
         canister_id: root_canister_id.get(),
     };
     let (sns, dapps) = root_canister.list_sns_canisters(agent).await?;
@@ -264,4 +271,48 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     };
     let uploaded_chunk_hashes =
         upload_wasm_as_chunks(agent, store_canister_id, wasm_bytes, num_chunks_expected).await?;
+
+    // 5. Propose to upgrade the target canister to a Wasm assembled from the uploaded chunks.
+    let sns_governance = sns::governance::GovernanceCanister {
+        canister_id: sns.governance.canister_id,
+    };
+
+    let command = manage_neuron::Command::MakeProposal(Proposal {
+        title: format!("Upgrade SNS-controlled canister {}", target_canister_id.get()),
+        summary: format!(""),
+        url: proposal_url.to_string(),
+        action: Some(Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
+            canister_id: Some(target_canister_id.get()),
+            new_canister_wasm: vec![],
+            canister_upgrade_arg,
+            mode: Some(CanisterInstallMode::Upgrade as i32),
+        })),
+    });
+
+    let ManageNeuronResponse {
+        command,
+    } = sns_governance.manage_neuron(agent, sns_neuron_id, command).await?;
+
+    let proposal_id = match command {
+        Some(manage_neuron_response::Command::MakeProposal(manage_neuron_response::MakeProposalResponse {
+            proposal_id: Some(proposal_id),
+        })) => {
+            proposal_id
+        }
+        _ => {
+            bail!("SNS Governance did not confirm that the proposal was made ({command:?}).")
+        }
+    };
+
+    let proposal_url = format!(
+        "https://nns.ic0.app/proposal/?u={}&proposal={}",
+        root_canister_id.get(), proposal_id,
+    );
+
+    eprintln!(
+        "Successfully proposed to upgrade SNS-controlled canister, see details here:\n\
+         {proposal_url}",
+    );
+
+    Ok(())
 }
