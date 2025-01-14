@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize};
+use ic_btc_interface::Txid;
 use serde::Serialize;
 use std::fmt;
 
@@ -19,9 +20,26 @@ pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
+impl TryFrom<CheckTransactionArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionArgs) -> Result<Self, Self::Error> {
+        Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string())
+    }
+}
+
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckTransactionStrArgs {
     pub txid: String,
+}
+
+impl TryFrom<CheckTransactionStrArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionStrArgs) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string())
+    }
 }
 
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
@@ -56,16 +74,6 @@ pub enum CheckTransactionRetriable {
     TransientInternalError(String),
 }
 
-#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
-pub enum CheckTransactionIrrecoverableError {
-    /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
-    ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction id because it fails to decode.
-    InvalidTransactionId(String),
-    /// Invalid transaction.
-    InvalidTransaction(String),
-}
-
 impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {
     fn from(err: CheckTransactionIrrecoverableError) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(err))
@@ -81,6 +89,67 @@ impl From<CheckTransactionRetriable> for CheckTransactionResponse {
 impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
+    }
+}
+
+impl From<Result<(), Vec<String>>> for CheckTransactionResponse {
+    fn from(result: Result<(), Vec<String>>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => Self::Failed(err),
+        }
+    }
+}
+
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
+pub enum CheckTransactionIrrecoverableError {
+    /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
+    ResponseTooLarge { txid: Vec<u8> },
+    /// Invalid transaction id because it fails to decode.
+    InvalidTransactionId(String),
+    /// Invalid transaction.
+    InvalidTransaction(String),
+}
+
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
+pub enum CheckTransactionQueryResponse {
+    /// When check finishes and all input addresses passed.
+    Passed,
+    /// When check finishes and one or more input addresses failed.
+    /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
+    Failed(Vec<String>),
+    /// Unknown case where it is unable to give a final answer of Passed or Failed.
+    /// The caller should examine the status and decide how to handle it.
+    Unknown(CheckTransactionQueryStatus),
+}
+
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
+pub enum CheckTransactionQueryStatus {
+    /// The result is not available, but may be obtained via a call to the non-query version
+    /// of `check_transaction`.
+    HttpOutcallRequired,
+    /// The result is unknown due to an irrecoverable error.
+    Error(CheckTransactionIrrecoverableError),
+}
+
+impl From<CheckTransactionIrrecoverableError> for CheckTransactionQueryResponse {
+    fn from(err: CheckTransactionIrrecoverableError) -> CheckTransactionQueryResponse {
+        CheckTransactionQueryResponse::Unknown(CheckTransactionQueryStatus::Error(err))
+    }
+}
+
+impl From<CheckTransactionQueryStatus> for CheckTransactionQueryResponse {
+    fn from(status: CheckTransactionQueryStatus) -> CheckTransactionQueryResponse {
+        CheckTransactionQueryResponse::Unknown(status)
+    }
+}
+
+impl From<Result<(), Vec<String>>> for CheckTransactionQueryResponse {
+    fn from(result: Result<(), Vec<String>>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => Self::Failed(err),
+        }
     }
 }
 

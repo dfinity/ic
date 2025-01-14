@@ -50,6 +50,26 @@ type CheckTransactionIrrecoverableError = variant {
     InvalidTransaction : text;
 };
 
+// The result of a check_transaction_query call.
+type CheckTransactionQueryResponse = variant {
+    // When check finishes and all input addresses passed.
+    Passed;
+    // When check finishes and one or more input addresses failed.
+    // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
+    Failed: vec BitcoinAddress;
+    // Unknown case where it is unable to give a final answer of Passed or Failed.
+    // The caller should examine the status and decide how to handle it.
+    Unknown: CheckTransactionQueryStatus;
+};
+
+type CheckTransactionQueryStatus = variant {
+     // The result is not available, but may be obtained via a call to the non-query version
+     // of `check_transaction`.
+     HttpOutcallRequired;
+     // The result is unknown due to an irrecoverable error.
+     Error: CheckTransactionIrrecoverableError;
+};
+
 type InitArg = record {
     btc_network : BtcNetwork;
     check_mode : CheckMode;
@@ -90,6 +110,11 @@ service : (CheckArg) -> {
 
     // Same as check_transaction, but taking the transaction id argument as a string.
     check_transaction_str: (CheckTransactionStrArgs) -> (CheckTransactionResponse);
+
+    // Same as check_transaction, but query method, hence it does not perform any HTTP
+    // outcalls to fetch the required information.
+    // IMPORTANT: this endpoint is meant as a debugging tool and is not guaranteed to be backwards-compatible.
+    check_transaction_query: (CheckTransactionArgs) -> (CheckTransactionQueryResponse) query;
 
     // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.

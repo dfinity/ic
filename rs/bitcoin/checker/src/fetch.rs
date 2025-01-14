@@ -183,23 +183,8 @@ pub trait FetchEnv {
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
     async fn check_fetched(&self, txid: Txid, fetched: &FetchedTx) -> CheckTransactionResponse {
-        // Return Passed or Failed when all checks are complete, or None otherwise.
-        fn check_completed(fetched: &FetchedTx) -> Option<CheckTransactionResponse> {
-            if fetched.input_addresses.iter().all(|x| x.is_some()) {
-                // We have obtained all input addresses.
-                for address in fetched.input_addresses.iter().flatten() {
-                    if is_blocked(address) {
-                        return Some(CheckTransactionResponse::Failed(vec![address.to_string()]));
-                    }
-                }
-                Some(CheckTransactionResponse::Passed)
-            } else {
-                None
-            }
-        }
-
-        if let Some(result) = check_completed(fetched) {
-            return result;
+        if let Some(result) = check_no_input_address_is_blocked(fetched) {
+            return result.into();
         }
 
         let mut futures = vec![];
@@ -280,11 +265,28 @@ pub trait FetchEnv {
         }
         // Check again to see if we have completed
         match state::get_fetch_status(txid).and_then(|result| match result {
-            FetchTxStatus::Fetched(fetched) => check_completed(&fetched),
+            FetchTxStatus::Fetched(fetched) => {
+                check_no_input_address_is_blocked(&fetched).map(|result| result.into())
+            }
             _ => None,
         }) {
             Some(result) => result,
             None => CheckTransactionRetriable::Pending.into(),
         }
     }
+}
+
+/// Return `Ok` if no input address is blocked, and an `Err` containing the first blocked address
+/// otherwise. If any of the input transactions is `None`, returns `None`.
+pub fn check_no_input_address_is_blocked(fetched: &FetchedTx) -> Option<Result<(), Vec<String>>> {
+    if fetched.input_addresses.iter().any(|x| x.is_none()) {
+        return None;
+    }
+    fetched
+        .input_addresses
+        .iter()
+        .flatten()
+        .find(|address| is_blocked(address))
+        .map(|blocked| Err(vec![blocked.to_string()]))
+        .or(Some(Ok(())))
 }
