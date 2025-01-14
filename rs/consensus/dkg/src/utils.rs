@@ -82,12 +82,9 @@ pub(crate) fn get_enabled_vet_keys(
 pub(crate) fn tags_iter(
     vet_keys: &[NiDkgMasterPublicKeyId],
 ) -> impl Iterator<Item = NiDkgTag> + use<'_> {
-    TAGS.iter().cloned().chain(
-        vet_keys
-            .iter()
-            .cloned()
-            .map(|key| NiDkgTag::HighThresholdForKey(key)),
-    )
+    TAGS.iter()
+        .cloned()
+        .chain(vet_keys.iter().cloned().map(NiDkgTag::HighThresholdForKey))
 }
 
 #[cfg(test)]
@@ -97,7 +94,6 @@ mod tests {
     use ic_management_canister_types::{
         MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
-    use ic_protobuf::registry::subnet::v1::SubnetRecord as PbSubnetRecord;
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::subnet_test_id;
@@ -146,9 +142,8 @@ mod tests {
             .build();
 
         registry.expect_get_value().return_const({
-            let pk = PbSubnetRecord::from(subnet_record);
             let mut v = Vec::new();
-            pk.encode(&mut v).unwrap();
+            subnet_record.encode(&mut v).unwrap();
             Ok(Some(v))
         });
 

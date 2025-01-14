@@ -498,9 +498,10 @@ pub fn get_dkg_summary_from_cup_contents(
             let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
                 .expect("IDkg key combined with NiDkg initialization");
 
-            let transcript = initial_ni_dkg_transcript_from_registry_record(record).expect(
-                &format!("Decoding high-threshold DKG for key-id {} failed.", key_id),
-            );
+            let transcript =
+                initial_ni_dkg_transcript_from_registry_record(record).unwrap_or_else(|_| {
+                    panic!("Decoding high-threshold DKG for key-id {} failed.", key_id)
+                });
 
             Some((NiDkgTag::HighThresholdForKey(key_id), transcript))
         })
@@ -523,7 +524,7 @@ pub fn get_dkg_summary_from_cup_contents(
     // registry version of the recovered NNS, otherwise the oldest registry version used in a CUP is
     // computed incorrectly.
     if let Some(version) = registry_version_of_original_registry {
-        for (_, transcript) in &mut transcripts {
+        for transcript in transcripts.values_mut() {
             transcript.registry_version = version;
         }
     }
@@ -575,7 +576,7 @@ pub(crate) fn get_configs_for_local_transcripts(
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
 
-    for tag in tags_iter(&vet_kd_ids) {
+    for tag in tags_iter(vet_kd_ids) {
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
