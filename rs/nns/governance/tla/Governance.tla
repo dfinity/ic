@@ -266,6 +266,8 @@ Next ==
 \* A sanity check: we can actually get a non-zero stake in a neuron
 Can_Stake_Sanity == \A n \in DOMAIN(neuron) : neuron[n].cached_stake = 0
 
+Can_Decrease_Stake_Sanity == [][\A n \in DOMAIN(neuron) \cap DOMAIN(neuron') : neuron[n].cached_stake <= neuron'[n].cached_stake]_<<global_non_ledger_vars, local_vars, env_vars>>
+
 Cached_Stake_Capped_By_Balance == \A n \in DOMAIN(neuron) :
     neuron[n].cached_stake <= balances[neuron[n].account]
 
