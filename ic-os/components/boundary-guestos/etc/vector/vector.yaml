@@ -9,7 +9,6 @@ sources:
     type: journald
     include_units:
     - certificate-issuer
-    - ic-boundary
     - danted
 
 transforms:
@@ -79,35 +78,6 @@ transforms:
       .service = "certificate-issuer"
       .timestamp = parse_timestamp!(.timestamp, "%+")
 
-  ic_boundary:
-    type: filter
-    inputs:
-    - journal
-
-    condition: ._SYSTEMD_UNIT == "ic-boundary.service"
-
-  ic_boundary_normalized:
-    type: remap
-    inputs:
-    - ic_boundary
-
-    source: |
-      . = parse_json!(.message)
-
-      .service = "ic-boundary"
-      .timestamp = parse_timestamp!(.timestamp, "%+")
-
-  ic_boundary_filtered:
-    type: filter
-    inputs:
-    - ic_boundary_normalized
-
-    condition: |
-      !includes([
-          "check",
-          "http_request_in",
-      ], .action)
-
 sinks:
   vector_exporter:
     type: prometheus_exporter
@@ -132,7 +102,6 @@ sinks:
     type: console
     inputs:
     - certificate_issuer_normalized
-    - ic_boundary_filtered
 
     encoding:
       codec: json
