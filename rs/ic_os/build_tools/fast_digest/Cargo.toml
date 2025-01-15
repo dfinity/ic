@@ -1,0 +1,8 @@
+[package]
+name = "fast-digest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = { workspace = true }
+blake3 = "1.5.5"

@@ -57,10 +57,13 @@ pub async fn check_offset(disk_image: &Path, index: usize) -> Result<u64> {
         return Err(anyhow!("fdisk failed: {}", String::from_utf8(out.stderr)?));
     }
 
-    let line = std::str::from_utf8(&out.stdout)?
+    let output = std::str::from_utf8(&out.stdout)?;
+    let line = output
         .lines()
         .find(|v| v.starts_with(&format!("{}{}", prefix, index)))
-        .expect("Partition index '{index}' not found in image");
+        .unwrap_or_else(|| {
+            panic!("Partition index '{index}' not found in image. fdisk output: '{output}'")
+        });
     let offset = line
         .split_ascii_whitespace()
         .nth(1)

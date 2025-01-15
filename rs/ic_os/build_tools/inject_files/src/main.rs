@@ -1,9 +1,10 @@
-use std::env;
+use std::fs;
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
-use tokio::process::Command;
 
 use partition_tools::{
     ext::{ExtPartition, FileContexts},
@@ -31,26 +32,18 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let temp_dir = PathBuf::from(
-        env::var("ICOS_TMPDIR").context("ICOS_TMPDIR should be set in BUILD script.")?,
-    );
-    let temp_file = temp_dir.join("partition.img");
+    fs::copy(cli.input, &cli.output)?;
+    fs::set_permissions(&cli.output, Permissions::from_mode(0o600))?;
 
-    // TODO: Quick hack to unpack and repack file
-    let mut cmd = Command::new("tar");
-    let _ = cmd
-        .arg("xf")
-        .arg(cli.input)
-        .arg("-C")
-        .arg(temp_dir.as_path())
-        .status()
-        .await;
-
-    let mut target = ExtPartition::open(temp_file.clone(), cli.index)
+    // let temp_dir = PathBuf::from(
+    //     env::var("ICOS_TMPDIR").context("ICOS_TMPDIR should be set in BUILD script.")?,
+    // );
+    // let temp_file = temp_dir.join("partition.img");
+    let mut target = ExtPartition::open(cli.output.clone(), cli.index)
         .await
         .context(format!(
             "Failed to open partition file {}",
-            temp_file.clone().display()
+            cli.output.clone().display()
         ))?;
 
     let contexts = cli
@@ -93,7 +86,7 @@ async fn main() -> Result<()> {
                 "Could not write file {} to {} in partition file {}",
                 source_file.display(),
                 install_target.display(),
-                temp_file.clone().display(),
+                cli.output.clone().display(),
             ))?;
         target
             .fixup_metadata(install_target, inode_mode, context)
@@ -101,36 +94,12 @@ async fn main() -> Result<()> {
             .context(format!(
                 "Could not fix up metadata of file {} in partition file {}",
                 install_target.display(),
-                temp_file.clone().display(),
+                cli.output.clone().display(),
             ))?;
     }
 
     // Close data partition
     target.close().await?;
-
-    // TODO: Quick hack to unpack and repack file
-    // We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    // If dflate is ever misbehaving, it can be replaced with:
-    // tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    let temp_tar = temp_dir.join("partition.tar");
-    let mut cmd = Command::new(cli.dflate);
-    let _ = cmd
-        .arg("--input")
-        .arg(&temp_file)
-        .arg("--output")
-        .arg(&temp_tar)
-        .status()
-        .await;
-
-    let mut cmd = Command::new("zstd");
-    let _ = cmd
-        .arg("-q")
-        .arg("--threads=0")
-        .arg(&temp_tar)
-        .arg("-o")
-        .arg(cli.output)
-        .status()
-        .await;
 
     Ok(())
 }

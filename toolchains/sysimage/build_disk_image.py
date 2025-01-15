@@ -13,7 +13,6 @@ import argparse
 import os
 import subprocess
 import sys
-import tarfile
 
 
 def read_partition_description(data):
@@ -87,41 +86,16 @@ def prepare_diskimage(gpt_entries, image_file):
             raise RuntimeError("Build of partition table failed")
 
 
-def _copyfile(source, target, size):
-    while size:
-        count = min(16 * 1024, size)
-        data = source.read(count)
-        target.write(data)
-        size -= len(data)
-
-
-def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
-
-    partition_tf = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
-
-    partition_tf = tarfile.open(partition_tf, mode="r:")
+def write_partition_image(gpt_entry, partition_file, disk_image):
     base = gpt_entry["start"] * 512
-    with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
-        for member in partition_tf:
-            if member.path != "partition.img":
-                continue
-            if member.size > gpt_entry["size"] * 512:
-                raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
-            source = partition_tf.extractfile(member)
-            if member.type == tarfile.GNUTYPE_SPARSE:
-                for offset, size in member.sparse:
-                    if size == 0:
-                        continue
-                    source.seek(offset)
-                    target.seek(offset + base)
-                    _copyfile(source, target, size)
-            else:
-                target.seek(base)
-                _copyfile(source, target, member.size)
+    if not partition_file.endswith(".img"):
+        raise RuntimeError("Trying to write a partition image that doesn't end if .img")
+    if os.path.getsize(partition_file) > gpt_entry["size"] * 512:
+        raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
+    subprocess.run(
+        ["dd", f"if={partition_file}", f"of={disk_image}", f"seek={base}",
+         "conv=sparse,notrunc", "oflag=seek_bytes", "bs=4M"],
+        check=True)
 
 
 def select_partition_file(name, partition_files):
@@ -180,12 +154,12 @@ def main():
         prefix = "A_"
         name = entry["name"]
         if name.startswith(prefix):
-            name = name[len(prefix) :]
+            name = name[len(prefix):]
 
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tzst(entry, disk_image, partition_file)
+            write_partition_image(entry, partition_file, disk_image)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 

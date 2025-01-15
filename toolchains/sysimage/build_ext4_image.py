@@ -130,7 +130,7 @@ def prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_fi
 
         return commands
     else:
-        return "chown root:root fs_basedir"
+        return f"chown root:root {fs_basedir}"
 
 def make_argparser():
     parser = argparse.ArgumentParser()
@@ -199,7 +199,6 @@ def main():
     fs_basedir = os.path.join(tmpdir, "fs")
     fakeroot_statefile = os.path.join(tmpdir, "fakeroot.state")
     os.mkdir(fs_basedir)
-    image_file = os.path.join(tmpdir, "partition.img")
 
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
@@ -222,7 +221,7 @@ def main():
         "-d",
         os.path.join(fs_basedir, limit_prefix),
         "-F",
-        image_file,
+        out_file,
         str(image_size),
     ]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
@@ -258,41 +257,14 @@ def main():
     e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
-    e2fsdroid_args += [image_file]
-    # e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
+    e2fsdroid_args += [out_file]
+    # e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), out_file]
     start = time.time()
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
     elapsed = time.time() - start
     print(f"TOOK {elapsed}")
 
     subprocess.run(["sync"], check=True)
-
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    temp_tar = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            image_file,
-            "--output",
-            temp_tar,
-        ],
-        check=True,
-    )
-
-    subprocess.run(
-        [
-            "zstd",
-            "-q",
-            "--threads=0",
-            temp_tar,
-            "-o",
-            out_file,
-        ],
-        check=True,
-    )
 
 
 if __name__ == "__main__":

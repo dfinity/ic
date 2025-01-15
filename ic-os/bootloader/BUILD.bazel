@@ -22,7 +22,7 @@ genrule(
 )
 
 vfat_image(
-    name = "partition-esp.tzst",
+    name = "partition-esp.img",
     src = ":bootloader-tree.tar",
     partition_size = "100M",
     subdir = "boot/efi",

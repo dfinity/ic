@@ -93,20 +93,7 @@ def main():
 
     files = args.files.split(",")
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
-    partition_tar_path = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", args.image, "-o", partition_tar_path], check=True)
-
-    with tarfile.open(partition_tar_path) as tar:
-        partition_img = next((item for item in tar if item.path == "partition.img"), None)
-        if not partition_img:
-            return "partition.img not found in input image"
-        tar.extract(partition_img, path=tmpdir)
-
-    partition_img_path = os.path.join(tmpdir, "partition.img")
-
-    errors = list(itertools.chain.from_iterable(check_paths_in_source(source, partition_img_path) for source in files))
+    errors = list(itertools.chain.from_iterable(check_paths_in_source(source, args.image) for source in files))
     if errors:
         return "\nThe following problems were found:\n" + "\n".join(errors)
 

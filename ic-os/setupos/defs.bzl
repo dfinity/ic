@@ -130,7 +130,7 @@ def _custom_partitions(mode):
     )
 
     fat32_image(
-        name = "partition-config.tzst",
+        name = "partition-config.img",
         src = "config_tar",
         label = "CONFIG",
         partition_size = "50M",
@@ -163,7 +163,7 @@ def _custom_partitions(mode):
     )
 
     ext4_image(
-        name = "partition-data.tzst",
+        name = "partition-data.img",
         src = "data_tar",
         partition_size = "1750M",
         subdir = "data",
@@ -174,6 +174,6 @@ def _custom_partitions(mode):
     )
 
     return [
-        ":partition-config.tzst",
-        ":partition-data.tzst",
+        ":partition-config.img",
+        ":partition-data.img",
     ]
