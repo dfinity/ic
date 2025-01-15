@@ -141,6 +141,7 @@ pub trait ArchivelessBlockchain {
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
     fn remove_blocks(&mut self, num_blocks: u64) -> Vec<EncodedBlock>;
+    fn last_hash(&self) -> Option<HashOf<EncodedBlock>>;
 }
 
 pub trait LedgerData: LedgerContext {
@@ -312,11 +313,16 @@ where
         .blockchain_mut()
         .add_block(block.clone())
         .expect("failed to add block");
-    let height_stable = ledger
-        .archiveless_blockchain_mut()
-        .add_block(height, block.encode())
-        .expect("failed to add block to stable blockchain");
-    assert_eq!(height, height_stable);
+    let last_hash = ledger.blockchain().last_hash.unwrap();
+
+    // let height = ledger.archiveless_blockchain().len();
+    // let _height_stable = ledger
+    //     .archiveless_blockchain_mut()
+    //     .add_block(height, block.encode())
+    //     .expect("failed to add block to stable blockchain");
+    // let last_hash = ledger.archiveless_blockchain().last_hash().unwrap();
+
+    // assert_eq!(height, height_stable);
     if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
         if fee_collector.block_index.is_none() {
             fee_collector.block_index = Some(height);
@@ -336,7 +342,7 @@ where
             });
     }
 
-    Ok((height, ledger.blockchain().last_hash.unwrap()))
+    Ok((height, last_hash))
 }
 
 /// Trim balances. Can be used e.g. if the ledger is low on heap memory.

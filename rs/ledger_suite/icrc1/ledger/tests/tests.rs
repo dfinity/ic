@@ -18,7 +18,7 @@ use ic_ledger_suite_state_machine_tests::{
     NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
     TOKEN_SYMBOL,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
@@ -1373,18 +1373,18 @@ fn test_get_archiveless_blocks() {
         .install_canister(ledger_wasm(), args, None)
         .expect("Unable to install the ledger");
 
-    let get_blocks_old = |start: u64, length: u64| {
-        let arg = GetBlocksRequest {
-            start: Nat::from(start),
-            length: Nat::from(length),
-        };
-        get_blocks(&env, ledger_id, arg)
-    };
+    // let get_blocks_old = |start: u64, length: u64| {
+    //     let arg = GetBlocksRequest {
+    //         start: Nat::from(start),
+    //         length: Nat::from(length),
+    //     };
+    //     get_blocks(&env, ledger_id, arg)
+    // };
 
     let now = env.time();
 
     for i in 2..1100 {
-        let approval_result = send_approval(
+        let _approval_result = send_approval(
             &env,
             ledger_id,
             account(1).owner,
@@ -1401,7 +1401,7 @@ fn test_get_archiveless_blocks() {
         )
         .expect("approval failed");
 
-        let tf_result = transfer_from(
+        let _tf_result = transfer_from(
             &env,
             ledger_id,
             account_sub(i),
@@ -1480,17 +1480,17 @@ fn test_bench_block_removal() {
         .install_canister(ledger_wasm(), args, None)
         .expect("Unable to install the ledger");
 
-    let get_blocks_old = |start: u64, length: u64| {
-        let arg = GetBlocksRequest {
-            start: Nat::from(start),
-            length: Nat::from(length),
-        };
-        get_blocks(&env, ledger_id, arg)
-    };
+    // let get_blocks_old = |start: u64, length: u64| {
+    //     let arg = GetBlocksRequest {
+    //         start: Nat::from(start),
+    //         length: Nat::from(length),
+    //     };
+    //     get_blocks(&env, ledger_id, arg)
+    // };
 
     let now = env.time();
 
-    let approval_result = send_approval(
+    let _approval_result = send_approval(
         &env,
         ledger_id,
         account(1).owner,
@@ -1507,7 +1507,7 @@ fn test_bench_block_removal() {
     )
     .expect("approval failed");
 
-    let tf_result = transfer_from(
+    let _tf_result = transfer_from(
         &env,
         ledger_id,
         account_sub(2),
@@ -1525,6 +1525,98 @@ fn test_bench_block_removal() {
         args,
     )
     .expect("Unable to perform bench_block_removal");
+}
+
+fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
+    }
+}
+
+use std::time::Instant;
+
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
+fn test_tx_perf() {
+    use candid::Principal;
+    let env = StateMachine::new();
+
+    let from = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([11_u8; 32]),
+    };
+    let init_args = Encode!(&LedgerArgument::Init(InitArgs {
+        minting_account: MINTER,
+        fee_collector_account: None,
+        initial_balances: vec![(from, Nat::from(1_000_000_000_000u64))]
+            .into_iter()
+            .collect(),
+        transfer_fee: Nat::from(1u8),
+        decimals: None,
+        token_name: "TT".into(),
+        token_symbol: "TT".into(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold: 1_000_000_000,
+            num_blocks_to_archive: 1,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: ic_base_types::PrincipalId(Principal::anonymous()),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: Some(80u16),
+        feature_flags: None,
+    }))
+    .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), init_args, None)
+        .unwrap();
+
+    let send_batch = |method_name: &str, start: u64, num: u64| {
+        let payload = Encode!(&(start as u64, num as u64)).unwrap();
+
+        let before = Instant::now();
+        let result = env
+            .execute_ingress_as(
+                ic_base_types::PrincipalId(from.owner),
+                canister_id,
+                method_name,
+                payload,
+            )
+            .expect(&format!("{} failed", method_name));
+        let after = Instant::now();
+        let res = Decode!(&assert_reply(result), Result<u64, String>).unwrap();
+        match res {
+            Ok(x) => {
+                if (start + num) % 100_000 == 0 {
+                    println!(
+                        "{}, {}, {}",
+                        start + num,
+                        after.duration_since(before).as_millis(),
+                        x
+                    );
+                }
+                return x;
+            }
+            Err(e) => panic!("failed with {e}"),
+        }
+    };
+
+    let send_all = |total: u64, batch_size: u64, method_name: &str| {
+        for i in 0..total / batch_size {
+            let _count = send_batch(method_name, (i * batch_size).into(), batch_size.into());
+        }
+    };
+
+    let _balances_count = send_all(100_000, 20_000, "add_accounts");
+
+    env.upgrade_canister(canister_id, ledger_wasm(), Encode!().unwrap())
+        .expect("Unable to upgrade ledger");    
 }
 
 #[cfg(not(feature = "u256-tokens"))]

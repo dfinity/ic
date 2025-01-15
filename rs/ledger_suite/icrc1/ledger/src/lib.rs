@@ -68,7 +68,7 @@ const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// The maximum number of transactions the ledger should return for a single
 /// get_transactions request.
 const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
-const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
+const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
@@ -569,9 +569,9 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    pub blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
     #[serde(default)]
-    stable_blockchain: StableBlockchain,
+    pub stable_blockchain: StableBlockchain,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -1083,14 +1083,14 @@ impl Ledger {
         let block = self.stable_blockchain.get_block(num_blocks - 1).unwrap();
         for i in 1..1000 {
             while num_blocks < 2000 {
-                self.stable_blockchain.add_block(curr_index, block.clone());
+                let _ = self.stable_blockchain.add_block(curr_index, block.clone());
                 curr_index += 1;
                 num_blocks += 1;
             }
             let start = instruction_counter();
             let _removed_blocks = self.stable_blockchain.remove_blocks(1000);
             let diff = instruction_counter() - start;
-            ic_cdk::println!("iteration {}, instructions: {}", i, diff  );
+            ic_cdk::println!("iteration {}, instructions: {}", i, diff);
             num_blocks -= 1000;
         }
     }
@@ -1374,11 +1374,24 @@ impl BalancesStore for StableBalances {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
-pub struct StableBlockchain {}
+pub struct StableBlockchain {
+    pub last_hash: Option<HashOf<EncodedBlock>>,
+}
 
 impl ArchivelessBlockchain for StableBlockchain {
     fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<u64, String> {
-        BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.insert(index, block));
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.insert(index, block.clone()));
+        self.last_hash = Some(
+            ic_icrc1::hash::hash_cbor(block.as_slice())
+                .map(HashOf::new)
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "bug: encoded block {} is not hashable cbor: {}",
+                        hex::encode(block.as_slice()),
+                        err
+                    )
+                }),
+        );
         Ok(index)
     }
 
@@ -1419,5 +1432,9 @@ impl ArchivelessBlockchain for StableBlockchain {
 
     fn get_block(&self, index: u64) -> Option<EncodedBlock> {
         BLOCKS_MEMORY.with_borrow(|blocks| blocks.get(&index))
+    }
+
+    fn last_hash(&self) -> Option<HashOf<EncodedBlock>> {
+        self.last_hash
     }
 }

@@ -3,6 +3,7 @@ mod benches;
 
 use candid::candid_method;
 use candid::types::number::Nat;
+use candid::Principal;
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
@@ -254,6 +255,25 @@ fn post_upgrade(args: Option<LedgerArgument>) {
             ledger.clear_arrivals();
         });
     }
+
+    let start_blocks = ic_cdk::api::instruction_counter();
+    use ic_ledger_canister_core::ledger::ArchivelessBlockchain;
+    Access::with_ledger_mut(|ledger| {
+        let mut i = 0;
+        for block in &ledger.blockchain.blocks {
+            let res = ledger.stable_blockchain.add_block(i, block.clone());
+            assert!(res.is_ok());
+            i += 1;
+        }
+    });
+    log_message(
+        format!(
+            "Block migration instructions: {}",
+            ic_cdk::api::instruction_counter() - start_blocks
+        )
+        .as_str(),
+    );
+
     if !is_ready() {
         log_message("Migration started.");
         migrate_next_part(
@@ -998,6 +1018,60 @@ fn icrc21_canister_call_consent_message(
         decimals,
     )
 }
+
+fn max_length_principal(index: u32) -> [u8; 29] {
+    const MAX_PRINCIPAL: [u8; 29] = [1_u8; 29];
+    let bytes: [u8; 4] = index.to_be_bytes();
+    let mut principal = MAX_PRINCIPAL;
+    principal[0] = bytes[0];
+    principal[1] = bytes[1];
+    principal[2] = bytes[2];
+    principal[3] = bytes[3];
+    principal
+}
+
+#[update]
+#[candid_method(update)]
+async fn add_accounts(start_num: (u64, u64)) -> Result<u64, String> {
+    let fee = Some(Access::with_ledger(|ledger| ledger.transfer_fee().into()));
+
+    let now =
+        TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time()).as_nanos_since_unix_epoch();
+    let mut to = Account {
+        owner: Principal::from_slice(max_length_principal(666).as_slice()),
+        subaccount: Some([11_u8; 32]),
+    };
+
+    let mut args = TransferArg {
+        from_subaccount: Some([11_u8; 32]),
+        to,
+        fee,
+        amount: Nat::from(1u64),
+        memo: Some(MEMO.to_vec().into()),
+        created_at_time: Some(now),
+    };
+
+    for i in start_num.0..start_num.0 + start_num.1 {
+        to.owner = Principal::from_slice(max_length_principal(i.try_into().unwrap()).as_slice());
+        args.to = to;
+        let res = icrc1_transfer(args.clone()).await;
+        match res {
+            Ok(_) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    Ok(instruction_counter())
+}
+
+const MEMO: [u8; 80] = [
+    0x82_u8, 0x00, 0x83, 0x54, 0x04, 0xc5, 0x63, 0x84, 0x17, 0x78, 0xc9, 0x3f, 0x41, 0xdc, 0x1a,
+    0x89, 0x82, 0x1a, 0xe1, 0xc6, 0x75, 0xbb, 0xe8, 0x15, 0x58, 0x20, 0xb5, 0xa1, 0x01, 0xfb, 0x96,
+    0xc5, 0xcf, 0x22, 0x4d, 0xf0, 0xd5, 0x02, 0x9b, 0x56, 0xbe, 0x81, 0xfc, 0x65, 0xce, 0x61, 0xf8,
+    0x99, 0x11, 0xb7, 0x71, 0x23, 0x27, 0x8a, 0xe7, 0xf4, 0x67, 0xb7, 0x19, 0x01, 0x2c, 0xf4, 0x67,
+    0xb7, 0x19, 0x01, 0x2c, 0xf4, 0x67, 0xb7, 0x19, 0x01, 0x2c, 0xf4, 0x67, 0xb7, 0x19, 0x01, 0x2c,
+    0x2c,
+];
 
 #[query]
 #[candid_method(query)]
