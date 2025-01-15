@@ -48,7 +48,7 @@ use ic_nns_governance_api::pb::v1::{
     Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
     ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NnsFunction,
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
@@ -856,6 +856,58 @@ fn manage_neuron(
     Decode!(&result, ManageNeuronResponse).unwrap()
 }
 
+/// This function allows directly modifying most neuron fields, but it only works in testing.
+pub fn update_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron: Neuron,
+) -> Result<(), GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "update_neuron",
+            Encode!(&neuron).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to update_neuron failed: {:#?}", s),
+    };
+
+    if let Some(err) = Decode!(&result, Option<GovernanceError>).unwrap() {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn adopt_proposal(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> Result<(), GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "adopt_proposal",
+            Encode!(&proposal_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to adopt_proposal failed: {:#?}", s),
+    };
+
+    if let Some(err) = Decode!(&result, Option<GovernanceError>).unwrap() {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
 trait NnsManageNeuronConfigureOperation {
     fn into_operation(self) -> Operation;
 }
@@ -906,10 +958,10 @@ fn nns_configure_neuron(
     }
 }
 
-#[must_use]
-pub fn nns_create_super_powerful_neuron(
+pub fn nns_create_neuron_with_stake(
     state_machine: &StateMachine,
     controller: PrincipalId,
+    stake: Tokens,
 ) -> NeuronId {
     let memo = 0xCAFE_F00D;
 
@@ -918,9 +970,8 @@ pub fn nns_create_super_powerful_neuron(
         PrincipalId::from(GOVERNANCE_CANISTER_ID),
         Some(compute_neuron_staking_subaccount(controller, memo)),
     );
-    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
-    let amount = Tokens::from_e8s(u64::MAX / 4);
-    mint_icp(state_machine, destination, amount);
+
+    mint_icp(state_machine, destination, stake);
 
     // Create the Neuron.
     let neuron_id = nns_claim_or_refresh_neuron(state_machine, controller, memo);
@@ -939,6 +990,16 @@ pub fn nns_create_super_powerful_neuron(
     }
 
     neuron_id
+}
+
+#[must_use]
+pub fn nns_create_super_powerful_neuron(
+    state_machine: &StateMachine,
+    controller: PrincipalId,
+) -> NeuronId {
+    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
+    let amount = Tokens::from_e8s(u64::MAX / 4);
+    nns_create_neuron_with_stake(state_machine, controller, amount)
 }
 
 #[must_use]
@@ -1289,6 +1350,20 @@ pub fn nns_governance_make_proposal(
     proposal: &MakeProposalRequest,
 ) -> ManageNeuronResponse {
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_governance_adopt_proposal(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: ProposalId,
+) -> ManageNeuronResponse {
+    let command = ManageNeuronCommandRequest::RegisterVote(manage_neuron::RegisterVote {
+        proposal: Some(proposal_id),
+        vote: Vote::Yes as i32,
+    });
 
     manage_neuron(state_machine, sender, neuron_id, command)
 }
