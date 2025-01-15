@@ -7,30 +7,41 @@ use prost::Message;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+pub enum Heights {
+    All,
+    Latest,
+    Explicit(Vec<(Height, Option<Height>)>),
+}
+
 /// Copy checkpoints from the state directory at `source` to the state directory at `destination`.
 ///
-/// If `heights` is not provided, all checkpoints from the source are copied. Otherwise, only listed checkpoints are copied.
-/// Optionally, the copied checkpoints can be given a different height in the destination.
+/// If `heights` is `Heights::All`, all checkpoints from the source are copied, if it is `Heights::Latest` only the maximum height
+/// from `src` is copied. Otherwise, only listed checkpoints are copied.
+/// Optionally, if the heights are listed explicitly then the copied checkpoints can be given a different height in the destination.
 ///
 /// Apart from copying the checkpoints, the relevant entries are also copied from the `states_metadata.pbuf` file, containing the manifest.
-pub fn do_copy(
-    source: PathBuf,
-    destination: PathBuf,
-    heights: Option<Vec<(Height, Option<Height>)>>,
-) -> Result<(), String> {
+pub fn do_copy(source: PathBuf, destination: PathBuf, heights: Heights) -> Result<(), String> {
     let src_layout = StateLayout::new_no_init(no_op_logger(), source, &MetricsRegistry::new());
     let dst_layout =
         StateLayout::try_new(no_op_logger(), destination, &MetricsRegistry::new()).unwrap();
 
-    let heights = heights.unwrap_or_else(|| {
-        src_layout
+    let heights = match heights {
+        Heights::All => src_layout
             .checkpoint_heights()
             .unwrap()
             .into_iter()
             .map(|h| (h, None))
-            .collect()
-    });
+            .collect(),
+        Heights::Latest => src_layout
+            .checkpoint_heights()
+            .unwrap()
+            .last()
+            .map(|h| vec![(*h, None)])
+            .unwrap_or_default(),
+        Heights::Explicit(heights) => heights,
+    };
 
+    // Replace (h, None) with (h, h) and (h, Some(x)) with (h, x)
     let heights = heights
         .into_iter()
         .map(|(src, dst)| {
@@ -57,6 +68,10 @@ fn do_copy_with_state_layouts(
                 dst_height,
                 cp_layout.raw_path().display()
             ));
+        }
+
+        if src_layout.checkpoint_verified(src_height).is_err() {
+            return Err(format!("Checkpoint {} does not exist at src", src_height));
         }
 
         dst_layout

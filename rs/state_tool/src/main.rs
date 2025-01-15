@@ -50,15 +50,9 @@ enum Opt {
         source: PathBuf,
         /// Path to the destination ic_state directory.
         destination: PathBuf,
-        /// List of heights to copy. If not specified, all heights are copied.
-        ///
-        /// Heights can be specified as a comma separated list of heights. Optionally, a state can be renamed by specifiying the source and destination height separated by '->'.
-        ///
-        /// Examples:
-        ///     - `--heights 1,2,3` copies states at heights 1, 2, and 3.
-        ///     - `--heights 1->2` copies the state at height 1 and renames it to height 2.
-        #[clap(long = "heights", value_parser = parse_height_pair, value_delimiter = ',', verbatim_doc_comment)]
-        heights: Option<Vec<(Height, Option<Height>)>>,
+        /// Heights to copy.
+        #[command(flatten)]
+        heights: HeightsArgs,
     },
 
     /// Computes manifest of a checkpoint.
@@ -167,6 +161,40 @@ enum Opt {
     },
 }
 
+/// Command line arguments for the `copy` command with eith
+#[derive(Debug, Clone, clap::Args)]
+#[group(multiple = false)]
+struct HeightsArgs {
+    /// Copy the latest state only.
+    ///
+    /// Mutually exclusive with `--heights`. If neither is specified, all heights are copied.
+    #[clap(long = "latest")]
+    latest: bool,
+    /// List of heights to copy. If not specified, all heights are copied.
+    ///
+    /// Heights can be specified as a comma separated list of heights. Optionally, a state can be renamed by specifiying the source and destination height separated by '->'.
+    ///
+    /// Examples:
+    ///     - `--heights 1,2,3` copies states at heights 1, 2, and 3.
+    ///     - `--heights 1->2` copies the state at height 1 and renames it to height 2.
+    ///
+    /// Mutually exclusive with `--latest`. If neither is specified, all heights are copied.
+    #[clap(long = "heights", value_parser = parse_height_pair, value_delimiter = ',', verbatim_doc_comment)]
+    heights: Option<Vec<(Height, Option<Height>)>>,
+}
+
+impl From<HeightsArgs> for commands::copy::Heights {
+    fn from(val: HeightsArgs) -> Self {
+        if val.latest {
+            Self::Latest
+        } else if val.heights.is_some() {
+            Self::Explicit(val.heights.unwrap().into_iter().collect())
+        } else {
+            Self::All
+        }
+    }
+}
+
 /// Parser for either a single height or a pair of heights separated by '->'.
 /// Used to parse the `--heights` argument of the `copy` command.
 fn parse_height_pair(
@@ -200,7 +228,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
             source,
             destination,
             heights,
-        } => commands::copy::do_copy(source, destination, heights),
+        } => commands::copy::do_copy(source, destination, heights.into()),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
         Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
         Opt::ListStates { config } => commands::list::do_list(config),
@@ -288,6 +316,43 @@ mod tests {
         assert_eq!(
             dst_layout.checkpoint_heights().unwrap(),
             vec![Height::new(1)]
+        );
+    }
+
+    #[test]
+    fn copy_command_line_latest_test() {
+        let env = StateMachineBuilder::new()
+            .with_remove_old_states(false)
+            .build();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.checkpointed_tick();
+        env.state_manager.flush_tip_channel();
+
+        let dst_dir = TempDir::new().unwrap();
+
+        main_inner(vec![
+            "state-tool".to_string(),
+            "copy".to_string(),
+            env.state_manager
+                .state_layout()
+                .raw_path()
+                .display()
+                .to_string(),
+            dst_dir.path().display().to_string(),
+            "--latest".to_string(),
+        ]);
+
+        let dst_layout = StateLayout::try_new(
+            no_op_logger(),
+            dst_dir.path().to_path_buf(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            dst_layout.checkpoint_heights().unwrap(),
+            vec![Height::new(3)]
         );
     }
 
