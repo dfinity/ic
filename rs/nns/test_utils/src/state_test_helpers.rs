@@ -889,7 +889,7 @@ pub fn adopt_proposal(
 ) -> Result<(), GovernanceError> {
     let result = state_machine
         .execute_ingress_as(
-            sender,
+            PrincipalId::new_anonymous(),
             GOVERNANCE_CANISTER_ID,
             "adopt_proposal",
             Encode!(&proposal_id).unwrap(),
@@ -958,10 +958,10 @@ fn nns_configure_neuron(
     }
 }
 
-#[must_use]
-pub fn nns_create_super_powerful_neuron(
+pub fn nns_create_neuron_with_stake(
     state_machine: &StateMachine,
     controller: PrincipalId,
+    stake: Tokens,
 ) -> NeuronId {
     let memo = 0xCAFE_F00D;
 
@@ -970,9 +970,8 @@ pub fn nns_create_super_powerful_neuron(
         PrincipalId::from(GOVERNANCE_CANISTER_ID),
         Some(compute_neuron_staking_subaccount(controller, memo)),
     );
-    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
-    let amount = Tokens::from_e8s(u64::MAX / 4);
-    mint_icp(state_machine, destination, amount);
+
+    mint_icp(state_machine, destination, stake);
 
     // Create the Neuron.
     let neuron_id = nns_claim_or_refresh_neuron(state_machine, controller, memo);
@@ -991,6 +990,16 @@ pub fn nns_create_super_powerful_neuron(
     }
 
     neuron_id
+}
+
+#[must_use]
+pub fn nns_create_super_powerful_neuron(
+    state_machine: &StateMachine,
+    controller: PrincipalId,
+) -> NeuronId {
+    // "Overwhelmingly" large, but still small enough to avoid addition overflow.
+    let amount = Tokens::from_e8s(u64::MAX / 4);
+    nns_create_neuron_with_stake(state_machine, controller, amount)
 }
 
 #[must_use]
