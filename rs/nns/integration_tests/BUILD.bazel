@@ -444,7 +444,7 @@ rust_ic_test(
 #       is run. This authorizes the test to download the test data.
 #
 #     * `--test_env=NNS_PROPOSAL_ID_TO_ADOPT=`. The value is a (u64) ID of an NNS proposal
-#       that is currently open. If not specified, an NNS Governance upgrade proposal will
+#       that is currently *open*. If not specified, an NNS Governance upgrade proposal will
 #       be submitted and adopted, as a CI smoke test.
 #
 # For more details, please refer to the comment above "upgrade_canisters_with_golden_nns_state".
