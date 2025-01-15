@@ -435,7 +435,7 @@ rust_ic_test(
 #         --test_env=NNS_PROPOSAL_ID_TO_ADOPT=134803 \
 #         --test_output=streamed \
 #         --test_arg=--nocapture \
-#         //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+#         //rs/nns/integration_tests:test_proposal_with_golden_nns_state
 #
 # Required Environment Variables:
 #
