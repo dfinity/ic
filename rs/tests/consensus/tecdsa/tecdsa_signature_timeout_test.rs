@@ -42,7 +42,7 @@ fn test(env: TestEnv) {
             &governance,
             app_subnet.subnet_id,
             key_ids.clone(),
-            Some(Duration::from_secs(1)),
+            Some(Duration::from_millis(1)),
             &log,
         )
         .await;
@@ -67,7 +67,7 @@ fn test(env: TestEnv) {
                 AgentError::CertifiedReject(RejectResponse {
                     reject_code: RejectCode::CanisterReject,
                     reject_message: "Signature request expired".to_string(),
-                    error_code: None
+                    error_code: Some("IC0406".to_string())
                 })
             )
         }

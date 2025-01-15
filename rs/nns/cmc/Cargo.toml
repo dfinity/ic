@@ -47,6 +47,7 @@ yansi = "0.5.0"
 candid_parser = { workspace = true }
 futures = { workspace = true }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+serde_bytes = { workspace = true }
 
 [[bin]]
 name = "cycles-minting-canister"

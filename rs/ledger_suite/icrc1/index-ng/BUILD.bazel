@@ -79,7 +79,10 @@ rust_library(
 rust_test(
     name = "index_ng_unit_test",
     crate = ":_wasm_index_ng_canister",
-    data = [":index-ng.did"],
+    data = [
+        ":index-ng.did",
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
+    ],
     deps = [
         # Keep sorted.
         "//rs/ledger_suite/icrc1/test_utils",
@@ -98,18 +101,17 @@ rust_test(
         ],
         crate_features = conf["crate_features"],
         data = [
-            "//rs/ledger_suite/icrc1/index:index_canister.wasm",
-        ] + [
             conf["index_wasm"],
             conf["ledger_wasm"],
         ],
         env = {
+            "RUST_TEST_THREADS": "4",
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
-            "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
         extra_srcs = ["tests/common/mod.rs"],
+        tags = ["cpu:4"],
         deps = [
             # Keep sorted.
             ":index-ng",
@@ -117,7 +119,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/icrc1/index",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/icrc1/tokens_u64",

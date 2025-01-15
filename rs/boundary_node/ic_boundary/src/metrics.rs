@@ -2,7 +2,7 @@
 
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Instant,
 };
 
@@ -25,7 +25,6 @@ use prometheus::{
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use tikv_jemalloc_ctl::{epoch, stats};
-use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
@@ -220,7 +219,7 @@ impl Run for MetricsRunner {
         }
 
         // Take a write lock, truncate the vector and encode the metrics into it
-        let mut metrics_cache = self.metrics_cache.write().await;
+        let mut metrics_cache = self.metrics_cache.write().unwrap();
         metrics_cache.buffer.clear();
         self.encoder
             .encode(&metric_families, &mut metrics_cache.buffer)?;
@@ -501,8 +500,17 @@ pub async fn metrics_middleware(
     let ip_family = request
         .extensions()
         .get::<Arc<ConnInfo>>()
-        .map(|x| x.remote_addr.family())
-        .unwrap_or("0");
+        .map(|x| {
+            let f = x.remote_addr.family();
+            if f == "v4" {
+                4
+            } else if f == "v6" {
+                6
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
 
     let remote_addr = request
         .extensions()
@@ -707,7 +715,7 @@ pub async fn metrics_handler(
     // Get a read lock and clone the buffer contents
     (
         [(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
-        cache.read().await.buffer.clone(),
+        cache.read().unwrap().buffer.clone(),
     )
 }
 

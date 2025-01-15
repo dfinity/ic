@@ -2,11 +2,14 @@ use super::*;
 use crate::{
     governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON},
     neuron::{DissolveStateAndAge, NeuronBuilder},
+    neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{neuron::Followees, BallotInfo, Vote},
-    temporarily_disable_active_neurons_in_stable_memory,
-    temporarily_enable_active_neurons_in_stable_memory,
+    temporarily_disable_allow_active_neurons_in_stable_memory,
+    temporarily_disable_migrate_active_neurons_to_stable_memory,
+    temporarily_enable_allow_active_neurons_in_stable_memory,
+    temporarily_enable_migrate_active_neurons_to_stable_memory,
     temporarily_enable_stable_memory_following_index,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
@@ -197,8 +200,9 @@ fn add_neuron_inactive_maximum() -> BenchResult {
 
 #[bench(raw)]
 fn update_recent_ballots_stable_memory() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
+    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum).build();
@@ -238,7 +242,8 @@ fn range_neurons_performance() -> BenchResult {
 
 #[bench(raw)]
 fn neuron_metrics_calculation_heap() -> BenchResult {
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
 
@@ -249,7 +254,8 @@ fn neuron_metrics_calculation_heap() -> BenchResult {
 
 #[bench(raw)]
 fn neuron_metrics_calculation_stable() -> BenchResult {
-    let _f = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     let mut rng = new_rng();
     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
@@ -283,7 +289,8 @@ fn add_neuron_ready_to_spawn(
 
 #[bench(raw)]
 fn list_ready_to_spawn_neuron_ids_heap() -> BenchResult {
-    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
     add_neuron_ready_to_spawn(now_seconds(), &mut rng, &mut neuron_store);
@@ -293,7 +300,8 @@ fn list_ready_to_spawn_neuron_ids_heap() -> BenchResult {
 
 #[bench(raw)]
 fn list_ready_to_spawn_neuron_ids_stable() -> BenchResult {
-    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
     add_neuron_ready_to_spawn(now_seconds(), &mut rng, &mut neuron_store);
@@ -326,7 +334,8 @@ fn add_neuron_ready_to_unstake_maturity(
 
 #[bench(raw)]
 fn list_neurons_ready_to_unstake_maturity_heap() -> BenchResult {
-    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
     add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
@@ -336,7 +345,8 @@ fn list_neurons_ready_to_unstake_maturity_heap() -> BenchResult {
 
 #[bench(raw)]
 fn list_neurons_ready_to_unstake_maturity_stable() -> BenchResult {
-    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 1_000, 2_000);
     add_neuron_ready_to_unstake_maturity(now_seconds(), &mut rng, &mut neuron_store);
@@ -366,7 +376,8 @@ fn build_neurons_fund_portion(neuron: &Neuron, amount_icp_e8s: u64) -> NeuronsFu
 
 #[bench(raw)]
 fn draw_maturity_from_neurons_fund_heap() -> BenchResult {
-    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let mut neurons_fund_neurons = BTreeSet::new();
@@ -388,10 +399,14 @@ fn draw_maturity_from_neurons_fund_heap() -> BenchResult {
 
 #[bench(raw)]
 fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
-    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let mut neurons_fund_neurons = BTreeSet::new();
+    // When extrapolating to `MAX_NEURONS_FUND_PARTICIPANTS` (5K) neurons, the current performance
+    // of 12M instructions (as of the time of writing) becomes 600M instructions. This is relatively
+    // small compared to the instruction limit of 50B (or the 40B limit for application subnets).
     for _ in 0..100 {
         let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Typical)
             .with_maturity_e8s_equivalent(2_000_000_000)
@@ -410,7 +425,8 @@ fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
 
 #[bench(raw)]
 fn list_active_neurons_fund_neurons_heap() -> BenchResult {
-    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     for _ in 0..100 {
@@ -425,7 +441,8 @@ fn list_active_neurons_fund_neurons_heap() -> BenchResult {
 
 #[bench(raw)]
 fn list_active_neurons_fund_neurons_stable() -> BenchResult {
-    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     for _ in 0..100 {
@@ -436,4 +453,46 @@ fn list_active_neurons_fund_neurons_stable() -> BenchResult {
     }
 
     bench_fn(|| std::hint::black_box(neuron_store.list_active_neurons_fund_neurons()))
+}
+
+fn validate_all_neurons(neuron_store: &NeuronStore, validator: &mut NeuronDataValidator) {
+    let mut now = now_seconds();
+    loop {
+        validator.maybe_validate(now, neuron_store);
+
+        let still_validating = validator
+            .summary()
+            .current_validation_started_time_seconds
+            .is_some();
+        if !still_validating {
+            break;
+        }
+        now += 1;
+    }
+}
+
+#[bench(raw)]
+fn neuron_data_validation_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let mut validator = NeuronDataValidator::new();
+
+    bench_fn(|| {
+        validate_all_neurons(&neuron_store, &mut validator);
+    })
+}
+
+#[bench(raw)]
+fn neuron_data_validation_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let mut validator = NeuronDataValidator::new();
+
+    bench_fn(|| {
+        validate_all_neurons(&neuron_store, &mut validator);
+    })
 }

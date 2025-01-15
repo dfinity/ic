@@ -38,8 +38,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
@@ -209,7 +208,7 @@ fn run_benchmark<G, I, W, R>(
     G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs),
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs),
 {
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
@@ -231,7 +230,7 @@ fn run_benchmark<G, I, W, R>(
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(exec_env, expected_ops, args);
+                    routine(id.as_ref(), exec_env, expected_ops, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -257,7 +256,7 @@ fn check_sandbox_defined() -> bool {
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
 where
     G: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
     if !check_sandbox_defined() {
         return;
@@ -300,6 +299,7 @@ where
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         Arc::new(FakeStateManager::new()),
+        Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

@@ -177,6 +177,7 @@ mod tests {
                 key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
                 skip_prompts: true,
+                use_local_binaries: false,
             },
             subcommand_args: SubCommand::AppSubnetRecovery(AppSubnetRecoveryArgs {
                 subnet_id: fake_subnet_id(),
@@ -186,7 +187,7 @@ mod tests {
                 pub_key: Some(String::from("Fake public key")),
                 download_node: None,
                 keep_downloaded_state: Some(false),
-                upload_node: None,
+                upload_method: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
                 next_step: None,
                 upgrade_image_url: None,

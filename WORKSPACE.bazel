@@ -26,9 +26,13 @@ canisters(
         "sns-wasm": "sns-wasm-canister.wasm.gz",
         "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
         "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v1": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v2": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
         "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
         "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v1": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v2": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "sns_root": "sns-root-canister.wasm.gz",
         "sns_governance": "sns-governance-canister.wasm.gz",
@@ -38,7 +42,7 @@ canisters(
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
     },
-    path = "//:mainnet-canisters.json",
+    path = "//:mainnet-canister-revisions.json",
     reponames = {
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",
@@ -52,9 +56,13 @@ canisters(
         "sns-wasm": "mainnet_nns_sns-wasm-canister",
         "ck_btc_archive": "mainnet_ckbtc_ic-icrc1-archive",
         "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
+        "ck_btc_ledger_v1": "mainnet_ckbtc_ic-icrc1-ledger-v1",
+        "ck_btc_ledger_v2": "mainnet_ckbtc_ic-icrc1-ledger-v2",
         "ck_btc_index": "mainnet_ckbtc-index-ng",
         "ck_eth_archive": "mainnet_cketh_ic-icrc1-archive-u256",
         "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
+        "ck_eth_ledger_v1": "mainnet_cketh_ic-icrc1-ledger-u256-v1",
+        "ck_eth_ledger_v2": "mainnet_cketh_ic-icrc1-ledger-u256-v2",
         "ck_eth_index": "mainnet_cketh-index-ng",
         "sns_root": "mainnet_sns-root-canister",
         "sns_governance": "mainnet_sns-governance-canister",
@@ -88,11 +96,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    # Back-ported fix: https://github.com/bazelbuild/rules_rust/pull/2981
-    patch_args = ["-p1"],
-    patches = ["//bazel:rules_rust.patch"],
-    sha256 = "85e2013727ab26fb22abdffe4b2ac0c27a2d5b6296167ba63d8f6e13140f51f9",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.53.0/rules_rust-v0.53.0.tar.gz"],
+    sha256 = "af4f56caae50a99a68bfce39b141b509dd68548c8204b98ab7a1cafc94d5bb02",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.54.1/rules_rust-v0.54.1.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")

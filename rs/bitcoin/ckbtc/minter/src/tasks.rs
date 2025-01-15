@@ -1,10 +1,6 @@
 #[cfg(test)]
 mod tests;
-use crate::{
-    distribute_kyt_fees, estimate_fee_per_vbyte, finalize_requests, reimburse_failed_kyt,
-    submit_pending_requests, CanisterRuntime,
-};
-use ic_btc_interface::Network;
+use crate::{estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,7 +15,6 @@ thread_local! {
 pub enum TaskType {
     ProcessLogic,
     RefreshFeePercentiles,
-    DistributeKytFee,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -147,7 +142,6 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
 
             submit_pending_requests().await;
             finalize_requests().await;
-            reimburse_failed_kyt().await;
         }
         TaskType::RefreshFeePercentiles => {
             const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
@@ -164,30 +158,6 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
             let _ = estimate_fee_per_vbyte().await;
-        }
-        TaskType::DistributeKytFee => {
-            const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration = Duration::from_secs(24 * 60 * 60);
-
-            let _enqueue_followup_guard = guard((), |_| {
-                schedule_after(
-                    MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
-                    TaskType::DistributeKytFee,
-                    &runtime,
-                );
-            });
-            let _guard = match crate::guard::DistributeKytFeeGuard::new() {
-                Some(guard) => guard,
-                None => return,
-            };
-
-            match crate::state::read_state(|s| s.btc_network) {
-                Network::Mainnet | Network::Testnet => {
-                    distribute_kyt_fees().await;
-                }
-                // We use a debug canister build exposing an endpoint
-                // triggering the fee distribution in tests.
-                Network::Regtest => {}
-            }
         }
     }
 }
