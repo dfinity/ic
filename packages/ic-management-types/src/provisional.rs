@@ -1,10 +1,8 @@
 //! Provisional functions only available in local development instances.
-
-use crate::api::call::{call, CallResult};
-use candid::{CandidType, Nat, Principal};
+use candid::{CandidType, Nat};
 use serde::{Deserialize, Serialize};
 
-pub use super::main::{CanisterId, CanisterIdRecord, CanisterSettings};
+pub use crate::{CanisterId, CanisterIdRecord, CanisterSettings};
 
 /// Argument type of [provisional_create_canister_with_cycles].
 #[derive(
@@ -26,34 +24,4 @@ pub struct ProvisionalTopUpCanisterArgument {
     pub canister_id: CanisterId,
     /// Amount of cycles to be added.
     pub amount: Nat,
-}
-
-/// Create a new canister with specified amount of cycles balance.
-///
-/// This method is only available in local development instances.
-///
-/// See [IC method `provisional_create_canister_with_cycles`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-provisional_create_canister_with_cycles).
-pub async fn provisional_create_canister_with_cycles(
-    arg: ProvisionalCreateCanisterWithCyclesArgument,
-) -> CallResult<(CanisterIdRecord,)> {
-    call(
-        Principal::management_canister(),
-        "provisional_create_canister_with_cycles",
-        (arg,),
-    )
-    .await
-}
-
-/// Add cycles to a canister.
-///
-/// This method is only available in local development instances.
-///
-/// See [IC method `provisional_top_up_canister`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-provisional_top_up_canister).
-pub async fn provisional_top_up_canister(arg: ProvisionalTopUpCanisterArgument) -> CallResult<()> {
-    call(
-        Principal::management_canister(),
-        "provisional_top_up_canister",
-        (arg,),
-    )
-    .await
 }

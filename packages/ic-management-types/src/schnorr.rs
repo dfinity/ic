@@ -1,7 +1,7 @@
 use candid::CandidType;
 use serde::{Deserialize, Serialize};
 
-use super::super::main::CanisterId;
+use crate::CanisterId;
 
 /// Argument Type of [schnorr_public_key](super::schnorr_public_key).
 #[derive(

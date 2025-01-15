@@ -1,5 +1,6 @@
 [package]
-documentation = "https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-management-canister"name = "ic-management-types"
+documentation = "https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-management-canister"
+name = "ic-management-types"
 version = "0.0.1"
 license = "Apache-2.0"
 description = "Types for the IC management canister"
@@ -20,3 +21,4 @@ edition.workspace = true
 [dependencies]
 candid = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
