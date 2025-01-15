@@ -281,7 +281,7 @@ fn systematic_fr_per_subnet(
     for metrics in daily_node_metrics.values() {
         for metric in metrics {
             subnet_daily_failure_rates
-                .entry((metric.subnet_assigned.into(), metric.ts))
+                .entry((metric.subnet_assigned, metric.ts))
                 .or_default()
                 .push(metric.failure_rate);
         }
