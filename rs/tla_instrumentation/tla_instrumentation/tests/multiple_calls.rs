@@ -12,6 +12,8 @@ use tla_instrumentation::{
 };
 use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
+use async_trait::async_trait;
+
 mod common;
 use common::check_tla_trace;
 
@@ -121,36 +123,47 @@ struct StructCanister {
 
 static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
-#[tla_function]
-async fn call_maker() {
-    tla_log_request!(
-        "WaitForResponse",
-        Destination::new("othercan"),
-        "Target_Method",
-        2_u64
-    );
-    tla_log_response!(
-        Destination::new("othercan"),
-        TlaValue::Variant {
-            tag: "Ok".to_string(),
-            value: Box::new(3_u64.to_tla_value())
-        }
-    );
+struct CallMaker {}
+
+#[async_trait]
+trait CallMakerTrait {
+    async fn call_maker(&self);
+}
+
+#[async_trait]
+impl CallMakerTrait for CallMaker {
+    #[tla_function(async_trait_fn = true)]
+    async fn call_maker(&self) {
+        tla_log_request!(
+            "WaitForResponse",
+            Destination::new("othercan"),
+            "Target_Method",
+            2_u64
+        );
+        tla_log_response!(
+            Destination::new("othercan"),
+            TlaValue::Variant {
+                tag: "Ok".to_string(),
+                value: Box::new(3_u64.to_tla_value())
+            }
+        );
+    }
 }
 
 impl StructCanister {
     #[tla_update_method(my_f_desc())]
     pub async fn my_method(&mut self) {
         self.counter += 1;
+        let call_maker = CallMaker {};
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase1");
-        call_maker().await;
+        call_maker.call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase2");
-        call_maker().await;
+        call_maker.call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         // Note that this would not be necessary (and would be an error) if

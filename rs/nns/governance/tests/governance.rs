@@ -4264,6 +4264,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 /// If we approve KYC for Principals 1 and 2, neurons A, B and C should have
 /// `kyc_verified=true`, while neuron D still has `kyc_verified=false`
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_approve_kyc() {
     let governance_proto = fixture_for_approve_kyc();
     let driver = fake::FakeDriver::default()
@@ -4703,6 +4704,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4740,6 +4742,7 @@ fn test_neuron_lifecycle() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_subaccount() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4833,6 +4836,7 @@ fn test_nns1_520() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_main_account() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -5430,6 +5434,7 @@ fn test_rate_limiting_neuron_creation() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -6712,6 +6717,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
