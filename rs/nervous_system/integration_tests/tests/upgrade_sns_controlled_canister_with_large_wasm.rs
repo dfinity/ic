@@ -179,7 +179,7 @@ async fn run_test(store_same_as_target: bool) {
             app_subnet,
             vec![],
             None,
-            vec![sns.governance.canister_id, sns.root.canister_id],
+            vec![sns.root.canister_id],
         )
         .await
     };
