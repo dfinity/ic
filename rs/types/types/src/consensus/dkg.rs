@@ -209,10 +209,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -244,15 +242,24 @@ impl Summary {
     /// Return the set of next transcripts for all tags. If for some tag
     /// the next transcript is not available, the current transcript is used.
     /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| {
-                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
-                (tag, new_next_transcripts)
-            })
-            .collect()
+    pub fn into_next_transcripts(mut self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+        let mut next_transcripts = BTreeMap::new();
+        for tag in self.configs.into_keys().map(|id| id.dkg_tag) {
+            let next_transcript = self.next_transcripts.remove(&tag);
+            let current_transcript = self.current_transcripts.remove(&tag);
+
+            let transcript = next_transcript.or(current_transcript);
+            match transcript {
+                Some(transcript) => {
+                    next_transcripts.insert(tag, transcript);
+                }
+                // TODO: Warn if no single trancript could be found
+                None => (),
+            }
+        }
+
+        // TODO: Warn if transcripts are left over
+        next_transcripts
     }
 
     /// Returns `true` if the provided height is included in the DKG interval

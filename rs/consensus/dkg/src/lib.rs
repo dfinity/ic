@@ -1661,7 +1661,7 @@ mod tests {
 
             assert_eq!(vet_key_ids.len(), 1);
             for tag in tags_iter(&vet_key_ids) {
-                let current_transcript = dkg_summary.current_transcript(&tag);
+                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -1726,7 +1726,7 @@ mod tests {
             assert_eq!(vet_key_ids.len(), 1);
             for tag in tags_iter(&vet_key_ids) {
                 // We reused the transcript.
-                let current_transcript = dkg_summary.current_transcript(&tag);
+                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -1800,7 +1800,7 @@ mod tests {
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(&tag);
+                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
@@ -1850,7 +1850,7 @@ mod tests {
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(&tag);
+                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(5)
@@ -1898,7 +1898,7 @@ mod tests {
                     conf.receivers().get(),
                     &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
-                let current_transcript = dkg_summary.current_transcript(&tag);
+                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
                 assert_eq!(
                     current_transcript.dkg_id.start_block_height,
                     Height::from(10)
