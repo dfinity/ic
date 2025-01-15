@@ -1639,12 +1639,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
-        match self.sandbox_safe_system_state.subnet_type {
-            SubnetType::System => NumInstructions::from(0),
-            SubnetType::VerifiedApplication | SubnetType::Application => {
-                NumInstructions::from(num_bytes.get())
-            }
-        }
+        NumInstructions::from(num_bytes.get())
     }
 
     fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
