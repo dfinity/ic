@@ -1,6 +1,11 @@
 use crate::{
-    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    certification::recertify_registry, missing_node_types_map::MISSING_NODE_TYPES_MAP,
+    mutations::node_management::common::get_key_family, pb::v1::RegistryCanisterStableStorage,
+    registry::Registry,
 };
+use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
+use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
+use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 
 pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
@@ -53,13 +58,40 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
     }
 }
 
+fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation> {
+    let missing_node_types_map = &MISSING_NODE_TYPES_MAP;
+
+    let mut mutations = Vec::new();
+
+    for (id, record) in get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter() {
+        if record.node_reward_type.is_none() {
+            let reward_type = missing_node_types_map
+                .get(&id)
+                .map(|t| NodeRewardType::from(t.clone()));
+
+            if let Some(reward_type) = reward_type {
+                if reward_type != NodeRewardType::Unspecified {
+                    let mut record = record;
+                    record.node_reward_type = Some(reward_type as i32);
+                    mutations.push(update(id, record));
+                }
+            }
+        }
+    }
+
+    mutations
+}
+
 #[cfg(test)]
 mod test {
+    use ic_base_types::{NodeId, PrincipalId};
+    use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use super::*;
     use crate::{
         common::test_helpers::{empty_mutation, invariant_compliant_registry},
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
+        mutations::node_management::common::make_add_node_registry_mutations
     };
 
     fn stable_storage_from_registry(
@@ -166,5 +198,39 @@ mod test {
         // then we panic when decoding
         let mut new_registry = Registry::new();
         canister_post_upgrade(&mut new_registry, &stable_storage);
+    }
+
+    #[test]
+    fn test_migration_works_correctly {
+        let mut registry = Registry::new();
+        // Populate nodes with missing node types
+        let mut nodes = Vec::new();
+
+
+        let mut node_additions = Vec::new();
+        let valid_public_keys = ValidNodePublicKeys::new_empty();
+        for (id, _) in MISSING_NODE_TYPES_MAP.iter() {
+            let record = NodeRecord {
+                xnet: None,
+                http: None,
+                node_operator_id: PrincipalId::new_anonymous().to_vec(),
+                chip_id: None,
+                hostos_version_id: None,
+                public_ipv4_config: None,
+                domain: None,
+                node_reward_type: None,
+            };
+
+            node_additions.append(&mut make_add_node_registry_mutations(NodeId::from(PrincipalId::from_str(id).unwrap()), record, valid_public_keys);
+        }
+
+        registry.maybe_apply_mutation_internal(node_additions);
+        let stable_storage_bytes = stable_storage_from_registry(&registry, None);
+
+
+        let mut new_registry = Registry::new();
+        canister_post_upgrade(&mut new_registry, &stable_storage_bytes);
+        let mutations = add_missing_node_types_to_nodes(&new_registry);
+        assert_eq!(mutations.len(), 0);
     }
 }
