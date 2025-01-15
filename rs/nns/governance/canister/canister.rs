@@ -676,6 +676,17 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
         .map(GovernanceError::from)
 }
 
+#[cfg(feature = "test")]
+#[update]
+/// Internal method for calling update_neuron.
+fn adopt_proposal(proposal_id: ProposalIdProto) -> Option<GovernanceError> {
+    debug_log("adopt_proposal");
+    governance_mut()
+        .adopt_proposal(proposal_id)
+        .err()
+        .map(GovernanceError::from)
+}
+
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
