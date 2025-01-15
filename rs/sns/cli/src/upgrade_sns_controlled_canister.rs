@@ -41,6 +41,9 @@ pub struct UpgradeSnsControlledCanisterArgs {
 
     #[clap(long)]
     proposal_url: Url,
+
+    #[clap(long)]
+    summary: String,
 }
 
 fn load_wasm(wasm_path: PathBuf) -> Result<Vec<u8>> {
@@ -72,6 +75,7 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         wasm_path,
         candid_arg,
         proposal_url,
+        summary,
     } = args;
 
     let wasm_bytes = load_wasm(wasm_path)?;
@@ -144,7 +148,7 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
             "Upgrade SNS-controlled canister {}",
             target_canister_id.get()
         ),
-        summary: format!(""), // TODO: allow the user to specify a summary
+        summary,
         url: proposal_url.to_string(),
         action: Some(Action::UpgradeSnsControlledCanister(
             UpgradeSnsControlledCanister {
