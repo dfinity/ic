@@ -2293,6 +2293,38 @@ impl Governance {
         })?
     }
 
+    /// Adopts a proposal by pretending that all potential votes were YES votes in the tally.
+    ///
+    /// Preconditions:
+    /// - the proposal with `proposal_id` already exists in `self.proposal_data`
+    #[cfg(feature = "test")]
+    pub fn adopt_proposal(&mut self, proposal_id: ProposalId) -> Result<(), GovernanceError> {
+        let now = self.env.now();
+
+        let proposal_data = self.mut_proposal_data_or_err(&proposal_id, "in adopt_proposal")?;
+
+        assert_eq!(proposal_data.status(), ProposalStatus::Open);
+
+        let Some(mut tally) = proposal_data.latest_tally else {
+            panic!("No tally specified for proposal {}", proposal_id.id);
+        };
+
+        tally.no = 0;
+        tally.yes = tally.total;
+        tally.timestamp_seconds = now;
+        assert!(
+            tally.is_absolute_majority_for_yes(),
+            "Bug in test-only code"
+        );
+
+        proposal_data.latest_tally.replace(tally);
+
+        // Ensure that the proposal action will be processed ASAP.
+        self.closest_proposal_deadline_timestamp_seconds = now;
+
+        Ok(())
+    }
+
     /// Add a neuron to the list of neurons.
     ///
     /// Fails under the following conditions:
