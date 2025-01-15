@@ -132,6 +132,7 @@ pub fn bytes_to_vet_kd_payload(data: &[u8]) -> Result<VetKdPayload, ProxyDecodeE
 #[cfg(test)]
 mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use rand::RngCore;
 
     use crate::exhaustive::ExhaustiveSet;
 
@@ -140,7 +141,7 @@ mod tests {
     #[test]
     fn test_vet_kd_payload_conversion() {
         let set = VetKdPayload::exhaustive_set(&mut reproducible_rng());
-        println!("Number of VetKdAgreement variants: {}", set.len());
+        println!("Number of VetKdPayload variants: {}", set.len());
         let max_size = NumBytes::new(2 * 1024 * 1024);
         for element in set {
             // serialize -> deserialize round-trip
@@ -149,8 +150,64 @@ mod tests {
 
             assert_eq!(
                 element, new_element,
-                "deserialized agreement is different from original"
+                "deserialized VetKdPayload is different from original"
             );
         }
+    }
+
+    #[test]
+    fn test_large_vet_kd_payload_conversion() {
+        let mut rng = reproducible_rng();
+        // Max size is 10_000 bytes
+        let max_size = NumBytes::new(10 * 1000);
+
+        // Each agreement has 1000 bytes (in deserialized form)
+        let mut make_agreement = || {
+            let mut data = [0; 1000];
+                rng.fill_bytes(&mut data);
+            VetKdAgreement::Success(data.to_vec())
+        };
+
+        // 8 Agreements should still fit in the payload
+        let payload_fits = VetKdPayload {
+            vet_kd_agreements: (0..9).map(|i| {
+                (CallbackId::new(i), make_agreement())
+            }).collect(),
+        };
+
+        let bytes = vet_kd_payload_to_bytes(payload_fits.clone(), max_size);
+        assert!(bytes.len() as u64 <= max_size.get());
+        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+
+        assert_eq!(
+            new_payload, payload_fits,
+            "deserialized VetKdPayload is different from original"
+        );
+
+        // The 9th agreement should be truncated
+        let mut payload_too_large = payload_fits.clone();
+        payload_too_large.vet_kd_agreements.insert(CallbackId::new(9), make_agreement());
+
+        let bytes = vet_kd_payload_to_bytes(payload_too_large, max_size);
+        assert!(bytes.len() as u64 <= max_size.get());
+        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+
+        assert_eq!(
+            new_payload, payload_fits,
+            "deserialized VetKdPayload is different from original"
+        );
+
+        // But there should still be space for a reject
+        let mut payload_reject = payload_fits.clone();
+        payload_reject.vet_kd_agreements.insert(CallbackId::new(9), VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
+
+        let bytes = vet_kd_payload_to_bytes(payload_reject.clone(), max_size);
+        assert!(bytes.len() as u64 <= max_size.get());
+        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+
+        assert_eq!(
+            new_payload, payload_reject,
+            "deserialized VetKdPayload is different from original"
+        );
     }
 }
