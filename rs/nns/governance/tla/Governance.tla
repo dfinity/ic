@@ -293,11 +293,14 @@ Cached_Stake_Not_Underflowing == \A n \in DOMAIN(neuron): neuron[n].cached_stake
 Neurons_Have_At_Least_Min_Stake == \A n \in DOMAIN(neuron) :
     n \notin locks => neuron[n].cached_stake >= MIN_STAKE
 
+Ready_To_Spawn_Ids_Exist == (UNION Range(ready_to_spawn_ids)) \subseteq DOMAIN(neuron)
+
 Full_Invariant ==   /\ Cached_Stake_Capped_By_Balance_When_Not_Locked
                     /\ Neuron_And_Account_Id_By_Neuron_Coherent
                     /\ Total_Minting_Does_Not_Exceed_Rewards
                     /\ Neurons_Have_Unique_Accounts
                     /\ Cached_Stake_Not_Underflowing
+                    /\ Ready_To_Spawn_Ids_Exist
 
 \*******************************************************************************
 \* Symmetry optimizations for model checking
