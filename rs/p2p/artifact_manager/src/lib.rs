@@ -176,7 +176,7 @@ enum StreamState<T> {
     EndOfStream,
 }
 
-async fn batch_read<T, S: Stream<Item = T> + Send + Unpin + 'static>(
+async fn read_batch<T, S: Stream<Item = T> + Send + Unpin + 'static>(
     mut stream: Pin<&mut S>,
     recv_timeout: Duration,
 ) -> Option<Vec<T>> {
@@ -189,6 +189,8 @@ async fn batch_read<T, S: Stream<Item = T> + Send + Unpin + 'static>(
                 std::future::poll_fn(|cx| match stream.as_mut().poll_next(cx) {
                     Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
                     Poll::Ready(Some(v)) => Poll::Ready(StreamState::Value(v)),
+                    // Stream has finished because the abortable broadcast/p2p has stopped.
+                    // This is infallible.
                     Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
                 })
                 .await
@@ -197,7 +199,8 @@ async fn batch_read<T, S: Stream<Item = T> + Send + Unpin + 'static>(
             }
             Some(res)
         }
-        // Stream has finished because the abortable broadcast/p2p has stopped
+        // Stream has finished because the abortable broadcast/p2p has stopped.
+        // This is infallible.
         Ok(None) => None,
         // First value didn't arrive on time
         Err(_) => Some(vec![]),
@@ -233,7 +236,7 @@ fn process_messages<
 
         let batched_artifact_events = current_thread_rt.block_on(async {
             let inbound_stream = std::pin::Pin::new(&mut inbound_stream);
-            batch_read(inbound_stream, recv_timeout).await
+            read_batch(inbound_stream, recv_timeout).await
         });
         let batched_artifact_events = match batched_artifact_events {
             Some(v) => v,
@@ -437,14 +440,52 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
 mod tests {
     use super::*;
 
-    use std::{convert::Infallible, sync::Arc};
-
     use ic_interfaces::time_source::SysTimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
-    use tokio_stream::wrappers::UnboundedReceiverStream;
+    use std::{convert::Infallible, sync::Arc};
+    use tokio::sync::mpsc::channel;
+    use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 
     use crate::{run_artifact_processor, ArtifactProcessor};
+
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_after_consuming_all() {
+        let (tx, rx) = channel(100);
+        let mut rx_stream = ReceiverStream::new(rx);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        let pinned_rx_stream_1 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream_1, recv_timeout).await,
+            Some(vec![1])
+        );
+        tx.send(2).await.unwrap();
+        tx.send(3).await.unwrap();
+        let pinned_rx_stream_2 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream_2, recv_timeout).await,
+            Some(vec![2, 3])
+        );
+        std::mem::drop(tx);
+        let pinned_rx_stream_3 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(read_batch(pinned_rx_stream_3, recv_timeout).await, None);
+    }
+
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_before_consuming_all() {
+        let (tx, rx) = channel(100);
+        let mut rx_stream = ReceiverStream::new(rx);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        tx.send(2).await.unwrap();
+        std::mem::drop(tx);
+        let pinned_rx_stream = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream, recv_timeout).await,
+            Some(vec![1, 2])
+        );
+    }
 
     #[test]
     fn send_initial_artifacts() {
