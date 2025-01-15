@@ -136,7 +136,10 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
-use ic_nns_governance::storage::reset_stable_memory;
+use ic_nns_governance::{
+    pb::v1::governance::{neuron_in_flight_command, NeuronInFlightCommand},
+    storage::reset_stable_memory,
+};
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -4261,6 +4264,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 /// If we approve KYC for Principals 1 and 2, neurons A, B and C should have
 /// `kyc_verified=true`, while neuron D still has `kyc_verified=false`
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_approve_kyc() {
     let governance_proto = fixture_for_approve_kyc();
     let driver = fake::FakeDriver::default()
@@ -4700,6 +4704,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4737,6 +4742,7 @@ fn test_neuron_lifecycle() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_subaccount() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4830,6 +4836,7 @@ fn test_nns1_520() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_main_account() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -5427,6 +5434,7 @@ fn test_rate_limiting_neuron_creation() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -6230,6 +6238,127 @@ fn test_neuron_spawn_with_subaccount() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
+#[test]
+fn test_maturity_correctly_reset_if_spawn_fails() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
+
+    let now = driver.now();
+    assert_eq!(
+        gov.with_neuron(&id, |neuron| neuron
+            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
+            .state())
+            .unwrap(),
+        NeuronState::NotDissolving
+    );
+
+    // Artificially set the neuron's maturity to sufficient value
+    let parent_maturity_e8s_equivalent: u64 = 123_456_789;
+    assert!(
+        parent_maturity_e8s_equivalent
+            > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+    );
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
+
+    // Advance the time so that we can check that the spawned neuron has the age
+    // and the right creation timestamp
+    driver.advance_time_by(1);
+
+    // Nonce used for spawn (given as input).
+    let nonce_spawn = driver.random_u64().expect("Could not get random number");
+
+    let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    let child_nid = gov
+        .spawn_neuron(
+            &id,
+            &from,
+            &Spawn {
+                new_controller: Some(child_controller),
+                nonce: Some(nonce_spawn),
+                percentage_to_spawn: None,
+            },
+        )
+        .unwrap();
+
+    let creation_timestamp = driver.now();
+
+    // We should now have 2 neurons.
+    assert_eq!(gov.neuron_store.len(), 2);
+    // And we should have one ledger accounts.
+    driver.assert_num_neuron_accounts_exist(1);
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    // Maturity on the parent neuron should be reset.
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    driver.fail_next_ledger_call();
+
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+
+    //Driver should fail to finish spawning neurons now (i.e. minting) b/c ledger returns error
+
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let child_neuron = gov
+        .get_full_neuron(&child_nid, &child_controller)
+        .expect("The child neuron is missing");
+
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, Some(1730737555));
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
+    // We expect maturity modulation of 100 basis points, which is 1%, because of the
+    // result returned from FakeDriver when pretending to be CMC.
+    assert_eq!(
+        gov.heap_data
+            .cached_daily_maturity_modulation_basis_points
+            .unwrap(),
+        100
+    );
+    // The value here should be reset to the original value, without being modulated.
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 123_456_789);
+}
+
 /// Checks that:
 /// * Specifying a percentage_to_spawn different from 100 lead to the proper fractional maturity
 ///   to be spawned.
@@ -6588,6 +6717,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -14911,4 +15041,71 @@ impl CMC for StubCMC {
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
         unimplemented!()
     }
+}
+
+// TODO(NNS1-3526): Remove after deployed and confirmed fix
+#[test]
+fn test_locked_neuron_is_unlocked_and_icp_is_minted() {
+    let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
+    let neuron_id = 17912780790050115461;
+    let mut nns = NNSBuilder::new()
+        .set_start_time(epoch)
+        .add_neuron(
+            NeuronBuilder::new(neuron_id, 1_200_000, PrincipalId::new_user_test_id(42))
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(epoch))),
+        )
+        .create();
+
+    nns.governance.heap_data.in_flight_commands.insert(
+        neuron_id,
+        NeuronInFlightCommand {
+            timestamp: 1728911670,
+            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
+                id: neuron_id,
+            })),
+        },
+    );
+
+    // B/c of how this test is setup, the neuron will have stake.
+    // We just want to make sure it can only incrase once.
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000
+    );
+
+    nns.governance
+        .fix_locked_spawn_neuron()
+        .now_or_never()
+        .unwrap()
+        .expect("Failed to fix locked spawn neuron");
+
+    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 0);
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000 * 2
+    );
+
+    // Nothing happens if you call it again with a differnt lock time.
+    nns.governance.heap_data.in_flight_commands.insert(
+        neuron_id,
+        NeuronInFlightCommand {
+            timestamp: 1728911671,
+            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
+                id: neuron_id,
+            })),
+        },
+    );
+    nns.governance
+        .fix_locked_spawn_neuron()
+        .now_or_never()
+        .unwrap()
+        .expect("Failed to fix locked spawn neuron");
+
+    // Lock is not cleared b/c we didn't target that lock
+    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 1);
+    // Balance doesn't change this time.
+    assert_eq!(
+        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
+        1_200_000 * 2
+    );
 }

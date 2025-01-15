@@ -146,9 +146,9 @@ use crate::storage::with_voting_state_machines_mut;
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
-    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
-    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
+    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC,
+    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -251,10 +251,14 @@ const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
-/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
-/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
-/// this constant can be used to obtain an upper bound for the number of SNS neurons created
-/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
+/// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
+/// constant can be used to obtain an upper bound for the number of SNS neurons created for the
+/// Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`. In addition, this constant
+/// also affects the upperbound of instructions needed to draw/refund maturity from/to the Neurons'
+/// Fund, so before increasing this constant, the impact on the instructions used by
+/// `CreateServiceNervousSystem` proposal execution also needs to be evaluated (currently, each
+/// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
@@ -2655,6 +2659,7 @@ impl Governance {
     /// - The neuron exists.
     /// - The caller is the controller of the the neuron.
     /// - The neuron's state is `Dissolved` at the current timestamp.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_NEURON_DESC.clone()))]
     pub async fn disburse_neuron(
         &mut self,
         id: &NeuronId,
@@ -2759,6 +2764,13 @@ impl Governance {
         // an amount less than the transaction fee.
         if fees_amount_e8s > transaction_fee_e8s {
             let now = self.env.now();
+            tla_log_label!("DisburseNeuron_Fee");
+            tla_log_locals! {
+                fees_amount: fees_amount_e8s,
+                neuron_id: id.id,
+                to_account: tla::account_to_tla(to_account),
+                disburse_amount: disburse_amount_e8s
+            };
             let _result = self
                 .ledger
                 .transfer_funds(
@@ -2786,6 +2798,15 @@ impl Governance {
         // user told us to disburse more than they had in their account (but
         // the burn still happened).
         let now = self.env.now();
+
+        tla_log_label!("DisburseNeuron_Stake");
+        tla_log_locals! {
+            fees_amount: fees_amount_e8s,
+            neuron_id: id.id,
+            to_account: tla::account_to_tla(to_account),
+            disburse_amount: disburse_amount_e8s
+        };
+
         let block_height = self
             .ledger
             .transfer_funds(
@@ -3520,6 +3541,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone()))]
     pub async fn disburse_to_neuron(
         &mut self,
         id: &NeuronId,
@@ -3685,6 +3707,13 @@ impl Governance {
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
         let memo = created_timestamp_seconds;
+
+        tla_log_locals! {
+            parent_neuron_id: parent_nid.id,
+            disburse_amount: disburse_to_neuron.amount_e8s,
+            child_neuron_id: child_nid.id,
+            child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount))
+        };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -6946,11 +6975,11 @@ impl Governance {
                         .with_neuron(&neuron_id, |neuron| neuron.clone())
                         .expect("Neuron should exist, just found in list");
 
-                    let maturity = neuron.maturity_e8s_equivalent;
+                    let original_maturity = neuron.maturity_e8s_equivalent;
                     let subaccount = neuron.subaccount();
 
                     let neuron_stake: u64 = match apply_maturity_modulation(
-                        maturity,
+                        original_maturity,
                         maturity_modulation,
                     ) {
                         Ok(neuron_stake) => neuron_stake,
@@ -7019,7 +7048,7 @@ impl Governance {
                                 error,
                             );
                             match self.with_neuron_mut(&neuron_id, |neuron| {
-                                neuron.maturity_e8s_equivalent = neuron_stake;
+                                neuron.maturity_e8s_equivalent = original_maturity;
                                 neuron.cached_neuron_stake_e8s = 0;
                                 neuron.spawn_at_timestamp_seconds =
                                     original_spawn_at_timestamp_seconds;
@@ -7058,6 +7087,67 @@ impl Governance {
 
         // Release the global spawning lock
         self.heap_data.spawning_neurons = Some(false);
+    }
+
+    // TODO(NNS1-3526): Remove this method once it is released.
+    pub async fn fix_locked_spawn_neuron(&mut self) -> Result<(), GovernanceError> {
+        // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
+        // Neuron's state was updated, but the ledger transaction did not finish.
+        const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
+
+        let id = 17912780790050115461;
+        let neuron_id = NeuronId { id };
+
+        let now_seconds = self.env.now();
+
+        match self.heap_data.in_flight_commands.get(&id) {
+            None => {
+                return Ok(());
+            }
+            Some(existing_lock) => {
+                let NeuronInFlightCommand {
+                    timestamp,
+                    command: _,
+                } = existing_lock;
+
+                // We check the exact timestamp so that new locks couldn't trigger this condition
+                // which would allow that neuron to repeatedly mint under the right conditions.
+                if *timestamp != TARGETED_LOCK_TIMESTAMP {
+                    return Ok(());
+                }
+            }
+        };
+
+        let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
+            let neuron_stake = neuron.cached_neuron_stake_e8s;
+            let subaccount = neuron.subaccount();
+            (neuron_stake, subaccount)
+        })?;
+
+        // Mint the ICP
+        match self
+            .ledger
+            .transfer_funds(
+                neuron_stake,
+                0, // Minting transfer don't pay a fee.
+                None,
+                neuron_subaccount(subaccount),
+                now_seconds,
+            )
+            .await
+        {
+            Ok(_) => {
+                self.heap_data.in_flight_commands.remove(&id);
+                Ok(())
+            }
+            Err(error) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                format!(
+                    "Error fixing locked neuron: {:?}. Ledger update failed with err: {:?}.",
+                    neuron_id, error
+                ),
+            )),
+        }
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise
@@ -7284,9 +7374,11 @@ impl Governance {
         })
     }
 
-    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        self.neuron_store
-            .batch_adjust_neurons_storage(start_neuron_id)
+    pub fn batch_adjust_neurons_storage(
+        &mut self,
+        next: std::ops::Bound<NeuronId>,
+    ) -> std::ops::Bound<NeuronId> {
+        self.neuron_store.batch_adjust_neurons_storage(next)
     }
 
     /// Recompute cached metrics once per day

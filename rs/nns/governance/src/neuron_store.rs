@@ -624,68 +624,17 @@ impl NeuronStore {
 
     /// Adjusts the storage location of neurons, since active neurons might become inactive due to
     /// passage of time.
-    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 200;
-
+    pub fn batch_adjust_neurons_storage(&mut self, next: Bound<NeuronId>) -> Bound<NeuronId> {
         #[cfg(target_arch = "wasm32")]
         static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 1_000_000_000;
 
         #[cfg(target_arch = "wasm32")]
-        let max_instructions_reached =
-            || ic_cdk::api::instruction_counter() >= MAX_NUM_INSTRUCTIONS_PER_BATCH;
+        let carry_on = || ic_cdk::api::instruction_counter() < MAX_NUM_INSTRUCTIONS_PER_BATCH;
 
         #[cfg(not(target_arch = "wasm32"))]
-        let max_instructions_reached = || false;
+        let carry_on = || true;
 
-        self.adjust_neuron_storage_with_max_instructions(
-            start_neuron_id,
-            BATCH_SIZE_FOR_MOVING_NEURONS,
-            max_instructions_reached,
-        )
-    }
-
-    fn adjust_neuron_storage_with_max_instructions(
-        &mut self,
-        start_neuron_id: NeuronId,
-        max_batch_size: usize,
-        max_instructions_reached: impl Fn() -> bool,
-    ) -> Option<NeuronId> {
-        // We currently only move neurons from heap to stable storage, since it's impossible to have
-        // active neurons in stable storage. In the future, we might need to move neurons from
-        // stable storage to heap as a rollback mechanism, but it is not implemented here yet.
-        let neuron_ids: Vec<_> = self
-            .heap_neurons
-            .range(start_neuron_id.id..)
-            .take(max_batch_size)
-            .map(|(id, _)| NeuronId { id: *id })
-            .collect();
-        // We know it is the last batch if the number of neurons is less than the batch size.
-        let is_last_batch = neuron_ids.len() < max_batch_size;
-
-        if neuron_ids.is_empty() {
-            return None;
-        }
-
-        let mut next_neuron_id = Some(start_neuron_id);
-
-        for neuron_id in neuron_ids {
-            if max_instructions_reached() {
-                // We don't need to look at the `is_last_batch` because at least one neuron is
-                // skipped due to instruction limit.
-                return next_neuron_id;
-            }
-
-            // We don't modify the neuron, but the below just makes sure that the neuron is in the
-            // appropriate storage location given its state and the current time.
-            let _ = self.with_neuron_mut(&neuron_id, |_| {});
-            next_neuron_id = neuron_id.next();
-        }
-
-        if is_last_batch {
-            None
-        } else {
-            next_neuron_id
-        }
+        groom_some_neurons(self, |_| {}, next, carry_on)
     }
 
     fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {

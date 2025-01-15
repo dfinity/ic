@@ -10,6 +10,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
     "//rs/tests/test_canisters/http_counter",
     "//rs/tests/test_canisters/kv_store",
     "@asset_canister//file",
+    "@long_asset_canister//file",
 ]
 
 system_test_nns(
@@ -18,6 +19,7 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
@@ -59,6 +61,7 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
     flaky = True,
     tags = [
@@ -127,6 +130,7 @@ system_test_nns(
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
+    proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
     ],
@@ -140,6 +144,7 @@ system_test_nns(
         "//rs/nns/constants",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
         "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",

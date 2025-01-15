@@ -14,7 +14,7 @@ use ic_ledger_suite_state_machine_tests::{
     wait_ledger_ready, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::{StateMachine, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -73,8 +73,8 @@ lazy_static! {
         Wasm::from_bytes(archive_wasm()),
         None,
     );
-    pub static ref ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
-        hex::decode("25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45").unwrap();
+    pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822").unwrap();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -97,8 +97,8 @@ lazy_static! {
         Wasm::from_bytes(archive_wasm()),
         None,
     );
-    pub static ref ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
-        hex::decode("9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e").unwrap();
+    pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("8b2e3e596a147780b0e99ce36d0b8f1f3ba41a98b819b42980a7c08c309b44c1").unwrap();
 }
 
 pub struct Wasms {
@@ -188,7 +188,7 @@ impl LedgerSuiteConfig {
         let deployed_module_hash = canister_status
             .module_hash()
             .expect("should have ledger canister module hash");
-        if deployed_module_hash.as_slice() == ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH.as_slice() {
+        if deployed_module_hash.as_slice() == BALANCES_MIGRATED_LEDGER_MODULE_HASH.as_slice() {
             ExpectMigration::No
         } else {
             ExpectMigration::Yes
@@ -351,18 +351,19 @@ impl LedgerSuiteConfig {
         // Upgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
-        self.upgrade_ledger(
+        match self.upgrade_ledger(
             state_machine,
             &self.mainnet_wasms.ledger_wasm,
             ExpectMigration::No,
-        )
-        .expect("should downgrade to mainnet ledger version");
-        self.upgrade_ledger(
-            state_machine,
-            &self.mainnet_wasms.ledger_wasm,
-            ExpectMigration::No,
-        )
-        .expect("should downgrade to mainnet ledger version");
+        ) {
+            Ok(_) => {
+                panic!("should not successfully downgrade ledger");
+            }
+            Err(user_error) => user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Trying to downgrade from incompatible version",
+            ),
+        }
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
     }
