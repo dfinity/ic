@@ -132,7 +132,8 @@ impl CreateVetKdKeyShareTestSetup {
     pub fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let master_secret_key = Scalar::random(rng);
         let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-        let transport_public_key = G2Affine::hash("ic-crypto-vetkd-test".as_bytes(), &rng.gen::<[u8; 32]>());
+        let transport_public_key =
+            G2Affine::hash("ic-crypto-vetkd-test".as_bytes(), &rng.gen::<[u8; 32]>());
         let key_id = KeyId::from([123; 32]);
         let derivation_path = ExtendedDerivationPath {
             caller: canister_test_id(234).get(),
