@@ -384,6 +384,9 @@ impl SubnetsImpl {
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
     }
+    fn clear(&self) {
+        self.subnets.write().unwrap().clear();
+    }
 }
 
 impl Subnets for SubnetsImpl {
@@ -421,8 +424,8 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        let subnets = self.subnets.get_all();
         if let Some(ref state_dir) = self.state_dir {
+            let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
             }
@@ -452,8 +455,35 @@ impl Drop for PocketIc {
             let topology_json = serde_json::to_string(&raw_topology).unwrap();
             topology_file.write_all(topology_json.as_bytes()).unwrap();
         }
-        for subnet in subnets {
+        for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
+        }
+        let state_machines: Vec<_> = self
+            .subnets
+            .get_all()
+            .into_iter()
+            .map(|subnet| subnet.state_machine.clone())
+            .collect();
+        self.subnets.clear();
+        // for every StateMachine, wait until nobody else has an Arc to that StateMachine
+        // and then drop that StateMachine
+        let start = std::time::Instant::now();
+        for state_machine in state_machines {
+            let mut state_machine = Some(state_machine);
+            while state_machine.is_some() {
+                match Arc::try_unwrap(state_machine.take().unwrap()) {
+                    Ok(sm) => {
+                        sm.drop();
+                        break;
+                    }
+                    Err(sm) => {
+                        state_machine = Some(sm);
+                    }
+                }
+                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+                    panic!("Timed out while dropping PocketIC.");
+                }
+            }
         }
     }
 }

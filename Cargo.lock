@@ -5445,6 +5445,7 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "futures",
  "ic-artifact-pool",
  "ic-config",
  "ic-interfaces",
@@ -5454,6 +5455,7 @@ dependencies = [
  "ic-types",
  "prometheus",
  "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
@@ -8394,6 +8396,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
@@ -10708,6 +10711,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "turmoil",
 ]
 
@@ -18342,6 +18346,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "futures",
+ "getrandom",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.16.0",
