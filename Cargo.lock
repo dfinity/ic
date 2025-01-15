@@ -8396,6 +8396,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
@@ -17128,6 +17129,7 @@ version = "6.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
+ "bitcoin 0.28.2",
  "candid",
  "candid_parser",
  "ed25519-dalek",
@@ -18344,6 +18346,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "futures",
+ "getrandom",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.16.0",
