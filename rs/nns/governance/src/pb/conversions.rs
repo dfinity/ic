@@ -1,6 +1,8 @@
 use crate::pb::v1 as pb;
 use ic_nns_governance_api::pb::v1 as pb_api;
 
+use crate::pb::proposal_conversions::convert_proposal;
+
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
         Self {
@@ -479,16 +481,6 @@ impl From<pb_api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTime
     }
 }
 
-impl From<pb::Proposal> for pb_api::Proposal {
-    fn from(item: pb::Proposal) -> Self {
-        Self {
-            title: item.title,
-            summary: item.summary,
-            url: item.url,
-            action: item.action.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::Proposal> for pb::Proposal {
     fn from(item: pb_api::Proposal) -> Self {
         Self {
@@ -510,56 +502,6 @@ impl From<pb_api::MakeProposalRequest> for pb::Proposal {
     }
 }
 
-impl From<pb::proposal::Action> for pb_api::proposal::Action {
-    fn from(item: pb::proposal::Action) -> Self {
-        match item {
-            pb::proposal::Action::ManageNeuron(v) => {
-                pb_api::proposal::Action::ManageNeuron(Box::new((*v).into()))
-            }
-            pb::proposal::Action::ManageNetworkEconomics(v) => {
-                pb_api::proposal::Action::ManageNetworkEconomics(v.into())
-            }
-            pb::proposal::Action::Motion(v) => pb_api::proposal::Action::Motion(v.into()),
-            pb::proposal::Action::ExecuteNnsFunction(v) => {
-                pb_api::proposal::Action::ExecuteNnsFunction(v.into())
-            }
-            pb::proposal::Action::ApproveGenesisKyc(v) => {
-                pb_api::proposal::Action::ApproveGenesisKyc(v.into())
-            }
-            pb::proposal::Action::AddOrRemoveNodeProvider(v) => {
-                pb_api::proposal::Action::AddOrRemoveNodeProvider(v.into())
-            }
-            pb::proposal::Action::RewardNodeProvider(v) => {
-                pb_api::proposal::Action::RewardNodeProvider(v.into())
-            }
-            pb::proposal::Action::SetDefaultFollowees(v) => {
-                pb_api::proposal::Action::SetDefaultFollowees(v.into())
-            }
-            pb::proposal::Action::RewardNodeProviders(v) => {
-                pb_api::proposal::Action::RewardNodeProviders(v.into())
-            }
-            pb::proposal::Action::RegisterKnownNeuron(v) => {
-                pb_api::proposal::Action::RegisterKnownNeuron(v.into())
-            }
-            pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
-                pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
-            }
-            pb::proposal::Action::OpenSnsTokenSwap(v) => {
-                pb_api::proposal::Action::OpenSnsTokenSwap(v.into())
-            }
-            pb::proposal::Action::CreateServiceNervousSystem(v) => {
-                pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
-            }
-            pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
-            pb::proposal::Action::StopOrStartCanister(v) => {
-                pb_api::proposal::Action::StopOrStartCanister(v.into())
-            }
-            pb::proposal::Action::UpdateCanisterSettings(v) => {
-                pb_api::proposal::Action::UpdateCanisterSettings(v.into())
-            }
-        }
-    }
-}
 impl From<pb_api::proposal::Action> for pb::proposal::Action {
     fn from(item: pb_api::proposal::Action) -> Self {
         match item {
@@ -1206,7 +1148,7 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
             pb::manage_neuron::Command::MakeProposal(v) => {
-                pb_api::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
+                pb_api::manage_neuron::Command::MakeProposal(Box::new(convert_proposal(&v, false)))
             }
             pb::manage_neuron::Command::RegisterVote(v) => {
                 pb_api::manage_neuron::Command::RegisterVote(v.into())
@@ -1857,7 +1799,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             id: item.id,
             proposer: item.proposer,
             reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
+            proposal: item.proposal.map(|x| convert_proposal(&x, false)),
             proposal_timestamp_seconds: item.proposal_timestamp_seconds,
             ballots: item
                 .ballots
@@ -2334,64 +2276,6 @@ impl From<pb_api::WaitForQuietState> for pb::WaitForQuietState {
     fn from(item: pb_api::WaitForQuietState) -> Self {
         Self {
             current_deadline_timestamp_seconds: item.current_deadline_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::ProposalInfo> for pb_api::ProposalInfo {
-    fn from(item: pb::ProposalInfo) -> Self {
-        Self {
-            id: item.id,
-            proposer: item.proposer,
-            reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
-            proposal_timestamp_seconds: item.proposal_timestamp_seconds,
-            ballots: item
-                .ballots
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            latest_tally: item.latest_tally.map(|x| x.into()),
-            decided_timestamp_seconds: item.decided_timestamp_seconds,
-            executed_timestamp_seconds: item.executed_timestamp_seconds,
-            failed_timestamp_seconds: item.failed_timestamp_seconds,
-            failure_reason: item.failure_reason.map(|x| x.into()),
-            reward_event_round: item.reward_event_round,
-            topic: item.topic,
-            status: item.status,
-            reward_status: item.reward_status,
-            deadline_timestamp_seconds: item.deadline_timestamp_seconds,
-            derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
-            total_potential_voting_power: item.total_potential_voting_power,
-        }
-    }
-}
-
-impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
-    fn from(item: pb_api::ProposalInfo) -> Self {
-        Self {
-            id: item.id,
-            proposer: item.proposer,
-            reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
-            proposal_timestamp_seconds: item.proposal_timestamp_seconds,
-            ballots: item
-                .ballots
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            latest_tally: item.latest_tally.map(|x| x.into()),
-            decided_timestamp_seconds: item.decided_timestamp_seconds,
-            executed_timestamp_seconds: item.executed_timestamp_seconds,
-            failed_timestamp_seconds: item.failed_timestamp_seconds,
-            failure_reason: item.failure_reason.map(|x| x.into()),
-            reward_event_round: item.reward_event_round,
-            topic: item.topic,
-            status: item.status,
-            reward_status: item.reward_status,
-            deadline_timestamp_seconds: item.deadline_timestamp_seconds,
-            derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
-            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2894,27 +2778,6 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
     }
 }
 
-impl From<pb::InstallCode> for pb_api::InstallCode {
-    fn from(item: pb::InstallCode) -> Self {
-        let wasm_module_hash = item
-            .wasm_module
-            .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
-        let arg = item.arg.unwrap_or_default();
-        let arg_hash = if arg.is_empty() {
-            Some(vec![])
-        } else {
-            Some(super::calculate_hash(&arg).to_vec())
-        };
-
-        Self {
-            canister_id: item.canister_id,
-            install_mode: item.install_mode,
-            skip_stopping_before_installing: item.skip_stopping_before_installing,
-            wasm_module_hash,
-            arg_hash,
-        }
-    }
-}
 impl From<pb_api::InstallCode> for pb::InstallCode {
     fn from(item: pb_api::InstallCode) -> Self {
         Self {
@@ -3137,62 +3000,6 @@ impl From<pb_api::update_canister_settings::LogVisibility>
     }
 }
 
-impl From<pb::Governance> for pb_api::Governance {
-    fn from(item: pb::Governance) -> Self {
-        Self {
-            neurons: item
-                .neurons
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            proposals: item
-                .proposals
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            to_claim_transfers: item
-                .to_claim_transfers
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-            wait_for_quiet_threshold_seconds: item.wait_for_quiet_threshold_seconds,
-            economics: item.economics.map(|x| x.into()),
-            latest_reward_event: item.latest_reward_event.map(|x| x.into()),
-            in_flight_commands: item
-                .in_flight_commands
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            genesis_timestamp_seconds: item.genesis_timestamp_seconds,
-            node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
-            default_followees: item
-                .default_followees
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            short_voting_period_seconds: item.short_voting_period_seconds,
-            neuron_management_voting_period_seconds: item.neuron_management_voting_period_seconds,
-            metrics: item.metrics.map(|x| x.into()),
-            most_recent_monthly_node_provider_rewards: item
-                .most_recent_monthly_node_provider_rewards
-                .map(|x| x.into()),
-            cached_daily_maturity_modulation_basis_points: item
-                .cached_daily_maturity_modulation_basis_points,
-            maturity_modulation_last_updated_at_timestamp_seconds: item
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-            spawning_neurons: item.spawning_neurons,
-            making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            migrations: item.migrations.map(|x| x.into()),
-            topic_followee_index: item
-                .topic_followee_index
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
-            restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::Governance> for pb::Governance {
     fn from(item: pb_api::Governance) -> Self {
         Self {
@@ -3539,15 +3346,6 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
-impl From<pb::governance::MakingSnsProposal> for pb_api::governance::MakingSnsProposal {
-    fn from(item: pb::governance::MakingSnsProposal) -> Self {
-        Self {
-            proposer_id: item.proposer_id,
-            caller: item.caller,
-            proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsProposal {
     fn from(item: pb_api::governance::MakingSnsProposal) -> Self {
         Self {
@@ -3740,21 +3538,6 @@ impl From<pb_api::ListProposalInfo> for pb::ListProposalInfo {
             include_status: item.include_status,
             include_all_manage_neuron_proposals: item.include_all_manage_neuron_proposals,
             omit_large_fields: item.omit_large_fields,
-        }
-    }
-}
-
-impl From<pb::ListProposalInfoResponse> for pb_api::ListProposalInfoResponse {
-    fn from(item: pb::ListProposalInfoResponse) -> Self {
-        Self {
-            proposal_info: item.proposal_info.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-impl From<pb_api::ListProposalInfoResponse> for pb::ListProposalInfoResponse {
-    fn from(item: pb_api::ListProposalInfoResponse) -> Self {
-        Self {
-            proposal_info: item.proposal_info.into_iter().map(|x| x.into()).collect(),
         }
     }
 }

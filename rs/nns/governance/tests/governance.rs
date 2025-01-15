@@ -85,10 +85,10 @@ use ic_nns_governance::{
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
         KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
-        ProposalChange, ProposalData, ProposalDataChange,
+        ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics,
+        Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
+        ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -101,7 +101,10 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    pb::v1::{
+        proposal::Action as ApiAction, Ballot as ApiBallot,
+        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListProposalInfoResponse,
+    },
     proposal_validation::validate_proposal_title,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -118,7 +121,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::{btreemap, hashmap, hashset};
 use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
@@ -4465,24 +4468,18 @@ fn test_get_neuron_ids_by_principal() {
         driver.get_fake_cmc(),
     );
 
-    let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
-    principal2_neuron_ids.sort_unstable();
-
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal1),
-        vec![NeuronId { id: 1 }]
+        hashset! { NeuronId { id: 1 } }
     );
     assert_eq!(
-        principal2_neuron_ids,
-        vec![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+        gov.get_neuron_ids_by_principal(&principal2),
+        hashset! { NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 } }
     );
-    assert_eq!(
-        gov.get_neuron_ids_by_principal(&principal3),
-        Vec::<NeuronId>::new()
-    );
+    assert_eq!(gov.get_neuron_ids_by_principal(&principal3), hashset! {});
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal4),
-        vec![NeuronId { id: 4 }]
+        hashset! { NeuronId { id: 4 } }
     );
 }
 
@@ -4644,7 +4641,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), hashset! {id});
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -5783,11 +5780,8 @@ fn test_neuron_split() {
         parent_neuron.voting_power_refreshed_timestamp_seconds,
     );
 
-    let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
-    neuron_ids.sort_unstable();
-    let mut expected_neuron_ids = vec![id, child_nid];
-    expected_neuron_ids.sort_unstable();
-    assert_eq!(neuron_ids, expected_neuron_ids);
+    let neuron_ids = governance.get_neuron_ids_by_principal(&from);
+    assert_eq!(neuron_ids, hashset! {id, child_nid});
 }
 
 #[test]
@@ -7217,7 +7211,12 @@ fn test_manage_and_reward_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -7568,7 +7567,12 @@ fn test_manage_and_reward_multiple_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -8030,7 +8034,7 @@ fn test_get_proposal_info() {
     let action = result.proposal.unwrap().action.unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
     );
 }
 
@@ -8068,7 +8072,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8106,7 +8110,7 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu)
+        ApiAction::ExecuteNnsFunction(eu)
         if eu.payload.len() ==
             EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
     );
@@ -8141,7 +8145,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8800,7 +8804,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -8812,7 +8816,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                2 => Ballot {
+                2 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 2,
                 },
@@ -8824,7 +8828,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -8974,7 +8978,7 @@ fn test_omit_large_fields() {
     );
 
     fn get_logo(list_proposals_response: ListProposalInfoResponse) -> Option<Image> {
-        let Action::CreateServiceNervousSystem(create_service_nervous_system) =
+        let ApiAction::CreateServiceNervousSystem(create_service_nervous_system) =
             list_proposals_response.proposal_info[0]
                 .proposal
                 .clone()
@@ -9078,8 +9082,9 @@ async fn test_max_number_of_proposals_with_ballots() {
         .unwrap();
     }
     assert_eq!(
+        gov.get_pending_proposals(&PrincipalId::new_anonymous())
+            .len(),
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        gov.get_pending_proposals_data().count()
     );
     // Let's try one more. It should be rejected.
     assert_matches!(gov.make_proposal(
@@ -11881,8 +11886,8 @@ async fn test_known_neurons() {
     assert_eq!(
         gov.get_proposal_info(&principal(3), failed_proposal_id)
             .unwrap()
-            .status(),
-        ProposalStatus::Failed
+            .status,
+        ProposalStatus::Failed as i32
     );
 
     // Check that the state is the same as before the last proposal.

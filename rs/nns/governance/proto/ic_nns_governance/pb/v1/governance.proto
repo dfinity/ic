@@ -1780,64 +1780,6 @@ message WaitForQuietState {
   uint64 current_deadline_timestamp_seconds = 1;
 }
 
-// This is a view of the ProposalData returned by API queries and is NOT used
-// for storage. The ballots are restricted to those of the caller's neurons and
-// additionally it has the computed fields, topic, status, and reward_status.
-message ProposalInfo {
-  // The unique id for this proposal.
-  ic_nns_common.pb.v1.ProposalId id = 1;
-
-  // The ID of the neuron that made this proposal.
-  ic_nns_common.pb.v1.NeuronId proposer = 2;
-
-  // The amount of ICP in E8s to be charged to the proposer if the proposal is
-  // rejected.
-  uint64 reject_cost_e8s = 3;
-
-  // The proposal originally submitted.
-  Proposal proposal = 4;
-
-  // The timestamp, in seconds from the Unix epoch, when this proposal was made.
-  uint64 proposal_timestamp_seconds = 5;
-
-  // See [ProposalData::ballots].
-  map<fixed64, Ballot> ballots = 6;
-
-  // See [ProposalData::latest_tally].
-  Tally latest_tally = 7;
-
-  // See [ProposalData::decided_timestamp_seconds].
-  uint64 decided_timestamp_seconds = 8;
-
-  // See [ProposalData::executed_timestamp_seconds].
-  uint64 executed_timestamp_seconds = 12;
-
-  // See [ProposalData::failed_timestamp_seconds].
-  uint64 failed_timestamp_seconds = 13;
-
-  // See [ProposalData::failure_reason].
-  GovernanceError failure_reason = 18;
-
-  // See [ProposalData::reward_event_round].
-  uint64 reward_event_round = 14;
-
-  // Derived - see [Topic] for more information
-  Topic topic = 15;
-
-  // Derived - see [ProposalStatus] for more information
-  ProposalStatus status = 16;
-
-  // Derived - see [ProposalRewardStatus] for more information
-  ProposalRewardStatus reward_status = 17;
-
-  optional uint64 deadline_timestamp_seconds = 19;
-
-  DerivedProposalInformation derived_proposal_information = 20;
-
-  // See [ProposalData::total_potential_voting_power].
-  optional uint64 total_potential_voting_power = 21;
-}
-
 // Network economics contains the parameters for several operations related
 // to the economy of the network. When submitting a NetworkEconomics proposal
 // default values (0) are considered unchanged, so a valid proposal only needs
@@ -2624,10 +2566,6 @@ message ListProposalInfo {
   // is useful to improve download times and to ensure that the response to the
   // request doesn't exceed the message size limit.
   optional bool omit_large_fields = 7;
-}
-
-message ListProposalInfoResponse {
-  repeated ProposalInfo proposal_info = 1;
 }
 
 // A request to list neurons. The "requested list", i.e., the list of
