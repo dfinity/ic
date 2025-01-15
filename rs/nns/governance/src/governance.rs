@@ -1965,7 +1965,7 @@ impl Governance {
 
         assert_eq!(proposal_data.status(), ProposalStatus::Open);
 
-        let Some(mut tally) = proposal_data.latest_tally else {
+        let Some(tally) = proposal_data.latest_tally.as_mut() else {
             panic!("No tally specified for proposal {}", proposal_id.id);
         };
 
@@ -1977,9 +1977,9 @@ impl Governance {
             "Bug in test-only code"
         );
 
-        proposal_data.latest_tally.replace(tally);
-
-        // Ensure that the proposal action will be processed ASAP.
+        // Ensure that the proposal action will be processed ASAP (this ensures that
+        // the precondition of `Governance.process_proposals()` holds in the post-state
+        // of this function).
         self.closest_proposal_deadline_timestamp_seconds = now;
 
         Ok(())
