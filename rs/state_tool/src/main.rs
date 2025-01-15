@@ -170,7 +170,7 @@ struct HeightsArgs {
     /// Mutually exclusive with `--heights`. If neither is specified, all heights are copied.
     #[clap(long = "latest")]
     latest: bool,
-    /// List of heights to copy. If not specified, all heights are copied.
+    /// List of heights to copy.
     ///
     /// Heights can be specified as a comma separated list of heights. Optionally, a state can be renamed by specifiying the source and destination height separated by '->'.
     ///
