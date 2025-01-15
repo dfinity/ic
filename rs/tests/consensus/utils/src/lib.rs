@@ -67,6 +67,6 @@ pub async fn assert_no_consensus_error_counters_increased(env: &TestEnv) {
     info!(env.logger(), "No error counter increased!");
 }
 
-pub async fn assert_no_consensus_error_counters_increased_blocking(env: &TestEnv) {
+pub fn assert_no_consensus_error_counters_increased_blocking(env: &TestEnv) {
     block_on(assert_no_consensus_error_counters_increased(env))
 }
