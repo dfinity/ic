@@ -8413,6 +8413,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
@@ -18405,6 +18406,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "futures",
+ "getrandom",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.16.0",
