@@ -191,6 +191,22 @@ impl Storable for Account {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+/// Default way of encoding a `Principal` in a `Subaccount`.
+/// Can be used to create a separate `Subaccount` for each ledger user.
+pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
+    let mut subaccount = [0; 32];
+    let principal = principal.as_slice();
+    subaccount[0] = principal.len().try_into().unwrap();
+    subaccount[1..1 + principal.len()].copy_from_slice(principal);
+    subaccount
+}
+
+/// Decode `Principal` from a `Subaccount`, see `principal_to_subaccount` above.
+pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
+    let len = subaccount[0] as usize;
+    Principal::from_slice(&subaccount[1..len + 1])
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -202,7 +218,9 @@ mod tests {
 
     use candid::Principal;
 
-    use crate::icrc1::account::{Account, ICRC1TextReprError};
+    use crate::icrc1::account::{
+        principal_to_subaccount, subaccount_to_principal, Account, ICRC1TextReprError,
+    };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255u8, 29);
@@ -356,6 +374,15 @@ mod tests {
         use proptest::{prop_assert_eq, proptest};
         proptest!(|(account in account_strategy())| {
             prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
+        })
+    }
+
+    #[test]
+    fn test_principal_to_subaccount() {
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(principal in principal_strategy())| {
+            let subaccount = principal_to_subaccount(principal);
+            prop_assert_eq!(subaccount_to_principal(subaccount), principal);
         })
     }
 

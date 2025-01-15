@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add default encoding and decoding of a Principal in a Subaccount.
+
 ## 0.1.7
 
 ### Added
