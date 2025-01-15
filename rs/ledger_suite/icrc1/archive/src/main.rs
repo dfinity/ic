@@ -436,3 +436,31 @@ fn check_candid_interface() {
     )
     .expect("the ledger interface is not compatible with archive.did");
 }
+
+#[test]
+fn check_archive_and_ledger_block_equality() {
+    // check that ledger.did and archive.did agree on the block format
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../ledger/ledger.did");
+    let archive_did_file = manifest_dir.join("archive.did");
+    let mut ledger_env = candid_parser::utils::CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let archive_env = candid_parser::utils::CandidSource::File(archive_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let ledger_block_type = ledger_env.find_type("Block").unwrap().to_owned();
+    let archive_block_type = archive_env.find_type("Block").unwrap().to_owned();
+
+    let mut gamma = std::collections::HashSet::new();
+    let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type.clone());
+    candid::types::subtype::equal(
+        &mut gamma,
+        &ledger_env,
+        &ledger_block_type,
+        &archive_block_type,
+    )
+    .expect("Ledger and Archive block types are different");
+}
