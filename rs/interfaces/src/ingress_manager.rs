@@ -52,7 +52,7 @@ impl IngressSetQuery for IngressSets {
 /// Reasons for why an ingress payload might be invalid.
 #[derive(Eq, PartialEq, Debug)]
 pub enum InvalidIngressPayloadReason {
-    /// In [`IngressMessageId`] inside the payload doesn't match the referenced [`SignedIngress`].
+    /// An [`IngressMessageId`] inside the payload doesn't match the referenced [`SignedIngress`].
     MismatchedMessageId {
         expected: IngressMessageId,
         computed: IngressMessageId,
