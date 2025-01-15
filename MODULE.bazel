@@ -863,8 +863,8 @@ http_file(
 http_file(
     name = "management_canister_did",
     downloaded_file_path = "ic.did",
-    sha256 = "31d4654d60b364420a2e52f546f06b2255dc78ac8c2d768271f004b8946e92cb",
-    url = "https://raw.githubusercontent.com/dfinity/portal/407ec5b92d06618c4df9f52e98514c5f4f44313e/docs/references/_attachments/ic.did",
+    sha256 = "0e92d8b9c2cf3d3fca166b76b2d3b8a2464d9b2b61117d8b2f63222b388d8dd1",
+    url = "https://raw.githubusercontent.com/dfinity/portal/78c93aa37ef17dc67484079d1a4bf58a10a63106/docs/references/_attachments/ic.did",
 )
 
 # Mozilla CA certificate store in PEM format
