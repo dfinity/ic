@@ -80,7 +80,9 @@ Split == INSTANCE Split_Neuron
 
 CONSTANTS 
     NUMBER_OF_TRANSFERS_CAP,
-    INITIAL_MAX_BALANCE
+    INITIAL_MAX_BALANCE,
+    MAX_NEURON_FEE,
+    MAX_MATURITY
 
 CONSTANTS 
     User_Account_Ids
@@ -92,7 +94,8 @@ VARIABLES
     total_rewards,
     nr_transfers
 
-env_vars == << balances, minted, burned, total_rewards, nr_transfers >>
+ledger_vars == << balances, minted, burned, nr_transfers >>
+env_vars == << ledger_vars, total_rewards >>
 
 Ledger_Init ==
     /\ balances = [a \in Governance_Account_Ids \union {Minting_Account_Id} |-> 0] @@ [a \in User_Account_Ids |-> INITIAL_MAX_BALANCE]
@@ -224,6 +227,20 @@ Init == (* Global variables *)
             @@ [self \in Claim_Neuron_Process_Ids |-> "ClaimNeuron1"]
         /\ Ledger_Init
 
+Change_Neuoron_Fee ==
+    \E nid \in DOMAIN(neuron):
+        \E new_fee_value \in 0..Min({MAX_NEURON_FEE, neuron[nid].cached_stake}):
+            /\ neuron' = [neuron EXCEPT ![nid].fees = new_fee_value]
+            /\ UNCHANGED <<neuron_id_by_account, locks, governance_to_ledger, ledger_to_governance, spawning_neurons, env_vars, local_vars >>
+
+Increase_Neuron_Maturity ==
+    \E nid \in DOMAIN(neuron):
+        \E new_maturity \in (neuron[nid].maturity+1)..MAX_MATURITY:
+            /\ total_rewards' = total_rewards + new_maturity - neuron[nid].maturity
+            /\ neuron' = [neuron EXCEPT ![nid].maturity = new_maturity]
+            /\ UNCHANGED <<neuron_id_by_account, locks, governance_to_ledger, ledger_to_governance, spawning_neurons, ledger_vars, local_vars >>
+
+
 Next ==
     \* Combine the transitions of all the submodules, by taking the disjunction of the transitions of any submodule.
     \* Additionally, each disjunct leaves unchanged the variables that are not used by the submodule.
@@ -231,14 +248,16 @@ Next ==
         /\ UNCHANGED env_vars
         /\ 
             \/ Claim!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
-            \/ Disburse!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+            \/ Disburse!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
             \/ Disburse_To!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
             \/ Merge!Next /\ UNCHANGED <<neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
             \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Spawn_Neurons!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+            \/ Spawn_Neurons!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
             \/ Split!Next /\ UNCHANGED << neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id >>
     \/ Ledger_Process_Governance_Request /\ UNCHANGED << global_non_ledger_vars, local_vars >>
     \/ Ledger_User_Transfer /\ UNCHANGED << global_non_ledger_vars, local_vars, governance_to_ledger, ledger_to_governance, total_rewards >>
+    \/ Change_Neuoron_Fee
+    \/ Increase_Neuron_Maturity
 
 \*******************************************************************************
 \* Properties
