@@ -1826,18 +1826,24 @@ impl StateMachine {
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
-        let mut i = 0i32;
         // StateManager is owned by an Arc, that is cloned into multiple components and different
         // threads. If we return before all the asynchronous components release the Arc, we may
         // end up with to StateManagers writing to the same directory, resulting in a crash.
+        let start = std::time::Instant::now();
         while state_manager.upgrade().is_some() {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            i += 1;
-            if i >= 100 {
-                panic!("Failed to wait for StateManager drop");
+            if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+                panic!("Timed out while dropping StateMachine.");
             }
         }
         result
+    }
+
+    /// Safely drops this `StateMachine`. We cannot achieve this functionality by implementing `Drop`
+    /// since we have to wait until there are no more `Arc`s for the state manager and
+    /// this is infeasible in a `Drop` implementation.
+    pub fn drop(self) {
+        let _ = self.into_components();
     }
 
     /// Emulates a node restart, including checkpoint recovery.
