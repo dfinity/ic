@@ -93,6 +93,10 @@ rust_ic_test_suite(
         "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         ":messaging",
@@ -117,9 +121,5 @@ rust_ic_test_suite(
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:serde",
-    ],
-    proc_macro_deps = [
-	# Keep sorted.
-        "@crate_index//:test-strategy",
     ],
 )
