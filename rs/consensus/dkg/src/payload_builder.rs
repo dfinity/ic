@@ -892,7 +892,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -1471,6 +1471,127 @@ mod tests {
                     }
                 }
             }
+        });
+    }
+
+    #[test]
+    fn test_vet_key_local_transcript_generation() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            // We'll have a DKG summary inside every 5th block.
+            let dkg_interval_length = 4;
+            // Committee are nodes 0, 1, 2, 3.
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies {
+                mut pool,
+                registry_data_provider,
+                registry,
+                replica_config,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    5,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            // Get the latest summary block, which is the genesis block
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(5),
+                "The latest available version was used for the summary block."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(0));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
+            );
+            assert_eq!(dkg_summary.configs.len(), 2);
+
+            assert_eq!(vet_key_ids.len(), 0);
+            for tag in tags_iter(&vet_key_ids) {
+                let config = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+                // TODO
+            }
+
+            pool.advance_round_normal_operation();
+            add_subnet_record(
+                &registry_data_provider,
+                6,
+                replica_config.subnet_id,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .with_chain_key_config(test_vet_key_config())
+                    .build(),
+            );
+            registry.update_to_latest_version();
+            pool.advance_round_normal_operation_n(
+                dkg_interval_length + (dkg_interval_length + 1) * 0,
+            );
+
+            // TODO
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            //assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            //assert_eq!(dkg_summary.height, Height::from(5));
+            // assert_eq!(
+            //     cup.get_oldest_registry_version_in_use(),
+            //     RegistryVersion::from(5)
+            // );
+
+            assert_eq!(vet_key_ids.len(), 1);
+            for tag in tags_iter(&vet_key_ids) {
+                let config = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+                // TODO
+            }
+
+            todo!();
         });
     }
 }
