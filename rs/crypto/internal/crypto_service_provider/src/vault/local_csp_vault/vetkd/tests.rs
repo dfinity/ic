@@ -3,7 +3,7 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::{key_id::KeyId, LocalCspVault};
 use assert_matches::assert_matches;
-use ic_crypto_internal_bls12_381_vetkd::{G2Affine, Scalar, TransportSecretKey};
+use ic_crypto_internal_bls12_381_vetkd::{G2Affine, Scalar, TransportPublicKey};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -12,6 +12,12 @@ use ic_types::crypto::ExtendedDerivationPath;
 use ic_types_test_utils::ids::canister_test_id;
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+
+fn create_transport_public_key<R: CryptoRng + Rng>(rng: &mut R) -> TransportPublicKey {
+    let g2 = G2Affine::hash("ic-crypto-test".as_bytes(), &rng.gen::<[u8; 32]>());
+    TransportPublicKey::deserialize(&g2.serialize())
+        .expect("Failed to deserialize G2Affine")
+}
 
 #[test]
 fn should_correctly_create_encrypted_vetkd_key_share() {
@@ -50,7 +56,8 @@ fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng + 'static>(
 ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
     let master_secret_key = Scalar::random(&mut rng);
     let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
+    let encryption_public_key = create_transport_public_key(&mut rng);
+
     let key_id = KeyId::from([123; 32]);
 
     let mut node_sks = MockSecretKeyStore::new();
@@ -88,7 +95,7 @@ fn should_fail_to_create_key_share_with_invalid_master_public_key() {
     let rng = &mut reproducible_rng();
 
     let invalid_master_public_key = b"invalid-master-public-key".to_vec();
-    let encryption_public_key = TransportSecretKey::generate(rng).public_key();
+    let encryption_public_key = create_transport_public_key(rng);
     let key_id = KeyId::from([123; 32]);
 
     let derivation_path = ExtendedDerivationPath {
@@ -153,7 +160,7 @@ fn should_fail_to_create_key_share_if_key_is_missing_in_secret_key_store() {
 
     let master_secret_key = Scalar::random(&mut rng);
     let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
+    let encryption_public_key = create_transport_public_key(&mut rng);
     let key_id = KeyId::from([123; 32]);
 
     let mut node_sks = MockSecretKeyStore::new();
@@ -195,7 +202,7 @@ fn should_fail_to_create_key_share_if_key_in_secret_key_store_has_wrong_type() {
 
     let master_secret_key = Scalar::random(&mut rng);
     let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
+    let encryption_public_key = create_transport_public_key(&mut rng);
     let key_id = KeyId::from([123; 32]);
 
     let mut node_sks = MockSecretKeyStore::new();
