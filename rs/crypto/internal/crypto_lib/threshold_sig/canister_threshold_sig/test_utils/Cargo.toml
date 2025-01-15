@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 ed25519-dalek = { workspace = true }
+#TODO: try migrating this to the latest bitcoin crate. 
 bitcoin = { version = "0.28.2" }
 hex = "0.4"
 secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }

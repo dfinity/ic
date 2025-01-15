@@ -1,4 +1,6 @@
-use bitcoin::{blockdata::constants::genesis_block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, BlockHash, Network,
+};
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_btc_adapter::config::Config;
 use ic_btc_adapter::config::IncomingSource;

@@ -64,6 +64,7 @@ pub(crate) fn address_limits(network: Network) -> (usize, usize) {
         Network::Testnet => (100, 1000),
         Network::Signet => (1, 1),
         Network::Regtest => (1, 1),
+        other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 

@@ -22,6 +22,7 @@ ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = { workspace = true }
+primitive-types = "0.12"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -36,7 +37,7 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 bitcoind = "0.32.0"
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }

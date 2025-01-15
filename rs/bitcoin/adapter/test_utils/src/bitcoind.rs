@@ -5,16 +5,21 @@ use std::{
     sync::Arc,
 };
 
+use bitcoin::p2p::{Magic, ServiceFlags};
+
 use bitcoin::{
+    block::Header as BlockHeader,
     consensus::{deserialize_partial, encode, serialize},
-    network::{
-        constants::ServiceFlags,
+    p2p::{
         message::{NetworkMessage, RawNetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    Block, BlockHash, BlockHeader,
+    Block, BlockHash,
 };
+
+use bitcoin::io as bitcoin_io;
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -24,10 +29,10 @@ const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
 async fn write_network_message(
     socket: &mut TcpStream,
-    magic: u32,
+    magic: Magic,
     payload: NetworkMessage,
 ) -> io::Result<()> {
-    let res = RawNetworkMessage { magic, payload };
+    let res = RawNetworkMessage::new(magic, payload);
     let serialized = serialize(&res);
     socket.write_all(&serialized).await?;
     socket.flush().await?;
@@ -36,8 +41,8 @@ async fn write_network_message(
 
 async fn handle_getdata(
     socket: &mut TcpStream,
-    msg: Vec<Inventory>,
-    magic: u32,
+    msg: &[Inventory],
+    magic: Magic,
     blocks: Arc<HashMap<BlockHash, Block>>,
 ) -> io::Result<()> {
     for inv in msg.iter() {
@@ -57,11 +62,15 @@ async fn handle_getdata(
     Ok(())
 }
 
-async fn handle_ping(socket: &mut TcpStream, val: u64, magic: u32) -> io::Result<()> {
+async fn handle_ping(socket: &mut TcpStream, val: u64, magic: Magic) -> io::Result<()> {
     write_network_message(socket, magic, NetworkMessage::Pong(val)).await
 }
 
-async fn handle_version(socket: &mut TcpStream, v: VersionMessage, magic: u32) -> io::Result<()> {
+async fn handle_version(
+    socket: &mut TcpStream,
+    v: &VersionMessage,
+    magic: Magic,
+) -> io::Result<()> {
     if v.version < MINIMUM_PROTOCOL_VERSION {
         let err = io::Error::new(ErrorKind::Other, "Protocol version too low");
         return Err(err);
@@ -73,14 +82,14 @@ async fn handle_version(socket: &mut TcpStream, v: VersionMessage, magic: u32) -
     Ok(())
 }
 
-async fn handle_getaddr(socket: &mut TcpStream, magic: u32) -> io::Result<()> {
+async fn handle_getaddr(socket: &mut TcpStream, magic: Magic) -> io::Result<()> {
     write_network_message(socket, magic, NetworkMessage::Addr(vec![])).await
 }
 
 async fn handle_getheaders(
     socket: &mut TcpStream,
-    msg: GetHeadersMessage,
-    magic: u32,
+    msg: &GetHeadersMessage,
+    magic: Magic,
     cached_headers: Arc<HashMap<BlockHash, BlockHeader>>,
     children: Arc<HashMap<BlockHash, Vec<BlockHash>>>,
 ) -> io::Result<()> {
@@ -89,18 +98,18 @@ async fn handle_getheaders(
     let locator = {
         let mut found = None;
 
-        for locator in msg.locator_hashes {
-            if cached_headers.contains_key(&locator) {
-                found = Some(locator);
+        for locator in &msg.locator_hashes {
+            if cached_headers.contains_key(locator) {
+                found = Some(*locator);
                 break;
             }
         }
-        found.unwrap_or(
+        found.unwrap_or_else(|| {
             // If no locators are found, use the genesis hash.
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
                 .parse()
-                .unwrap(),
-        )
+                .unwrap()
+        })
     };
 
     let mut queue = VecDeque::new();
@@ -183,22 +192,22 @@ impl FakeBitcoind {
                         match deserialize_partial::<RawNetworkMessage>(&unparsed) {
                             Ok((raw, cnt)) => {
                                 let handler_result =
-                                match raw.payload {
+                                match raw.payload() {
                                     NetworkMessage::Version(v) => {
-                                        handle_version(&mut socket, v, raw.magic).await
+                                        handle_version(&mut socket, v, *raw.magic()).await
                                     }
                                     NetworkMessage::Verack => Ok(()),
                                     NetworkMessage::GetAddr => {
-                                        handle_getaddr(&mut socket, raw.magic).await
+                                        handle_getaddr(&mut socket, *raw.magic()).await
                                     }
                                     NetworkMessage::GetHeaders(msg) => {
-                                        handle_getheaders(&mut socket, msg, raw.magic, cached_headers.clone(), children.clone()).await
+                                        handle_getheaders(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
                                     }
                                     NetworkMessage::GetData(msg) => {
-                                        handle_getdata(&mut socket, msg, raw.magic, blocks.clone()).await
+                                        handle_getdata(&mut socket, msg, *raw.magic(), blocks.clone()).await
                                     }
                                     NetworkMessage::Ping(val) => {
-                                        handle_ping(&mut socket, val, raw.magic).await
+                                        handle_ping(&mut socket, *val, *raw.magic()).await
                                     }
                                     smth => panic!("Unexpected NetworkMessage: {:?}", smth),
                                 };
@@ -208,7 +217,7 @@ impl FakeBitcoind {
                                 unparsed.drain(..cnt);
                             }
                             Err(encode::Error::Io(ref err)) // Received incomplete message
-                                if err.kind() == std::io::ErrorKind::UnexpectedEof =>
+                                if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof =>
                             {
                                 break
                             }

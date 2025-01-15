@@ -55,7 +55,10 @@ pub fn test_update_balance(env: TestEnv) {
     // Create wallet if required.
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,

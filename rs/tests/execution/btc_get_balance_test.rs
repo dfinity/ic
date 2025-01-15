@@ -149,8 +149,15 @@ pub fn get_balance(env: TestEnv) {
     .unwrap();
 
     // Generate an address.
-    let btc_address = btc_rpc.get_new_address(None, None).unwrap();
-    info!(&logger, "Created temporary btc address: {}", btc_address);
+    let btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
+    info!(
+        &logger,
+        "Created temporary btc address: {}",
+        btc_address.to_string()
+    );
 
     // Mint some blocks for the address we generated.
     let block = btc_rpc.generate_to_address(101, &btc_address).unwrap();

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
