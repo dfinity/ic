@@ -1,12 +1,15 @@
+use crate::logs::{LogEntry, RewardsPerNodeProviderLog};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, NodeRewardsTable},
 };
-use logs::{LogEntry, RewardsPerNodeProviderLog};
 use std::collections::{BTreeMap, HashMap};
 pub mod logs;
+pub mod v1_logs;
+pub mod v1_rewards;
+pub mod v1_types;
 
 pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: BTreeMap<PrincipalId, u64>,
