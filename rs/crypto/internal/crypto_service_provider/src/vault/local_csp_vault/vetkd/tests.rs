@@ -3,7 +3,7 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::{key_id::KeyId, LocalCspVault};
 use assert_matches::assert_matches;
-use ic_crypto_internal_bls12_381_vetkd::{G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -132,8 +132,7 @@ impl CreateVetKdKeyShareTestSetup {
     pub fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let master_secret_key = Scalar::random(rng);
         let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-        let transport_public_key =
-            G2Affine::hash("ic-crypto-vetkd-test".as_bytes(), &rng.gen::<[u8; 32]>());
+        let transport_public_key = G1Affine::from(G1Affine::generator() * Scalar::random(rng));
         let key_id = KeyId::from([123; 32]);
         let derivation_path = ExtendedDerivationPath {
             caller: canister_test_id(234).get(),
