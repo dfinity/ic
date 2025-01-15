@@ -8394,6 +8394,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
@@ -13318,6 +13319,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "lru",
+ "proptest",
 ]
 
 [[package]]
@@ -17124,6 +17126,7 @@ version = "6.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
+ "bitcoin 0.28.2",
  "candid",
  "candid_parser",
  "ed25519-dalek",
@@ -18340,6 +18343,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "futures",
+ "getrandom",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.16.0",
@@ -18427,6 +18431,28 @@ name = "relative-path"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+
+[[package]]
+name = "release-runscript"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "colored",
+ "futures",
+ "ic-agent",
+ "ic-base-types",
+ "ic-nervous-system-agent",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "rgb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "rend"

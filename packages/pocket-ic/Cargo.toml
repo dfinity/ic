@@ -46,6 +46,7 @@ tracing-subscriber = { workspace = true }
 wslpath = "0.0.2"
 
 [dev-dependencies]
+bitcoin = { workspace = true }
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }

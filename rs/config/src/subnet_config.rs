@@ -140,7 +140,6 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
-const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -341,7 +340,7 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
-            dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),

@@ -147,8 +147,8 @@ use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
-    MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC,
+    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -251,10 +251,14 @@ const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
-/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap.
-/// Given the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count),
-/// this constant can be used to obtain an upper bound for the number of SNS neurons created
-/// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
+/// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
+/// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
+/// constant can be used to obtain an upper bound for the number of SNS neurons created for the
+/// Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`. In addition, this constant
+/// also affects the upperbound of instructions needed to draw/refund maturity from/to the Neurons'
+/// Fund, so before increasing this constant, the impact on the instructions used by
+/// `CreateServiceNervousSystem` proposal execution also needs to be evaluated (currently, each
+/// neuron takes ~120K instructions to draw/refund maturity, so the total is ~600M).
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 
 impl NetworkEconomics {
@@ -3537,6 +3541,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone()))]
     pub async fn disburse_to_neuron(
         &mut self,
         id: &NeuronId,
@@ -3702,6 +3707,13 @@ impl Governance {
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
         let memo = created_timestamp_seconds;
+
+        tla_log_locals! {
+            parent_neuron_id: parent_nid.id,
+            disburse_amount: disburse_to_neuron.amount_e8s,
+            child_neuron_id: child_nid.id,
+            child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount))
+        };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(

@@ -1,9 +1,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::candid_method;
 use candid::types::number::Nat;
-use candid::Principal;
+use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
@@ -846,15 +845,13 @@ fn get_data_certificate() -> DataCertificate {
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
     panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
-            owner: ic_cdk::api::caller(),
+            owner: caller,
             subaccount: arg.from_subaccount,
         };
         if from_account.owner == arg.spender.owner {
@@ -916,6 +913,14 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             })?;
         Ok(block_idx)
     })?;
+
+    Ok(block_idx)
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
