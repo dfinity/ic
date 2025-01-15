@@ -118,4 +118,8 @@ rust_ic_test_suite(
         "@crate_index//:proptest",
         "@crate_index//:serde",
     ],
+    proc_macro_deps = [
+	# Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
 )

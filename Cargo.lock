@@ -9655,6 +9655,7 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
+ "test-strategy 0.3.1",
  "tracing",
  "xnet-test",
 ]

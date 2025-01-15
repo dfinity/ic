@@ -67,21 +67,18 @@ prop_compose! {
     }
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(3))]
-    #[test]
-    fn check_guaranteed_response_message_memory_limits_are_respected(
-        seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
-        config in arb_canister_config(MAX_PAYLOAD_BYTES, 5),
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn check_guaranteed_response_message_memory_limits_are_respected(
+    #[strategy(proptest::collection::vec(any::<u64>().no_shrink(), 3))] seeds: Vec<u64>,
+    #[strategy(arb_canister_config(MAX_PAYLOAD_BYTES, 5))] config: CanisterConfig,
+) {
+    if let Err((err_msg, nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
+        30,  // chatter_phase_round_count
+        300, // shutdown_phase_max_rounds
+        seeds.as_slice(),
+        config,
     ) {
-        if let Err((err_msg, nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-            30,     // chatter_phase_round_count
-            300,    // shutdown_phase_max_rounds
-            seeds.as_slice(),
-            config,
-        ) {
-            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
-        }
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
     }
 }
 
@@ -171,21 +168,17 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     })
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(3))]
-    #[test]
-    fn check_calls_conclude_with_migrating_canister(
-        seed in any::<u64>().no_shrink(),
-        config in arb_canister_config(KB as u32, 10),
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn check_calls_conclude_with_migrating_canister(
+    #[strategy(any::<u64>().no_shrink())] seed: u64,
+    #[strategy(arb_canister_config(KB as u32, 10))] config: CanisterConfig,
+) {
+    if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
+        10,  // chatter_phase_round_count
+        300, // shutdown_phase_max_rounds
+        seed, config,
     ) {
-        if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
-            10,     // chatter_phase_round_count
-            300,    // shutdown_phase_max_rounds
-            seed,
-            config,
-        ) {
-            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
-        }
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
     }
 }
 
@@ -249,21 +242,18 @@ fn check_calls_conclude_with_migrating_canister_impl(
     fixture.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(3))]
-    #[test]
-    fn check_canister_can_be_stopped_with_remote_subnet_stalling(
-        seeds in proptest::collection::vec(any::<u64>().no_shrink(), 2),
-        config in arb_canister_config(MAX_PAYLOAD_BYTES, 5),
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn check_canister_can_be_stopped_with_remote_subnet_stalling(
+    #[strategy(proptest::collection::vec(any::<u64>().no_shrink(), 2))] seeds: Vec<u64>,
+    #[strategy(arb_canister_config(MAX_PAYLOAD_BYTES, 5))] config: CanisterConfig,
+) {
+    if let Err((err_msg, nfo)) = check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
+        30,  // chatter_phase_round_count
+        300, // shutdown_phase_max_rounds
+        seeds.as_slice(),
+        config,
     ) {
-        if let Err((err_msg, nfo)) = check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
-            30,     // chatter_phase_round_count
-            300,    // shutdown_phase_max_rounds
-            seeds.as_slice(),
-            config,
-        ) {
-            unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
-        }
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
     }
 }
 
