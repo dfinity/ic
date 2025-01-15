@@ -3199,14 +3199,16 @@ mod tests {
         candid::export_service!();
         let new_interface = __export_service();
 
-        let old_interface =
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("cmc.did");
+        let old_interface = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("node-metrics-collector.did");
 
         service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::File(old_interface.as_path()),
         )
-        .expect("The CMC canister interface is not compatible with the cmc.did file");
+        .expect(
+            "The CMC canister interface is not compatible with the node-metrics-collector.did file",
+        );
     }
 
     #[test]

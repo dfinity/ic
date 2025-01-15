@@ -1,0 +1,29 @@
+[package]
+name = "node-metrics-collector-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-stable-structures = { workspace = true }
+candid = { workspace = true }
+serde = { workspace = true }
+ic-registry-keys = { path = "../../registry/keys" }
+futures = { workspace = true }
+anyhow = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-nns-common = { path = "../../nns/common" }
+ic-protobuf = { path = "../../protobuf" }
+
+[[bin]]
+name = "node-metrics-collector-canister"
+path = "src/main.rs"
+
+[build-dependencies]
+build-info-build = { workspace = true }
