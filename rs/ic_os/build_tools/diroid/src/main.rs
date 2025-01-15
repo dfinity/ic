@@ -38,8 +38,9 @@ fn main() -> Result<()> {
             &(0, 0)
         } else {
             fakeroot_map.get(&entry.ino()).context(format!(
-                "fakeroot map does not contain inode: '{}'",
-                entry.ino()
+                "fakeroot map does not contain inode: '{}', path: '{}'",
+                entry.ino(),
+                entry.path().display()
             ))?
         };
 

@@ -160,6 +160,10 @@ def icos_build(
             "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
             "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
         ],
+        extra_files = {
+            k: v
+            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+        },
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -183,17 +187,17 @@ def icos_build(
     # Defer injection to this point to allow caching most of the built images
     # -------------------- Inject extra files --------------------
 
-    inject_files(
-        name = "partition-root-unsigned.tzst",
-        testonly = malicious,
-        base = "static-partition-root-unsigned.tzst",
-        file_contexts = ":file_contexts",
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-        },
-        tags = ["manual", "no-cache"],
-    )
+    #    inject_files(
+    #        name = "partition-root-unsigned.tzst",
+    #        testonly = malicious,
+    #        base = "static-partition-root-unsigned.tzst",
+    #        file_contexts = ":file_contexts",
+    #        extra_files = {
+    #            k: v
+    #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+    #        },
+    #        tags = ["manual", "no-cache"],
+    #    )
 
     # Inherit tags for this test, to avoid triggering builds for local base images
     component_file_references_test(
