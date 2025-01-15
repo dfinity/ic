@@ -2617,53 +2617,61 @@ async fn validate_chunked_wasm(
         }
     };
 
-    let stored_chunks_response = env
-        .call_canister(CanisterId::ic_00(), "stored_chunks", arg)
-        .await;
+    // TODO[NNS1-3550]: Enable stored chunks validation on mainnet.
+    #[cfg(feature = "test")]
+    let validate_stored_chunks: bool = true;
+    #[cfg(not(feature = "test"))]
+    let validate_stored_chunks: bool = false;
+    if validate_stored_chunks {
+        // TODO[NNS1-3550]: Switch this call to best-effort.
+        let stored_chunks_response = env
+            .call_canister(CanisterId::ic_00(), "stored_chunks", arg)
+            .await;
 
-    let stored_chunks_response = match stored_chunks_response {
-        Ok(stored_chunks_response) => stored_chunks_response,
-        Err(err) => {
-            let defect = format!("Cannot call stored_chunks for {store_canister_id}: {err:?}");
-            defects.push(defect);
-            return Err(defects);
-        }
-    };
+        let stored_chunks_response = match stored_chunks_response {
+            Ok(stored_chunks_response) => stored_chunks_response,
+            Err(err) => {
+                let defect = format!("Cannot call stored_chunks for {store_canister_id}: {err:?}");
+                defects.push(defect);
+                return Err(defects);
+            }
+        };
 
-    let stored_chunks_response = match Decode!(&stored_chunks_response, StoredChunksReply) {
-        Ok(stored_chunks_response) => stored_chunks_response,
-        Err(err) => {
+        let stored_chunks_response = match Decode!(&stored_chunks_response, StoredChunksReply) {
+            Ok(stored_chunks_response) => stored_chunks_response,
+            Err(err) => {
+                let defect = format!(
+                    "Cannot decode response from calling stored_chunks for {store_canister_id}: {err}"
+                );
+                defects.push(defect);
+                return Err(defects);
+            }
+        };
+
+        // Finally, check that the expected chunks were successfully uploaded to the store canister.
+        let stored_chunks = stored_chunks_response
+            .0
+            .iter()
+            .map(|chunk| format_full_hash(&chunk.hash))
+            .collect::<BTreeSet<_>>();
+        let expected_chunks = chunk_hashes_list
+            .iter()
+            .map(|chunk| format_full_hash(chunk))
+            .collect::<BTreeSet<_>>();
+
+        if !expected_chunks.is_subset(&stored_chunks) {
+            let missing_chunks = expected_chunks
+                .difference(&stored_chunks)
+                .cloned()
+                .collect::<Vec<_>>();
             let defect = format!(
-                "Cannot decode response from calling stored_chunks for {store_canister_id}: {err}"
+                "{} out of {} expected WASM chunks were not uploaded to the store canister: {}",
+                missing_chunks.len(),
+                expected_chunks.len(),
+                missing_chunks.join(", ")
             );
             defects.push(defect);
-            return Err(defects);
         }
-    };
-
-    // Finally, check that the expected chunks were sucessfully uploaded to the store canister.
-    let stored_chunks = stored_chunks_response
-        .0
-        .iter()
-        .map(|chunk| format_full_hash(&chunk.hash))
-        .collect::<BTreeSet<_>>();
-    let expected_chunks = chunk_hashes_list
-        .iter()
-        .map(|chunk| format_full_hash(chunk))
-        .collect::<BTreeSet<_>>();
-
-    if !expected_chunks.is_subset(&stored_chunks) {
-        let missing_chunks = expected_chunks
-            .difference(&stored_chunks)
-            .cloned()
-            .collect::<Vec<_>>();
-        let defect = format!(
-            "{} out of {} expected WASM chunks were not uploaded to the store canister: {}",
-            missing_chunks.len(),
-            expected_chunks.len(),
-            missing_chunks.join(", ")
-        );
-        defects.push(defect);
     }
 
     if !defects.is_empty() {

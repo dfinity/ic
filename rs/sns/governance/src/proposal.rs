@@ -2868,6 +2868,8 @@ No upgrade argument."#
         );
     }
 
+    // TODO[NNS1-3550]: Enable this test for all compilations.
+    #[cfg(feature = "test")]
     #[tokio::test]
     async fn render_upgrade_sns_controlled_canister_proposal_with_unexpected_chunk() {
         let mut chunked_canister_wasm = ChunkedCanisterWasm {
