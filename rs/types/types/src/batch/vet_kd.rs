@@ -164,15 +164,15 @@ mod tests {
         // Each agreement has 1000 bytes (in deserialized form)
         let mut make_agreement = || {
             let mut data = [0; 1000];
-                rng.fill_bytes(&mut data);
+            rng.fill_bytes(&mut data);
             VetKdAgreement::Success(data.to_vec())
         };
 
         // 8 Agreements should still fit in the payload
         let payload_fits = VetKdPayload {
-            vet_kd_agreements: (0..9).map(|i| {
-                (CallbackId::new(i), make_agreement())
-            }).collect(),
+            vet_kd_agreements: (0..9)
+                .map(|i| (CallbackId::new(i), make_agreement()))
+                .collect(),
         };
 
         let bytes = vet_kd_payload_to_bytes(payload_fits.clone(), max_size);
@@ -186,7 +186,9 @@ mod tests {
 
         // The 9th agreement should be truncated
         let mut payload_too_large = payload_fits.clone();
-        payload_too_large.vet_kd_agreements.insert(CallbackId::new(9), make_agreement());
+        payload_too_large
+            .vet_kd_agreements
+            .insert(CallbackId::new(9), make_agreement());
 
         let bytes = vet_kd_payload_to_bytes(payload_too_large, max_size);
         assert!(bytes.len() as u64 <= max_size.get());
@@ -199,7 +201,10 @@ mod tests {
 
         // But there should still be space for a reject
         let mut payload_reject = payload_fits.clone();
-        payload_reject.vet_kd_agreements.insert(CallbackId::new(9), VetKdAgreement::Reject(VetKdErrorCode::TimedOut));
+        payload_reject.vet_kd_agreements.insert(
+            CallbackId::new(9),
+            VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
+        );
 
         let bytes = vet_kd_payload_to_bytes(payload_reject.clone(), max_size);
         assert!(bytes.len() as u64 <= max_size.get());
