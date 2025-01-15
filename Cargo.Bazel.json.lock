@@ -1,5 +1,5 @@
 {
-  "checksum": "97b45eac24bbc0fd625f3cf63626a383bd09b30b36311221d6c7754821baae80",
+  "checksum": "0d0f07a82417a5445e64780417e27427470ef376d446e178e972bbc76555f945",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -53704,13 +53704,13 @@
                 "target": "libc"
               }
             ],
-            "aarch64-linux-android": [
+            "aarch64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
-            "aarch64-pc-windows-msvc": [
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -53812,12 +53812,6 @@
                 "target": "libc"
               }
             ],
-            "x86_64-unknown-freebsd": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
@@ -53825,6 +53819,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -60789,6 +60789,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-fuchsia": [
               "default",
               "event",
@@ -60797,11 +60802,6 @@
               "process",
               "termios",
               "time",
-              "use-libc-auxv"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "termios",
               "use-libc-auxv"
             ],
             "aarch64-unknown-linux-gnu": [
@@ -61010,6 +61010,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "x86_64-unknown-freebsd": [
               "default",
               "event",
@@ -61020,12 +61025,7 @@
               "time",
               "use-libc-auxv"
             ],
-            "x86_64-pc-windows-msvc": [
-              "default",
-              "termios",
-              "use-libc-auxv"
-            ],
-            "x86_64-unknown-freebsd": [
+            "x86_64-unknown-fuchsia": [
               "default",
               "event",
               "mm",
@@ -61129,6 +61129,10 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-fuchsia": [
@@ -61430,6 +61434,17 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
