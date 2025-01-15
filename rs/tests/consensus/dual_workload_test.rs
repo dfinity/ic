@@ -19,6 +19,7 @@ end::catalog[] */
 
 use ic_agent::{Agent, AgentError};
 use ic_base_types::PrincipalId;
+use ic_consensus_system_test_utils::assert_no_consensus_error_counters_increased;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -107,7 +108,9 @@ fn test(env: TestEnv) {
 
         info!(log, "Calls are setup, will be submitted now");
         let reports = calls.await;
-        info!(log, "Report: {:?}", reports)
+        info!(log, "Report: {:?}", reports);
+
+        assert_no_consensus_error_counters_increased(&env).await;
     });
 }
 

@@ -18,6 +18,7 @@ Success::
 end::catalog[] */
 
 use ic_base_types::NodeId;
+use ic_consensus_system_test_utils::assert_no_consensus_error_counters_increased_blocking;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -111,6 +112,7 @@ fn test(env: TestEnv) {
         EndpointsStatus::AllUnhealthy,
     );
 
+    assert_no_consensus_error_counters_increased_blocking(&env);
     info!(log, "Kill nodes after removal (last shot to the victims)");
     nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
     // Assert that `update` call can still be executed, this ensures that removed+killed nodes are not part of the consensus committee.

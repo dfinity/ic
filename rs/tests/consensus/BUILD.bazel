@@ -76,6 +76,7 @@ system_test(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/universal_canister/lib",
