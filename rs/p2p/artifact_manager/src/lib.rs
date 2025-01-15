@@ -13,6 +13,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
@@ -175,6 +176,34 @@ enum StreamState<T> {
     EndOfStream,
 }
 
+async fn batch_read<T, S: Stream<Item = T> + Send + Unpin + 'static>(
+    mut stream: Pin<&mut S>,
+    recv_timeout: Duration,
+) -> Option<Vec<T>> {
+    let mut stream = std::pin::Pin::new(&mut stream);
+    match timeout(recv_timeout, stream.next()).await {
+        Ok(Some(first_value)) => {
+            let mut res = vec![first_value];
+            // We ignore the end of stream and empty value states.
+            while let StreamState::Value(value) =
+                std::future::poll_fn(|cx| match stream.as_mut().poll_next(cx) {
+                    Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
+                    Poll::Ready(Some(v)) => Poll::Ready(StreamState::Value(v)),
+                    Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
+                })
+                .await
+            {
+                res.push(value)
+            }
+            Some(res)
+        }
+        // Stream has finished because the abortable broadcast/p2p has stopped
+        Ok(None) => None,
+        // First value didn't arrive on time
+        Err(_) => Some(vec![]),
+    }
+}
+
 // The artifact processor thread loop
 fn process_messages<
     Artifact: IdentifiableArtifact + 'static,
@@ -203,30 +232,8 @@ fn process_messages<
         };
 
         let batched_artifact_events = current_thread_rt.block_on(async {
-            let mut inbound_stream = std::pin::Pin::new(&mut inbound_stream);
-            match timeout(recv_timeout, inbound_stream.next()).await {
-                Ok(Some(artifact_event)) => {
-                    let mut artifacts = vec![artifact_event];
-                    while let StreamState::Value(artifact) =
-                        std::future::poll_fn(|cx| match inbound_stream.as_mut().poll_next(cx) {
-                            Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
-                            Poll::Ready(Some(artifact)) => {
-                                Poll::Ready(StreamState::Value(artifact))
-                            }
-                            Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
-                        })
-                        .await
-                    {
-                        artifacts.push(artifact);
-                    }
-                    Some(artifacts)
-                }
-                Ok(None) => {
-                    // p2p is stopped
-                    None
-                }
-                Err(_) => Some(vec![]),
-            }
+            let inbound_stream = std::pin::Pin::new(&mut inbound_stream);
+            batch_read(inbound_stream, recv_timeout).await
         });
         let batched_artifact_events = match batched_artifact_events {
             Some(v) => v,
