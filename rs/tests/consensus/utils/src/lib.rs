@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
 use ic_system_test_driver::{
-    driver::{test_env::TestEnv, test_env_api::{set_var_to_path, HasTopologySnapshot, IcNodeContainer}},
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{set_var_to_path, HasTopologySnapshot, IcNodeContainer},
+    },
     util::{block_on, MetricsFetcher},
 };
 use slog::{info, warn};
@@ -23,7 +26,10 @@ pub fn set_sandbox_env_vars(dir: PathBuf) {
 /// Note: this shouldn't be used in system tests where we have malicious nodes as some of the
 /// counters could increase due to malicious behavior.
 pub async fn assert_no_consensus_error_counters_increased(env: &TestEnv) {
-    let nodes = env.topology_snapshot().subnets().flat_map(|subnet| subnet.nodes());
+    let nodes = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|subnet| subnet.nodes());
 
     const ERROR_COUNTERS: &[&str; 8] = &[
         "consensus_invalidated_artifacts",
