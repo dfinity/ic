@@ -3210,7 +3210,6 @@ dependencies = [
  "scopeguard",
  "scraper",
  "secp256k1 0.22.2",
- "secp256k1 0.29.1",
  "semver",
  "serde",
  "serde-bytes-repr",

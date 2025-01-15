@@ -1,5 +1,5 @@
 {
-  "checksum": "4c6e999e0d04eed4610e0b4a09e4f72db9b9ad8b7c8d0ca9c9f2db557d7f1c9d",
+  "checksum": "609d19ef6f47780aec7e87dab3087b7ede7048948e8c86204893f8e3ed4c6c27",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19159,11 +19159,6 @@
             },
             {
               "id": "secp256k1 0.22.2",
-              "target": "secp256k1",
-              "alias": "secp256k1_0_22"
-            },
-            {
-              "id": "secp256k1 0.29.1",
               "target": "secp256k1"
             },
             {
@@ -53683,6 +53678,12 @@
                 "target": "libc"
               }
             ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -53731,6 +53732,12 @@
                 "target": "libc"
               }
             ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -53774,6 +53781,12 @@
               }
             ],
             "x86_64-linux-android": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -60748,6 +60761,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -60838,6 +60856,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "i686-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -60952,6 +60975,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -61069,9 +61097,46 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61154,9 +61219,24 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61304,9 +61384,35 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -63581,8 +63687,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default",
-            "global-context",
             "hashes",
             "rand",
             "rand-std",
@@ -87513,7 +87617,6 @@
     "scopeguard 1.2.0",
     "scraper 0.17.1",
     "secp256k1 0.22.2",
-    "secp256k1 0.29.1",
     "semver 1.0.22",
     "serde 1.0.217",
     "serde-bytes-repr 0.1.5",
