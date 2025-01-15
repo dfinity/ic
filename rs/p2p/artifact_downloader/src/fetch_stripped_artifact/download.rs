@@ -84,7 +84,7 @@ impl Pools {
         };
 
         match data_payload.batch.ingress.get_by_id(ingress_message_id) {
-            Some(Ok(ingress_message)) => {
+            Ok(Some(ingress_message)) => {
                 self.metrics.ingress_messages_in_block.inc();
                 Ok(ingress_message)
             }

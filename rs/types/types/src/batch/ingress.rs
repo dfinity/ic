@@ -94,10 +94,11 @@ impl IngressPayload {
     pub fn get_by_id(
         &self,
         ingress_message_id: &IngressMessageId,
-    ) -> Option<Result<SignedIngress, IngressPayloadError>> {
+    ) -> Result<Option<SignedIngress>, IngressPayloadError> {
         self.serialized_ingress_messages
             .get(ingress_message_id)
             .map(|bytes| SignedIngress::try_from(bytes.clone()).map_err(IngressPayloadError))
+            .transpose()
     }
 
     /// Iterates over the ingress messages in their deserialized form.
@@ -266,10 +267,10 @@ mod tests {
             payload
         );
         // Individual lookup works.
-        assert_eq!(payload.get_by_id(&id1).unwrap().unwrap(), m1);
-        assert_eq!(payload.get_by_id(&id2).unwrap().unwrap(), m2);
-        assert_eq!(payload.get_by_id(&id3).unwrap().unwrap(), m3);
-        assert_eq!(payload.get_by_id(&id4), None);
+        assert_eq!(payload.get_by_id(&id1), Ok(Some(m1)));
+        assert_eq!(payload.get_by_id(&id2), Ok(Some(m2)));
+        assert_eq!(payload.get_by_id(&id3), Ok(Some(m3)));
+        assert_eq!(payload.get_by_id(&id4), Ok(None));
         // Converting back to messages should match original
         assert_eq!(msgs, <Vec<SignedIngress>>::try_from(payload).unwrap());
     }
