@@ -1,4 +1,4 @@
-use ic_base_types::PrincipalId;
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetricsHistoryResponse;
 use num_traits::FromPrimitive;
 use rust_decimal::Decimal;
@@ -13,21 +13,32 @@ pub type SubnetMetricsHistory = (PrincipalId, Vec<NodeMetricsHistoryResponse>);
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct RewardableNode {
-    pub node_id: PrincipalId,
+    pub node_id: NodeId,
     pub node_provider_id: PrincipalId,
     pub region: String,
     pub node_type: String,
 }
 
-#[derive(Clone, Hash, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct DailyNodeMetrics {
     pub ts: u64,
-    pub subnet_assigned: PrincipalId,
+    pub subnet_assigned: SubnetId,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
     pub failure_rate: Decimal,
 }
 
+impl Default for DailyNodeMetrics {
+    fn default() -> Self {
+        DailyNodeMetrics {
+            ts: 0,
+            subnet_assigned: SubnetId::from(PrincipalId::new_anonymous()),
+            num_blocks_proposed: 0,
+            num_blocks_failed: 0,
+            failure_rate: Decimal::ZERO,
+        }
+    }
+}
 impl fmt::Display for DailyNodeMetrics {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -41,7 +52,7 @@ impl fmt::Display for DailyNodeMetrics {
 impl DailyNodeMetrics {
     pub fn new(
         ts: u64,
-        subnet_assigned: PrincipalId,
+        subnet_assigned: SubnetId,
         num_blocks_proposed: u64,
         num_blocks_failed: u64,
     ) -> Self {

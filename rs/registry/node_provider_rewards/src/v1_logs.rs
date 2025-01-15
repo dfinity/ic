@@ -1,4 +1,4 @@
-use ic_base_types::PrincipalId;
+use ic_base_types::{NodeId, PrincipalId};
 use itertools::Itertools;
 use rust_decimal::{prelude::Zero, Decimal};
 use std::fmt;
@@ -104,11 +104,11 @@ pub enum LogEntry {
         node_count: u32,
     },
     ActiveIdiosyncraticFailureRates {
-        node_id: PrincipalId,
+        node_id: NodeId,
         failure_rates: Vec<Decimal>,
     },
     ComputeRewardsForNode {
-        node_id: PrincipalId,
+        node_id: NodeId,
         node_type: String,
         region: String,
     },

@@ -21,7 +21,7 @@ impl MockedMetrics {
 }
 
 impl DailyNodeMetrics {
-    fn from_fr_dummy(ts: u64, subnet_assigned: PrincipalId, failure_rate: Decimal) -> Self {
+    fn from_fr_dummy(ts: u64, subnet_assigned: SubnetId, failure_rate: Decimal) -> Self {
         let num_blocks_proposed = 10;
         let num_blocks_failed = if failure_rate.is_zero() {
             0
@@ -47,7 +47,7 @@ fn daily_mocked_failure_rates(metrics: Vec<MockedMetrics>) -> Vec<Decimal> {
             (0..mocked_metrics.days).map(move |i| {
                 DailyNodeMetrics::new(
                     i,
-                    PrincipalId::new_anonymous(),
+                    PrincipalId::new_anonymous().into(),
                     mocked_metrics.proposed_blocks,
                     mocked_metrics.failed_blocks,
                 )
@@ -84,8 +84,8 @@ fn mocked_rewards_table() -> NodeRewardsTable {
 }
 #[test]
 fn test_daily_node_metrics() {
-    let subnet1 = PrincipalId::new_user_test_id(1);
-    let subnet2 = PrincipalId::new_user_test_id(2);
+    let subnet1: SubnetId = PrincipalId::new_user_test_id(1).into();
+    let subnet2: SubnetId = PrincipalId::new_user_test_id(2).into();
 
     let node1 = PrincipalId::new_user_test_id(101);
     let node2 = PrincipalId::new_user_test_id(102);
@@ -147,9 +147,9 @@ fn test_daily_node_metrics() {
         (subnet2, vec![sub2_day3]),
     ]);
 
-    let result = daily_node_metrics(input_metrics);
+    let result = metrics_in_rewarding_period(input_metrics);
 
-    let metrics_node1 = result.get(&node1).expect("Node1 metrics not found");
+    let metrics_node1 = result.get(&node1.into()).expect("Node1 metrics not found");
     assert_eq!(metrics_node1[0].subnet_assigned, subnet1);
     assert_eq!(metrics_node1[0].num_blocks_proposed, 10);
     assert_eq!(metrics_node1[0].num_blocks_failed, 2);
@@ -162,7 +162,7 @@ fn test_daily_node_metrics() {
     assert_eq!(metrics_node1[2].num_blocks_proposed, 15);
     assert_eq!(metrics_node1[2].num_blocks_failed, 3);
 
-    let metrics_node2 = result.get(&node2).expect("Node2 metrics not found");
+    let metrics_node2 = result.get(&node2.into()).expect("Node2 metrics not found");
     assert_eq!(metrics_node2[0].subnet_assigned, subnet1);
     assert_eq!(metrics_node2[0].num_blocks_proposed, 20);
     assert_eq!(metrics_node2[0].num_blocks_failed, 5);
@@ -269,14 +269,14 @@ fn test_same_rewards_percent_if_gaps_no_penalty() {
 }
 
 fn from_subnet_daily_metrics(
-    subnet_id: PrincipalId,
+    subnet_id: SubnetId,
     daily_subnet_fr: Vec<(TimestampNanos, Vec<f64>)>,
-) -> HashMap<PrincipalId, Vec<DailyNodeMetrics>> {
+) -> HashMap<NodeId, Vec<DailyNodeMetrics>> {
     let mut daily_node_metrics = HashMap::new();
     for (day, fr) in daily_subnet_fr {
         fr.into_iter().enumerate().for_each(|(i, fr)| {
             let node_metrics: &mut Vec<DailyNodeMetrics> = daily_node_metrics
-                .entry(PrincipalId::new_user_test_id(i as u64))
+                .entry(NodeId::from(PrincipalId::new_user_test_id(i as u64)))
                 .or_default();
 
             node_metrics.push(DailyNodeMetrics {
@@ -291,7 +291,7 @@ fn from_subnet_daily_metrics(
 }
 #[test]
 fn test_systematic_fr_calculation() {
-    let subnet1 = PrincipalId::new_user_test_id(10);
+    let subnet1 = SubnetId::new(PrincipalId::new_user_test_id(1));
 
     let assigned_metrics = from_subnet_daily_metrics(
         subnet1,
@@ -306,7 +306,7 @@ fn test_systematic_fr_calculation() {
 
     let result = systematic_fr_per_subnet(&assigned_metrics);
 
-    let expected: HashMap<(PrincipalId, TimestampNanos), Decimal> = HashMap::from([
+    let expected: HashMap<(SubnetId, TimestampNanos), Decimal> = HashMap::from([
         ((subnet1, 1), dec!(0.3)),
         ((subnet1, 2), dec!(0.8)),
         ((subnet1, 3), dec!(0.64)),
@@ -320,9 +320,9 @@ fn test_systematic_fr_calculation() {
 #[test]
 fn test_idiosyncratic_daily_fr_correct_values() {
     let mut logger = RewardsLog::default();
-    let node1 = PrincipalId::new_user_test_id(1);
-    let node2 = PrincipalId::new_user_test_id(2);
-    let subnet1 = PrincipalId::new_user_test_id(10);
+    let node1 = NodeId::from(PrincipalId::new_user_test_id(1));
+    let node2 = NodeId::from(PrincipalId::new_user_test_id(2));
+    let subnet1 = SubnetId::from(PrincipalId::new_user_test_id(10));
 
     let assigned_metrics = HashMap::from([
         (
@@ -345,7 +345,8 @@ fn test_idiosyncratic_daily_fr_correct_values() {
         ((subnet1, 3), dec!(0.1)),
     ]);
 
-    let result = nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result =
+        compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     let expected = HashMap::from([
         (node1, vec![dec!(0.1), dec!(0.3), dec!(0.749)]), // (0.2 - 0.1), (0.5 - 0.2), (0.849 - 0.1)
@@ -359,8 +360,8 @@ fn test_idiosyncratic_daily_fr_correct_values() {
 #[should_panic(expected = "Systematic failure rate not found")]
 fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
     let mut logger = RewardsLog::default();
-    let node1 = PrincipalId::new_user_test_id(1);
-    let subnet1 = PrincipalId::new_user_test_id(10);
+    let node1: NodeId = PrincipalId::new_user_test_id(1).into();
+    let subnet1: SubnetId = PrincipalId::new_user_test_id(10).into();
 
     let assigned_metrics = HashMap::from([(
         node1,
@@ -369,14 +370,14 @@ fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 2), dec!(0.1))]);
 
-    nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 }
 
 #[test]
 fn test_idiosyncratic_daily_fr_negative_failure_rate() {
     let mut logger = RewardsLog::default();
-    let node1 = PrincipalId::new_user_test_id(1);
-    let subnet1 = PrincipalId::new_user_test_id(10);
+    let node1: NodeId = PrincipalId::new_user_test_id(1).into();
+    let subnet1: SubnetId = PrincipalId::new_user_test_id(10).into();
 
     let assigned_metrics = HashMap::from([(
         node1,
@@ -385,7 +386,8 @@ fn test_idiosyncratic_daily_fr_negative_failure_rate() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 1), dec!(0.1))]);
 
-    let result = nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result =
+        compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     // Expecting zero due to saturation
     let expected = HashMap::from([(node1, vec![Decimal::ZERO])]);
@@ -419,13 +421,13 @@ fn test_node_provider_below_min_limit() {
     let node_provider_id = PrincipalId::new_anonymous();
     let rewardables = vec![
         RewardableNode {
-            node_id: PrincipalId::new_user_test_id(1),
+            node_id: PrincipalId::new_user_test_id(1).into(),
             node_provider_id,
             region: "region1".to_string(),
             node_type: "type1".to_string(),
         },
         RewardableNode {
-            node_id: PrincipalId::new_user_test_id(2),
+            node_id: PrincipalId::new_user_test_id(2).into(),
             node_provider_id,
             region: "region1".to_string(),
             node_type: "type3.1".to_string(),
@@ -455,16 +457,16 @@ fn test_node_provider_rewards_one_assigned() {
 
     let rewardables = (1..=5)
         .map(|i| RewardableNode {
-            node_id: PrincipalId::new_user_test_id(i),
+            node_id: PrincipalId::new_user_test_id(i).into(),
             node_provider_id: PrincipalId::new_anonymous(),
             region: "A,B".to_string(),
             node_type: "type1".to_string(),
         })
         .collect_vec();
 
-    let mut nodes_idiosyncratic_fr = HashMap::new();
+    let mut nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>> = HashMap::new();
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(1),
+        PrincipalId::new_user_test_id(1).into(),
         vec![dec!(0.4), dec!(0.2), dec!(0.3), dec!(0.4)], // Avg. 0.325
     );
 
@@ -523,20 +525,20 @@ fn test_node_provider_rewards_two_assigned() {
 
     let rewardables = (1..=5)
         .map(|i| RewardableNode {
-            node_id: PrincipalId::new_user_test_id(i),
+            node_id: PrincipalId::new_user_test_id(i).into(),
             node_provider_id: PrincipalId::new_anonymous(),
             region: "A,B".to_string(),
             node_type: "type1".to_string(),
         })
         .collect_vec();
 
-    let mut nodes_idiosyncratic_fr = HashMap::new();
+    let mut nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>> = HashMap::new();
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(1),
+        PrincipalId::new_user_test_id(1).into(),
         vec![dec!(0.4), dec!(0.2), dec!(0.3), dec!(0.4)], // Avg. 0.325
     );
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(2),
+        PrincipalId::new_user_test_id(2).into(),
         vec![dec!(0.9), dec!(0.6), dec!(0.304), dec!(0.102)], // Avg. 0.4765
     );
 
@@ -602,15 +604,15 @@ fn test_np_rewards_type3_coeff() {
     // 4 nodes in period: 1 assigned, 3 unassigned
     let rewardables = (1..=4)
         .map(|i| RewardableNode {
-            node_id: PrincipalId::new_user_test_id(i),
+            node_id: PrincipalId::new_user_test_id(i).into(),
             node_provider_id: PrincipalId::new_anonymous(),
             region: "A,B,C".to_string(),
             node_type: "type3.1".to_string(),
         })
         .collect_vec();
-    let mut nodes_idiosyncratic_fr = HashMap::new();
+    let mut nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>> = HashMap::new();
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(1),
+        PrincipalId::new_user_test_id(1).into(),
         vec![dec!(0.4), dec!(0.2), dec!(0.3), dec!(0.4)], // Avg. 0.325
     );
 
@@ -671,7 +673,7 @@ fn test_np_rewards_type3_mix() {
     // 4 nodes in period: 1 assigned, 3 unassigned
     let mut rewardables = (1..=3)
         .map(|i| RewardableNode {
-            node_id: PrincipalId::new_user_test_id(i),
+            node_id: PrincipalId::new_user_test_id(i).into(),
             node_provider_id: PrincipalId::new_anonymous(),
             region: "A,B,C".to_string(),
             node_type: "type3.1".to_string(),
@@ -679,19 +681,19 @@ fn test_np_rewards_type3_mix() {
         .collect_vec();
 
     rewardables.push(RewardableNode {
-        node_id: PrincipalId::new_user_test_id(4),
+        node_id: PrincipalId::new_user_test_id(4).into(),
         node_provider_id: PrincipalId::new_anonymous(),
         region: "A,B,D".to_string(),
         node_type: "type3".to_string(),
     });
 
-    let mut nodes_idiosyncratic_fr = HashMap::new();
+    let mut nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>> = HashMap::new();
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(3),
+        PrincipalId::new_user_test_id(3).into(),
         vec![dec!(0.1), dec!(0.12), dec!(0.23), dec!(0.12)],
     );
     nodes_idiosyncratic_fr.insert(
-        PrincipalId::new_user_test_id(4),
+        PrincipalId::new_user_test_id(4).into(),
         vec![dec!(0.2), dec!(0.32), dec!(0.123), dec!(0.432)],
     );
 

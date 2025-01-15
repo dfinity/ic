@@ -1,4 +1,4 @@
-use ic_base_types::PrincipalId;
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardsTable};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
@@ -25,38 +25,40 @@ const RF: &str = "Linear Reduction factor";
 pub fn calculate_rewards(
     days_in_period: u64,
     rewards_table: &NodeRewardsTable,
-    subnet_metrics: HashMap<PrincipalId, Vec<NodeMetricsHistoryResponse>>,
+    subnet_metrics: HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
     rewardable_nodes: &[RewardableNode],
 ) -> RewardsPerNodeProvider {
     let mut rewards_per_node_provider = HashMap::default();
     let mut rewards_log_per_node_provider = HashMap::default();
 
-    let mut all_assigned_metrics = daily_node_metrics(subnet_metrics);
-    let subnets_systematic_fr = systematic_fr_per_subnet(&all_assigned_metrics);
-    let node_provider_rewardables = rewardables_by_node_provider(rewardable_nodes);
+    let mut metrics_in_rewarding_period = metrics_in_rewarding_period(subnet_metrics);
+    let subnets_systematic_fr = systematic_fr_per_subnet(&metrics_in_rewarding_period);
+    let node_provider_rewardables = rewardable_nodes_by_node_provider(rewardable_nodes);
 
-    for (node_provider_id, node_provider_rewardables) in node_provider_rewardables {
+    for (node_provider_id, nodes) in node_provider_rewardables {
         let mut logger = RewardsLog::default();
         logger.add_entry(
             LogLevel::High,
             LogEntry::CalculateRewardsForNodeProvider(node_provider_id),
         );
 
-        let assigned_metrics: HashMap<PrincipalId, Vec<DailyNodeMetrics>> =
-            node_provider_rewardables
-                .iter()
-                .filter_map(|node| {
-                    all_assigned_metrics
-                        .remove(&node.node_id)
-                        .map(|daily_metrics| (node.node_id, daily_metrics))
-                })
-                .collect::<HashMap<PrincipalId, Vec<DailyNodeMetrics>>>();
-        let node_daily_fr =
-            nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+        let daily_metrics_by_node: HashMap<NodeId, Vec<DailyNodeMetrics>> = nodes
+            .iter()
+            .filter_map(|node| {
+                metrics_in_rewarding_period
+                    .remove(&node.node_id)
+                    .map(|daily_metrics| (node.node_id, daily_metrics))
+            })
+            .collect();
+        let node_daily_fr = compute_relative_node_failure_rate(
+            &mut logger,
+            &daily_metrics_by_node,
+            &subnets_systematic_fr,
+        );
 
         let rewards = node_provider_rewards(
             &mut logger,
-            &node_provider_rewardables,
+            &nodes,
             node_daily_fr,
             days_in_period,
             rewards_table,
@@ -72,18 +74,13 @@ pub fn calculate_rewards(
     }
 }
 
-/// Computes the idiosyncratic daily failure rates for each node.
-///
-/// This function calculates the idiosyncratic failure rates by subtracting the systematic
-/// failure rate of the subnet from the node's failure rate for each day.
-/// If the node's failure rate is less than the systematic failure rate, the idiosyncratic
-/// failure rate is set to zero.
-fn nodes_idiosyncratic_fr(
+/// Computes the relative node failure rates discounting the subnet systematic failure rate.
+fn compute_relative_node_failure_rate(
     logger: &mut RewardsLog,
-    assigned_metrics: &HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
-    subnets_systematic_fr: &HashMap<(PrincipalId, TimestampNanos), Decimal>,
-) -> HashMap<PrincipalId, Vec<Decimal>> {
-    let mut nodes_idiosyncratic_fr: HashMap<PrincipalId, Vec<Decimal>> = HashMap::new();
+    assigned_metrics: &HashMap<NodeId, Vec<DailyNodeMetrics>>,
+    subnets_systematic_fr: &HashMap<(SubnetId, TimestampNanos), Decimal>,
+) -> HashMap<NodeId, Vec<Decimal>> {
+    let mut nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>> = HashMap::new();
 
     for (node_id, daily_metrics) in assigned_metrics {
         let failure_rates = nodes_idiosyncratic_fr.entry(*node_id).or_default();
@@ -114,7 +111,7 @@ fn nodes_idiosyncratic_fr(
 fn node_provider_rewards(
     logger: &mut RewardsLog,
     rewardables: &[RewardableNode],
-    nodes_idiosyncratic_fr: HashMap<PrincipalId, Vec<Decimal>>,
+    nodes_idiosyncratic_fr: HashMap<NodeId, Vec<Decimal>>,
     days_in_period: u64,
     rewards_table: &NodeRewardsTable,
 ) -> Rewards {
@@ -267,8 +264,8 @@ fn assigned_multiplier(logger: &mut RewardsLog, daily_failure_rate: Vec<Decimal>
 /// This function calculates the 75th percentile of failure rates for each subnet on a daily basis.
 /// This represents the systematic failure rate for all the nodes in the subnet for that day.
 fn systematic_fr_per_subnet(
-    daily_node_metrics: &HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
-) -> HashMap<(PrincipalId, TimestampNanos), Decimal> {
+    daily_node_metrics: &HashMap<NodeId, Vec<DailyNodeMetrics>>,
+) -> HashMap<(SubnetId, TimestampNanos), Decimal> {
     fn percentile_75(mut values: Vec<Decimal>) -> Decimal {
         values.sort();
         let len = values.len();
@@ -279,12 +276,12 @@ fn systematic_fr_per_subnet(
         values[idx]
     }
 
-    let mut subnet_daily_failure_rates: HashMap<(PrincipalId, u64), Vec<Decimal>> = HashMap::new();
+    let mut subnet_daily_failure_rates: HashMap<(SubnetId, u64), Vec<Decimal>> = HashMap::new();
 
     for metrics in daily_node_metrics.values() {
         for metric in metrics {
             subnet_daily_failure_rates
-                .entry((metric.subnet_assigned, metric.ts))
+                .entry((metric.subnet_assigned.into(), metric.ts))
                 .or_default()
                 .push(metric.failure_rate);
         }
@@ -296,9 +293,9 @@ fn systematic_fr_per_subnet(
         .collect()
 }
 
-fn daily_node_metrics(
-    subnets_metrics: HashMap<PrincipalId, Vec<NodeMetricsHistoryResponse>>,
-) -> HashMap<PrincipalId, Vec<DailyNodeMetrics>> {
+fn metrics_in_rewarding_period(
+    subnets_metrics: HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
+) -> HashMap<NodeId, Vec<DailyNodeMetrics>> {
     let mut subnets_metrics = subnets_metrics
         .into_iter()
         .flat_map(|(subnet_id, metrics)| {
@@ -307,19 +304,19 @@ fn daily_node_metrics(
         .collect_vec();
     subnets_metrics.sort_by_key(|(_, metrics)| metrics.timestamp_nanos);
 
-    let mut daily_node_metrics: HashMap<PrincipalId, Vec<(PrincipalId, u64, NodeMetrics)>> =
+    let mut metrics_in_rewarding_period: HashMap<NodeId, Vec<(SubnetId, u64, NodeMetrics)>> =
         HashMap::default();
 
     for (subnet_id, metrics) in subnets_metrics {
         for node_metrics in metrics.node_metrics {
-            daily_node_metrics
-                .entry(node_metrics.node_id)
+            metrics_in_rewarding_period
+                .entry(node_metrics.node_id.into())
                 .or_default()
                 .push((subnet_id, metrics.timestamp_nanos, node_metrics));
         }
     }
 
-    daily_node_metrics
+    metrics_in_rewarding_period
         .into_iter()
         .map(|(node_id, metrics)| {
             let mut daily_metrics = Vec::new();
@@ -514,7 +511,7 @@ fn base_rewards_region_nodetype(
     region_nodetype_rewards
 }
 
-fn rewardables_by_node_provider(
+fn rewardable_nodes_by_node_provider(
     nodes: &[RewardableNode],
 ) -> HashMap<PrincipalId, Vec<RewardableNode>> {
     let mut node_provider_rewardables: HashMap<PrincipalId, Vec<RewardableNode>> =
