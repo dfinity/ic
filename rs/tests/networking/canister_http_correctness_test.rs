@@ -17,20 +17,26 @@ end::catalog[] */
 
 use anyhow::Result;
 use assert_matches::assert_matches;
-use candid::{CandidType, Deserialize};
+use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use canister_http::*;
 use canister_test::{Canister, Runtime};
-use dfn_candid::candid_one;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    Agent, AgentError,
+};
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
     driver::{
         group::{SystemTestGroup, SystemTestSubGroup},
         test_env::TestEnv,
+        test_env_api::{HasTopologySnapshot, IcNodeContainer},
     },
     systest,
     util::block_on,
@@ -76,6 +82,21 @@ impl<'a> Handlers<'a> {
         let principal_id = get_proxy_canister_id(self.env);
         let canister_id = CanisterId::unchecked_from_principal(principal_id);
         Canister::new(&self.runtime, canister_id)
+    }
+
+    async fn agent(&self) -> Agent {
+        let app_node = self
+            .env
+            .topology_snapshot()
+            .subnets()
+            .filter(|s| s.subnet_type() == SubnetType::Application)
+            .next()
+            .expect("there is an application subnet")
+            .nodes()
+            .next()
+            .expect("there is a node on the subnet.");
+
+        app_node.build_canister_agent().await.agent
     }
 }
 
@@ -145,7 +166,7 @@ pub fn test_enforce_https(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("http://[{webserver_ipv6}]:20443"),
@@ -165,7 +186,13 @@ pub fn test_enforce_https(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 pub fn test_transform_function_is_executed(env: TestEnv) {
@@ -175,7 +202,7 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
     let transform_context = "transform_context".as_bytes().to_vec();
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -217,7 +244,7 @@ pub fn test_non_existent_transform_function(env: TestEnv) {
     let transform_context = "transform_context".as_bytes().to_vec();
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -237,7 +264,13 @@ pub fn test_non_existent_transform_function(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterError, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            ..
+        })
+    );
 }
 
 pub fn test_composite_transform_function_is_executed(env: TestEnv) {
@@ -245,7 +278,7 @@ pub fn test_composite_transform_function_is_executed(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -279,7 +312,7 @@ pub fn test_no_cycles_attached(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("http://[{webserver_ipv6}]:20443"),
@@ -299,7 +332,13 @@ pub fn test_no_cycles_attached(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 pub fn test_max_possible_request_size(env: TestEnv) {
@@ -323,7 +362,7 @@ pub fn test_max_possible_request_size(env: TestEnv) {
     let body = vec![0; MAX_REQUEST_BYTES_LIMIT - header_list_size];
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/request_size"),
@@ -367,7 +406,7 @@ pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
     let body = vec![0; MAX_REQUEST_BYTES_LIMIT - header_list_size + 1];
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/request_size"),
@@ -387,7 +426,13 @@ pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
@@ -411,7 +456,7 @@ pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
 
     let response = block_on(async move {
         submit_outcall(
-            &handlers.proxy_canister(),
+            &handlers,
             RemoteHttpRequest {
                 request: request.clone(),
                 cycles: expected_cycle_cost(
@@ -424,7 +469,13 @@ pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
         .await
     });
 
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
@@ -448,7 +499,7 @@ pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
 
     let response = block_on(async move {
         submit_outcall(
-            &handlers.proxy_canister(),
+            &handlers,
             RemoteHttpRequest {
                 request: request.clone(),
                 cycles: expected_cycle_cost(
@@ -485,7 +536,7 @@ pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
 
     let response = block_on(async move {
         submit_outcall(
-            &handlers.proxy_canister(),
+            &handlers,
             RemoteHttpRequest {
                 request: request.clone(),
                 cycles: expected_cycle_cost(
@@ -497,7 +548,13 @@ pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
         )
         .await
     });
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 pub fn test_max_response_limit_too_large(env: TestEnv) {
@@ -505,7 +562,7 @@ pub fn test_max_response_limit_too_large(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -525,7 +582,13 @@ pub fn test_max_response_limit_too_large(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
@@ -533,7 +596,7 @@ pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -553,7 +616,13 @@ pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 pub fn test_non_existing_transform_function(env: TestEnv) {
@@ -561,7 +630,7 @@ pub fn test_non_existing_transform_function(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443"),
@@ -581,7 +650,13 @@ pub fn test_non_existing_transform_function(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterError, _)))
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            ..
+        })
+    )
 }
 
 pub fn test_post_request(env: TestEnv) {
@@ -589,7 +664,7 @@ pub fn test_post_request(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/post"),
@@ -620,7 +695,7 @@ pub fn test_http_endpoint_response_is_too_large(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/bytes/100000"),
@@ -640,7 +715,13 @@ pub fn test_http_endpoint_response_is_too_large(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
@@ -648,7 +729,7 @@ pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
@@ -668,7 +749,13 @@ pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 /// The adapter should not follow HTTP redirects.
@@ -677,7 +764,7 @@ pub fn test_that_redirects_are_not_followed(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/redirect/10"),
@@ -706,7 +793,7 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{}]:9090", webserver_ipv6),
@@ -728,13 +815,14 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
 
     let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
     let err_response = response.clone().unwrap_err();
-    assert_matches!(err_response.0, RejectionCode::SysTransient);
+
+    assert_matches!(err_response.reject_code, RejectCode::SysTransient);
 
     assert!(
-        err_response.1.contains(expected_error_message),
+        err_response.reject_message.contains(expected_error_message),
         "Expected error message to contain, {}, got: {}",
         expected_error_message,
-        err_response.1
+        err_response.reject_message
     );
 }
 
@@ -743,7 +831,7 @@ fn test_invalid_domain_name(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com"),
@@ -763,14 +851,20 @@ fn test_invalid_domain_name(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysTransient, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysTransient,
+            ..
+        })
+    );
 }
 
 fn test_invalid_ip(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://240.0.0.0"),
@@ -790,7 +884,13 @@ fn test_invalid_ip(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysTransient, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysTransient,
+            ..
+        })
+    );
 }
 
 /// Test that the response body returned is the same as the requested path.
@@ -816,7 +916,7 @@ fn test_get_hello_world_call(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
@@ -863,7 +963,7 @@ fn test_post_call(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
@@ -911,7 +1011,7 @@ fn test_head_call(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
@@ -936,7 +1036,7 @@ fn test_small_maximum_possible_response_size(env: TestEnv) {
     let max_response_bytes = Some(header_size + "hello_world".len() as u64);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -976,7 +1076,7 @@ fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
     let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -988,10 +1088,15 @@ fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
             },
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Request size exceeds limit and will fail.");
+    ));
 
-    assert_matches!(response, (RejectionCode::SysFatal, _));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
@@ -1013,7 +1118,7 @@ fn test_small_maximum_possible_response_size_only_headers(env: TestEnv) {
     let max_response_bytes = Some(header_size + n);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1051,7 +1156,7 @@ fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv)
     let max_response_bytes = Some(header_size + n - 1);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1063,10 +1168,15 @@ fn test_small_maximum_possible_response_size_exceeded_only_headers(env: TestEnv)
             },
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Request size exceeds limit and will fail.");
+    ));
 
-    assert_matches!(response, (RejectionCode::SysFatal, _));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 fn test_non_ascii_url_is_rejected(env: TestEnv) {
@@ -1091,22 +1201,26 @@ fn test_non_ascii_url_is_rejected(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Non ASCII url should fail.");
+    ));
 
-    assert_matches!(response, (RejectionCode::SysFatal, _));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 /// Test that the response body returned is the same as the requested path.
 fn test_max_url_length(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let expected_body = "hello_world";
 
     let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
@@ -1124,7 +1238,7 @@ fn test_max_url_length(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
@@ -1140,7 +1254,6 @@ fn test_max_url_length(env: TestEnv) {
 fn test_max_url_length_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let expected_body = "hello_world";
 
     let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
@@ -1159,22 +1272,26 @@ fn test_max_url_length_exceeded(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Request exceeds url length limit and should fail.");
+    ));
 
-    assert_matches!(response, (RejectionCode::CanisterReject, _));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 /// Test that the response body returned is the same as the requested path.
 fn test_large_maximum_response_size(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let expected_body = "hello_world";
 
     let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
@@ -1193,18 +1310,21 @@ fn test_large_maximum_response_size(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Request exceeds url length limit and should fail.");
-
-    assert_matches!(response, (RejectionCode::CanisterReject, _));
+    ));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
-/// Test that the response body returned is the same as the requested path.
 fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
@@ -1218,7 +1338,7 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     let max_response_bytes = Some(header_size + "hello_world".len() as u64);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1226,7 +1346,7 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
                 method: HttpMethod::GET,
                 body: None,
                 transform: None,
-                max_response_bytes: Some(MAX_REQUEST_BYTES_LIMIT as u64),
+                max_response_bytes,
             },
             cycles: 500_000_000_000,
         },
@@ -1237,7 +1357,6 @@ fn test_maximum_possible_value_of_max_response_bytes(env: TestEnv) {
     assert_http_response(&response);
 }
 
-/// Test that the response body returned is the same as the requested path.
 fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
@@ -1248,10 +1367,10 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
     );
 
     let header_size = 143;
-    let max_response_bytes = Some(header_size + "hello_world".len() as u64);
+    let max_response_bytes = Some(header_size + "hello_world".len() as u64 - 1);
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1259,15 +1378,19 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
                 method: HttpMethod::GET,
                 body: None,
                 transform: None,
-                // Add 1 byte to exceed limit.
-                max_response_bytes: Some(MAX_REQUEST_BYTES_LIMIT as u64 + 1),
+                max_response_bytes,
             },
             cycles: 500_000_000_000,
         },
-    ))
-    .expect_err("Request is successful.");
+    ));
 
-    assert_matches!(response, (RejectionCode::CanisterReject, _));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
@@ -1311,14 +1434,20 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::CanisterReject, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterReject,
+            ..
+        })
+    );
 }
 
 fn test_max_number_of_response_headers(env: TestEnv) {
@@ -1333,7 +1462,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
     );
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1364,7 +1493,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
     );
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url,
@@ -1377,7 +1506,13 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
             cycles: 500_000_000_000,
         },
     ));
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysFatal,
+            ..
+        })
+    );
 }
 
 fn test_max_number_of_request_headers(env: TestEnv) {
@@ -1394,7 +1529,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
         .collect();
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: format!("https://[{webserver_ipv6}]:20443/anything"),
@@ -1440,7 +1575,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
     }
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         TestRemoteHttpRequest {
             request: TestRequest {
                 url,
@@ -1451,7 +1586,13 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err((RejectionCode::SysFatal, _)));
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::CanisterError,
+            ..
+        })
+    );
 }
 
 fn check_caller_id_on_transform_function(env: TestEnv) {
@@ -1478,7 +1619,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
     };
 
     let response = block_on(submit_outcall(
-        &handlers.proxy_canister(),
+        &handlers,
         RemoteHttpRequest {
             request: request.clone(),
             cycles: 500_000_000_000,
@@ -1634,23 +1775,52 @@ fn assert_http_json_response(
         "4. HTTP bin server received body does not match the outcall sent body."
     );
 }
-type OutcallsResponse = Result<RemoteHttpResponse, (RejectionCode, String)>;
+type ProxyCanisterResponse = Result<RemoteHttpResponse, (RejectionCode, String)>;
+type OutcallsResponse = Result<RemoteHttpResponse, RejectResponse>;
 
-async fn submit_outcall<Request>(
-    proxy_canister: &Canister<'_>,
-    request: Request,
-) -> OutcallsResponse
+async fn submit_outcall<Request>(handlers: &Handlers<'_>, request: Request) -> OutcallsResponse
 where
     Request: Clone + CandidType,
 {
-    proxy_canister
-        .update_(
-            "send_request",
-            candid_one::<OutcallsResponse, Request>,
-            request.clone(),
-        )
+    let args = Encode!(&request).unwrap();
+    let agent = handlers.agent().await;
+
+    let principal_id: PrincipalId = handlers.proxy_canister().effective_canister_id();
+    let principal: Principal = principal_id.into();
+
+    agent
+        .update(&principal, "send_request")
+        .with_arg(args)
+        .call_and_wait()
         .await
-        .expect("Request completes.")
+        .map_err(|agent_error| match agent_error {
+            AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
+                response
+            }
+            _ => panic!("Unexpected error: {:?}", agent_error),
+        })
+        .and_then(|response| {
+            decode_one::<ProxyCanisterResponse>(&response)
+                .unwrap()
+                .map_err(|(reject_code, reject_message)| {
+                    let reject_code = match reject_code {
+                        RejectionCode::SysFatal => RejectCode::SysFatal,
+                        RejectionCode::SysTransient => RejectCode::SysTransient,
+                        RejectionCode::DestinationInvalid => RejectCode::DestinationInvalid,
+                        RejectionCode::CanisterReject => RejectCode::CanisterReject,
+                        RejectionCode::CanisterError => RejectCode::CanisterError,
+                        RejectionCode::NoError | RejectionCode::Unknown => {
+                            panic!("Invalid rejection code.")
+                        }
+                    };
+
+                    RejectResponse {
+                        reject_code,
+                        reject_message,
+                        error_code: None,
+                    }
+                })
+        })
 }
 
 /// Pricing function of canister http requests.
