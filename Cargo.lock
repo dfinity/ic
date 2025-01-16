@@ -12960,11 +12960,8 @@ dependencies = [
 name = "ic-test-utilities-metrics"
 version = "0.9.0"
 dependencies = [
- "candid",
- "ic-canisters-http-types",
  "ic-metrics",
  "prometheus",
- "regex",
 ]
 
 [[package]]
