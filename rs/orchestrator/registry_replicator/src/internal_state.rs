@@ -1,5 +1,5 @@
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
@@ -113,7 +113,7 @@ impl InternalState {
         let registry_canister = if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES
             && self.registry_canister_fallback.is_some()
         {
-            info!(
+            debug!(
                 self.logger,
                 "Polling NNS failed {} times consecutively, trying config urls once...",
                 self.failed_poll_count

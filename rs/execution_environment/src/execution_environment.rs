@@ -34,7 +34,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory,
 };
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
@@ -771,7 +771,7 @@ impl ExecutionEnvironment {
                                         round_limits,
                                     ),
                                 };
-                                info!(
+                                debug!(
                                             self.log,
                                             "Finished executing create_canister message after {:?} with result: {:?}",
                                             since.elapsed().as_secs_f64(),
@@ -3601,7 +3601,7 @@ impl ExecutionEnvironment {
         } else {
             CompilationCostHandling::CountFullAmount
         };
-        info!(
+        debug!(
             self.log,
             "Start executing install_code message on canister {:?}", canister_id,
         );
@@ -3676,7 +3676,7 @@ impl ExecutionEnvironment {
                                 .expected_compiled_wasms
                                 .insert(WasmHash::from(new_wasm_hash));
                         }
-                        info!(
+                        debug!(
                             self.log,
                             "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,

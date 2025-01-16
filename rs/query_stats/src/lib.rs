@@ -1,6 +1,6 @@
 use crossbeam_channel::{Sender, TrySendError};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
@@ -119,7 +119,7 @@ impl QueryStatsCollector {
     pub fn register_query_statistics(&self, canister_id: CanisterId, stats: &QueryStats) {
         let current_epoch = *self.current_epoch.read().unwrap();
         if current_epoch.is_none() {
-            info!(
+            debug!(
                 every_n_seconds => 30,
                 self.log,
                 "QueryStatsCollector epoch not set - omitting stats for canister {} - num_calls: {} num_instructions: {} - payload_size: {}:{}",
