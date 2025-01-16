@@ -4,6 +4,16 @@ use super::*;
 fn test_candid_service_arg_validation() {
     for (label, candid_service, upgrade_arg, expected_result) in [
         (
+            "Service without args",
+            r#"
+                service : {
+                    g : () -> (int) query;
+                }
+            "#,
+            "()",
+            Ok(()),
+        ),
+        (
             "Invalid service",
             r#"
                 service : (x : record { foo : opt record {} }, y : nat32) -> {

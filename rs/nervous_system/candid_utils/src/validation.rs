@@ -17,7 +17,7 @@ pub fn validate_upgrade_args(
     let (expected_args_types, (env, _)) = instantiate_candid(CandidSource::Text(&candid_service))
         .map_err(|err| format!("{err:?}"))?;
 
-    fn fmt_type_vec(types: &Vec<Type>) -> String {
+    fn fmt_type_vec(types: &[Type]) -> String {
         let tab = " ".repeat(4);
         let types_str = if types.is_empty() {
             "// <empty>".to_string()
@@ -46,7 +46,7 @@ pub fn validate_upgrade_args(
         .iter()
         .zip(expected_args_types.iter())
         .map(|(observed_type, expected_type)| {
-            subtype(&mut gamma, &env, &observed_type, &expected_type)
+            subtype(&mut gamma, &env, observed_type, expected_type)
                 .map_err(|err| format!("{err:?}"))
         })
         .collect::<Vec<_>>();
