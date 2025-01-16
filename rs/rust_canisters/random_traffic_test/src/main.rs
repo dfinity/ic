@@ -99,22 +99,22 @@ fn sample((min, max): (u32, u32)) -> u32 {
 }
 
 /// Generates a random payload size for a call.
-fn call_bytes() -> u32 {
+fn gen_call_bytes() -> u32 {
     CONFIG.with_borrow(|config| sample(config.call_bytes_range))
 }
 
 /// Generates a random payload size for a reply.
-fn reply_bytes() -> u32 {
+fn gen_reply_bytes() -> u32 {
     CONFIG.with_borrow(|config| sample(config.reply_bytes_range))
 }
 
 /// Generates a random number of simulated instructions for generating a reply.
-fn instructions_count() -> u32 {
+fn gen_instructions_count() -> u32 {
     CONFIG.with_borrow(|config| sample(config.instructions_count_range))
 }
 
 /// Generates a timeout in seconds for a best-effort call.
-fn timeout_secs() -> u32 {
+fn gen_timeout_secs() -> u32 {
     CONFIG.with_borrow(|config| sample(config.timeout_secs_range))
 }
 
@@ -197,11 +197,11 @@ fn setup_call(
     call_tree_id: u32,
     call_depth: u32,
 ) -> (impl Future<Output = api::call::CallResult<Vec<u8>>>, u32) {
-    let msg = Message::new(call_tree_id, call_depth, call_bytes());
+    let msg = Message::new(call_tree_id, call_depth, gen_call_bytes());
     let receiver = receiver();
     let caller =
         (call_depth > 0).then_some(CanisterId::unchecked_from_principal(PrincipalId(caller())));
-    let timeout_secs = should_make_best_effort_call().then_some(timeout_secs());
+    let timeout_secs = should_make_best_effort_call().then_some(gen_timeout_secs());
 
     let call =
         Call::new(receiver.into(), "handle_call").with_raw_args(candid::Encode!(&msg).unwrap());
@@ -322,10 +322,10 @@ async fn handle_call(msg: Message) -> Vec<u8> {
         }
     }
 
-    let payload_bytes = reply_bytes();
+    let payload_bytes = gen_reply_bytes();
 
     // Do some thinking.
-    let counts = api::performance_counter(0) + instructions_count() as u64;
+    let counts = api::performance_counter(0) + gen_instructions_count() as u64;
     while counts > api::performance_counter(0) {}
 
     vec![0_u8; payload_bytes as usize]
