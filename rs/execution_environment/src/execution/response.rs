@@ -13,7 +13,7 @@ use ic_embedders::wasm_executor::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{debug, error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
@@ -1156,7 +1156,7 @@ fn process_response_result(
             let instructions_used =
                 original.message_instruction_limit - output.num_instructions_left;
             if instructions_used >= execution_parameters.instruction_limits.slice() {
-                info!(
+                debug!(
                     round.log,
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
