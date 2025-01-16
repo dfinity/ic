@@ -7,8 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-candid = { workspace = true }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
-regex = "1.11.0"
