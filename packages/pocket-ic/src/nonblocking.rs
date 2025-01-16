@@ -3,7 +3,7 @@ use crate::common::rest::{
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
 };
@@ -580,7 +580,8 @@ impl PocketIc {
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub async fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let endpoint = "update/await_ingress_message";
-        self.post(endpoint, message_id).await
+        let result: RawCanisterResult = self.post(endpoint, message_id).await;
+        result.into()
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
@@ -596,9 +597,11 @@ impl PocketIc {
             raw_message_id,
             raw_caller: caller.map(|caller| caller.into()),
         };
-        match self.try_post(endpoint, raw_ingress_status_args).await {
+        let result: Result<Option<RawCanisterResult>, (StatusCode, String)> =
+            self.try_post(endpoint, raw_ingress_status_args).await;
+        match result {
             Ok(None) => IngressStatusResult::NotAvailable,
-            Ok(Some(result)) => IngressStatusResult::Success(result),
+            Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
                 assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for PocketIc::ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
                 IngressStatusResult::Forbidden(message)
@@ -1480,7 +1483,8 @@ impl PocketIc {
             effective_principal,
         };
 
-        self.post(endpoint, raw_canister_call).await
+        let result: RawCanisterResult = self.post(endpoint, raw_canister_call).await;
+        result.into()
     }
 
     pub(crate) async fn update_call_with_effective_principal(

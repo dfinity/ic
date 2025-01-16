@@ -2,6 +2,7 @@
 //! The types in this module are used to serialize and deserialize data
 //! from and to JSON, and are used by both crates.
 
+use crate::RejectResponse;
 use candid::Principal;
 use hex;
 use reqwest::Response;
@@ -140,6 +141,34 @@ pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub enum RawCanisterResult {
+    Ok(
+        #[serde(deserialize_with = "base64::deserialize")]
+        #[serde(serialize_with = "base64::serialize")]
+        Vec<u8>,
+    ),
+    Err(RejectResponse),
+}
+
+impl From<Result<Vec<u8>, RejectResponse>> for RawCanisterResult {
+    fn from(result: Result<Vec<u8>, RejectResponse>) -> Self {
+        match result {
+            Ok(data) => RawCanisterResult::Ok(data),
+            Err(reject_response) => RawCanisterResult::Err(reject_response),
+        }
+    }
+}
+
+impl From<RawCanisterResult> for Result<Vec<u8>, RejectResponse> {
+    fn from(result: RawCanisterResult) -> Self {
+        match result {
+            RawCanisterResult::Ok(data) => Ok(data),
+            RawCanisterResult::Err(reject_response) => Err(reject_response),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]

@@ -1555,7 +1555,7 @@ impl TryFrom<u64> for RejectCode {
 }
 
 /// User-facing type describing an unsuccessful (also called reject) call response.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct RejectResponse {
     pub reject_code: RejectCode,
     pub reject_message: String,

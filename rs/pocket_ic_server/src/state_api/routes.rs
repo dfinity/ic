@@ -38,9 +38,9 @@ use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCycles, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, Topology,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubnetId, RawTime, Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -403,21 +403,21 @@ impl TryFrom<OpOut> for RawStableMemory {
     }
 }
 
-impl TryFrom<OpOut> for Result<Vec<u8>, RejectResponse> {
+impl TryFrom<OpOut> for RawCanisterResult {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterResult(result) => Ok(result),
+            OpOut::CanisterResult(result) => Ok(result.into()),
             _ => Err(OpConversionError),
         }
     }
 }
 
-impl TryFrom<OpOut> for Option<Result<Vec<u8>, RejectResponse>> {
+impl TryFrom<OpOut> for Option<RawCanisterResult> {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterResult(result) => Ok(Some(result)),
+            OpOut::CanisterResult(result) => Ok(Some(result.into())),
             OpOut::NoOutput => Ok(None),
             _ => Err(OpConversionError),
         }
@@ -529,10 +529,7 @@ pub async fn handler_json_query(
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (
-    StatusCode,
-    Json<ApiResponse<Result<Vec<u8>, RejectResponse>>>,
-) {
+) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
     let timeout = timeout_or_default(headers);
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
@@ -833,7 +830,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
         opout @ OpOut::CanisterResult(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(
-                Result::<Vec<u8>, RejectResponse>::try_from(opout).unwrap(),
+                RawCanisterResult::try_from(opout).unwrap(),
             )),
         )
             .into_response(),
@@ -980,10 +977,7 @@ pub async fn handler_await_ingress_message(
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_message_id): extract::Json<RawMessageId>,
-) -> (
-    StatusCode,
-    Json<ApiResponse<Result<Vec<u8>, RejectResponse>>>,
-) {
+) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
     let timeout = timeout_or_default(headers);
     match crate::pocket_ic::MessageId::try_from(raw_message_id) {
         Ok(message_id) => {
@@ -1005,10 +999,7 @@ pub async fn handler_ingress_status(
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_ingress_status_args): extract::Json<RawIngressStatusArgs>,
-) -> (
-    StatusCode,
-    Json<ApiResponse<Option<Result<Vec<u8>, RejectResponse>>>>,
-) {
+) -> (StatusCode, Json<ApiResponse<Option<RawCanisterResult>>>) {
     let timeout = timeout_or_default(headers);
     match crate::pocket_ic::MessageId::try_from(raw_ingress_status_args.raw_message_id) {
         Ok(message_id) => {
