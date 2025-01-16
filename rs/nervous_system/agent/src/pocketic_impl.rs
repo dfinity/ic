@@ -8,9 +8,7 @@ use crate::CallCanisters;
 #[derive(Error, Debug)]
 pub enum PocketIcCallError {
     #[error("pocket_ic error: {0}")]
-    PocketIc(pocket_ic::UserError),
-    #[error("canister rejected the request: {0}")]
-    Reject(String),
+    PocketIc(pocket_ic::RejectResponse),
     #[error("canister request could not be encoded: {0}")]
     CandidEncode(candid::Error),
     #[error("canister did not respond with the expected response type: {0}")]
@@ -27,7 +25,7 @@ impl CallCanisters for PocketIc {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload();
+        let request_bytes = request.payload().map_err(PocketIcCallError::CandidEncode)?;
         let response = if request.update() {
             self.update_call(
                 canister_id,
@@ -47,13 +45,6 @@ impl CallCanisters for PocketIc {
         }
         .map_err(PocketIcCallError::PocketIc)?;
 
-        match response {
-            pocket_ic::WasmResult::Reply(reply) => {
-                let response = candid::decode_one(reply.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?;
-                Ok(response)
-            }
-            pocket_ic::WasmResult::Reject(reject) => Err(PocketIcCallError::Reject(reject)),
-        }
+        candid::decode_one(response.as_slice()).map_err(PocketIcCallError::CandidDecode)
     }
 }

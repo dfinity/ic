@@ -848,6 +848,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    remove_old_states: bool,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -920,6 +921,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    remove_old_states: bool,
 }
 
 impl StateMachineBuilder {
@@ -952,6 +954,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
+            remove_old_states: true,
         }
     }
 
@@ -1132,6 +1135,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_remove_old_states(self, remove_old_states: bool) -> Self {
+        Self {
+            remove_old_states,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1159,6 +1169,7 @@ impl StateMachineBuilder {
             self.is_root_subnet,
             self.seed,
             self.log_level,
+            self.remove_old_states,
         )
     }
 
@@ -1370,9 +1381,7 @@ impl StateMachine {
         // used by the function `Self::execute_payload` of the `StateMachine`.
         let xnet_payload = batch_payload.xnet.clone();
         let ingress = &batch_payload.ingress;
-        let ingress_messages = (0..ingress.message_count())
-            .map(|i| ingress.get(i).unwrap().1)
-            .collect();
+        let ingress_messages = ingress.clone().try_into().unwrap();
         let (http_responses, _) =
             CanisterHttpPayloadBuilderImpl::into_messages(&batch_payload.canister_http);
         let inducted: Vec<_> = http_responses
@@ -1470,6 +1479,7 @@ impl StateMachine {
         is_root_subnet: bool,
         seed: [u8; 32],
         log_level: Option<Level>,
+        remove_old_states: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1811,6 +1821,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            remove_old_states,
         }
     }
 
@@ -1826,18 +1837,24 @@ impl StateMachine {
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
-        let mut i = 0i32;
         // StateManager is owned by an Arc, that is cloned into multiple components and different
         // threads. If we return before all the asynchronous components release the Arc, we may
         // end up with to StateManagers writing to the same directory, resulting in a crash.
+        let start = std::time::Instant::now();
         while state_manager.upgrade().is_some() {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            i += 1;
-            if i >= 100 {
-                panic!("Failed to wait for StateManager drop");
+            if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+                panic!("Timed out while dropping StateMachine.");
             }
         }
         result
+    }
+
+    /// Safely drops this `StateMachine`. We cannot achieve this functionality by implementing `Drop`
+    /// since we have to wait until there are no more `Arc`s for the state manager and
+    /// this is infeasible in a `Drop` implementation.
+    pub fn drop(self) {
+        let _ = self.into_components();
     }
 
     /// Emulates a node restart, including checkpoint recovery.
@@ -2392,7 +2409,9 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
-        self.state_manager.remove_states_below(batch_number);
+        if self.remove_old_states {
+            self.state_manager.remove_states_below(batch_number);
+        }
         assert_eq!(
             self.state_manager
                 .latest_state_certification_hash()
