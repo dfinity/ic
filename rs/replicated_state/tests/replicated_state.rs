@@ -1000,13 +1000,14 @@ fn compatibility_for_input_source() {
 
 #[test_strategy::proptest]
 fn peek_and_next_consistent(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
     ),
 ) {
-    let (mut replicated_state, _, total_requests) = test_input;
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
     let mut output_iter = replicated_state.output_into_iter();
 
@@ -1028,7 +1029,7 @@ fn peek_and_next_consistent(
 /// excluded queues to be left in the state.
 #[test_strategy::proptest]
 fn peek_and_next_consistent_with_exclude_queue(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
@@ -1036,7 +1037,7 @@ fn peek_and_next_consistent_with_exclude_queue(
     #[strategy(0..=1)] start: i32,
     #[strategy(2..=5)] exclude_step: i32,
 ) {
-    let (mut replicated_state, _, total_requests) = test_input;
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
     let mut output_iter = replicated_state.output_into_iter();
 
@@ -1061,13 +1062,13 @@ fn peek_and_next_consistent_with_exclude_queue(
 
 #[test_strategy::proptest]
 fn iter_yields_correct_elements(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
     ),
 ) {
-    let (mut replicated_state, mut raw_requests, _total_requests) = test_input;
+    let (mut replicated_state, mut raw_requests, _total_requests) = state_and_queues;
 
     let mut output_iter = replicated_state.output_into_iter();
 
@@ -1103,7 +1104,7 @@ fn iter_yields_correct_elements(
 
 #[test_strategy::proptest]
 fn iter_with_exclude_queue_yields_correct_elements(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
@@ -1111,7 +1112,7 @@ fn iter_with_exclude_queue_yields_correct_elements(
     #[strategy(0..=1)] start: i32,
     #[strategy(2..=5)] ignore_step: i32,
 ) {
-    let (mut replicated_state, mut raw_requests, total_requests) = test_input;
+    let (mut replicated_state, mut raw_requests, total_requests) = state_and_queues;
 
     let mut consumed = 0;
     let mut ignored_requests = Vec::new();
@@ -1183,13 +1184,14 @@ fn iter_with_exclude_queue_yields_correct_elements(
 
 #[test_strategy::proptest]
 fn ignore_leaves_state_untouched(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
     ),
 ) {
-    let (mut replicated_state, _, _) = test_input;
+    let (mut replicated_state, _, _) = state_and_queues;
 
     let expected_state = replicated_state.clone();
     {
@@ -1205,7 +1207,8 @@ fn ignore_leaves_state_untouched(
 
 #[test_strategy::proptest]
 fn peek_next_loop_with_exclude_queue_terminates(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
@@ -1213,7 +1216,7 @@ fn peek_next_loop_with_exclude_queue_terminates(
     #[strategy(0..=1)] start: i32,
     #[strategy(2..=5)] ignore_step: i32,
 ) {
-    let (mut replicated_state, _, _) = test_input;
+    let (mut replicated_state, _, _) = state_and_queues;
 
     let mut output_iter = replicated_state.output_into_iter();
 
@@ -1230,14 +1233,15 @@ fn peek_next_loop_with_exclude_queue_terminates(
 
 #[test_strategy::proptest]
 fn iter_with_stale_entries_terminates(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
     ),
     #[strategy(any::<u32>())] batch_time_seconds: u32,
 ) {
-    let (mut replicated_state, _, total_requests) = test_input;
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
@@ -1257,14 +1261,15 @@ fn iter_with_stale_entries_terminates(
 
 #[test_strategy::proptest]
 fn peek_next_loop_with_stale_entries_terminates(
-    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] test_input: (
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
         ReplicatedState,
         VecDeque<VecDeque<RequestOrResponse>>,
         usize,
     ),
     #[strategy(any::<u32>())] batch_time_seconds: u32,
 ) {
-    let (mut replicated_state, _, total_requests) = test_input;
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
