@@ -35,17 +35,18 @@ enum RejectionCode {
     Unknown,
 }
 
+// Create a counter canister and charge it with 2T cycles.
+fn deploy_counter_canister(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+    canister_id
+}
+
 #[test]
 fn test_counter_canister() {
     let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the counter canister wasm file on the canister.
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     // Make some calls to the canister.
     let reply = call_counter_canister(&pic, canister_id, "read");
@@ -283,10 +284,8 @@ fn test_routing_with_multiple_subnets() {
     let canister_id_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
     pic.add_cycles(canister_id_1, INIT_CYCLES);
     pic.add_cycles(canister_id_2, INIT_CYCLES);
-
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id_1, counter_wasm.clone(), vec![], None);
-    pic.install_canister(canister_id_2, counter_wasm.clone(), vec![], None);
+    pic.install_canister(canister_id_1, counter_wasm(), vec![], None);
+    pic.install_canister(canister_id_2, counter_wasm(), vec![], None);
 
     // Call canister 1 on subnet 1.
     let reply = call_counter_canister(&pic, canister_id_1, "read");
@@ -514,11 +513,7 @@ fn test_get_subnet_of_canister() {
 #[test]
 fn test_set_and_get_stable_memory_not_compressed() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     let data = "deadbeef".as_bytes().to_vec();
     pic.set_stable_memory(canister_id, data.clone(), BlobCompression::NoCompression);
@@ -530,10 +525,7 @@ fn test_set_and_get_stable_memory_not_compressed() {
 #[test]
 fn test_set_and_get_stable_memory_compressed() {
     let pic = PocketIc::new();
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     let data = "decafbad".as_bytes().to_vec();
     let mut compressed_data = Vec::new();
@@ -665,11 +657,7 @@ fn test_inspect_message() {
 #[test]
 fn test_too_large_call() {
     let pic = PocketIc::new();
-
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     const MAX_INGRESS_MESSAGE_ARG_SIZE: usize = 2097152;
     pic.update_call(
@@ -700,13 +688,10 @@ async fn test_create_and_drop_instances_async() {
 async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a counter canister and charge it with 2T cycles.
     let canister_id = pic.create_canister().await;
     pic.add_cycles(canister_id, INIT_CYCLES).await;
-
-    // Install the counter canister wasm file on the canister.
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None)
+    pic.install_canister(canister_id, counter_wasm(), vec![], None)
         .await;
 
     // Make some calls to the canister.
@@ -774,14 +759,7 @@ fn install_very_large_wasm() {
 #[test]
 fn test_uninstall_canister() {
     let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the counter canister wasm file on the canister.
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     // The module hash should be set after the canister is installed.
     let status = pic.canister_status(canister_id, None).unwrap();
@@ -1440,7 +1418,6 @@ fn test_canister_http_timeout() {
 
 #[test]
 fn subnet_metrics() {
-    const INIT_CYCLES: u128 = 2_000_000_000_000;
     let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     let topology = pic.topology();
@@ -1450,17 +1427,13 @@ fn subnet_metrics() {
         .get_subnet_metrics(Principal::management_canister())
         .is_none());
 
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+    deploy_counter_canister(&pic);
 
     let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
     assert_eq!(metrics.num_canisters, 2);
@@ -1766,11 +1739,7 @@ fn get_controllers_of_nonexisting_canister() {
 #[test]
 fn test_canister_snapshots() {
     let pic = PocketIc::new();
-
-    // We deploy the counter canister.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     // We bump the counter to make the counter different from its initial value.
     let reply = call_counter_canister(&pic, canister_id, "write");
@@ -1987,14 +1956,7 @@ fn make_live_twice() {
 #[test]
 fn create_instance_from_existing() {
     let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the counter canister wasm file on the canister.
-    let counter_wasm = counter_wasm();
-    pic.install_canister(canister_id, counter_wasm, vec![], None);
+    let canister_id = deploy_counter_canister(&pic);
 
     // Bump and check the counter value;
     let reply = call_counter_canister(&pic, canister_id, "write");
