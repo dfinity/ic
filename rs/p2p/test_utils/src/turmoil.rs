@@ -372,7 +372,7 @@ pub fn add_transport_to_sim<F>(
                 None
             };
 
-            let _artifact_processor_jh = if let Some(consensus) = consensus_manager_clone {
+            let con = if let Some(consensus) = consensus_manager_clone {
                 let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
                 let downloader = FetchArtifact::new(
                     log.clone(),
@@ -391,13 +391,14 @@ pub fn add_transport_to_sim<F>(
                     consensus.clone().read().unwrap().clone(),
                 );
 
-                Some(artifact_processor_jh)
+                let (consensus_router, manager) = consensus_builder.build();
+                router = Some(router.unwrap_or_default().merge(consensus_router));
+
+                Some((artifact_processor_jh, manager))
             } else {
                 None
             };
 
-            let (raw_router, manager) = consensus_builder.build();
-            let router = router.unwrap_or_default().merge(raw_router);
 
             let transport = Arc::new(QuicTransport::start(
                 &log,
@@ -408,10 +409,12 @@ pub fn add_transport_to_sim<F>(
                 peer,
                 topology_watcher_clone.clone(),
                 Arc::new(custom_udp),
-                router,
-            ));
+                router.unwrap_or_default()
+                        ));
 
-            manager.start(transport.clone(), topology_watcher_clone.clone());
+            if let Some((_, con_manager)) = con {
+                con_manager.start(transport.clone(), topology_watcher_clone.clone());
+            }
 
             if let Some(state_sync_manager) = state_sync_manager {
                 state_sync_manager.start(transport.clone());
