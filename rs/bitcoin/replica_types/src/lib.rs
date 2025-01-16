@@ -727,10 +727,15 @@ pub struct GetSuccessorsResponseComplete {
 impl GetSuccessorsResponseComplete {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        let GetSuccessorsResponseComplete { blocks, next } = &self;
-        let blocks_bytes = blocks.iter().map(|b| b.len()).sum::<usize>();
-        let next_bytes = next.iter().map(|n| n.len()).sum::<usize>();
-        blocks_bytes + next_bytes
+        self.count_blocks_bytes() + self.count_next_bytes()
+    }
+
+    pub fn count_blocks_bytes(&self) -> usize {
+        self.blocks.iter().map(|b| b.len()).sum::<usize>()
+    }
+
+    pub fn count_next_bytes(&self) -> usize {
+        self.next.iter().map(|n| n.len()).sum::<usize>()
     }
 }
 
