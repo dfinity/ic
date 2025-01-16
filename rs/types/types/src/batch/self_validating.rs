@@ -35,7 +35,8 @@ impl SelfValidatingPayload {
 
     /// Returns true if the payload is empty
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        let SelfValidatingPayload(responses) = &self;
+        responses.is_empty()
     }
 }
 

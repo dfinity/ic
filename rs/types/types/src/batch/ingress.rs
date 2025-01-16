@@ -86,7 +86,10 @@ impl IngressPayload {
 
     /// Return true if the payload is empty.
     pub fn is_empty(&self) -> bool {
-        self.serialized_ingress_messages.is_empty()
+        let IngressPayload {
+            serialized_ingress_messages,
+        } = &self;
+        serialized_ingress_messages.is_empty()
     }
 
     /// Return the [`SignedIngress`] referenced by the [`IngressMessageId`].
