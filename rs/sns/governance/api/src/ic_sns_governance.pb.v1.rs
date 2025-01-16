@@ -2213,6 +2213,7 @@ pub mod upgrade_journal_entry {
     pub struct TargetVersionSet {
         pub old_target_version: Option<super::governance::Version>,
         pub new_target_version: Option<super::governance::Version>,
+        pub is_advanced_automatically: Option<bool>,
     }
     #[derive(
         candid::CandidType, candid::Deserialize, Debug, serde::Serialize, Clone, PartialEq,

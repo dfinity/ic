@@ -3197,6 +3197,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3207,6 +3208,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }

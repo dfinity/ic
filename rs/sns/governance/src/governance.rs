@@ -3087,11 +3087,14 @@ impl Governance {
         let (_, target_version) = self
             .proto
             .validate_new_target_version(Some(new_target))
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+            .map_err(|err: String| {
+                GovernanceError::new_with_message(ErrorType::InvalidProposal, err)
+            })?;
 
         self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-            self.proto.target_version.clone(),
-            Some(target_version.clone()),
+            self.proto.target_version.clone().unwrap_or_default(),
+            target_version.clone(),
+            false,
         ));
 
         self.proto.target_version = Some(target_version);

@@ -502,11 +502,13 @@ impl Governance {
             let new_target = upgrade_steps.last().clone();
 
             {
-                let new_target = Some(new_target.clone());
-                if self.proto.target_version != new_target {
+                let old_version = self.proto.target_version.clone().unwrap_or_default();
+                let new_target = new_target.clone();
+                if old_version != new_target {
                     self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-                        self.proto.target_version.clone(),
+                        old_version,
                         new_target,
+                        true,
                     ));
                 }
             }

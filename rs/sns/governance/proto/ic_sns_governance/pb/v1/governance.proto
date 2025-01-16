@@ -2234,6 +2234,7 @@ message UpgradeJournalEntry {
   message TargetVersionSet {
     optional Governance.Version old_target_version = 1;
     optional Governance.Version new_target_version = 2;
+    optional bool is_advanced_automatically = 3;
   }
 
   message TargetVersionReset {

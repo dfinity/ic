@@ -3526,6 +3526,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(bool, optional, tag = "3")]
+        pub is_advanced_automatically: ::core::option::Option<bool>,
     }
     #[derive(
         candid::CandidType,
