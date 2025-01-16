@@ -1,0 +1,24 @@
+[package]
+documentation = "https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-management-canister"
+name = "ic-management-types"
+version = "0.0.1"
+license = "Apache-2.0"
+description = "Types for the IC management canister"
+repository = "https://github.com/dfinity/ic"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = [
+    "icp",
+    "management",
+    "canister",
+    "smart-contract",
+    "internet-computer",
+]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE"]
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

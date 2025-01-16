@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-management-types",
+    srcs = glob(["src/*.rs"]),
+    version = "0.0.1",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
