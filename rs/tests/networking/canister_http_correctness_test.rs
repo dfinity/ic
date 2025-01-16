@@ -1394,9 +1394,6 @@ fn test_maximum_possible_value_of_max_response_bytes_exceeded(env: TestEnv) {
 }
 
 fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
-    const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
-    const COUNTER_CANISTER_READ_METHOD: &str = "read";
-
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let url = format!(
