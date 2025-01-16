@@ -44,7 +44,7 @@ impl Default for Config {
             call_bytes_range: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
             reply_bytes_range: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
             instructions_count_range: (0, 0),
-            timeout_secs_range: (10, 100),
+            timeout_secs_range: (1, 100),
             calls_per_heartbeat: 3,
             reply_weight: 1,
             downstream_call_weight: 0,
