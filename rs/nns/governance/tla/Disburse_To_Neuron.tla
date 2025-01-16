@@ -27,8 +27,6 @@ Max(x, y) == IF x < y THEN y ELSE x
 request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
 transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
 
-o_deduct(disb_amount) == disb_amount + TRANSACTION_FEE
-
 (* --algorithm Governance_Ledger_Disburse_To_Neuron {
 
 variables
@@ -108,7 +106,7 @@ process (Disburse_To_Neuron \in Disburse_To_Neuron_Process_Ids)
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "d03e80ed" /\ chksum(tla) = "16e17ff0")
+\* BEGIN TRANSLATION (chksum(pcal) = "d03e80ed" /\ chksum(tla) = "60c4854a")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, spawning_neurons, parent_neuron_id, 
           disburse_amount, child_account_id, child_neuron_id
@@ -148,7 +146,7 @@ DisburseToNeuron(self) == /\ pc[self] = "DisburseToNeuron"
                                            /\ neuron_id_by_account' = (child_account_id'[self] :> child_neuron_id'[self] @@ neuron_id_by_account)
                                            /\ neuron' = (child_neuron_id'[self] :> [ cached_stake |-> 0, account |-> child_account_id'[self], fees |-> 0, maturity |-> 0 ] @@ neuron)
                                            /\ Assert(child_neuron_id'[self] \notin locks, 
-                                                     "Failure of assertion at line 83, column 17.")
+                                                     "Failure of assertion at line 81, column 17.")
                                            /\ locks' = (locks \union {parent_neuron_id'[self], child_neuron_id'[self]})
                                            /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(parent_neuron.account, child_account_id'[self], disburse_amount'[self] - TRANSACTION_FEE, TRANSACTION_FEE))))
                                 /\ pc' = [pc EXCEPT ![self] = "DisburseToNeuron_WaitForTransfer"]
