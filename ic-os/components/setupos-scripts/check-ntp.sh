@@ -8,11 +8,6 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 source /opt/ic/bin/functions.sh
 
-function set_hwclock_utc() {
-    echo "* Setting hardware clock to UTC..."
-    timedatectl set-local-rtc 0
-}
-
 function check_ntp() {
     echo "* Checking Chrony status..."
 
@@ -36,10 +31,15 @@ function check_ntp() {
     echo "* Chrony is running and time is in sync."
 }
 
+function set_hwclock_utc() {
+    echo "* Setting hardware clock to UTC..."
+    timedatectl set-local-rtc 0
+}
+
 main() {
     log_start "$(basename $0)"
-    set_hwclock_utc
     check_ntp
+    set_hwclock_utc
     log_end "$(basename $0)"
 }
 
