@@ -15,7 +15,6 @@ use ic_nervous_system_integration_tests::{
         add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
         sns::{self, swap::SwapFinalizationStatus},
     },
-    SectionTimer,
 };
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -395,15 +394,12 @@ async fn test_sns_lifecycle(
 
     // 2. Create an SNS instance
     let sns_instance_label = "1";
-    let (sns, nns_proposal_id) = {
-        let _timer = SectionTimer::new("Proposing to deploy SNS");
-        nns::governance::propose_to_deploy_sns_and_wait(
-            &pocket_ic,
-            create_service_nervous_system,
-            sns_instance_label,
-        )
-        .await
-    };
+    let (sns, nns_proposal_id) = nns::governance::propose_to_deploy_sns_and_wait(
+        &pocket_ic,
+        create_service_nervous_system,
+        sns_instance_label,
+    )
+    .await;
 
     // Check that total SNS Ledger supply adds up.
     let original_total_supply_sns_e8s =
@@ -471,10 +467,9 @@ async fn test_sns_lifecycle(
 
     // Currently, we are not allowed to make `ManageNervousSystemParameter` proposals.
     {
-        let _timer = SectionTimer::new("Proposing a ManageNervousSystemParameters proposal while in PreInitializationSwap mode");
         let err = sns::governance::propose_and_wait(
             &pocket_ic,
-            sns.governance,
+            sns.governance.canister_id,
             sns_neuron_principal_id,
             sns_neuron_id.clone(),
             sns_pb::Proposal {
@@ -1163,7 +1158,7 @@ async fn test_sns_lifecycle(
     {
         let proposal_result = sns::governance::propose_and_wait(
             &pocket_ic,
-            sns.governance,
+            sns.governance.canister_id,
             sns_neuron_principal_id,
             sns_neuron_id.clone(),
             sns_pb::Proposal {
