@@ -1,54 +1,57 @@
 #![allow(clippy::test_attr_in_doctest)]
-//! # PocketIC: A Canister Testing Platform
-//!
-//! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
-//!
-//! It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
-//!
-//! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
-//!
-//! ```rust
-//! use candid::{Principal, encode_one};
-//! use pocket_ic::PocketIc;
-//!
-//! // 2T cycles
-//! const INIT_CYCLES: u128 = 2_000_000_000_000;
-//!
-//! #[test]
-//! fn test_counter_canister() {
-//!     let pic = PocketIc::new();
-//!
-//!     // Create a canister and charge it with 2T cycles.
-//!     let canister_id = pic.create_canister();
-//!     pic.add_cycles(canister_id, INIT_CYCLES);
-//!
-//!     // Install the counter canister wasm file on the canister.
-//!     let counter_wasm = counter_wasm();
-//!     pic.install_canister(canister_id, counter_wasm, vec![], None);
-//!
-//!     // Make some calls to the canister.
-//!     let reply = call_counter_can(&pic, canister_id, "read");
-//!     assert_eq!(reply, vec![0, 0, 0, 0]);
-//!     let reply = call_counter_can(&pic, canister_id, "write");
-//!     assert_eq!(reply, vec![1, 0, 0, 0]);
-//!     let reply = call_counter_can(&pic, canister_id, "write");
-//!     assert_eq!(reply, vec![2, 0, 0, 0]);
-//!     let reply = call_counter_can(&pic, canister_id, "read");
-//!     assert_eq!(reply, vec![2, 0, 0, 0]);
-//! }
-//!
-//! fn call_counter_can(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
-//!     pic.update_call(
-//!         canister_id,
-//!         Principal::anonymous(),
-//!         method,
-//!         encode_one(()).unwrap(),
-//!     )
-//!     .expect("Failed to call counter canister")
-//! }
-//! ```
-//! For more information, see the [README](https://crates.io/crates/pocket-ic).
-//!
+/// # PocketIC: A Canister Testing Platform
+///
+/// PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
+///
+/// It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+///
+/// With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
+///
+/// ```rust
+/// use candid::{Principal, encode_one};
+/// use pocket_ic::PocketIc;
+///
+/// // 2T cycles
+/// const INIT_CYCLES: u128 = 2_000_000_000_000;
+///
+/// // Create a counter canister and charge it with 2T cycles.
+/// fn deploy_counter_canister(pic: &PocketIc) -> Principal {
+///     let canister_id = pic.create_canister();
+///     pic.add_cycles(canister_id, INIT_CYCLES);
+///     let counter_wasm = todo!();
+///     pic.install_canister(canister_id, counter_wasm, vec![], None);
+///     canister_id
+/// }
+///
+/// // Call a method on the counter canister as the anonymous principal.
+/// fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+///     pic.update_call(
+///         canister_id,
+///         Principal::anonymous(),
+///         method,
+///         encode_one(()).unwrap(),
+///     )
+///     .expect("Failed to call counter canister")
+/// }
+///
+/// #[test]
+/// fn test_counter_canister() {
+///     let pic = PocketIc::new();
+///     let canister_id = deploy_counter_canister(&pic);
+///
+///     // Make some calls to the counter canister.
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![0, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![1, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+/// }
+/// ```
+/// For more information, see the [README](https://crates.io/crates/pocket-ic).
+///
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,

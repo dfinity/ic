@@ -43,12 +43,23 @@ fn deploy_counter_canister(pic: &PocketIc) -> Principal {
     canister_id
 }
 
+// Call a method on the counter canister as the anonymous principal.
+fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+    pic.update_call(
+        canister_id,
+        Principal::anonymous(),
+        method,
+        encode_one(()).unwrap(),
+    )
+    .expect("Failed to call counter canister")
+}
+
 #[test]
 fn test_counter_canister() {
     let pic = PocketIc::new();
     let canister_id = deploy_counter_canister(&pic);
 
-    // Make some calls to the canister.
+    // Make some calls to the counter canister.
     let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, vec![0, 0, 0, 0]);
     let reply = call_counter_canister(&pic, canister_id, "write");
@@ -63,12 +74,9 @@ fn counter_wasm() -> Vec<u8> {
     const COUNTER_WAT: &str = r#"
     (module
         (import "ic0" "msg_reply" (func $msg_reply))
-        (import "ic0" "msg_reply_data_append"
-            (func $msg_reply_data_append (param i32 i32)))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
         (func $write
-            (i32.store
-                (i32.const 0)
-                (i32.add (i32.load (i32.const 0)) (i32.const 1)))
+            (i32.store (i32.const 0) (i32.add (i32.load (i32.const 0)) (i32.const 1)))
             (call $read))
         (func $read
             (call $msg_reply_data_append
@@ -80,16 +88,6 @@ fn counter_wasm() -> Vec<u8> {
         (export "canister_update write" (func $write))
     )"#;
     wat::parse_str(COUNTER_WAT).unwrap()
-}
-
-fn call_counter_canister(ic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
-    ic.update_call(
-        canister_id,
-        Principal::anonymous(),
-        method,
-        encode_one(()).unwrap(),
-    )
-    .expect("Failed to call counter canister")
 }
 
 #[test]
