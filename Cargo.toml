@@ -9,6 +9,7 @@ members = [
     "packages/ic-ethereum-types",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
+    "packages/ic-management-types",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",

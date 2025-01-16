@@ -9544,6 +9544,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-management-types"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-memory-transport"
 version = "0.9.0"
 dependencies = [
