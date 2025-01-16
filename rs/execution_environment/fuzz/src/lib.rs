@@ -84,7 +84,7 @@ where
             sandbox();
         }
         Ok(ForkResult::Parent { child }) => {
-            std::thread::sleep(std::time::Duration::from_secs(5));
+            std::thread::sleep(std::time::Duration::from_secs(1));
             let allowed_syscalls: BTreeSet<Sysno> = BTreeSet::from([
                 Sysno::mmap,
                 Sysno::mprotect,
@@ -107,7 +107,7 @@ where
                 // NOTE: If the code design changes in the future, this heuristic will need to be revisited
                 // and updated accordingly.
                 let mut children = get_children(child.into());
-                for _ in 0..2 {
+                for _ in 0..1 {
                     children.pop_last();
                 }
                 let child = children.last().unwrap();
@@ -123,7 +123,7 @@ where
 #[cfg(not(target_os = "linux"))]
 fn syscall_monitor<F>(_name: &str, sandbox: F)
 where
-    F: FnOnce(),
+    F: Fn(),
 {
     sandbox();
 }
@@ -140,14 +140,7 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
     while let Ok(result) = waitpid(child, None) {
         match result {
             WaitStatus::Stopped(..) => {
-                if let Err(err) = ptrace::setoptions(
-                    child,
-                    Options::PTRACE_O_TRACESYSGOOD
-                        | Options::PTRACE_O_TRACEFORK
-                        | Options::PTRACE_O_TRACECLONE
-                        | Options::PTRACE_O_TRACEEXIT
-                        | Options::PTRACE_O_TRACEVFORK,
-                ) {
+                if let Err(err) = ptrace::setoptions(child, Options::all()) {
                     panic!(
                         "ptrace: failed to setoptions process {}::{}: {}",
                         name, child, err
@@ -188,7 +181,7 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
             WaitStatus::PtraceEvent(..) => {
                 if let Err(err) = ptrace::detach(child, None) {
                     panic!(
-                        "ptrace: failed to attach process {}::{}: {}",
+                        "ptrace: failed to detach process {}::{}: {}",
                         name, child, err
                     );
                 }
