@@ -28,6 +28,11 @@ extern "C" {
 
 }
 
+#[derive(Debug, Default)]
+pub struct SandboxFeatures {
+    pub syscall_tracing: bool,
+}
+
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
 // However, to enable canister sandboxing, we override the initialisation by providing our own `main()`
 // which acts as a dispatcher for different sandboxed under certain arguments.
@@ -40,18 +45,19 @@ extern "C" {
 // `rust_fuzzer_test_input`, which is generated via the macro `fuzz_target!`.
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
-pub fn fuzzer_main() {
+pub fn fuzzer_main(features: SandboxFeatures) {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        syscall_monitor("canister_sandbox_main", canister_sandbox_main);
-        // canister_sandbox_main();
+        if features.syscall_tracing {
+            syscall_monitor("canister_sandbox_main", canister_sandbox_main);
+            return;
+        }
+        canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         #[cfg(not(fuzzing))]
-        // syscall_monitor("sandbox_launcher_main", sandbox_launcher_main);
         sandbox_launcher_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        // syscall_monitor("compiler_sandbox_main", compiler_sandbox_main);
         compiler_sandbox_main();
     } else {
         // Collect command-line arguments
@@ -93,6 +99,7 @@ where
                 Sysno::sendmsg,
                 Sysno::sigaltstack,
                 Sysno::futex,
+                Sysno::close,
             ]);
             loop {
                 // This code employs a manual heuristic to determine which process PID to attach to,
