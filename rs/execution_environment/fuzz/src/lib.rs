@@ -7,6 +7,12 @@ use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
+use nix::sys::ptrace::Options;
+use nix::sys::wait::WaitStatus;
+use nix::unistd::Pid;
+use procfs::process::Process;
+use std::collections::BTreeSet;
+
 #[cfg(target_os = "linux")]
 use nix::{sys::ptrace, sys::wait::waitpid, unistd::fork, unistd::ForkResult};
 
@@ -36,12 +42,15 @@ pub fn fuzzer_main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
         syscall_monitor("canister_sandbox_main", canister_sandbox_main);
+        // canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         #[cfg(not(fuzzing))]
+        // syscall_monitor("sandbox_launcher_main", sandbox_launcher_main);
         sandbox_launcher_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
-        syscall_monitor("compiler_sandbox_main", compiler_sandbox_main);
+        // syscall_monitor("compiler_sandbox_main", compiler_sandbox_main);
+        compiler_sandbox_main();
     } else {
         // Collect command-line arguments
         let args: Vec<CString> = std::env::args()
@@ -66,29 +75,32 @@ pub fn fuzzer_main() {
 #[cfg(target_os = "linux")]
 fn syscall_monitor<F>(name: &str, sandbox: F)
 where
-    F: FnOnce(),
+    F: Fn(),
 {
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            ptrace::traceme().unwrap_or_else(|_| panic!("{}: Failed at ptrace::traceme", name));
             sandbox();
         }
         Ok(ForkResult::Parent { child }) => {
+            std::thread::sleep(std::time::Duration::from_secs(5));
             loop {
-                waitpid(child, None).unwrap_or_else(|_| panic!("{}: Failed at waitpid", name));
-
-                match ptrace::getregs(child) {
-                    Ok(x) => {
-                        // TODO: Add a lookup against allowed syscalls and panic if not present.
-                        println!("Syscall name: {:?}", x.orig_rax)
-                    }
-                    Err(_) => break,
-                };
-
-                match ptrace::syscall(child, None) {
-                    Ok(_) => continue,
-                    Err(_) => break,
+                // This code employs a manual heuristic to determine which process PID to attach to,
+                // specifically targeting the one executing the Wasm code.
+                //
+                // The child process spawns a total of 14 threads. Since PIDs are monotonically increasing
+                // and the tid are stored in a BTreeSet, they are ordered based on their creation sequence.
+                //
+                // By tracing all PIDs and analyzing the associated syscalls, we observe that the critical
+                // threads to attach to are typically among the last few, specifically [n-2] and [n-1].
+                //
+                // NOTE: If the code design changes in the future, this heuristic will need to be revisited
+                // and updated accordingly.
+                let mut children = get_children(child.into());
+                for _ in 0..2 {
+                    children.pop_last();
                 }
+                let child = children.last().unwrap();
+                trace(name, Pid::from_raw((*child).into()));
             }
         }
         Err(err) => {
@@ -103,4 +115,88 @@ where
     F: FnOnce(),
 {
     sandbox();
+}
+
+fn trace(name: &str, child: Pid) {
+    if let Err(err) = ptrace::attach(child) {
+        println!(
+            "ptrace: failed to attach process {}::{}: {}",
+            name, child, err
+        );
+        return;
+    }
+
+    while let Ok(result) = waitpid(child, None) {
+        match result {
+            WaitStatus::Stopped(..) => {
+                if let Err(err) = ptrace::setoptions(
+                    child,
+                    Options::PTRACE_O_TRACESYSGOOD
+                        | Options::PTRACE_O_TRACEFORK
+                        | Options::PTRACE_O_TRACECLONE
+                        | Options::PTRACE_O_TRACEEXIT
+                        | Options::PTRACE_O_TRACEVFORK,
+                ) {
+                    panic!(
+                        "ptrace: failed to setoptions process {}::{}: {}",
+                        name, child, err
+                    );
+                }
+
+                if let Ok(regs) = ptrace::getregs(child) {
+                    // TODO: Add a lookup against allowed syscalls and panic if not present.
+                    println!("Syscall name: {:?} {}::{}", regs.orig_rax, name, child,);
+                }
+
+                if let Ok(_) = ptrace::syscall(child, None) {
+                    continue;
+                }
+            }
+            WaitStatus::PtraceSyscall(_) => {
+                if let Ok(regs) = ptrace::getregs(child) {
+                    // TODO: Add a lookup against allowed syscalls and panic if not present.
+                    println!("Syscall name: {:?} {}::{}", regs.orig_rax, name, child,);
+                }
+
+                if let Ok(_) = ptrace::syscall(child, None) {
+                    continue;
+                }
+            }
+            WaitStatus::Exited(..) => {
+                println!(
+                    "ptrace: process exited {}::{} child pids: {:?}",
+                    name,
+                    child,
+                    get_children(child.into())
+                );
+            }
+            WaitStatus::PtraceEvent(..) => {
+                if let Err(err) = ptrace::detach(child, None) {
+                    panic!(
+                        "ptrace: failed to attach process {}::{}: {}",
+                        name, child, err
+                    );
+                }
+                return;
+            }
+            _ => (),
+        }
+    }
+}
+
+fn get_children(parent_pid: i32) -> BTreeSet<i32> {
+    let mut pids = BTreeSet::new();
+
+    if let Ok(process) = Process::new(parent_pid) {
+        if let Ok(tasks) = process.tasks() {
+            for task in tasks {
+                if let Ok(task) = task {
+                    let child_pid = task.tid;
+                    pids.insert(child_pid);
+                }
+            }
+        }
+    }
+    pids.remove(&parent_pid);
+    pids
 }
