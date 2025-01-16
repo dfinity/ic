@@ -33,7 +33,9 @@ use std::fmt::Debug;
 ///     }
 /// }
 ///
-/// fn main() {
+///
+/// #[test]
+/// fn test_metrics () {
 ///     use pocket_ic::PocketIcBuilder;
 ///     use candid::Principal;
 ///
