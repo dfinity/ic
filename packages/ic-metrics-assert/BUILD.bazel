@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "ic-metrics-assert" + name_suffix,
-        srcs = ["src/lib.rs"],
+        srcs = glob(["src/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_metrics_assert",
         deps = [
