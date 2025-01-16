@@ -129,6 +129,8 @@ members = [
     "rs/http_utils",
     "rs/ic_os/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
+    "rs/ic_os/build_tools/fastcopy",
+    "rs/ic_os/build_tools/fast_digest",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
     "rs/ic_os/config_types",

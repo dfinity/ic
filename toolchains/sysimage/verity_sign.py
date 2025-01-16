@@ -6,6 +6,7 @@
 import argparse
 import os
 import re
+import time
 import subprocess
 import shutil
 import sys
@@ -43,7 +44,8 @@ def main():
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    shutil.copyfile(args.input, args.output)
+    # Copy input to output before processing it
+    subprocess.run(["cp", "--no-preserve=mode,ownership", args.input, args.output], check=True)
 
     verity_cmdline = [
         "/usr/sbin/veritysetup",

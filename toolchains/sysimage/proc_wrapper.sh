@@ -16,13 +16,19 @@ start_time=$(date +%s.%N)
 # files.
 for arg in $@; do
     if [[ -w "$arg" ]] && ! getfattr -n user.sha256sum "$arg" > /dev/null 2>&1; then
-#        sha256sum=$(tar -c --mtime='UTC 1970-01-01' --sparse "$arg" | md5sum)
-#        setfattr -n user.sha256sum -v "$sha256sum" "$arg"
-        sum=$(/home/ubuntu/.cargo/bin/b3sum --no-names $arg)
-        setfattr -n user.sha256sum -v "$sum" "$arg"
+        digest="235"
+#        sparsity=$(find "$arg" -printf '%S') # sparsity of file 0..1, 1 = not sparse, 0 = sparse
+#        if (( $(echo "$sparsity < 0.3" | bc) )); then
+#            directory=$(dirname "$arg")
+#            filename=$(basename "$arg")
+#            digest=$(tar -c --mtime="UTC 1970-01-01" --sparse -C "$directory" "$filename" | /home/ubuntu/.cargo/bin/b3sum)
+#        else
+#            digest=$(/home/ubuntu/.cargo/bin/b3sum --no-names $arg)
+#        fi
+        setfattr -n user.sha256sum -v "$digest" "$arg"
     fi
 done
 
 end_time=$(date +%s.%N)
 elapsed_time=$(echo "$end_time - $start_time" | bc)
-echo "Elapsed time: $elapsed_time seconds"
+echo "x Elapsed time: $elapsed_time seconds"

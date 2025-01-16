@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 sha2 = { workspace = true }
 blake3 = "1.5.5"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }

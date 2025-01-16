@@ -141,6 +141,33 @@ def select_partition_file(name, partition_files):
 
     return None
 
+def copy_file_with_holes(source_filename, target_filename, target_offset):
+    source_file_size = os.path.getsize(source_filename)
+    with open(source_filename, 'rb') as source_file:
+        with open(target_filename, 'r+b') as target_file:
+            while source_file.tell() < source_file_size:
+                # Seek to the next data block in the source file
+                try:
+                    source_offset = source_file.seek(source_file.tell(), os.SEEK_DATA)
+                    hole_offset = source_file.seek(source_file.tell(), os.SEEK_HOLE)
+                    length = hole_offset - source_offset
+                except OSError as err:
+                    if err.errno == 6:
+                        break
+                    else:
+                        raise err
+
+                # # Seek to the corresponding position in the target file
+                # target_file.seek(source_file.tell() + target_offset, os.SEEK_SET)
+
+                # Copy data using copy_file_range
+                bytes_copied = os.copy_file_range(source_file.fileno(),
+                                                  target_file.fileno(),
+                                                  length,
+                                                  offset_src=source_offset,
+                                                  offset_dst=target_offset+source_offset)
+
+                source_file.seek(source_offset + bytes_copied)
 
 def write_partition_image(lvm_entry, partition_image, lvm_image):
     base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
@@ -149,10 +176,11 @@ def write_partition_image(lvm_entry, partition_image, lvm_image):
     if os.path.getsize(partition_image) > lvm_entry["size"] * EXTENT_SIZE_BYTES:
         raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
 
-    subprocess.run(
-        ["dd", f"if={partition_image}", f"seek={base}", f"of={lvm_image}",
-         "conv=sparse,notrunc", "oflag=seek_bytes", "bs=4M"],
-        check=True)
+    # subprocess.run(
+    #     ["dd", f"if={partition_image}", f"seek={base}", f"of={lvm_image}",
+    #      "conv=sparse,notrunc", "oflag=seek_bytes", "bs=4M"],
+    #     check=True)
+    copy_file_with_holes(partition_image, lvm_image, base)
 
 
 def _build_pv_header(pv_uuid, image_size):

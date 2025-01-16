@@ -5,7 +5,8 @@ use std::os::fd::AsRawFd;
 
 fn main() {
     // let mut digest = Sha256::new();
-    let mut hasher = blake3::Hasher::new();
+    // let mut hasher = blake3::Hasher::new();
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
     let empty = [0u8; 1024 * 1024];
     for _ in 0..160000 {
         hasher.update(&empty);
