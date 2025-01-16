@@ -355,7 +355,7 @@ fn start_consensus(
         metrics_registry,
         node_id,
         artifact_pool_config,
-        &catch_up_package,
+        catch_up_package,
     );
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
