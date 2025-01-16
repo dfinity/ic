@@ -10,8 +10,10 @@ documentation.workspace = true
 ic-interfaces = { path = "../../interfaces" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
+futures = { workspace = true }
 prometheus = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
