@@ -248,10 +248,10 @@ impl IDkgPayload {
     }
 
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
-    pub fn iter_pre_signature_ids<'a>(
-        &'a self,
+    pub fn iter_pre_signature_ids(
+        &self,
         key_id: &'a IDkgMasterPublicKeyId,
-    ) -> impl Iterator<Item = PreSigId> + '_ {
+    ) -> impl Iterator<Item = PreSigId> {
         let available_pre_signature_ids = self
             .available_pre_signatures
             .iter()

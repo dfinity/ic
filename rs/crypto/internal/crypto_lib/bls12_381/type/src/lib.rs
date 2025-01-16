@@ -852,7 +852,7 @@ macro_rules! define_affine_and_projective_types {
                 const WINDOW_MASK: u8 = (1 << Self::WINDOW_BITS) - 1;
 
                 // The total number of windows in a scalar
-                const WINDOWS : usize = (Self::SUBGROUP_BITS + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+                const WINDOWS : usize = Self::SUBGROUP_BITS.div_ceil(define_affine_and_projective_types!(G1Affine, G1Projective, 48));
 
                 // We must select from 2^WINDOW_BITS elements in each table
                 // group. However one element of the table group is always the
