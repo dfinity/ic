@@ -12497,6 +12497,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-types",

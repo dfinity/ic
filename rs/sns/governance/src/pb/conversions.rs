@@ -291,9 +291,33 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb_api::ChunkedCanisterWasm::from),
         }
     }
 }
+
+impl From<pb_api::ChunkedCanisterWasm> for pb::ChunkedCanisterWasm {
+    fn from(item: pb_api::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
+impl From<pb::ChunkedCanisterWasm> for pb_api::ChunkedCanisterWasm {
+    fn from(item: pb::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
 impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCanister {
     fn from(item: pb_api::UpgradeSnsControlledCanister) -> Self {
         Self {
@@ -301,6 +325,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb::ChunkedCanisterWasm::from),
         }
     }
 }
