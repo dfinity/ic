@@ -6035,6 +6035,7 @@ dependencies = [
  "hex",
  "primitive-types",
  "proptest 0.9.6",
+ "rstest",
 ]
 
 [[package]]

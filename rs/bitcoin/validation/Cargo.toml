@@ -16,3 +16,4 @@ primitive-types = "0.12"
 [dev-dependencies]
 csv = "1.1"
 proptest = "0.9.4"
+rstest = { workspace = true }
