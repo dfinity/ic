@@ -1,24 +1,22 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
-use crate::memo::Status;
 use crate::queries::WithdrawalFee;
-use crate::state::ReimbursementReason;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
+use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{
     GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
 };
-use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
-use num_traits::ToPrimitive;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
+use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
@@ -52,10 +50,13 @@ pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
 /// The constants used to compute the minter's fee to cover its own cycle consumption.
-/// The values are set to cover the cycle cost on a 28-node subnet.
-pub const MINTER_FEE_PER_INPUT: u64 = 246;
-pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
-pub const MINTER_FEE_CONSTANT: u64 = 52;
+pub const MINTER_FEE_PER_INPUT: u64 = 146;
+pub const MINTER_FEE_PER_OUTPUT: u64 = 4;
+pub const MINTER_FEE_CONSTANT: u64 = 26;
+/// Dust limit for the minter's address.
+/// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
+/// For additional safety, we round that value up.
+pub const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
@@ -101,7 +102,9 @@ pub struct Log {
 pub struct MinterInfo {
     pub min_confirmations: u32,
     pub retrieve_btc_min_amount: u64,
-    pub kyt_fee: u64,
+    // Serialize to the old name to be backward compatible in Candid.
+    #[serde(rename = "kyt_fee")]
+    pub check_fee: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -181,24 +184,24 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 fn compute_min_withdrawal_amount(
     median_fee_rate_e3s: MillisatoshiPerByte,
     min_withdrawal_amount: u64,
+    check_fee: u64,
 ) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-    const PER_REQUEST_KYT_FEE: u64 = 2_000;
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
         + PER_REQUEST_VSIZE_BOUND * median_fee_rate
         + PER_REQUEST_MINTER_FEE_BOUND
-        + PER_REQUEST_KYT_FEE)
+        + check_fee)
         / 50_000)
         * 50_000
         + min_withdrawal_amount
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
-/// None if the bitcoin canister is unavailable or does not have enough data for
+/// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     /// The default fee we use on regtest networks if there are not enough data
@@ -214,8 +217,11 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
                     s.last_fee_per_vbyte.clone_from(&fees);
-                    s.fee_based_retrieve_btc_min_amount =
-                        compute_min_withdrawal_amount(fees[50], s.retrieve_btc_min_amount);
+                    s.fee_based_retrieve_btc_min_amount = compute_min_withdrawal_amount(
+                        fees[50],
+                        s.retrieve_btc_min_amount,
+                        s.check_fee,
+                    );
                 });
                 Some(fees[50])
             } else {
@@ -238,7 +244,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
-/// Constructs and sends out signed bitcoin transactions for pending retrieve
+/// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
 async fn submit_pending_requests() {
     // We make requests if we have old requests in the queue or if have enough
@@ -304,7 +310,7 @@ async fn submit_pending_requests() {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    state::audit::remove_retrieve_btc_request(s, request);
+                    state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                 }
                 None
             }
@@ -318,7 +324,7 @@ async fn submit_pending_requests() {
                 for request in batch {
                     if request.address == address && request.amount == amount {
                         // Finalize the request that we cannot fulfill.
-                        state::audit::remove_retrieve_btc_request(s, request);
+                        state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                     } else {
                         // Keep the rest of the requests in the batch, we will
                         // try to build a new transaction on the next iteration.
@@ -404,13 +410,14 @@ async fn submit_pending_requests() {
                                     submitted_at: ic_cdk::api::time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                 },
+                                &IC_CANISTER_RUNTIME,
                             );
                         });
                     }
                     Err(err) => {
                         log!(
                             P0,
-                            "[submit_pending_requests]: failed to send a bitcoin transaction: {}",
+                            "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
                             err
                         );
                     }
@@ -419,7 +426,7 @@ async fn submit_pending_requests() {
             Err(err) => {
                 log!(
                     P0,
-                    "[submit_pending_requests]: failed to sign a BTC transaction: {}",
+                    "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
                     err
                 );
             }
@@ -452,35 +459,6 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
             })
         })
         .collect()
-}
-
-async fn reimburse_failed_kyt() {
-    let try_to_reimburse = state::read_state(|s| s.pending_reimbursements.clone());
-    for (burn_block_index, entry) in try_to_reimburse {
-        let (memo_status, kyt_fee) = match entry.reason {
-            ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
-            ReimbursementReason::CallFailed => (Status::CallFailed, 0),
-        };
-        let reimburse_memo = crate::memo::MintMemo::KytFail {
-            kyt_fee: Some(kyt_fee),
-            status: Some(memo_status),
-            associated_burn_index: Some(burn_block_index),
-        };
-        if let Ok(block_index) = crate::updates::update_balance::mint(
-            entry
-                .amount
-                .checked_sub(kyt_fee)
-                .expect("reimburse underflow"),
-            entry.account,
-            crate::memo::encode(&reimburse_memo).into(),
-        )
-        .await
-        {
-            state::mutate_state(|s| {
-                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
-            });
-        }
-    }
 }
 
 async fn finalize_requests() {
@@ -527,10 +505,10 @@ async fn finalize_requests() {
 
     state::mutate_state(|s| {
         if !new_utxos.is_empty() {
-            state::audit::add_utxos(s, None, main_account, new_utxos);
+            state::audit::add_utxos(s, None, main_account, new_utxos, &IC_CANISTER_RUNTIME);
         }
         for txid in &confirmed_transactions {
-            state::audit::confirm_transaction(s, txid);
+            state::audit::confirm_transaction(s, txid, &IC_CANISTER_RUNTIME);
             maybe_finalized_transactions.remove(txid);
         }
     });
@@ -550,7 +528,7 @@ async fn finalize_requests() {
                 "[finalize_requests]: finalized transaction {} assumed to be stuck",
                 &txid
             );
-            state::audit::confirm_transaction(s, &txid);
+            state::audit::confirm_transaction(s, &txid, &IC_CANISTER_RUNTIME);
         }
     });
 
@@ -724,7 +702,7 @@ async fn finalize_requests() {
                 };
 
                 state::mutate_state(|s| {
-                    state::audit::replace_transaction(s, old_txid, new_tx);
+                    state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
                 });
             }
             Err(err) => {
@@ -849,7 +827,7 @@ pub async fn sign_transaction(
     ecdsa_public_key: &ECDSAPublicKey,
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
-) -> Result<tx::SignedTransaction, management::CallError> {
+) -> Result<tx::SignedTransaction, CallError> {
     use crate::address::{derivation_path, derive_public_key};
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
@@ -998,9 +976,7 @@ pub fn build_unsigned_transaction(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = MINTER_FEE_PER_INPUT * utxos_guard.len() as u64
-        + MINTER_FEE_PER_OUTPUT * (outputs.len() + 1) as u64
-        + MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(utxos_guard.len() as u64, (outputs.len() + 1) as u64);
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
@@ -1076,6 +1052,15 @@ pub fn build_unsigned_transaction(
     ))
 }
 
+pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
+    max(
+        MINTER_FEE_PER_INPUT * num_inputs
+            + MINTER_FEE_PER_OUTPUT * num_outputs
+            + MINTER_FEE_CONSTANT,
+        MINTER_ADDRESS_DUST_LIMIT,
+    )
+}
+
 /// Distributes an amount across the specified number of shares as fairly as
 /// possible.
 ///
@@ -1095,92 +1080,6 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
     }
 
     shares
-}
-
-pub async fn distribute_kyt_fees() {
-    use icrc_ledger_client_cdk::CdkRuntime;
-    use icrc_ledger_client_cdk::ICRC1Client;
-    use icrc_ledger_types::icrc1::transfer::TransferArg;
-
-    enum MintError {
-        TransferError(TransferError),
-        CallError(i32, String),
-    }
-
-    impl std::fmt::Debug for MintError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                MintError::TransferError(e) => write!(f, "TransferError({:?})", e),
-                MintError::CallError(code, msg) => write!(f, "CallError({}, {:?})", code, msg),
-            }
-        }
-    }
-
-    async fn mint(amount: u64, to: candid::Principal, memo: Memo) -> Result<u64, MintError> {
-        debug_assert!(memo.0.len() <= CKBTC_LEDGER_MEMO_SIZE as usize);
-
-        let client = ICRC1Client {
-            runtime: CdkRuntime,
-            ledger_canister_id: state::read_state(|s| s.ledger_id.get().into()),
-        };
-        client
-            .transfer(TransferArg {
-                from_subaccount: None,
-                to: Account {
-                    owner: to,
-                    subaccount: None,
-                },
-                fee: None,
-                created_at_time: None,
-                memo: Some(memo),
-                amount: candid::Nat::from(amount),
-            })
-            .await
-            .map_err(|(code, msg)| MintError::CallError(code, msg))?
-            .map_err(MintError::TransferError)
-            .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
-    }
-
-    let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());
-    for (provider, amount) in fees_to_distribute {
-        let memo = crate::memo::MintMemo::Kyt;
-        match mint(amount, provider, crate::memo::encode(&memo).into()).await {
-            Ok(block_index) => {
-                state::mutate_state(|s| {
-                    if let Err(state::Overdraft(overdraft)) =
-                        state::audit::distributed_kyt_fee(s, provider, amount, block_index)
-                    {
-                        // This should never happen because:
-                        //  1. The fee distribution task is guarded (at most one copy is active).
-                        //  2. Fee distribution is the only way to decrease the balance.
-                        log!(
-                            P0,
-                            "BUG[distribute_kyt_fees]: distributed {} to {} but the balance is only {}",
-                            tx::DisplayAmount(amount),
-                            provider,
-                            tx::DisplayAmount(amount - overdraft),
-                        );
-                    } else {
-                        log!(
-                            P0,
-                            "[distribute_kyt_fees]: minted {} to {}",
-                            tx::DisplayAmount(amount),
-                            provider,
-                        );
-                    }
-                });
-            }
-            Err(error) => {
-                log!(
-                    P0,
-                    "[distribute_kyt_fees]: failed to mint {} to {} with error: {:?}",
-                    tx::DisplayAmount(amount),
-                    provider,
-                    error
-                );
-            }
-        }
-    }
 }
 
 pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
@@ -1239,9 +1138,7 @@ pub fn estimate_retrieve_btc_fee(
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = MINTER_FEE_PER_INPUT * input_count
-        + MINTER_FEE_PER_OUTPUT * DEFAULT_OUTPUT_COUNT
-        + MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
     let bitcoin_fee =
@@ -1272,13 +1169,12 @@ pub trait CanisterRuntime {
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError>;
@@ -1314,19 +1210,18 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
-        management::call("bitcoin_get_utxos", cycles, &request).await
+        management::bitcoin_get_utxos(request).await
     }
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError> {
-        management::check_transaction(kyt_principal, utxo, cycle_payment).await
+        management::check_transaction(btc_checker_principal, utxo, cycle_payment).await
     }
 
     async fn mint_ckbtc(
@@ -1336,5 +1231,50 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+}
+
+/// Time in nanoseconds since the epoch (1970-01-01).
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub const fn new(ns_since_epoch: u64) -> Self {
+        Self(ns_since_epoch)
+    }
+
+    /// Number of nanoseconds since `UNIX EPOCH`.
+    pub fn as_nanos_since_unix_epoch(self) -> u64 {
+        self.0
+    }
+
+    pub fn checked_sub(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Timestamp(self.0.checked_sub(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn checked_duration_since(self, rhs: Timestamp) -> Option<Duration> {
+        self.0.checked_sub(rhs.0).map(Duration::from_nanos)
+    }
+
+    pub fn checked_add(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Self(self.0.checked_add(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn saturating_add(self, rhs: Duration) -> Self {
+        self.checked_add(rhs).unwrap_or(Timestamp(u64::MAX))
+    }
+}
+
+impl From<u64> for Timestamp {
+    fn from(timestamp: u64) -> Self {
+        Self(timestamp)
     }
 }

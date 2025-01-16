@@ -1,8 +1,6 @@
-use crate::ic_wasm::ICWasmModule;
+use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_config::{
-    embedders::{Config, FeatureFlags},
-    execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
+    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
@@ -59,14 +57,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
-    let embedder_config = Config {
-        feature_flags: FeatureFlags {
-            write_barrier: FlagStatus::Enabled,
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedder_config = ic_embedders_config(module.config.memory64_enabled);
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 

@@ -12,7 +12,7 @@ bincode = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-secp256k1 = { path = "secp256k1" }

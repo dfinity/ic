@@ -12,6 +12,18 @@ load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_DEV
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
 
+    # trim the volatile status file to only the values that farm needs and that rarely
+    # ever change (on CI at least); otherwise, BUILD_TIMESTAMP changes on every new Bazel
+    # server start and effectively invalidates all system tests on every CI run.
+    farm_metadata = ctx.actions.declare_file(ctx.label.name + "/farm_metadata")
+    ctx.actions.run_shell(
+        # NOTE: grep shouldn't return 1 as long as the workspace status command at least
+        # prints USER (which ours does).
+        command = "grep <{version_file} -e CI_JOB_NAME -e USER > {farm_metadata}".format(version_file = ctx.version_file.path, farm_metadata = farm_metadata.path),
+        inputs = [ctx.version_file],
+        outputs = [farm_metadata],
+    )
+
     # whether to use k8s instead of farm
     k8s = ctx.attr._k8s[BuildSettingInfo].value
 
@@ -71,7 +83,7 @@ def _run_system_test(ctx):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
     env |= {
-        "VOLATILE_STATUS_FILE_PATH": ctx.version_file.short_path,
+        "FARM_METADATA_PATH": farm_metadata.short_path,
     }
 
     # The test runner script expects a list of enviromment variable names to files:
@@ -106,9 +118,9 @@ def _run_system_test(ctx):
             runfiles = ctx.runfiles(
                 files = [
                     run_test_script_file,
+                    farm_metadata,
                     ctx.executable.src,
                     ctx.executable._upload_systest_dep,
-                    ctx.version_file,
                 ],
                 transitive_files = depset(
                     direct = [],
@@ -298,7 +310,7 @@ def system_test(
 
     run_system_test(
         name = name + "_colocate",
-        src = "//rs/tests/testing_verification:colocate_test_bin",
+        src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/tests:colocate_uvm_config_image",

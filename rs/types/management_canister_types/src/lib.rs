@@ -937,6 +937,10 @@ impl DefiniteCanisterSettingsArgs {
         self.wasm_memory_limit.clone()
     }
 
+    pub fn wasm_memory_threshold(&self) -> candid::Nat {
+        self.wasm_memory_threshold.clone()
+    }
+
     pub fn compute_allocation(&self) -> candid::Nat {
         self.compute_allocation.clone()
     }
@@ -1469,9 +1473,19 @@ impl From<CanisterInstallModeV2> for CanisterInstallMode {
     /// The function is lossy, hence it should be avoided when possible.
     fn from(item: CanisterInstallModeV2) -> Self {
         match item {
-            CanisterInstallModeV2::Install => CanisterInstallMode::Install,
-            CanisterInstallModeV2::Reinstall => CanisterInstallMode::Reinstall,
-            CanisterInstallModeV2::Upgrade(_) => CanisterInstallMode::Upgrade,
+            CanisterInstallModeV2::Install => Self::Install,
+            CanisterInstallModeV2::Reinstall => Self::Reinstall,
+            CanisterInstallModeV2::Upgrade(_) => Self::Upgrade,
+        }
+    }
+}
+
+impl From<CanisterInstallMode> for CanisterInstallModeV2 {
+    fn from(item: CanisterInstallMode) -> Self {
+        match item {
+            CanisterInstallMode::Install => Self::Install,
+            CanisterInstallMode::Reinstall => Self::Reinstall,
+            CanisterInstallMode::Upgrade => Self::Upgrade(None),
         }
     }
 }
@@ -2711,12 +2725,38 @@ impl ReshareChainKeyResponse {
     }
 }
 
+/// Represents the BIP341 aux argument of the sign_with_schnorr API.
+/// ```text
+/// (record {
+///   merkle_root_hash: blob;
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct SignWithBip341Aux {
+    pub merkle_root_hash: ByteBuf,
+}
+
+/// Represents the aux argument of the sign_with_schnorr API.
+/// ```text
+/// (variant {
+///    bip341: record {
+///      merkle_root_hash: blob;
+///   }
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum SignWithSchnorrAux {
+    #[serde(rename = "bip341")]
+    Bip341(SignWithBip341Aux),
+}
+
 /// Represents the argument of the sign_with_schnorr API.
 /// ```text
 /// (record {
 ///   message : blob;
 ///   derivation_path : vec blob;
 ///   key_id : schnorr_key_id;
+///   aux: opt schnorr_aux;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -2725,6 +2765,7 @@ pub struct SignWithSchnorrArgs {
     pub message: Vec<u8>,
     pub derivation_path: DerivationPath,
     pub key_id: SchnorrKeyId,
+    pub aux: Option<SignWithSchnorrAux>,
 }
 
 impl Payload<'_> for SignWithSchnorrArgs {}

@@ -8,27 +8,29 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 == Requirements ==
 
+A scalable, RPC-like library designed to operate in a peer-to-peer (P2P) network with Byzantine peers.
+
 [cols="3,3,3"]
 |===
 | **Capability**
 | **Purpose**
 | **Implementation Requirement**
 
-| RPC-like library
-| Simplifies application development by abstracting communication between nodes, allowing developers to focus on application logic instead of low-level networking.
-| Ensure https://en.wikipedia.org/wiki/Reliability_(computer_networking)[reliable data delivery] so the sender can confirm successful message delivery to the recipient.
-
-| Multitenancy of applications
-| Enables multiple applications to safely share the library, ensuring isolation and uninterrupted operation across applications.
-| Support https://en.wikipedia.org/wiki/Multiplexing[multiplexing] to independently route messages to their endpoints, unaffected by packet losses or delays impacting other messages.
-
-| Operates in P2P networks with Byzantine peers
-| Supports deployment in real-world environments, including networks with faulty or malicious nodes.
-| Implement https://en.wikipedia.org/wiki/Flow_control_(data)[flow control] to manage the number of connections, inflight messages, and streams per connection, ensuring stability and resilience.
+| Request–response abstraction
+| Simplifies one-to-one communication between nodes, enabling developers to focus on application logic instead of low-level networking.	
+| Ensure https://en.wikipedia.org/wiki/Reliability_(computer_networking)[reliable data delivery] so the sender receives confirmation of successful message delivery.
 
 | Scalable and resource-efficient
-| Optimizes usage of shared resources (e.g., CPU, file descriptors) to maintain performance under high demand and prevent resource exhaustion.
-| Utilize https://en.wikipedia.org/wiki/Connection-oriented_communication[connection-oriented communication] (e.g., a single persistent connection) to minimize overhead from repeated TLS handshakes or excessive connections between peers.
+| Optimizes shared resource usage (e.g., CPU, file descriptors) to sustain high performance under load and prevent resource exhaustion.	
+| Use https://en.wikipedia.org/wiki/Connection-oriented_communication[connection-oriented communication] to maintain a single persistent connection, minimizing overhead from repeated TLS handshakes or excessive connections.
+
+| Multitenancy of endpoints/handlers
+| Supports independent processing of multiple concurrent requests and responses.
+| Implement https://en.wikipedia.org/wiki/Multiplexing[multiplexing] to route messages independently, ensuring that packet loss or delay does not affect unrelated messages.
+
+| P2P fairness and resource protection
+| Ensures fair resource allocation in a P2P network where all peers are equal, preventing resource exhaustion by any single peer.
+| Enforce https://en.wikipedia.org/wiki/Flow_control_(data)[flow control] to limit the number of connections and in-flight messages per peer, ensuring resource usage stays within allocated boundaries.
 
 |===
 

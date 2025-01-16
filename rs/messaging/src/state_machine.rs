@@ -7,6 +7,7 @@ use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
+use ic_interfaces::time_source::system_time_now;
 use ic_logger::{error, fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -21,6 +22,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
+const PHASE_TIME_OUT_CALLBACKS: &str = "time_out_callbacks";
 const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 const PHASE_SHED_MESSAGES: &str = "shed_messages";
 
@@ -58,7 +60,8 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
-            best_effort_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
+            best_effort_message_memory_capacity: hypervisor_config
+                .best_effort_message_memory_capacity,
             log,
             metrics,
         }
@@ -123,8 +126,10 @@ impl StateMachine for StateMachineImpl {
         self.metrics
             .timed_out_messages_total
             .inc_by(timed_out_messages as u64);
+        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
+        let since = Instant::now();
         let (timed_out_callbacks, errors) = state.time_out_callbacks();
         self.metrics
             .timed_out_callbacks_total
@@ -139,12 +144,18 @@ impl StateMachine for StateMachineImpl {
             );
             self.metrics.critical_error_induct_response_failed.inc();
         }
-
-        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
+        self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
         let mut state_with_messages = self.demux.process_payload(state, batch.messages);
+        // Batch creation time is essentially wall time (on some replica), so the median
+        // duration should be meaningful.
+        self.metrics.induct_batch_latency.observe(
+            system_time_now()
+                .saturating_duration_since(batch.time)
+                .as_secs_f64(),
+        );
 
         // Append additional responses to the consensus queue.
         state_with_messages
@@ -168,7 +179,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.idkg_subnet_public_keys,
+            batch.chain_key_subnet_public_keys,
             batch.idkg_pre_signature_ids,
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),

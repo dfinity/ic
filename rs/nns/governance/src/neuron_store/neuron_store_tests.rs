@@ -3,16 +3,19 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
-    temporarily_disable_active_neurons_in_stable_memory,
+    temporarily_disable_allow_active_neurons_in_stable_memory,
+    temporarily_disable_migrate_active_neurons_to_stable_memory,
 };
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
 use pretty_assertions::assert_eq;
 use std::cell::Cell;
 
-static CREATED_TIMESTAMP_SECONDS: u64 = 123_456_789;
+// Value is 6 months ahead of when this code was written. For realism, and to
+// make sure this is "long" after we release periodic confirmation.
+static CREATED_TIMESTAMP_SECONDS: u64 = 1730834058 + 6 * ONE_MONTH_SECONDS;
 
 fn simple_neuron_builder(id: u64) -> NeuronBuilder {
     // Make sure different neurons have different accounts.
@@ -190,7 +193,7 @@ fn test_add_neurons() {
 
     // Step 3.1: verify that the active neuron is in the heap, not in the stable neuron store, and
     // can be read.
-    if is_active_neurons_in_stable_memory_enabled() {
+    if migrate_active_neurons_to_stable_memory() {
         assert!(is_neuron_in_stable(active_neuron.id()));
         assert!(!is_neuron_in_heap(&neuron_store, active_neuron.id()));
     } else {
@@ -359,7 +362,7 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
         neuron_store.batch_validate_neurons_in_stable_store_are_inactive(NeuronId::min_value(), 10);
 
     // Step 3: verifies the results - the active neuron in stable storage should be found as invalid.
-    if is_active_neurons_in_stable_memory_enabled() {
+    if allow_active_neurons_in_stable_memory() {
         assert_eq!(invalid_neuron_ids, vec![]);
     } else {
         assert_eq!(invalid_neuron_ids, vec![neuron.id()]);
@@ -413,7 +416,8 @@ fn assert_neuron_in_neuron_store_eq(neuron_store: &NeuronStore, neuron: &Neuron)
 #[test]
 fn test_from_active_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -442,7 +446,8 @@ fn test_from_active_to_active() {
 #[test]
 fn test_from_active_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron which would be inactive if there
     // is no fund.
@@ -473,7 +478,8 @@ fn test_from_active_to_inactive() {
 #[test]
 fn test_from_inactive_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -504,7 +510,8 @@ fn test_from_inactive_to_active() {
 #[test]
 fn test_from_inactive_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -535,7 +542,8 @@ fn test_from_inactive_to_inactive() {
 #[test]
 fn test_from_stale_inactive_to_inactive() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -563,7 +571,8 @@ fn test_from_stale_inactive_to_inactive() {
 #[test]
 fn test_from_stale_inactive_to_active() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -639,6 +648,214 @@ fn test_get_neuron_ids_readable_by_caller() {
 }
 
 #[test]
+fn test_prune_some_following_standard_voting_power_refresh_requirements() {
+    // Step 1: Prepare the world.
+
+    let followees = hashmap! {
+        Topic::Governance as i32 => Followees {
+            followees: vec![NeuronId { id: 99 }],
+        },
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![NeuronId { id: 101 }],
+        },
+    };
+
+    let mut fresh_neuron = simple_neuron_builder(1)
+        .with_followees(followees.clone())
+        .build();
+    fresh_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS + 1);
+
+    // Similar to fresh_neuron, except voting power was refrshed a "long" time
+    // ago.
+    let mut stale_neuron = simple_neuron_builder(3)
+        .with_followees(followees.clone())
+        .build();
+    stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
+
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        fresh_neuron.id().id => fresh_neuron.clone(),
+        stale_neuron.id().id => stale_neuron.clone(),
+    });
+
+    // Control the perception of time by neuron_store.
+    #[derive(Debug, Clone)]
+    struct DummyClock {}
+    impl Clock for DummyClock {
+        fn now(&self) -> u64 {
+            CREATED_TIMESTAMP_SECONDS
+        }
+
+        fn set_time_warp(&mut self, _: TimeWarp) {
+            unimplemented!();
+        }
+    }
+    impl PracticalClock for DummyClock {}
+    let clock = DummyClock {};
+    neuron_store.clock = Box::new(clock);
+
+    // Step 2: Call code under test.
+
+    // Stop after the second neuron is processed.
+    let mut neuron_count = 0;
+    let carry_on = || {
+        neuron_count += 1;
+        neuron_count < 2
+    };
+
+    assert_eq!(
+        prune_some_following(
+            &VotingPowerEconomics::DEFAULT,
+            &mut neuron_store,
+            Bound::Unbounded,
+            carry_on
+        ),
+        Bound::Excluded(stale_neuron.id()),
+    );
+    assert_eq!(neuron_count, 2);
+
+    // Do the next batch (which is empty). What we want to see is that
+    // prune_some_following "loops back around". More concretely, it should
+    // return Bound::Unbounded.
+    let mut call_count = 0;
+    let carry_on = || {
+        call_count += 1;
+        true
+    };
+    assert_eq!(
+        prune_some_following(
+            &VotingPowerEconomics::DEFAULT,
+            &mut neuron_store,
+            Bound::Excluded(stale_neuron.id()),
+            carry_on,
+        ),
+        Bound::Unbounded,
+    );
+    // Because after teh stale neuron, there are no more neurons. In that case
+    // prune_some_following tells us to loop back around.
+    assert_eq!(call_count, 0);
+
+    // Step 3: Inspect results.
+
+    // Assert that fresh neuron did not change.
+    neuron_store
+        .with_neuron(&fresh_neuron.id(), |fresh_neuron| {
+            assert_eq!(fresh_neuron.followees, followees);
+        })
+        .unwrap();
+
+    // Assert that the stale neuron did in fact change.
+    neuron_store
+        .with_neuron(&stale_neuron.id(), |stale_neuron| {
+            assert_eq!(
+                stale_neuron.followees,
+                hashmap! {
+                    // Governance got wiped out.
+
+                    // NeuronManagement did not get touched.
+                    Topic::NeuronManagement as i32 => Followees {
+                        followees: vec![NeuronId { id: 101 }],
+                    },
+                },
+            );
+        })
+        .unwrap();
+
+    assert_eq!(neuron_store.len(), 2);
+}
+
+/// This shows that VotingPowerEconomics is used when pruning following, not the
+/// old constant(s).
+#[test]
+fn test_prune_some_following_super_strict_voting_power_refresh() {
+    // Step 1: Prepare the world. (This is exactly the same as the previous test.)
+
+    let followees = hashmap! {
+        Topic::Governance as i32 => Followees {
+            followees: vec![NeuronId { id: 99 }],
+        },
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![NeuronId { id: 101 }],
+        },
+    };
+
+    let mut fresh_neuron = simple_neuron_builder(1)
+        .with_followees(followees.clone())
+        .build();
+    fresh_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS + 1);
+
+    // Similar to fresh_neuron, except voting power was refrshed a "long" time
+    // ago.
+    let mut stale_neuron = simple_neuron_builder(3)
+        .with_followees(followees.clone())
+        .build();
+    stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
+
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        fresh_neuron.id().id => fresh_neuron.clone(),
+        stale_neuron.id().id => stale_neuron.clone(),
+    });
+
+    // Control the perception of time by neuron_store.
+    #[derive(Debug, Clone)]
+    struct DummyClock {}
+    impl Clock for DummyClock {
+        fn now(&self) -> u64 {
+            CREATED_TIMESTAMP_SECONDS
+        }
+
+        fn set_time_warp(&mut self, _: TimeWarp) {
+            unimplemented!();
+        }
+    }
+    impl PracticalClock for DummyClock {}
+    let clock = DummyClock {};
+    neuron_store.clock = Box::new(clock);
+
+    // Step 2: Call code under test. (This is where things start looking
+    // different, compared to the previous test.)
+
+    assert_eq!(
+        prune_some_following(
+            &VotingPowerEconomics {
+                // These are much smaller than the normal values. As a result, all
+                // neurons suddenly look stale. As a result, all following is
+                // supposed to be cleared.
+                start_reducing_voting_power_after_seconds: Some(42),
+                clear_following_after_seconds: Some(58),
+            },
+            &mut neuron_store,
+            Bound::Unbounded, // Start new cycle.
+            || true,          // Do a full cycle.
+        ),
+        Bound::Unbounded,
+    );
+
+    // Step 3: Inspect results.
+
+    // Assert that everyone's following got cleared, due to super strict
+    // VotingPowerEconomics.
+    for neuron_id in [fresh_neuron.id(), stale_neuron.id()] {
+        neuron_store
+            .with_neuron(&neuron_id, |observed_neuron| {
+                assert_eq!(
+                    observed_neuron.followees,
+                    hashmap! {
+                        // Governance got wiped out.
+
+                        // NeuronManagement did not get touched.
+                        Topic::NeuronManagement as i32 => Followees {
+                            followees: vec![NeuronId { id: 101 }],
+                        },
+                    },
+                );
+            })
+            .unwrap();
+    }
+
+    assert_eq!(neuron_store.len(), 2);
+}
+
+#[test]
 fn test_get_non_empty_neuron_ids_readable_by_caller() {
     // Prepare the neurons.
     let controller = PrincipalId::new_user_test_id(1);
@@ -699,7 +916,8 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
 #[test]
 fn test_batch_adjust_neurons_storage() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -726,30 +944,20 @@ fn test_batch_adjust_neurons_storage() {
     warp_time_to_make_neuron_inactive(&mut neuron_store);
 
     // Step 1.5: define a lambda which always returns false, for checking instructions.
-    let always_false = || false;
+    let always_true = || true;
 
     // Step 1.6: make sure the counts of neurons in heap and stable are expected.
     assert_eq!(neuron_store.heap_neuron_store_len(), 10);
     assert_eq!(neuron_store.stable_neuron_store_len(), 0);
 
-    // Step 2: adjust the storage of neurons for the first 6 neurons and verifies the counts. Since
-    // the first 5 neurons are active because of their stake, only 1 neuron is moved.
-    let next_neuron_id = neuron_store.adjust_neuron_storage_with_max_instructions(
-        NeuronId { id: 0 },
-        6,
-        always_false,
+    // Step 2: adjust the storage of neurons and verifies the counts.
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 0 }),
+        always_true,
     );
-    assert_eq!(next_neuron_id, Some(NeuronId { id: 7 }));
-    assert_eq!(neuron_store.heap_neuron_store_len(), 9);
-    assert_eq!(neuron_store.stable_neuron_store_len(), 1);
-
-    // Step 3: adjust the storage of neurons for the rest of 4 neurons and verifies the counts.
-    let next_neuron_id = neuron_store.adjust_neuron_storage_with_max_instructions(
-        NeuronId { id: 7 },
-        6,
-        always_false,
-    );
-    assert_eq!(next_neuron_id, None);
+    assert_eq!(next_neuron_id, Bound::Unbounded);
     assert_eq!(neuron_store.heap_neuron_store_len(), 5);
     assert_eq!(neuron_store.stable_neuron_store_len(), 5);
 }
@@ -757,7 +965,8 @@ fn test_batch_adjust_neurons_storage() {
 #[test]
 fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     // This test doesn't make sense after neurons are migrated completely to stable memory.
-    let _f = temporarily_disable_active_neurons_in_stable_memory();
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     // Step 1.1: set up an empty neuron store.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -776,26 +985,35 @@ fn test_batch_adjust_neurons_storage_exceeds_instructions_limit() {
     assert_eq!(neuron_store.heap_neuron_store_len(), 5);
     assert_eq!(neuron_store.stable_neuron_store_len(), 0);
 
-    // Step 2: adjust the storage of neurons for the first 10 neurons, however, the instruction
-    // limit checker returns true for the 4th time it's called, allowing moving only 3 neurons.
+    // Step 2: adjust the storage of neurons for the first 10 neurons, however, the `carry_on`
+    // returns false for the 3rd time it's called, allowing `groom_some_neurons` continue 2 times,
+    // moving only 3 neurons.
     let counter = Cell::new(0);
-    let next_neuron_id =
-        neuron_store.adjust_neuron_storage_with_max_instructions(NeuronId { id: 0 }, 10, || {
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 0 }),
+        || {
             counter.set(counter.get() + 1);
-            counter.get() > 3
-        });
-    assert_eq!(next_neuron_id, Some(NeuronId { id: 4 }));
+            counter.get() <= 2
+        },
+    );
+    assert_eq!(next_neuron_id, Bound::Excluded(NeuronId { id: 3 }));
     assert_eq!(neuron_store.heap_neuron_store_len(), 2);
     assert_eq!(neuron_store.stable_neuron_store_len(), 3);
 
     // Step 3: adjust the storage of neurons for the rest of 4 neurons and verifies the counts.
     let counter = Cell::new(0);
-    let next_neuron_id =
-        neuron_store.adjust_neuron_storage_with_max_instructions(NeuronId { id: 4 }, 10, || {
+    let next_neuron_id = groom_some_neurons(
+        &mut neuron_store,
+        |_| {},
+        Bound::Excluded(NeuronId { id: 3 }),
+        || {
             counter.set(counter.get() + 1);
-            counter.get() > 3
-        });
-    assert_eq!(next_neuron_id, None);
+            counter.get() <= 2
+        },
+    );
+    assert_eq!(next_neuron_id, Bound::Unbounded);
     assert_eq!(neuron_store.heap_neuron_store_len(), 0);
     assert_eq!(neuron_store.stable_neuron_store_len(), 5);
 }

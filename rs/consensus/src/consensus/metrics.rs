@@ -10,7 +10,7 @@ use ic_types::{
         idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
         Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
-    CountBytes, Height,
+    CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -116,6 +116,7 @@ impl ConsensusMetrics {
 pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
+    pub block_time: Time,
     pub block_context_certified_height: u64,
     pub idkg_stats: Option<IDkgStats>,
 }
@@ -125,6 +126,7 @@ impl From<&Block> for BlockStats {
         Self {
             block_hash: format!("{:?}", ic_types::crypto::crypto_hash(block)),
             block_height: block.height().get(),
+            block_time: block.context.time,
             block_context_certified_height: block.context.certified_height.get(),
             idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
         }
@@ -155,7 +157,7 @@ impl BatchStats {
         self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
-            .extend_from_slice(&payload.ingress.message_ids());
+            .extend(payload.ingress.message_ids().cloned());
     }
 }
 
@@ -224,6 +226,7 @@ pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
     pub batch_delivery_interval: Histogram,
+    pub batch_delivery_latency: Histogram,
     pub ingress_messages_delivered: Histogram,
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
@@ -258,6 +261,12 @@ impl FinalizerMetrics {
                 "Time elapsed since the delivery of the previous batch, in seconds",
                 // 1ms, 2ms, 5ms, ..., 10s, 20s, 50s
                 decimal_buckets(-3, 1),
+            ),
+            batch_delivery_latency: metrics_registry.histogram(
+                "consensus_batch_delivery_latency_seconds",
+                "Wall time duration between block making and batch delivery, in seconds",
+                // 10ms, 20ms, 50ms, ..., 10s, 20s, 50s
+                decimal_buckets(-2, 2),
             ),
             finalization_certified_state_difference: metrics_registry.int_gauge(
                 "consensus_finalization_certified_state_difference",

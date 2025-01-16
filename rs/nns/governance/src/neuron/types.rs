@@ -13,14 +13,13 @@ use crate::{
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote,
+        Visibility, Vote, VotingPowerEconomics,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-use ic_nervous_system_linear_map::LinearMap;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
@@ -359,31 +358,25 @@ impl Neuron {
             > 0
     }
 
-    fn deciding_voting_power_adjustment_factor(
-        duration_since_voting_power_refreshed: Duration,
-    ) -> Decimal {
-        let linear_map = LinearMap::new(
-            Decimal::from(6 * ONE_MONTH_SECONDS)..Decimal::from(7 * ONE_MONTH_SECONDS), // from
-            Decimal::from(1)..Decimal::from(0),                                         // to
-        );
-
-        linear_map
-            .apply(Decimal::from(
-                duration_since_voting_power_refreshed.as_secs(),
-            ))
-            .clamp(Decimal::from(0), Decimal::from(1))
-    }
-
     /// How much swap this neuron has when it casts its vote on proposals.
-    pub fn deciding_voting_power(&self, now_seconds: u64) -> u64 {
-        // Main inputs.
+    pub fn deciding_voting_power(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        // Main inputs to main calculation.
+
         let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
-            Self::deciding_voting_power_adjustment_factor(Duration::from_secs(
+            let time_since_last_refreshed = Duration::from_secs(
                 now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
-            ))
+            );
+
+            voting_power_economics
+                .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
         } else {
             Decimal::from(1)
         };
+
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         // Main calculation.
@@ -557,6 +550,52 @@ impl Neuron {
     pub(crate) fn ready_to_spawn(&self, now_seconds: u64) -> bool {
         self.spawn_at_timestamp_seconds
             .is_some_and(|spawn_at_timestamp_seconds| now_seconds >= spawn_at_timestamp_seconds)
+    }
+
+    /// Returns the number of followee neuron IDs that were removed.
+    ///
+    /// If the neuron refreshed recently, no followee neuron IDs are removed
+    /// (and returns 0).
+    pub(crate) fn prune_following(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        let is_fresh = self.voting_power_refreshed_timestamp_seconds
+            >= now_seconds
+                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
+                - voting_power_economics.get_clear_following_after_seconds();
+        if is_fresh {
+            return 0;
+        }
+
+        let mut result = 0_usize;
+        for (topic, followees) in &self.followees {
+            if *topic == Topic::NeuronManagement as i32 {
+                continue;
+            }
+            result = result.saturating_add(followees.followees.len());
+        }
+
+        // Clear all following except ManageNeuron.
+        self.followees
+            .retain(|topic, _| *topic == Topic::NeuronManagement as i32);
+
+        // If this panics, that means we somehow have around 2^64 (or more)
+        // followees, which is not only disallowed, but just way more than we
+        // would ever be able to hold in memory.
+        u64::try_from(result).unwrap()
+    }
+
+    pub(crate) fn backfill_voting_power_refreshed_timestamp(&mut self) {
+        // This used to be the default, but we later changed our minds.
+        // The old definition:
+        // https://sourcegraph.com/github.com/dfinity/ic@1956e438af82a5b4aa9713bcbbe385684bf0704f/-/blob/rs/nns/governance/src/lib.rs?L189
+        const EVIL_TIMESTAMP_SECONDS: u64 = 1731628801;
+        if self.voting_power_refreshed_timestamp_seconds == EVIL_TIMESTAMP_SECONDS {
+            self.voting_power_refreshed_timestamp_seconds =
+                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
+        }
     }
 
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
@@ -906,7 +945,12 @@ impl Neuron {
     }
 
     /// Get the 'public' information associated with this neuron.
-    pub fn get_neuron_info(&self, now_seconds: u64, requester: PrincipalId) -> NeuronInfo {
+    pub fn get_neuron_info(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        requester: PrincipalId,
+    ) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
@@ -919,7 +963,7 @@ impl Neuron {
         }
 
         let visibility = self.visibility().map(|visibility| visibility as i32);
-
+        let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         NeuronInfo {
@@ -928,7 +972,6 @@ impl Neuron {
             age_seconds: self.age_seconds(now_seconds),
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
             recent_ballots,
-            voting_power: potential_voting_power,
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
@@ -938,6 +981,9 @@ impl Neuron {
             voting_power_refreshed_timestamp_seconds: Some(
                 self.voting_power_refreshed_timestamp_seconds,
             ),
+            deciding_voting_power: Some(deciding_voting_power),
+            potential_voting_power: Some(potential_voting_power),
+            voting_power: potential_voting_power,
         }
     }
 
@@ -1134,9 +1180,17 @@ impl Neuron {
     }
 }
 
-impl From<Neuron> for NeuronProto {
-    fn from(neuron: Neuron) -> Self {
-        let visibility = neuron.visibility().map(|visibility| visibility as i32);
+impl Neuron {
+    pub fn into_proto(
+        self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> NeuronProto {
+        let visibility = self.visibility().map(|visibility| visibility as i32);
+        let deciding_voting_power =
+            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
+        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+
         let Neuron {
             id,
             subaccount,
@@ -1161,7 +1215,7 @@ impl From<Neuron> for NeuronProto {
             visibility: _,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-        } = neuron;
+        } = self;
 
         let id = Some(id);
         let controller = Some(controller);
@@ -1172,6 +1226,7 @@ impl From<Neuron> for NeuronProto {
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let voting_power_refreshed_timestamp_seconds =
             Some(voting_power_refreshed_timestamp_seconds);
+        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as u32);
 
         NeuronProto {
             id,
@@ -1197,7 +1252,9 @@ impl From<Neuron> for NeuronProto {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as u32),
+            recent_ballots_next_entry_index,
+            deciding_voting_power,
+            potential_voting_power,
         }
     }
 }
@@ -1231,6 +1288,11 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+
+            // Derived Fields (and therefore, no need to transcribe).
+            // --------------
+            deciding_voting_power: _,
+            potential_voting_power: _,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;
@@ -1535,8 +1597,10 @@ pub struct NeuronBuilder {
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
     neuron_fees_e8s: u64,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
+    #[cfg(any(test, feature = "canbench-rs"))]
+    recent_ballots_next_entry_index: Option<usize>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
     #[cfg(test)]
@@ -1575,8 +1639,10 @@ impl NeuronBuilder {
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
             #[cfg(test)]
@@ -1666,9 +1732,12 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
+        let recent_ballots_next_entry_index =
+            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
+        self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self
     }
 
@@ -1699,6 +1768,15 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
+    pub fn with_voting_power_refreshed_timestamp_seconds(
+        mut self,
+        voting_power_refreshed_timestamp_seconds: u64,
+    ) -> Self {
+        self.voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
@@ -1718,8 +1796,10 @@ impl NeuronBuilder {
             neuron_type,
             #[cfg(test)]
             neuron_fees_e8s,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots,
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index,
             #[cfg(test)]
             transfer,
             #[cfg(test)]
@@ -1739,8 +1819,10 @@ impl NeuronBuilder {
         // The below fields are always the default values for a new neuron.
         #[cfg(not(test))]
         let neuron_fees_e8s = 0;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots = Vec::new();
+        #[cfg(not(any(test, feature = "canbench-rs")))]
+        let recent_ballots_next_entry_index = Some(0);
         #[cfg(not(test))]
         let transfer = None;
         #[cfg(not(test))]
@@ -1760,6 +1842,7 @@ impl NeuronBuilder {
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
+            recent_ballots_next_entry_index,
             kyc_verified,
             transfer,
             maturity_e8s_equivalent,
@@ -1771,7 +1854,6 @@ impl NeuronBuilder {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: None,
         }
     }
 }

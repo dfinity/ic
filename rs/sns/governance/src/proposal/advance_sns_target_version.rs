@@ -5,6 +5,7 @@ use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
+use pretty_assertions::assert_eq;
 
 fn sns_version_for_tests() -> Version {
     Version {
@@ -176,7 +177,7 @@ fn test_validate_and_render_advance_target_version_action() {
 
 ### Monitoring the upgrade process
 
-Please note: the upgrade steps above (valid around timestamp 0 seconds) might change during this proposal's voting period. Such changes are unlikely and are subject to NNS community's approval.
+Please note: the upgrade steps mentioned above (valid around 1970-01-01 00:00:00 UTC) might change during this proposal's voting period.
 
 The **upgrade journal** provides up-to-date information on this SNS's upgrade process:
 

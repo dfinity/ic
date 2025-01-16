@@ -304,14 +304,20 @@ fn test_disburse_maturity_succeeds_to_self() {
     assert_eq!(account_balance_before_disbursal, account_balance);
 
     // Advance time by a few days, but without triggering disbursal finalization.
-    env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.run_periodic_tasks_now();
+    env.gov_fixture
+        .advance_time_by(6 * ONE_DAY_SECONDS)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
+
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
-    env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.run_periodic_tasks_now();
+    env.gov_fixture
+        .advance_time_by(ONE_DAY_SECONDS + 10)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
+
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -409,14 +415,20 @@ fn test_disburse_maturity_succeeds_to_other() {
     assert_eq!(receiver_balance_before_disbursal, account_balance);
 
     // Advance time by a few days, but without triggering disbursal finalization.
-    env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.run_periodic_tasks_now();
+    env.gov_fixture
+        .advance_time_by(6 * ONE_DAY_SECONDS)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
+
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
-    env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.run_periodic_tasks_now();
+    env.gov_fixture
+        .advance_time_by(ONE_DAY_SECONDS + 10)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
+
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -498,7 +510,10 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     }
 
     // Advance time, to trigger disbursal finalization.
-    env.gov_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 10);
+    env.gov_fixture
+        .advance_time_by(7 * ONE_DAY_SECONDS + 10)
+        .temporarily_disable_sns_upgrades();
+
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
         let destination_account = icrc_ledger_types::icrc1::account::Account {
@@ -2628,7 +2643,9 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         .create();
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
-    canister_fixture.run_periodic_tasks_now();
+    canister_fixture
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
     let neuron = canister_fixture.get_neuron(&neuron_id);
@@ -2675,8 +2692,10 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
-    canister_fixture.run_periodic_tasks_now();
+    canister_fixture
+        .advance_time_by(7 * ONE_DAY_SECONDS + 1)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
     let account_balance_after_disbursal =
@@ -2714,7 +2733,9 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .create();
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
-    canister_fixture.run_periodic_tasks_now();
+    canister_fixture
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
@@ -2782,8 +2803,11 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
 
     // Advancing time and triggering periodic tasks should force a query of the new modulation.
-    canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
-    canister_fixture.run_periodic_tasks_now();
+    canister_fixture
+        .advance_time_by(2 * ONE_DAY_SECONDS)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
+
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
         .maturity_modulation
@@ -2802,8 +2826,10 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     assert_eq!(account_balance_before_disbursal, 0);
 
     // Advancing time and triggering periodic tasks should trigger the final disbursal.
-    canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
-    canister_fixture.run_periodic_tasks_now();
+    canister_fixture
+        .advance_time_by(5 * ONE_DAY_SECONDS + 1)
+        .temporarily_disable_sns_upgrades()
+        .run_periodic_tasks_now();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
     let account_balance_after_disbursal =

@@ -926,7 +926,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -945,6 +945,8 @@ pub mod i_dkg_message {
         Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -964,6 +966,17 @@ pub struct SchnorrSigShare {
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {
@@ -1039,7 +1052,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -1058,6 +1071,8 @@ pub mod i_dkg_artifact_id {
         Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1513,11 +1528,18 @@ pub struct IngressIdOffset {
     pub offset: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signed_request_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub buffer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<IngressMessage>,
 }
 /// Stripped consensus artifacts messages below
 #[derive(Clone, PartialEq, ::prost::Message)]

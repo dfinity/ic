@@ -51,6 +51,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
+ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }

@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:macaddr",
     "@crate_index//:ping",
     "@crate_index//:rayon",
     "@crate_index//:regex",
@@ -23,7 +24,6 @@ rust_library(
     ),
     aliases = {},
     crate_name = "network",
-    edition = "2021",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )

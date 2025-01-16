@@ -140,6 +140,7 @@ impl PocketIcBuilder {
         .await
     }
 
+    /// Use an already running PocketIC server.
     pub fn with_server_url(mut self, server_url: Url) -> Self {
         self.server_url = Some(server_url);
         self
@@ -680,9 +681,10 @@ impl PocketIc {
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
-    ) -> Option<Result<WasmResult, UserError>> {
+        caller: Option<Principal>,
+    ) -> IngressStatusResult {
         let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id, caller).await })
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
@@ -1522,6 +1524,18 @@ impl std::fmt::Display for UserError {
 pub enum CallError {
     Reject(String),
     UserError(UserError),
+}
+
+/// This enum describes the result of retrieving ingress status.
+/// The `IngressStatusResult::Forbidden` variant is produced
+/// if an optional caller is provided and a corresponding read state request
+/// for the status of the same update call signed by that specified caller
+/// was rejected because the update call was submitted by a different caller.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum IngressStatusResult {
+    NotAvailable,
+    Forbidden(String),
+    Success(Result<WasmResult, UserError>),
 }
 
 /// This struct describes the different types that executing a WASM function in

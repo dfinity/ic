@@ -1538,9 +1538,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         );
 
         // 10 is the latest checkpoint, hence cannot have been deleted
-        assert!(state_manager
-            .list_state_heights(CERT_ANY)
-            .contains(&height(10)));
+        assert!(state_manager.checkpoint_heights().contains(&height(10)));
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
@@ -1552,9 +1550,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
             Some(&height(11))
         );
 
-        assert!(state_manager
-            .list_state_heights(CERT_ANY)
-            .contains(&height(10)));
+        assert!(state_manager.checkpoint_heights().contains(&height(10)));
     });
 }
 
@@ -1581,18 +1577,14 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.remove_inmemory_states_below(height(6), &BTreeSet::new());
 
-        // Only odd heights should have been removed
+        // Snapshots from @1 to @5 are purged are removed while no checkpoints are removed.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(6), height(7), height(8), height(9)],
+        );
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4), height(6), height(8)]
         );
 
         state_manager.remove_states_below(height(4));
@@ -1600,14 +1592,12 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(6), height(7), height(8), height(9)],
+        );
+        // Checkpoints at @2 is removed.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(4), height(6), height(8)]
         );
 
         let state_manager = restart_fn(state_manager, Some(height(6)));
@@ -1641,16 +1631,27 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
-        state_manager.remove_inmemory_states_below(height(5), &btreeset![height(1), height(7)]);
+        // Tests the behavior of `remove_inmemory_states_below` for various scenarios involving extra heights to keep.
+        // This call covers another two cases:
+        // Case 1:
+        //   Extra heights to keep exist in memory and are below the requested height to remove.
+        //   Expected: These heights are retained.
+        // Case 2:
+        //   Extra heights to keep exist in memory and are at or above the requested height to remove.
+        //   Expected: No effect.
+        state_manager
+            .remove_inmemory_states_below(height(5), &btreeset![height(1), height(4), height(7)]);
 
         // State at height 1 is kept because of it is included in `extra_heights_to_keep`.
+        // State at 2 is removed because it is below the requested height and are not asked to keep in addition.
+        // Note that although state at 2 has a checkpoint, we don't treat it differently when removing in-memory states.
+        // State at 4 is kept because of it is protected by `extra_heights_to_keep`.
         // The additional protection on the state at height 7 has no effect since it is above the requested height.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
                 height(1),
-                height(2),
                 height(4),
                 height(5),
                 height(6),
@@ -1660,46 +1661,50 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
             ],
         );
 
-        state_manager.remove_inmemory_states_below(height(9), &btreeset![height(7), height(8)]);
-
-        // State at height 7 is kept because of it is included in `extra_heights_to_keep`.
-        // The additional protection on the state at height 8 currently has no effect since it is a checkpoint.
-        // However, this may be subject to change in the future.
-        assert_eq!(
-            state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+        // This call covers another two cases:
+        // Case 3:
+        //   Extra heights to keep do not exist in memory, and are below the requested height to remove.
+        //   Expected: No effect.
+        // Case 4:
+        //   Extra heights to keep do not exist in memory, and are at or above the requested height to remove.
+        //   Expected: No effect.
+        state_manager.remove_inmemory_states_below(
+            height(9),
+            &btreeset![height(2), height(7), height(8), height(10)],
         );
 
-        state_manager.remove_inmemory_states_below(height(9), &BTreeSet::new());
-
-        // State at height 7 is removed.
+        // Asking to keep state at 2 has no effect since it is already removed.
+        // State at height 7 and 8 are kept because they are included in `extra_heights_to_keep`.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(7), height(8), height(9)],
         );
 
-        state_manager.remove_states_below(height(8));
+        certify_height(&state_manager, height(8));
+
+        state_manager.remove_inmemory_states_below(height(10), &BTreeSet::new());
+
+        // There remain only the latest state, the latest certified height and the initial state.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(8), height(9)],
+        );
+
+        // Checkpoints are all present because we have not called `remove_states_below` yet.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4), height(6), height(8)]
+        );
+
+        state_manager.remove_states_below(height(10));
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(8), height(9)],
         );
+
+        assert_eq!(state_manager.checkpoint_heights(), vec![height(8)]);
 
         let state_manager = restart_fn(state_manager, Some(height(8)));
 
@@ -1738,9 +1743,12 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
             );
         }
 
+        // Although snapshot at height 8 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(8)).is_ok());
+
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(8), height(9)],
+            vec![height(0), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -1803,9 +1811,19 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
             );
         }
 
+        assert_eq!(state_manager.checkpoint_heights(), vec![height(6)]);
+        assert_eq!(
+            state_manager
+                .state_layout()
+                .unfiltered_checkpoint_heights()
+                .expect("failed to get unfiltered checkpoint heights"),
+            vec![height(6), height(8)]
+        );
+        // Although snapshot at height 6 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(6)).is_ok());
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(8), height(9)],
+            vec![height(0), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -1853,12 +1871,14 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
         }
 
         // The checkpoint at height 6 is the latest checkpoint requested to remove.
-        // Therefore, it should be kept.
+        // Therefore, the checkpoint should be kept while the snapshot is removed.
+        assert!(state_manager.checkpoint_heights().contains(&height(6)));
+        // Although snapshot at height 6 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(6)).is_ok());
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
-                height(6),
                 height(7),
                 height(8),
                 height(9),
@@ -2059,16 +2079,13 @@ fn can_purge_intermediate_snapshots() {
         state_manager.flush_tip_channel();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
-        // Checkpoint @5 is kept because it is the latest checkpoint at or below the
-        // requested height 9.
-        // Intermediate states from @6 to @8 are purged.
+        // Intermediate snapshots from @1 to @8 are purged.
         state_manager.remove_states_below(height(9));
         state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
-                height(5),
                 height(9),
                 height(10),
                 height(11),
@@ -2086,21 +2103,12 @@ fn can_purge_intermediate_snapshots() {
             ],
         );
 
-        // Checkpoint @20 is kept because it is the most recent
-        // checkpoint. @15 is kept because @19 depends on it.
-        // Intermediate states from @16 to @18 are purged.
+        // Intermediate states from @10 to @18 are purged.
         state_manager.remove_states_below(height(19));
         state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(15),
-                height(19),
-                height(20),
-                height(21),
-                height(22)
-            ],
+            vec![height(0), height(19), height(20), height(21), height(22)],
         );
 
         // Test calling `remove_states_below` at the latest checkpoint height.
@@ -2119,7 +2127,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(20), height(22)],
+            vec![height(0), height(22)],
         );
 
         // Test calling `remove_states_below` at a higher height than the latest state
@@ -2130,7 +2138,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(20), height(22)],
+            vec![height(0), height(22)],
         );
     })
 }
@@ -2159,8 +2167,8 @@ fn latest_certified_state_is_not_removed() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            // 1 is protected as latest certified state, 2 is protected as latest checkpoint
-            vec![height(0), height(1), height(2), height(4)],
+            // 1 is protected as latest certified state
+            vec![height(0), height(1), height(4)],
         );
     });
 }
@@ -3869,6 +3877,134 @@ fn can_handle_state_sync_and_commit_race_condition() {
 }
 
 #[test]
+fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        src_state_manager.commit_and_certify(
+            state.clone(),
+            height(1),
+            CertificationScope::Full,
+            None,
+        );
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+
+        wait_for_checkpoint(&*src_state_manager, height(3));
+
+        certify_height(&*src_state_manager, height(1));
+        certify_height(&*src_state_manager, height(2));
+
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2.get(),
+        };
+
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let (tip_height, state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(0));
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+            dst_state_manager.flush_tip_channel();
+            certify_height(&*dst_state_manager, height(1));
+
+            // The state sync is started before the state manager has the state at height 2.
+            let mut chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+            // Start the state sync when the state manager is below height 2.
+            // Omit one chunk and corrupt some files in the state sync scratchpad before adding the final chunk.
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
+            let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
+            assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+            certify_height(&*dst_state_manager, height(2));
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+            dst_state_manager.flush_tip_channel();
+
+            dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
+
+            // Checkpoint @2 should be removed
+            // while checkpoint @1 is still kept because it is referenced by state sync as a base.
+            assert_eq!(
+                dst_state_manager.checkpoint_heights(),
+                vec![height(1), height(3)]
+            );
+
+            assert_eq!(
+                dst_state_manager.list_state_heights(CERT_CERTIFIED),
+                vec![height(2)]
+            );
+
+            // Continue to perform the state sync at height 2 after the state manager reaches height 3.
+            pipe_state_sync(msg, chunkable);
+
+            // State sync adds back checkpoint @2 into the state manager.
+            assert_eq!(
+                dst_state_manager.checkpoint_heights(),
+                vec![height(2), height(3)]
+            );
+
+            // There should not exist duplicate entries for snapshot height 2.
+            assert_eq!(
+                dst_state_manager.list_state_heights(CERT_CERTIFIED),
+                vec![height(2)]
+            );
+
+            assert_eq!(
+                dst_state_manager.list_state_heights(CERT_ANY),
+                vec![height(0), height(2), height(3)]
+            );
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(
+                state,
+                height(4),
+                CertificationScope::Metadata,
+                None,
+            );
+            certify_height(&*dst_state_manager, height(3));
+            certify_height(&*dst_state_manager, height(4));
+            assert_eq!(dst_state_manager.latest_certified_height(), height(4));
+
+            let (tip_height, _state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(4));
+            assert_eq!(dst_state_manager.latest_state_height(), height(4));
+            // checkpoint @2 should be removable.
+            dst_state_manager.flush_tip_channel();
+            dst_state_manager.remove_states_below(height(4));
+            dst_state_manager.flush_deallocation_channel();
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(dst_state_manager.latest_certified_height(), height(4));
+            // Snapshots below 4 should be removable.
+            assert_eq!(
+                dst_state_manager.list_state_heights(CERT_ANY),
+                vec![height(0), height(4)]
+            );
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn can_commit_below_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
@@ -4387,7 +4523,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 nodes: node_public_keys.keys().cloned().collect(),
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
 
@@ -6065,6 +6201,7 @@ fn can_merge_unexpected_number_of_files() {
                 .vmemory_0();
             let existing_overlays = pm_layout.existing_overlays().unwrap();
             assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
+            state_manager.flush_tip_channel();
 
             // Copy each shard for heights 1..HEIGHT; now each file is beyond the hard limit,
             // triggering forced merge for all shards back to one overlay.
@@ -7383,8 +7520,12 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 }
 
 proptest! {
-// We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(5))]
+#![proptest_config(ProptestConfig {
+    // Fork to prevent flaky timeouts due to closed sandbox fds
+    fork: true,
+    // We go for fewer, but longer runs
+    ..ProptestConfig::with_cases(5)
+})]
 
 #[test]
 fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {

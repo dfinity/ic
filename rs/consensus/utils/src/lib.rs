@@ -22,6 +22,7 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod bouncer_metrics;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
@@ -616,6 +617,7 @@ mod tests {
                     ThresholdArguments::Schnorr(SchnorrArguments {
                         message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
+                        taproot_tree_root: None,
                     })
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),

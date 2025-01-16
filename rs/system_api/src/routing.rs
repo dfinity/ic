@@ -314,7 +314,7 @@ enum ChainKeySubnetKind {
 
 /// Routes to the `requested_subnet` if it holds the key (and fails if that
 /// subnet doesn't hold the key).  If a `requested_subnet` is not provided,
-/// route to the first subnet enabled to sign with the given key.
+/// route to the first subnet that has the given key enabled.
 fn route_chain_key_message(
     key_id: &MasterPublicKeyId,
     network_topology: &NetworkTopology,
@@ -333,17 +333,17 @@ fn route_chain_key_message(
                 key_id, subnet_id
             ))),
             Some(subnet_topology) => {
-                if subnet_topology.idkg_keys_held.contains(key_id) {
+                if subnet_topology.chain_keys_held.contains(key_id) {
                     match chain_key_subnet_kind {
                         ChainKeySubnetKind::HoldsEnabledKey => {
                             if network_topology
-                                .idkg_signing_subnets(key_id)
+                                .chain_key_enabled_subnets(key_id)
                                 .contains(subnet_id)
                             {
                                 Ok((*subnet_id).get())
                             } else {
                                 Err(ResolveDestinationError::ChainKeyError(format!(
-                                    "Subnet {} is not enabled to sign with threshold key {}",
+                                    "Subnet {} is not enabled to use threshold key {}",
                                     subnet_id, key_id,
                                 )))
                             }
@@ -355,33 +355,33 @@ fn route_chain_key_message(
                         "Requested unknown threshold key {} on subnet {}, subnet has keys: {}",
                         key_id,
                         subnet_id,
-                        format_keys(subnet_topology.idkg_keys_held.iter())
+                        format_keys(subnet_topology.chain_keys_held.iter())
                     )))
                 }
             }
         },
         None => {
-            // If some subnet is enabled to sign for the key we can immediately return it.
-            if let Some(subnet_id) = network_topology.idkg_signing_subnets(key_id).first() {
+            // If some subnet is enabled to use the key we can immediately return it.
+            if let Some(subnet_id) = network_topology.chain_key_enabled_subnets(key_id).first() {
                 return Ok((*subnet_id).get());
             }
             // Otherwise either return an error, or look through all subnets to
-            // find one with the key if signing isn't required.
+            // find one holding the key if it being enabled isn't required.
             match chain_key_subnet_kind {
                 ChainKeySubnetKind::HoldsEnabledKey => {
-                    let keys = format_keys(network_topology.idkg_signing_subnets.keys());
+                    let keys = format_keys(network_topology.chain_key_enabled_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
-                        "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
+                        "Requested unknown or disabled threshold key: {}, existing enabled keys: {}",
                         key_id, keys
                     )))
                 }
                 ChainKeySubnetKind::OnlyHoldsKey => {
                     let mut keys = BTreeSet::new();
                     for (subnet_id, topology) in &network_topology.subnets {
-                        if topology.idkg_keys_held.contains(key_id) {
+                        if topology.chain_keys_held.contains(key_id) {
                             return Ok((*subnet_id).get());
                         }
-                        keys.extend(topology.idkg_keys_held.iter().cloned());
+                        keys.extend(topology.chain_keys_held.iter().cloned());
                     }
                     let keys = format_keys(keys.iter());
                     Err(ResolveDestinationError::ChainKeyError(format!(
@@ -466,27 +466,27 @@ mod tests {
         MasterPublicKeyId::VetKd(vetkd_key_id(i))
     }
 
-    /// Two subnets have key_id1, but only one of the subnets is enabled to sign with it.
-    /// Only one subnet has key_id2, and it isn't enabled to sign with it.
+    /// Two subnets have key_id1, but only one of the subnets is enabled to use it.
+    /// Only one subnet has key_id2, and it isn't enabled to use it.
     fn network_with_chain_key_subnets(
         key_id1: MasterPublicKeyId,
         key_id2: MasterPublicKeyId,
     ) -> NetworkTopology {
         let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
-            // Only subnet 0 can sign with the first key.
-            idkg_signing_subnets: btreemap! {
+            // The first key is enabled only on subnet 0.
+            chain_key_enabled_subnets: btreemap! {
                 key_id1.clone() => vec![subnet_id0],
             },
             subnets: btreemap! {
                 // Subnet 0 holds both keys
                 subnet_id0 => SubnetTopology {
-                    idkg_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
+                    chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 // Subnet 1 holds only the first key.
                 subnet_test_id(1) => SubnetTopology {
-                    idkg_keys_held: vec![key_id1].into_iter().collect(),
+                    chain_keys_held: vec![key_id1].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 subnet_test_id(2) => SubnetTopology::default(),
@@ -548,6 +548,7 @@ mod tests {
             message: vec![1; 32],
             derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
+            aux: None,
         };
         Encode!(&args).unwrap()
     }
@@ -845,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_sign() {
+    fn resolve_chain_key_request() {
         for (network_topology, method, payload) in [
             (
                 network_with_ecdsa_subnets(),
@@ -877,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_sign_error() {
+    fn resolve_chain_key_request_error() {
         for (method, payload, master_key_id) in [
             (
                 Ic00Method::SignWithECDSA,
@@ -905,7 +906,7 @@ mod tests {
             ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
-                        "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: []",
+                        "Requested unknown or disabled threshold key: {}, existing enabled keys: []",
                         master_key_id,
                     )
                 )
@@ -914,7 +915,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_public_key_works_without_signing_enabled() {
+    fn resolve_chain_key_public_key_works_with_disabled_keys() {
         for (network_topology, method, payload) in [
             (
                 network_with_ecdsa_subnets(),
@@ -946,7 +947,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_initial_dealings_works_without_signing_enabled() {
+    fn resolve_chain_key_initial_dealings_works_with_disabled_keys() {
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -965,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_reshare_chain_key_works_without_signing_enabled() {
+    fn resolve_reshare_chain_key_works_with_disabled_keys() {
         for (network_topology, key_id) in [
             (network_with_ecdsa_subnets(), ecdsa_master_key_id(1)),
             (network_with_schnorr_subnets(), schnorr_master_key_id(1)),
@@ -985,8 +986,8 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_can_sign() {
-        // subnet_test_id(0) is enabled to sign with X_master_key_id(1).
+    fn route_chain_key_message_subnet_enabled() {
+        // subnet_test_id(0) is enabled to use X_master_key_id(1).
         for (key_id, network_topology) in [
             (ecdsa_master_key_id(1), network_with_ecdsa_subnets()),
             (schnorr_master_key_id(1), network_with_schnorr_subnets()),
@@ -1006,8 +1007,8 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_cannot_sign() {
-        // subnet_test_id(1) is not enabled to sign with X_master_key_id(1).
+    fn route_chain_key_message_key_disabled() {
+        // subnet_test_id(1) is not enabled to use X_master_key_id(1).
         for (key_id, network_topology) in [
             (ecdsa_master_key_id(1), network_with_ecdsa_subnets()),
             (schnorr_master_key_id(1), network_with_schnorr_subnets()),
@@ -1023,7 +1024,7 @@ mod tests {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Subnet {} is not enabled to sign with threshold key {}",
+                        "Subnet {} is not enabled to use threshold key {}",
                         subnet_id, key_id,
                     )
                 ),
@@ -1033,7 +1034,7 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_cannot_sign_unknown_subnet() {
+    fn route_chain_key_message_key_disabled_unknown_subnet() {
         for (key_id, network_topology) in [
             (ecdsa_master_key_id(1), network_with_ecdsa_subnets()),
             (schnorr_master_key_id(1), network_with_schnorr_subnets()),
@@ -1058,7 +1059,7 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_cannot_sign_unknown_key() {
+    fn route_chain_key_message_subnet_unknown_disabled_key() {
         for (key_id, network_topology) in [
             (ecdsa_master_key_id(1), network_with_ecdsa_subnets()),
             (schnorr_master_key_id(1), network_with_schnorr_subnets()),
@@ -1081,7 +1082,7 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_cannot_sign_no_requested_subnet_unknown_key() {
+    fn route_chain_key_message_subnet_no_requested_subnet_unknown_disabled_key() {
         for (known_key_id, unknown_key_id, network_topology) in [
             (
                 ecdsa_master_key_id(1),
@@ -1108,7 +1109,7 @@ mod tests {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Requested unknown or signing disabled threshold key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
+                        "Requested unknown or disabled threshold key: {unknown_key_id}, existing enabled keys: [{known_key_id}]",
                     )
                 ),
                 _ => panic!("Unexpected result."),
@@ -1117,7 +1118,7 @@ mod tests {
     }
 
     #[test]
-    fn route_chain_key_message_subnet_cannot_sign_no_required_signing_unknown_key() {
+    fn route_chain_key_message_subnet_not_required_key_disabled_unknown_key() {
         for (key_id1, key_id2, unknown_key_id, network_topology) in [
             (
                 ecdsa_master_key_id(1),

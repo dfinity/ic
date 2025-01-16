@@ -384,6 +384,9 @@ impl SubnetsImpl {
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
     }
+    fn clear(&self) {
+        self.subnets.write().unwrap().clear();
+    }
 }
 
 impl Subnets for SubnetsImpl {
@@ -421,8 +424,8 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        let subnets = self.subnets.get_all();
         if let Some(ref state_dir) = self.state_dir {
+            let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
             }
@@ -452,8 +455,35 @@ impl Drop for PocketIc {
             let topology_json = serde_json::to_string(&raw_topology).unwrap();
             topology_file.write_all(topology_json.as_bytes()).unwrap();
         }
-        for subnet in subnets {
+        for subnet in self.subnets.get_all() {
             subnet.state_machine.drop_payload_builder();
+        }
+        let state_machines: Vec<_> = self
+            .subnets
+            .get_all()
+            .into_iter()
+            .map(|subnet| subnet.state_machine.clone())
+            .collect();
+        self.subnets.clear();
+        // for every StateMachine, wait until nobody else has an Arc to that StateMachine
+        // and then drop that StateMachine
+        let start = std::time::Instant::now();
+        for state_machine in state_machines {
+            let mut state_machine = Some(state_machine);
+            while state_machine.is_some() {
+                match Arc::try_unwrap(state_machine.take().unwrap()) {
+                    Ok(sm) => {
+                        sm.drop();
+                        break;
+                    }
+                    Err(sm) => {
+                        state_machine = Some(sm);
+                    }
+                }
+                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+                    panic!("Timed out while dropping PocketIC.");
+                }
+            }
         }
     }
 }
@@ -728,7 +758,7 @@ impl PocketIc {
                             algorithm,
                             name: name.to_string(),
                         };
-                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                        builder = builder.with_chain_key(MasterPublicKeyId::Schnorr(key_id));
                     }
                 }
 
@@ -737,7 +767,7 @@ impl PocketIc {
                         curve: EcdsaCurve::Secp256k1,
                         name: name.to_string(),
                     };
-                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                    builder = builder.with_chain_key(MasterPublicKeyId::Ecdsa(key_id));
                 }
             }
 
@@ -1646,58 +1676,36 @@ impl Operation for AwaitIngressMessage {
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecuteIngressMessage(pub CanisterCall);
+pub struct IngressMessageStatus {
+    pub message_id: MessageId,
+    pub caller: Option<Principal>,
+}
 
-impl Operation for ExecuteIngressMessage {
+impl Operation for IngressMessageStatus {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let canister_call = self.0.clone();
-        let subnet = route_call(pic, canister_call);
+        let subnet = route(pic, self.message_id.effective_principal.clone(), false);
         match subnet {
             Ok(subnet) => {
-                match subnet.submit_ingress_as(
-                    self.0.sender,
-                    self.0.canister_id,
-                    self.0.method.clone(),
-                    self.0.payload.clone(),
-                ) {
-                    Err(SubmitIngressError::HttpError(e)) => {
-                        eprintln!("Failed to submit ingress message: {}", e);
-                        OpOut::Error(PocketIcError::BadIngressMessage(e))
-                    }
-                    Err(SubmitIngressError::UserError(e)) => {
-                        eprintln!("Failed to submit ingress message: {:?}", e);
-                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
-                    }
-                    Ok(msg_id) => {
-                        // Now, we execute on all subnets until we have the result
-                        let max_rounds = 100;
-                        for _i in 0..max_rounds {
-                            for subnet_ in pic.subnets.get_all() {
-                                subnet_.state_machine.execute_round();
-                            }
-                            match subnet.ingress_status(&msg_id) {
-                                IngressStatus::Known {
-                                    state: IngressState::Completed(result),
-                                    ..
-                                } => return Ok(result).into(),
-                                IngressStatus::Known {
-                                    state: IngressState::Failed(error),
-                                    ..
-                                } => {
-                                    return Err::<
-                                        ic_state_machine_tests::WasmResult,
-                                        ic_state_machine_tests::UserError,
-                                    >(error)
-                                    .into()
-                                }
-                                _ => {}
-                            }
+                if let Some(caller) = self.caller {
+                    if let Some(actual_caller) = subnet.ingress_caller(&self.message_id.msg_id) {
+                        if caller != actual_caller.get().0 {
+                            return OpOut::Error(PocketIcError::Forbidden(
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                            ));
                         }
-                        OpOut::Error(PocketIcError::BadIngressMessage(format!(
-                            "Failed to answer to ingress {} after {} rounds.",
-                            msg_id, max_rounds
-                        )))
                     }
+                }
+                match subnet.ingress_status(&self.message_id.msg_id) {
+                    IngressStatus::Known {
+                        state: IngressState::Completed(result),
+                        ..
+                    } => Ok(result).into(),
+                    IngressStatus::Known {
+                        state: IngressState::Failed(error),
+                        ..
+                    } => Err(error).into(),
+                    _ => OpOut::NoOutput,
                 }
             }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
@@ -1705,35 +1713,12 @@ impl Operation for ExecuteIngressMessage {
     }
 
     fn id(&self) -> OpId {
-        let call_id = self.0.id();
-        OpId(format!("canister_update_{}", call_id.0))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IngressMessageStatus(pub MessageId);
-
-impl Operation for IngressMessageStatus {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(pic, self.0.effective_principal.clone(), false);
-        match subnet {
-            Ok(subnet) => match subnet.ingress_status(&self.0.msg_id) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(result),
-                    ..
-                } => Ok(result).into(),
-                IngressStatus::Known {
-                    state: IngressState::Failed(error),
-                    ..
-                } => Err(error).into(),
-                _ => OpOut::NoOutput,
-            },
-            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
-        }
-    }
-
-    fn id(&self) -> OpId {
-        OpId(format!("ingress_status_{}", self.0.msg_id))
+        OpId(format!(
+            "ingress_status({},{:?},{:?})",
+            self.message_id.msg_id,
+            self.message_id.effective_principal,
+            self.caller.map(|caller| caller.to_string())
+        ))
     }
 }
 
@@ -2563,7 +2548,18 @@ fn route(
         EffectivePrincipal::CanisterId(canister_id) => match pic.try_route_canister(canister_id) {
             Some(subnet) => Ok(subnet),
             None => {
-                if is_provisional_create_canister {
+                // Canisters created via `provisional_create_canister_with_cycles`
+                // with the management canister ID as the effective canister ID
+                // are created on the subnet with the default effective canister ID.
+                if is_provisional_create_canister && canister_id == CanisterId::ic_00() {
+                    Ok(pic
+                        .try_route_canister(
+                            PrincipalId(pic.topology.default_effective_canister_id)
+                                .try_into()
+                                .unwrap(),
+                        )
+                        .unwrap())
+                } else if is_provisional_create_canister {
                     // We retrieve the PocketIC instace time (consistent across all subnets) from one subnet.
                     let time = pic.subnets.get_all().first().unwrap().state_machine.time();
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.

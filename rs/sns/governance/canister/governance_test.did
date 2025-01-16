@@ -166,6 +166,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DeregisterDappCanisters = record {
@@ -384,6 +385,7 @@ type ManageDappCanisterSettings = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
 };
 
 type SnsVersion = record {
@@ -820,7 +822,10 @@ type UpgradeJournal = record {
   entries : vec UpgradeJournalEntry;
 };
 
-type GetUpgradeJournalRequest = record {};
+type GetUpgradeJournalRequest = record {
+  limit : opt nat64;
+  offset : opt nat64;
+};
 
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
@@ -828,6 +833,7 @@ type GetUpgradeJournalResponse = record {
   target_version : opt Version;
   deployed_version : opt Version;
   upgrade_journal : opt UpgradeJournal;
+  upgrade_journal_entry_count: opt nat64;
 };
 
 type AdvanceTargetVersionRequest = record { target_version : opt Version; };
