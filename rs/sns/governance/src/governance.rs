@@ -3092,7 +3092,7 @@ impl Governance {
             })?;
 
         self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-            self.proto.target_version.clone().unwrap_or_default(),
+            self.proto.target_version.clone(),
             target_version.clone(),
             false,
         ));

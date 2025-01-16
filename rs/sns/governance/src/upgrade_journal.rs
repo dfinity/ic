@@ -28,12 +28,12 @@ impl upgrade_journal_entry::UpgradeStepsReset {
 impl upgrade_journal_entry::TargetVersionSet {
     /// Creates a new TargetVersionSet event with old and new versions
     pub fn new(
-        old_version: Version,
+        old_version: Option<Version>,
         new_version: Version,
         is_advanced_automatically: bool,
     ) -> Self {
         Self {
-            old_target_version: Some(old_version),
+            old_target_version: old_version,
             new_target_version: Some(new_version),
             is_advanced_automatically: Some(is_advanced_automatically),
         }
