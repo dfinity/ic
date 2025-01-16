@@ -284,6 +284,9 @@ pub fn setup_and_start_vms(
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
+                    // https://kubevirt.io/user-guide/storage/disks_and_volumes/#containerdisk
+                    // build container disk that holds config fat disk for guestos
+                    // push it to local container registry
                     let command = format!(
                         "set -xe; \
                         mkdir -p /var/sysimage/tnet; \
