@@ -1122,7 +1122,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.17.1",
             ),
             "secp256k1": crate.spec(
-                package = "secp256k1",
                 version = "^0.22",
                 features = [
                     "global-context",
