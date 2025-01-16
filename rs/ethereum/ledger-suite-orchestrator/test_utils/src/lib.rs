@@ -348,7 +348,7 @@ impl LedgerSuiteOrchestrator {
 }
 
 impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
-    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.as_ref()
             .query(self.ledger_suite_orchestrator_id, "http_request", request)
             .map(assert_reply)

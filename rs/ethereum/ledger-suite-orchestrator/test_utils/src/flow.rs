@@ -426,8 +426,8 @@ impl ManagedCanistersAssert {
 }
 
 impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
-    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
-        self.setup.http_get(request)
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.setup.http_query(request)
     }
 }
 
