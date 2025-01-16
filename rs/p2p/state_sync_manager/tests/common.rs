@@ -418,7 +418,7 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
-    let (router, rx) = ic_state_sync_manager::build_axum_router(
+    let (router, rx) = ic_state_sync_manager::build_state_sync_manager(
         state_sync.clone(),
         log.clone(),
         &MetricsRegistry::default(),

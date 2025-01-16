@@ -359,7 +359,7 @@ pub fn add_transport_to_sim<F>(
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
 
             let state_sync_rx = if let Some(ref state_sync) = state_sync_client_clone {
-                let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_axum_router(
+                let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_state_sync_manager(
                     state_sync.clone(),
                     log.clone(),
                     &MetricsRegistry::default(),
