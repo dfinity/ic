@@ -149,7 +149,7 @@ spec:
             name: "{name}-guestos"
           name: disk0
         - containerDisk:
-            image: "harbor.ln1-idx1.dfinity.network/tnet/{name}"
+            image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
           name: disk1
 "#;
 

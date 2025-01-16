@@ -286,48 +286,22 @@ pub fn setup_and_start_vms(
                 InfraProvider::K8s => {
                     let command = format!(
                         "set -xe; \
-                        sudo buildah login -u 'robot$tnet+tnet' -p 'TestingPOC1' harbor.ln1-idx1.dfinity.network; \
                         mkdir -p /var/sysimage/tnet; \
                         ctr=$(sudo buildah --root /var/sysimage/tnet from scratch); \
                         sudo buildah --root /var/sysimage/tnet copy --chown=107:107 $ctr {0} /disk/; \
-                        sudo buildah --root /var/sysimage/tnet commit $ctr harbor.ln1-idx1.dfinity.network/tnet/{1}; \
-                        sudo buildah --root /var/sysimage/tnet push harbor.ln1-idx1.dfinity.network/tnet/{1}",
+                        sudo buildah --root /var/sysimage/tnet commit $ctr harbor-core.harbor.svc.cluster.local/tnet/config:{1}; \
+                        sudo buildah --root /var/sysimage/tnet push --tls-verify=false --creds 'robot$tnet+tnet:TestingPOC1' harbor-core.harbor.svc.cluster.local/tnet/config:{1}",
                         conf_img_path.display(), tnet_node.name.clone().unwrap()
                     );
-
                     let output = Command::new("bash")
                         .arg("-c")
                         .arg(command)
                         .output()
                         .expect("Failed to execute command");
-
-                    if output.status.success() {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        println!("Output:\n{}", stdout);
-                    } else {
+                    if !output.status.success() {
                         let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Error:\n{}", stderr);
-
+                        bail!("Error building and pushing config container config image: {}", stderr);
                     }
-                    //let url = format!(
-                    //    "{}/{}",
-                    //    tnet_node.config_url.clone().expect("missing config_url"),
-                    //    CONF_IMG_FNAME
-                    //);
-                    //info!(
-                    //    t_env.logger(),
-                    //    "Uploading image {} to {}",
-                    //    conf_img_path.clone().display().to_string(),
-                    //    url.clone()
-                    //);
-                    //block_on(upload_image(conf_img_path.as_path(), &url))
-                    //    .expect("Failed to upload config image");
-                    //block_on(tnet_node.deploy_config_image(
-                    //    CONF_IMG_FNAME,
-                    //    "config",
-                    //    DataVolumeContentType::Kubevirt,
-                    //))
-                    //.expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
