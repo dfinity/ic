@@ -48,13 +48,13 @@ fn test_counter_canister() {
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     // Make some calls to the canister.
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, vec![0, 0, 0, 0]);
-    let reply = call_counter_can(&pic, canister_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, vec![1, 0, 0, 0]);
-    let reply = call_counter_can(&pic, canister_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, vec![2, 0, 0, 0]);
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, vec![2, 0, 0, 0]);
 }
 
@@ -81,7 +81,7 @@ fn counter_wasm() -> Vec<u8> {
     wat::parse_str(COUNTER_WAT).unwrap()
 }
 
-fn call_counter_can(ic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+fn call_counter_canister(ic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
     ic.update_call(
         canister_id,
         Principal::anonymous(),
@@ -289,15 +289,15 @@ fn test_routing_with_multiple_subnets() {
     pic.install_canister(canister_id_2, counter_wasm.clone(), vec![], None);
 
     // Call canister 1 on subnet 1.
-    let reply = call_counter_can(&pic, canister_id_1, "read");
+    let reply = call_counter_canister(&pic, canister_id_1, "read");
     assert_eq!(reply, vec![0, 0, 0, 0]);
-    let reply = call_counter_can(&pic, canister_id_1, "write");
+    let reply = call_counter_canister(&pic, canister_id_1, "write");
     assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Call canister 2 on subnet 2.
-    let reply = call_counter_can(&pic, canister_id_2, "read");
+    let reply = call_counter_canister(&pic, canister_id_2, "read");
     assert_eq!(reply, vec![0, 0, 0, 0]);
-    let reply = call_counter_can(&pic, canister_id_2, "write");
+    let reply = call_counter_canister(&pic, canister_id_2, "write");
     assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Creating a canister without specifying a subnet should still work.
@@ -701,18 +701,18 @@ async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister().await;
-    pic.add_cycles(can_id, INIT_CYCLES).await;
+    let canister_id = pic.create_canister().await;
+    pic.add_cycles(canister_id, INIT_CYCLES).await;
 
     // Install the counter canister wasm file on the canister.
     let counter_wasm = counter_wasm();
-    pic.install_canister(can_id, counter_wasm, vec![], None)
+    pic.install_canister(canister_id, counter_wasm, vec![], None)
         .await;
 
     // Make some calls to the canister.
     let reply = pic
         .update_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "read",
             encode_one(()).unwrap(),
@@ -753,20 +753,20 @@ fn install_very_large_wasm() {
     let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     // Create a canister.
-    let can_id = pic.create_canister();
+    let canister_id = pic.create_canister();
 
     // Charge the canister with 2T cycles.
-    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+    pic.add_cycles(canister_id, 100 * INIT_CYCLES);
 
     // Install the very large canister wasm on the canister.
     let wasm_module = very_large_wasm(5_000_000);
     assert!(wasm_module.len() >= 5_000_000);
-    pic.install_canister(can_id, wasm_module, vec![], None);
+    pic.install_canister(canister_id, wasm_module, vec![], None);
 
     // Update call on the newly installed canister should succeed
     // and return 4 bytes of the large data section.
     let res = pic
-        .update_call(can_id, Principal::anonymous(), "read", vec![])
+        .update_call(canister_id, Principal::anonymous(), "read", vec![])
         .unwrap();
     assert_eq!(res, vec![b'X'; 4]);
 }
@@ -776,22 +776,22 @@ fn test_uninstall_canister() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the counter canister wasm file on the canister.
     let counter_wasm = counter_wasm();
-    pic.install_canister(can_id, counter_wasm, vec![], None);
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     // The module hash should be set after the canister is installed.
-    let status = pic.canister_status(can_id, None).unwrap();
+    let status = pic.canister_status(canister_id, None).unwrap();
     assert!(status.module_hash.is_some());
 
     // Uninstall the canister.
-    pic.uninstall_canister(can_id, None).unwrap();
+    pic.uninstall_canister(canister_id, None).unwrap();
 
     // The module hash should be unset after the canister is uninstalled.
-    let status = pic.canister_status(can_id, None).unwrap();
+    let status = pic.canister_status(canister_id, None).unwrap();
     assert!(status.module_hash.is_none());
 }
 
@@ -800,11 +800,11 @@ fn test_update_canister_settings() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 200T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 100 * INIT_CYCLES);
 
     // The compute allocation of the canister should be zero.
-    let status = pic.canister_status(can_id, None).unwrap();
+    let status = pic.canister_status(canister_id, None).unwrap();
     let zero: candid::Nat = 0_u64.into();
     assert_eq!(status.settings.compute_allocation, zero);
 
@@ -814,11 +814,11 @@ fn test_update_canister_settings() {
         compute_allocation: Some(new_compute_allocation.clone()),
         ..Default::default()
     };
-    pic.update_canister_settings(can_id, None, settings)
+    pic.update_canister_settings(canister_id, None, settings)
         .unwrap();
 
     // Check that the compute allocation has been set.
-    let status = pic.canister_status(can_id, None).unwrap();
+    let status = pic.canister_status(canister_id, None).unwrap();
     assert_eq!(status.settings.compute_allocation, new_compute_allocation);
 }
 
@@ -1221,12 +1221,12 @@ fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the test canister wasm file on the canister.
     let test_wasm = test_canister_wasm();
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // with a transform function (clearing http response headers and setting
@@ -1234,7 +1234,7 @@ fn test_canister_http_with_transform() {
     // and mock a canister http outcall response.
     let call_id = pic
         .submit_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "canister_http_with_transform",
             encode_one(()).unwrap(),
@@ -1281,18 +1281,18 @@ fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the test canister wasm file on the canister.
     let test_wasm = test_canister_wasm();
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // and mock diverging canister http outcall responses.
     let call_id = pic
         .submit_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "canister_http",
             encode_one(()).unwrap(),
@@ -1344,17 +1344,17 @@ fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the test canister wasm file on the canister.
     let test_wasm = test_canister_wasm();
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // and mock diverging canister http outcall responses.
     pic.submit_call(
-        can_id,
+        canister_id,
         Principal::anonymous(),
         "canister_http",
         encode_one(()).unwrap(),
@@ -1392,18 +1392,18 @@ fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the test canister wasm file on the canister.
     let test_wasm = test_canister_wasm();
-    pic.install_canister(can_id, test_wasm, vec![], None);
+    pic.install_canister(canister_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
         .submit_call(
-            can_id,
+            canister_id,
             Principal::anonymous(),
             "canister_http",
             encode_one(()).unwrap(),
@@ -1773,9 +1773,9 @@ fn test_canister_snapshots() {
     pic.install_canister(canister_id, counter_wasm(), vec![], None);
 
     // We bump the counter to make the counter different from its initial value.
-    let reply = call_counter_can(&pic, canister_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
 
     // We haven't taken any snapshot so far and thus listing snapshots yields an empty result.
@@ -1798,9 +1798,9 @@ fn test_canister_snapshots() {
     );
 
     // We bump the counter once more to test loading snapshots in a subsequent step.
-    let reply = call_counter_can(&pic, canister_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
     // We load the snapshot (it is recommended to only load a snapshot on a stopped canister).
@@ -1810,13 +1810,13 @@ fn test_canister_snapshots() {
     pic.start_canister(canister_id, None).unwrap();
 
     // We verify that the snapshot was successfully loaded.
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 1_u32.to_le_bytes().to_vec());
 
     // We bump the counter again.
-    let reply = call_counter_can(&pic, canister_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
-    let reply = call_counter_can(&pic, canister_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, 2_u32.to_le_bytes().to_vec());
 
     // We take one more snapshot: since we already have an active snapshot,
@@ -1989,17 +1989,17 @@ fn create_instance_from_existing() {
     let pic = PocketIc::new();
 
     // Create a canister and charge it with 2T cycles.
-    let can_id = pic.create_canister();
-    pic.add_cycles(can_id, INIT_CYCLES);
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
 
     // Install the counter canister wasm file on the canister.
     let counter_wasm = counter_wasm();
-    pic.install_canister(can_id, counter_wasm, vec![], None);
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     // Bump and check the counter value;
-    let reply = call_counter_can(&pic, can_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, vec![1, 0, 0, 0]);
-    let reply = call_counter_can(&pic, can_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, vec![1, 0, 0, 0]);
 
     // Create a new PocketIC handle to the existing PocketIC instance.
@@ -2007,9 +2007,9 @@ fn create_instance_from_existing() {
         PocketIc::new_from_existing_instance(pic.get_server_url(), pic.instance_id(), None);
 
     // Bump and check the counter value;
-    let reply = call_counter_can(&pic_handle, can_id, "write");
+    let reply = call_counter_canister(&pic_handle, canister_id, "write");
     assert_eq!(reply, vec![2, 0, 0, 0]);
-    let reply = call_counter_can(&pic_handle, can_id, "read");
+    let reply = call_counter_canister(&pic_handle, canister_id, "read");
     assert_eq!(reply, vec![2, 0, 0, 0]);
 
     // Drop the newly created PocketIC handle.
@@ -2017,9 +2017,9 @@ fn create_instance_from_existing() {
     drop(pic_handle);
 
     // Bump and check the counter value;
-    let reply = call_counter_can(&pic, can_id, "write");
+    let reply = call_counter_canister(&pic, canister_id, "write");
     assert_eq!(reply, vec![3, 0, 0, 0]);
-    let reply = call_counter_can(&pic, can_id, "read");
+    let reply = call_counter_canister(&pic, canister_id, "read");
     assert_eq!(reply, vec![3, 0, 0, 0]);
 }
 
