@@ -223,7 +223,7 @@ impl governance::Mode {
         }
     }
 
-    pub fn proposal_types_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
+    pub fn functions_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
         vec![
             NervousSystemFunction::manage_nervous_system_parameters(),
             NervousSystemFunction::transfer_sns_treasury_funds(),
@@ -249,7 +249,7 @@ impl governance::Mode {
                 );
         }
 
-        let is_action_disallowed = Self::proposal_types_disallowed_in_pre_initialization_swap()
+        let is_action_disallowed = Self::functions_disallowed_in_pre_initialization_swap()
             .into_iter()
             .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
 
