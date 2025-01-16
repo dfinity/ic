@@ -1089,7 +1089,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
                 defects.extend(new_defects.into_iter());
                 None
             }
-            Ok(_) => Some(wasm.info()),
+            Ok(_) => Some(wasm.description()),
         },
     };
 
