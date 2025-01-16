@@ -112,14 +112,14 @@ impl AccessPolicy for WriteOnly {
 
 impl WritePolicy for WriteOnly {}
 
-impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
+impl<T> AccessPolicy for RwPolicy<'_, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
         WriteOnly::check_dir(p)
     }
 }
 
-impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
-impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
+impl<T> ReadPolicy for RwPolicy<'_, T> {}
+impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 

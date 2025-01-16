@@ -2337,7 +2337,7 @@ struct WindowInfo<const WINDOW_SIZE: usize> {}
 
 impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const SIZE: usize = WINDOW_SIZE;
-    const WINDOWS: usize = (Scalar::BYTES * 8 + Self::SIZE - 1) / Self::SIZE;
+    const WINDOWS: usize = (Scalar::BYTES * 8).div_ceil(Self::SIZE);
 
     const MASK: u8 = 0xFFu8 >> (8 - Self::SIZE);
     const ELEMENTS: usize = (1 << Self::SIZE) as usize;

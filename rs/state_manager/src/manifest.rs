@@ -286,7 +286,7 @@ fn write_chunk_hash(hasher: &mut Sha256, chunk_info: &ChunkInfo, version: StateS
 /// Returns the number of chunks of size `max_chunk_size` required to cover a
 /// file of size `size_bytes`.
 fn count_chunks(size_bytes: u64, max_chunk_size: u32) -> usize {
-    (size_bytes as usize + max_chunk_size as usize - 1) / max_chunk_size as usize
+    (size_bytes as usize).div_ceil(max_chunk_size as usize)
 }
 
 /// Checks if the manifest was computed using specified max_chunk_size.

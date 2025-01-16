@@ -556,8 +556,7 @@ where
             peers_sender.send_if_modified(|set| {
                 nodes_leaving_topology
                     .iter()
-                    .map(|n| set.remove(*n))
-                    .any(|r| r)
+                    .any(|n| set.remove(*n))
             });
         }
         debug_assert!(

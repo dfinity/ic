@@ -3576,7 +3576,7 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
-        let size = (data.len() + WASM_PAGE_SIZE_IN_BYTES - 1) / WASM_PAGE_SIZE_IN_BYTES;
+        let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state

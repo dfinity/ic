@@ -133,7 +133,7 @@ struct WriteBuffer<'a> {
     start_index: PageIndex,
 }
 
-impl<'a> WriteBuffer<'a> {
+impl WriteBuffer<'_> {
     fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
         use std::io::{Seek, SeekFrom};
 
@@ -356,7 +356,7 @@ pub enum MemoryMapOrData<'a> {
     Data(&'a [u8]),
 }
 
-impl<'a> MemoryInstructions<'a> {
+impl MemoryInstructions<'_> {
     // Filters and cuts any instructions that do not fall into `new_range`.
     pub fn restrict_to_range(&mut self, new_range: &Range<PageIndex>) {
         self.range = PageIndex::new(std::cmp::max(self.range.start.get(), new_range.start.get()))

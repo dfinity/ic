@@ -959,10 +959,10 @@ impl Ledger {
                 {
                     let tip_hash_label = Label::from("tip_hash");
                     let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
-                    return fork(
+                    fork(
                         label(last_block_index_label, leaf(last_block_index_encoded)),
                         label(tip_hash_label, leaf(last_block_hash.as_slice().to_vec())),
-                    );
+                    )
                 }
             }
             None => empty(),

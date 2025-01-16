@@ -3768,7 +3768,7 @@ impl<'a> SwapDigest<'a> {
     }
 }
 
-impl<'a> fmt::Debug for SwapDigest<'a> {
+impl fmt::Debug for SwapDigest<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let Swap {
             lifecycle,
