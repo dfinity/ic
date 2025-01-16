@@ -399,7 +399,6 @@ pub fn add_transport_to_sim<F>(
                 None
             };
 
-
             let transport = Arc::new(QuicTransport::start(
                 &log,
                 &MetricsRegistry::default(),
@@ -409,8 +408,8 @@ pub fn add_transport_to_sim<F>(
                 peer,
                 topology_watcher_clone.clone(),
                 Arc::new(custom_udp),
-                router.unwrap_or_default()
-                        ));
+                router.unwrap_or_default(),
+            ));
 
             if let Some((_, con_manager)) = con {
                 con_manager.start(transport.clone(), topology_watcher_clone.clone());
