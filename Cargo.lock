@@ -5445,6 +5445,7 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "futures",
  "ic-artifact-pool",
  "ic-config",
  "ic-interfaces",
@@ -5454,6 +5455,7 @@ dependencies = [
  "ic-types",
  "prometheus",
  "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
@@ -10709,6 +10711,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "turmoil",
 ]
 
@@ -12525,6 +12528,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-types",
