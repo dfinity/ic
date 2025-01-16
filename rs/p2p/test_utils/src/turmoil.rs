@@ -358,14 +358,15 @@ pub fn add_transport_to_sim<F>(
             let this_ip = turmoil::lookup(peer.to_string());
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
 
-            let state_sync_rx = if let Some(ref state_sync) = state_sync_client_clone {
-                let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_state_sync_manager(
-                    state_sync.clone(),
-                    log.clone(),
+            let state_sync_manager = if let Some(ref state_sync) = state_sync_client_clone {
+                let (state_sync_router, state_sync_manager) = ic_state_sync_manager::build_state_sync_manager(
+                    &log,
                     &MetricsRegistry::default(),
+                    &tokio::runtime::Handle::current(),
+                    state_sync.clone(),
                 );
                 router = Some(router.unwrap_or_default().merge(state_sync_router));
-                Some(state_sync_rx)
+                Some(state_sync_manager)
             } else {
                 None
             };
@@ -409,15 +410,8 @@ pub fn add_transport_to_sim<F>(
 
             consensus_builder.run(transport.clone(), topology_watcher_clone.clone());
 
-            if let Some(state_sync_rx) = state_sync_rx {
-                ic_state_sync_manager::start_state_sync_manager(
-                    &log,
-                    &MetricsRegistry::default(),
-                    &tokio::runtime::Handle::current(),
-                    transport.clone(),
-                    state_sync_client_clone.unwrap().clone(),
-                    state_sync_rx,
-                );
+            if let Some(state_sync_manager) = state_sync_manager {
+                state_sync_manager.start(transport.clone());
             }
 
             post_setup_future_clone(peer, transport).await;

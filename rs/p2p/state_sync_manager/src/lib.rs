@@ -325,14 +325,17 @@ mod tests {
             };
 
             let (handler_tx, handler_rx) = tokio::sync::mpsc::channel(100);
-            start_state_sync_manager(
-                &log,
-                &MetricsRegistry::default(),
-                rt.handle(),
-                Arc::new(t) as Arc<_>,
-                Arc::new(s) as Arc<_>,
-                handler_rx,
-            );
+            let metrics = StateSyncManagerMetrics::new(&MetricsRegistry::default());
+
+            let manager = StateSyncManager {
+                log: log.clone(),
+                advert_receiver: handler_rx,
+                ongoing_state_sync: None,
+                metrics,
+                state_sync: Arc::new(s) as Arc<_>,
+                rt: rt.handle().clone(),
+            };
+            let _ = manager.start(Arc::new(t) as Arc<_>);
             rt.block_on(async move {
                 handler_tx.send((id, NODE_1)).await.unwrap();
                 handler_tx.send((old_id, NODE_2)).await.unwrap();
