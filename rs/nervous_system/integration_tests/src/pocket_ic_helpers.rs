@@ -4,7 +4,7 @@ use futures::stream;
 use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
+use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -65,7 +65,7 @@ use itertools::Itertools;
 use maplit::btreemap;
 use pocket_ic::{
     management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
-    UserError, WasmResult,
+    RejectResponse,
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
@@ -838,15 +838,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "list_neurons was rejected by the NNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, ListNeuronsResponse).unwrap()
         }
 
@@ -871,10 +862,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to (NNS) manage_neuron failed: {:#?}", s),
-            };
             Decode!(&result, ManageNeuronResponse).unwrap()
         }
 
@@ -913,7 +900,7 @@ pub mod nns {
             pocket_ic: &PocketIc,
             proposal_id: u64,
             sender: PrincipalId,
-        ) -> Result<ProposalInfo, UserError> {
+        ) -> Result<ProposalInfo, RejectResponse> {
             pocket_ic
                 .query_call(
                     GOVERNANCE_CANISTER_ID.into(),
@@ -922,17 +909,7 @@ pub mod nns {
                     Encode!(&proposal_id).unwrap(),
                 )
                 .await
-                .map(|result| match result {
-                    WasmResult::Reply(reply) => {
-                        Decode!(&reply, Option<ProposalInfo>).unwrap().unwrap()
-                    }
-                    WasmResult::Reject(reject) => {
-                        panic!(
-                            "get_proposal_info was rejected by the NNS governance canister: {:#?}",
-                            reject
-                        )
-                    }
-                })
+                .map(|result| Decode!(&result, Option<ProposalInfo>).unwrap().unwrap())
         }
 
         pub async fn wait_for_proposal_execution(
@@ -956,7 +933,7 @@ pub mod nns {
                         // more attempts to get the proposal info to find out if the proposal
                         // actually got executed.
                         let is_benign = [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
-                            .contains(&user_error.code);
+                            .contains(&user_error.error_code);
                         if is_benign {
                             continue;
                         } else {
@@ -1004,12 +981,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
         }
 
@@ -1056,16 +1027,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_network_economics_parameters was rejected by the NNS governance \
-                        canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, NetworkEconomics).unwrap()
         }
     }
@@ -1097,10 +1058,6 @@ pub mod nns {
         ) -> Result<Nat, TransferError> {
             let call_id = icrc1_transfer_request(pocket_ic, sender, transfer_arg).await;
             let result = pocket_ic.await_call(call_id).await.unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, TransferError>).unwrap()
         }
 
@@ -1117,10 +1074,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to account_balance failed: {:#?}", s),
-            };
             Decode!(&result, Tokens).unwrap()
         }
 
@@ -1156,7 +1109,7 @@ pub mod nns {
 
             // Assert result is ok.
             match result {
-                Ok(WasmResult::Reply(_reply)) => (), // Ok,
+                Ok(_reply) => (), // Ok,
                 _ => panic!("{:?}", result),
             }
         }
@@ -1185,12 +1138,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_deployed_sns_by_proposal_id failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetDeployedSnsByProposalIdResponse).unwrap()
         }
 
@@ -1205,10 +1152,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_wasm failed: {:#?}", s),
-            };
             Decode!(&result, GetWasmResponse)
                 .unwrap()
                 .wasm
@@ -1231,12 +1174,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_latest_sns_version failed: {:#?}", s)
-                }
-            };
             let response = Decode!(&result, ListUpgradeStepsResponse).unwrap();
             let latest_version = response
                 .steps
@@ -1428,7 +1365,7 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
         use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
@@ -1461,10 +1398,6 @@ pub mod sns {
                 )
                 .await
                 .expect("Error calling manage_neuron");
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to (SNS) manage_neuron failed: {:#?}", s),
-            };
             Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
         }
 
@@ -1492,26 +1425,16 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             proposal: sns_pb::Proposal,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-            let response = manage_neuron(
-                pocket_ic,
-                canister_id,
-                sender,
-                neuron_id,
-                sns_pb::manage_neuron::Command::MakeProposal(proposal),
-            )
-            .await;
-            use sns_pb::manage_neuron_response::Command;
-            let response = match response.command {
-                Some(Command::MakeProposal(response)) => Ok(response),
-                Some(Command::Error(err)) => Err(err),
-                _ => panic!("Proposal failed unexpectedly: {:#?}", response),
-            }?;
-            let proposal_id = response.proposal_id.unwrap_or_else(|| {
-                panic!(
-                    "First SNS proposal response did not contain a proposal_id: {:#?}",
-                    response
-                )
-            });
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let governance = GovernanceCanister::new(canister_id);
+            let proposal_id = governance
+                .submit_proposal(&agent, neuron_id, proposal)
+                .await
+                .map_err(|err| match err {
+                    SubmitProposalError::GovernanceError(e) => e,
+                    e => panic!("Unexpected error: {e}"),
+                })?;
+
             wait_for_proposal_execution(pocket_ic, canister_id, proposal_id).await
         }
 
@@ -1538,7 +1461,7 @@ pub mod sns {
                     Ok(proposal) => proposal,
                     Err(user_error) => {
                         if [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
-                            .contains(&user_error.code)
+                            .contains(&user_error.error_code)
                         {
                             continue;
                         } else {
@@ -1573,7 +1496,7 @@ pub mod sns {
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
             sender: PrincipalId,
-        ) -> Result<sns_pb::GetProposalResponse, UserError> {
+        ) -> Result<sns_pb::GetProposalResponse, RejectResponse> {
             pocket_ic
                 .query_call(
                     canister_id.into(),
@@ -1585,17 +1508,7 @@ pub mod sns {
                     .unwrap(),
                 )
                 .await
-                .map(|result| match result {
-                    WasmResult::Reply(reply) => {
-                        Decode!(&reply, sns_pb::GetProposalResponse).unwrap()
-                    }
-                    WasmResult::Reject(reject) => {
-                        panic!(
-                            "get_proposal was rejected by the SNS governance canister: {:#?}",
-                            reject
-                        )
-                    }
-                })
+                .map(|result| Decode!(&result, sns_pb::GetProposalResponse).unwrap())
         }
 
         pub async fn list_neurons(
@@ -1611,15 +1524,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "list_neurons was rejected by the SNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
@@ -1784,10 +1688,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_neuron failed: {:#?}", s),
-            };
             let response = Decode!(&result, sns_pb::GetNeuronResponse).unwrap();
             match response.result.expect("No result in response") {
                 get_neuron_response::Result::Error(e) => Err(e),
@@ -1915,10 +1815,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to ledger_id failed: {:#?}", s),
-            };
             Decode!(&result, PrincipalId).unwrap()
         }
 
@@ -1932,10 +1828,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to status failed: {:#?}", s),
-            };
             Decode!(&result, Status).unwrap()
         }
 
@@ -1961,10 +1853,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, GetBlocksResponse).unwrap()
         }
 
@@ -2021,10 +1909,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_total_supply failed: {:#?}", s),
-            };
             Decode!(&result, Nat).unwrap()
         }
 
@@ -2042,10 +1926,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_balance_of failed: {:#?}", s),
-            };
             Decode!(&result, Nat).unwrap()
         }
 
@@ -2075,10 +1955,6 @@ pub mod sns {
             let call_id =
                 icrc1_transfer_request(pocket_ic, canister_id, sender, transfer_arg).await;
             let result = pocket_ic.await_call(call_id).await.unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, TransferError>).unwrap()
         }
 
@@ -2104,10 +1980,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, GetBlocksResponse).unwrap()
         }
 
@@ -2194,10 +2066,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to archives failed: {:#?}", s),
-            };
             Decode!(&result, Vec<ArchiveInfo>).unwrap()
         }
 
@@ -2216,10 +2084,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_approve failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, ApproveError>).unwrap()
         }
 
@@ -2238,10 +2102,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_allowance failed: {:#?}", s),
-            };
             Decode!(&result, Allowance).unwrap()
         }
 
@@ -2260,10 +2120,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_transfer_from failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, TransferFromError>).unwrap()
         }
     }
@@ -2295,10 +2151,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, BlockRange).unwrap()
         }
     }
@@ -2382,12 +2234,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_sns_canisters_summary failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetSnsCanistersSummaryResponse).unwrap()
         }
     }
@@ -2512,10 +2358,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Decode!(&result, GetInitResponse).unwrap()
         }
 
@@ -2537,10 +2379,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Decode!(&result, ListSnsNeuronRecipesResponse).unwrap()
         }
 
@@ -2563,10 +2401,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Ok(Decode!(&result, NewSaleTicketResponse).unwrap())
         }
 
@@ -2589,10 +2423,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to refresh_buyer_tokens failed: {:#?}", s),
-            };
             Ok(Decode!(&result, RefreshBuyerTokensResponse).unwrap())
         }
 
@@ -2613,10 +2443,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
-            };
             Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
         }
 
@@ -2634,10 +2460,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_open_ticket failed: {:#?}", s),
-            };
             Ok(Decode!(&result, GetOpenTicketResponse).unwrap())
         }
 
@@ -2658,10 +2480,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to error_refund_icp failed: {:#?}", s),
-            };
             Decode!(&result, ErrorRefundIcpResponse).unwrap()
         }
 
@@ -2678,10 +2496,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_derived_state failed: {:#?}", s),
-            };
             Decode!(&result, GetDerivedStateResponse).unwrap()
         }
 
@@ -2698,10 +2512,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_lifecycle failed: {:#?}", s),
-            };
             Decode!(&result, GetLifecycleResponse).unwrap()
         }
 
@@ -2848,10 +2658,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to finalize_swap failed: {:#?}", s),
-            };
             Decode!(&result, FinalizeSwapResponse).unwrap()
         }
 
@@ -2868,12 +2674,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_auto_finalization_status failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetAutoFinalizationStatusResponse).unwrap()
         }
 
