@@ -1,17 +1,6 @@
 ---- MODULE Merge_Neurons ----
 EXTENDS TLC, Sequences, Integers, FiniteSets, Variants
 
-(*
-@typeAlias: proc = Str;
-@typeAlias: account = Str;
-@typeAlias: neuronId = Int;
-@typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account: $account });
-@typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
-@typeAlias: neurons = $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int};
-*)
-
-_type_alias_dummy == TRUE
-
 CONSTANTS
     Minting_Account_Id,
     Merge_Neurons_Process_Ids,
