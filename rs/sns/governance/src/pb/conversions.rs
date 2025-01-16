@@ -1,5 +1,6 @@
 use crate::pb::v1 as pb;
 use ic_sns_governance_api::pb::v1 as pb_api;
+use ic_sns_governance_api::topics;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
@@ -90,6 +91,11 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees: item
+                .topic_followees
+                .into_iter()
+                .map(|(k, v)| (topics::Topic::try_from(k).unwrap(), v.into())) // TODO: DO NOT MERGE: Let's handle this error in a better way
+                .collect(),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -118,6 +124,11 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .followees
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
+                .collect(),
+            topic_followees: item
+                .topic_followees
+                .into_iter()
+                .map(|(k, v)| (u64::from(k), v.into()))
                 .collect(),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
@@ -201,6 +212,7 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.and_then(|x| topics::Topic::try_from(x).ok()),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -213,6 +225,7 @@ impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
 {
     fn from(item: pb_api::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.map(u64::from),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,

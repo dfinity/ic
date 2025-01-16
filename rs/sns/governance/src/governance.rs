@@ -1373,6 +1373,7 @@ impl Governance {
             created_timestamp_seconds: creation_timestamp_seconds,
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
+            topic_followees: parent_neuron.topic_followees.clone(),
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
@@ -4009,6 +4010,7 @@ impl Governance {
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
             followees: self.default_followees_or_panic().followees,
+            topic_followees: BTreeMap::new(),
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4175,6 +4177,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 followees: neuron_recipe.construct_followees(),
+                topic_followees: neuron_recipe.construct_topic_followees(),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),
