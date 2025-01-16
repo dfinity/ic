@@ -359,12 +359,13 @@ pub fn add_transport_to_sim<F>(
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
 
             let state_sync_manager = if let Some(ref state_sync) = state_sync_client_clone {
-                let (state_sync_router, state_sync_manager) = ic_state_sync_manager::build_state_sync_manager(
-                    &log,
-                    &MetricsRegistry::default(),
-                    &tokio::runtime::Handle::current(),
-                    state_sync.clone(),
-                );
+                let (state_sync_router, state_sync_manager) =
+                    ic_state_sync_manager::build_state_sync_manager(
+                        &log,
+                        &MetricsRegistry::default(),
+                        &tokio::runtime::Handle::current(),
+                        state_sync.clone(),
+                    );
                 router = Some(router.unwrap_or_default().merge(state_sync_router));
                 Some(state_sync_manager)
             } else {
@@ -389,12 +390,14 @@ pub fn add_transport_to_sim<F>(
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
-                router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 
                 Some(artifact_processor_jh)
             } else {
                 None
             };
+
+            let (raw_router, manager) = consensus_builder.build();
+            let router = Some(router.unwrap_or_default().merge(raw_router));
 
             let transport = Arc::new(QuicTransport::start(
                 &log,
@@ -408,7 +411,7 @@ pub fn add_transport_to_sim<F>(
                 router.unwrap_or_default(),
             ));
 
-            consensus_builder.run(transport.clone(), topology_watcher_clone.clone());
+            manager.start(transport.clone(), topology_watcher_clone.clone());
 
             if let Some(state_sync_manager) = state_sync_manager {
                 state_sync_manager.start(transport.clone());
