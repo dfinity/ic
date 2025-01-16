@@ -33,8 +33,8 @@ Decrease_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_
 Increase_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_stake = @ + amount]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Update_Fees(neuron, neuron_id, fees_amount) == [neuron EXCEPT
-    ![neuron_id].cached_stake = Minted_Stake(neuron, neuron_id),
-    ![neuron_id].fees = 0 ]
+    ![neuron_id].cached_stake = @ - fees_amount,
+    ![neuron_id].fees = @ - fees_amount ]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Decrease_Maturity(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].maturity = @ - amount]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
