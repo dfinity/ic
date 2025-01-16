@@ -397,7 +397,7 @@ pub fn add_transport_to_sim<F>(
             };
 
             let (raw_router, manager) = consensus_builder.build();
-            let router = Some(router.unwrap_or_default().merge(raw_router));
+            let router = router.unwrap_or_default().merge(raw_router);
 
             let transport = Arc::new(QuicTransport::start(
                 &log,
@@ -408,7 +408,7 @@ pub fn add_transport_to_sim<F>(
                 peer,
                 topology_watcher_clone.clone(),
                 Arc::new(custom_udp),
-                router.unwrap_or_default(),
+                router,
             ));
 
             manager.start(transport.clone(), topology_watcher_clone.clone());
