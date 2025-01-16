@@ -295,7 +295,6 @@ fn compute_next_difficulty(
     // and therefore likely blockstorms.
     // Testnet4 uses the last_adjustment_header.bits to calculate the next epoch's difficulty, making it
     // more stable.
-    //TODO(mihailjianu): add a test for testnet4.
     let previous_difficulty = match network {
         Network::Testnet4 => last_adjustment_header.bits,
         _ => prev_header.bits,

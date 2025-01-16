@@ -534,11 +534,13 @@ impl BlockchainManager {
                 }
             }
         }
+        println!("before if");
 
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
         }
+        println!("after if");
 
         let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
 
@@ -565,6 +567,8 @@ impl BlockchainManager {
             let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
             requests_sent_to_a.cmp(requests_sent_to_b)
         });
+
+        println!("entering loop");
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
         for peer in peer_info {
@@ -598,6 +602,9 @@ impl BlockchainManager {
                 peer.socket,
                 selected_inventory
             );
+
+
+            println!("get data sent");
 
             //Send 'getdata' request for the inventory to the peer.
             channel

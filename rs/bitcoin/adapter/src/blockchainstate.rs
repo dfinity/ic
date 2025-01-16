@@ -4,7 +4,8 @@ use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics
 use bitcoin::{
     block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
 };
-
+use std::fs::OpenOptions;
+use std::io::Write;
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
@@ -102,6 +103,8 @@ pub struct BlockchainState {
     /// Used to determine how validation should be handled with `validate_header`.
     network: Network,
     metrics: BlockchainStateMetrics,
+
+    file: std::fs::File,
 }
 
 impl BlockchainState {
@@ -117,6 +120,16 @@ impl BlockchainState {
             work: genesis_block_header.work(),
         }];
 
+        let file_path = "debug.log";
+
+        // Open the file in append mode, or create it if it doesn't exist
+        let mut file = OpenOptions::new()
+            .create(true) // Create the file if it doesn't exist
+            .write(true)  // Enable writing
+            .append(true) // Append to the file instead of overwriting
+            .open(file_path)
+            .expect("Failed to open or create file");
+
         BlockchainState {
             genesis_block_header,
             header_cache,
@@ -124,6 +137,7 @@ impl BlockchainState {
             tips,
             network: config.network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
+            file    
         }
     }
 
@@ -190,6 +204,10 @@ impl BlockchainState {
             .get_mut(&header.prev_blockhash)
             .ok_or(AddHeaderError::PrevHeaderNotCached(header.prev_blockhash))?;
 
+        
+
+        // header is fully  valid. 
+
         let cached_header = HeaderNode {
             header,
             height: parent.height + 1,
@@ -220,6 +238,8 @@ impl BlockchainState {
                 self.tips.push(tip);
             }
         };
+        
+        let difficulty = header.difficulty_float();
 
         self.header_cache.insert(block_hash, cached_header);
 
@@ -240,6 +260,13 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
+
+        println!("debuggg in add_block");
+
+        if block.header.difficulty_float() > 1.0 {
+            writeln!(self.file, "[{}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size()).unwrap();
+        }
+
         self.block_cache.insert(block_hash, block);
         self.metrics
             .block_cache_size
