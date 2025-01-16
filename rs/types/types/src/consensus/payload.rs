@@ -67,11 +67,10 @@ impl BlockPayload {
     /// Return true if it is a normal block and empty
     pub fn is_empty(&self) -> bool {
         match self {
-            BlockPayload::Data(data) => {
-                let DataPayload { batch, dkg, idkg } = data;
+            BlockPayload::Data(DataPayload { batch, dkg, idkg }) => {
                 batch.is_empty() && dkg.is_empty() && idkg.is_none()
             }
-            _ => false,
+            BlockPayload::Summary(_) => false,
         }
     }
 
