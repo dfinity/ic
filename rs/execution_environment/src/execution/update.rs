@@ -26,6 +26,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 #[cfg(test)]
@@ -45,6 +46,7 @@ pub fn execute_update(
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
+    deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -63,8 +65,9 @@ pub fn execute_update(
                     .as_ref()
                     .map_or(false, |es| es.is_wasm64);
 
-                let prepaid_execution_cycles =
-                    match round.cycles_account_manager.prepay_execution_cycles(
+                let prepaid_execution_cycles = match round
+                    .cycles_account_manager
+                    .prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
                         message_memory_usage,
@@ -74,19 +77,35 @@ pub fn execute_update(
                         reveal_top_up,
                         is_wasm64_execution.into(),
                     ) {
-                        Ok(cycles) => cycles,
-                        Err(err) => {
-                            return finish_call_with_error(
-                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                                canister,
-                                call_or_task,
-                                NumInstructions::from(0),
-                                round.time,
-                                execution_parameters.subnet_type,
-                                round.log,
-                            );
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
+                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            canister
+                                .system_state
+                                .task_queue
+                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                            canister
+                                .system_state
+                                .task_queue
+                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
-                    };
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            call_or_task,
+                            NumInstructions::from(0),
+                            round.time,
+                            execution_parameters.subnet_type,
+                            round.log,
+                        );
+                    }
+                };
                 (canister, prepaid_execution_cycles, false)
             }
         };
@@ -122,7 +141,7 @@ pub fn execute_update(
         log_dirty_pages,
     };
 
-    let helper = match UpdateHelper::new(&clean_canister, &original) {
+    let helper = match UpdateHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
             return finish_err(
@@ -305,11 +324,16 @@ struct UpdateHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
+    deallocation_sender: DeallocationSender,
 }
 
 impl UpdateHelper {
     /// Applies the initial state changes and performs the initial validation.
-    fn new(clean_canister: &CanisterState, original: &OriginalContext) -> Result<Self, UserError> {
+    fn new(
+        clean_canister: &CanisterState,
+        original: &OriginalContext,
+        deallocation_sender: &DeallocationSender,
+    ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
         validate_message(&canister, &original.method)?;
@@ -363,12 +387,14 @@ impl UpdateHelper {
             canister,
             call_context_id,
             initial_cycles_balance,
+            deallocation_sender: deallocation_sender.clone(),
         })
     }
 
     /// Returns a struct with all the necessary information to replay the
     /// performed update call steps in subsequent rounds.
     fn pause(self) -> PausedUpdateHelper {
+        self.deallocation_sender.send(Box::new(self.canister));
         PausedUpdateHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
@@ -382,8 +408,9 @@ impl UpdateHelper {
         clean_canister: &CanisterState,
         original: &OriginalContext,
         paused: PausedUpdateHelper,
+        deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let helper = Self::new(clean_canister, original)?;
+        let helper = Self::new(clean_canister, original, deallocation_sender)?;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
@@ -443,6 +470,7 @@ impl UpdateHelper {
                     clean_canister.canister_id(),
                     err,
                 );
+                self.deallocation_sender.send(Box::new(self.canister));
                 // Perf counter: no need to update the call context, as it won't be saved.
                 return finish_err(
                     clean_canister,
@@ -453,6 +481,7 @@ impl UpdateHelper {
                 );
             }
         }
+        self.deallocation_sender.send(Box::new(clean_canister));
 
         apply_canister_state_changes(
             canister_state_changes,
@@ -467,6 +496,7 @@ impl UpdateHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
         let heap_delta = if output.wasm_result.is_ok() {
@@ -564,6 +594,7 @@ impl PausedExecution for PausedCallExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -571,8 +602,12 @@ impl PausedExecution for PausedCallExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        let helper = match UpdateHelper::resume(&clean_canister, &self.original, self.paused_helper)
-        {
+        let helper = match UpdateHelper::resume(
+            &clean_canister,
+            &self.original,
+            self.paused_helper,
+            deallocation_sender,
+        ) {
             Ok(helper) => helper,
             Err(err) => {
                 info!(

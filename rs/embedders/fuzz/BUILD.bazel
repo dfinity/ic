@@ -41,6 +41,7 @@ rust_library(
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
+        "@crate_index//:futures",
         "@crate_index//:lazy_static",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:tokio",
@@ -121,7 +122,7 @@ rust_fuzz_test_binary_afl(
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
-rust_fuzz_test_binary(
+rust_fuzz_test_binary_afl(
     name = "compile_wasm_using_embedder",
     srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,

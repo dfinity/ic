@@ -518,8 +518,9 @@ impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
 }
 
 use ic_types::crypto::vetkd::{
-    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
-    VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
+    VetKdKeyVerificationError,
 };
 
 impl VetKdProtocol for CryptoReturningOk {
@@ -528,7 +529,7 @@ impl VetKdProtocol for CryptoReturningOk {
         _args: VetKdArgs,
     ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
         Ok(VetKdEncryptedKeyShare {
-            encrypted_key_share: vec![],
+            encrypted_key_share: VetKdEncryptedKeyShareContent(vec![]),
             node_signature: vec![],
         })
     }
