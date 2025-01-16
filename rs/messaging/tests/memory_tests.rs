@@ -91,7 +91,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected(
 ///
 /// For the second phase, the 'chatter' is disabled by putting a canister into `Stopping` state
 /// every 10 rounds. In addition to shutting down traffic altogether from that canister (including
-/// downstream calls) this will also induce a lot asychnronous rejections for requests. If any
+/// downstream calls) this will also induce a lot asynchronous rejections for requests. If any
 /// canister fails to reach `Stopped` state (i.e. no pending calls), something went wrong in
 /// message routing, most likely a bug connected to reject signals for requests.
 ///

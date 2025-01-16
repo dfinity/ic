@@ -186,7 +186,7 @@ fn should_make_downstream_call() -> bool {
 
 /// Flip the `BEST_EFFORT_COIN` to determine whether we should make a best-effort call or a
 /// guaranteed response call.
-fn make_best_effort_call() -> bool {
+fn should_make_best_effort_call() -> bool {
     RNG.with_borrow_mut(|rng| BEST_EFFORT_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0)
 }
 
@@ -201,7 +201,7 @@ fn setup_call(
     let receiver = receiver();
     let caller =
         (call_depth > 0).then_some(CanisterId::unchecked_from_principal(PrincipalId(caller())));
-    let timeout_secs = make_best_effort_call().then_some(timeout_secs());
+    let timeout_secs = should_make_best_effort_call().then_some(timeout_secs());
 
     let call =
         Call::new(receiver.into(), "handle_call").with_raw_args(candid::Encode!(&msg).unwrap());
