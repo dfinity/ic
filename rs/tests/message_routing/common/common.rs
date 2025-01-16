@@ -14,7 +14,9 @@ use xnet_test::StartArgs;
 pub async fn start_all_canisters(
     canisters: &[Vec<Canister<'_>>],
     payload_size_bytes: u64,
+    response_payload_size_bytes: u64,
     canister_to_subnet_rate: u64,
+    deadline_seconds: u32,
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
         .iter()
@@ -34,6 +36,8 @@ pub async fn start_all_canisters(
             network_topology: topology.clone(),
             canister_to_subnet_rate,
             payload_size_bytes,
+            response_payload_size_bytes,
+            deadline_seconds,
         };
         futures.push(async move {
             let _: String = canister
