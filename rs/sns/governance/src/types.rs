@@ -2546,7 +2546,7 @@ pub enum Wasm {
     },
 }
 
-//// Validates that the specified byte sequence meets the following requirements:
+/// Validates that the specified byte sequence meets the following requirements:
 /// 1. `new_canister_wasm` starts with Wasm or Gzip magic bytes.
 /// 2. Combined length of `new_canister_wasm` and `new_canister_wasm` is within ICP message limits.
 fn validate_wasm_bytes(
