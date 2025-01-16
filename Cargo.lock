@@ -5877,7 +5877,6 @@ dependencies = [
  "ic-metrics",
  "ic-test-utilities-logger",
  "parking_lot 0.12.3",
- "primitive-types",
  "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -6034,7 +6033,9 @@ dependencies = [
  "bitcoin 0.32.5",
  "csv",
  "hex",
+ "primitive-types",
  "proptest 0.9.6",
+ "rstest",
 ]
 
 [[package]]

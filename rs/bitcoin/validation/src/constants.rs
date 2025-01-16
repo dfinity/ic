@@ -57,11 +57,18 @@ const TESTNET: &[(BlockHeight, &str)] = &[
     (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
 ];
 
+/// Bitcoin testnet checkpoints
+#[rustfmt::skip]
+const TESTNET4: &[(BlockHeight, &str)] = &[
+    (64000, "000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5")
+];
+
 /// Returns the maximum difficulty target depending on the network
 pub fn max_target(network: &Network) -> Target {
     match network {
         Network::Bitcoin => Target::MAX_ATTAINABLE_MAINNET,
         Network::Testnet => Target::MAX_ATTAINABLE_TESTNET,
+        Network::Testnet4 => Target::MAX_ATTAINABLE_TESTNET,
         Network::Regtest => Target::MAX_ATTAINABLE_REGTEST,
         Network::Signet => Target::MAX_ATTAINABLE_SIGNET,
         &other => unreachable!("Unsupported network: {:?}", other),
@@ -72,7 +79,7 @@ pub fn max_target(network: &Network) -> Target {
 /// readjusted in the network after a fixed time interval.
 pub fn no_pow_retargeting(network: &Network) -> bool {
     match network {
-        Network::Bitcoin | Network::Testnet | Network::Signet => false,
+        Network::Bitcoin | Network::Testnet | Network::Signet | Network::Testnet4 => false,
         Network::Regtest => true,
         &other => unreachable!("Unsupported network: {:?}", other),
     }
@@ -83,6 +90,7 @@ pub fn pow_limit_bits(network: &Network) -> CompactTarget {
     CompactTarget::from_consensus(match network {
         Network::Bitcoin => 0x1d00ffff,
         Network::Testnet => 0x1d00ffff,
+        Network::Testnet4 => 0x1d00ffff,
         Network::Regtest => 0x207fffff,
         Network::Signet => 0x1e0377ae,
         &other => unreachable!("Unsupported network: {:?}", other),
@@ -94,7 +102,7 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Testnet4 => &[],
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
@@ -114,7 +122,7 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Testnet4 => &[],
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
         _ => &[],
