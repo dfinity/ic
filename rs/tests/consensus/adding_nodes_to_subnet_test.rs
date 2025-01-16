@@ -19,9 +19,12 @@ use anyhow::Result;
 use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::{NodeId, SubnetId};
-use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-    install_nns_and_check_progress, store_message,
+use ic_consensus_system_test_utils::{
+    assert_no_consensus_error_counters_increased_blocking,
+    rw_message::{
+        can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress, store_message,
+    },
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
@@ -98,6 +101,8 @@ fn adding_new_nodes_to_subnet_test(env: TestEnv) {
 
         verify_node_is_making_progress(&unassigned_node, canister_id, &logger);
     }
+
+    assert_no_consensus_error_counters_increased_blocking(&env);
 }
 
 fn add_node_to_subnet(

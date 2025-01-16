@@ -26,6 +26,7 @@ Success::
 end::catalog[] */
 
 use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::assert_no_consensus_error_counters_increased_blocking;
 use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -209,6 +210,8 @@ fn subnet_splitting_test(env: TestEnv) {
         canister_id_to_be_migrated,
         &logger,
     );
+
+    assert_no_consensus_error_counters_increased_blocking(&env);
 }
 
 fn prepare_source_subnet(
