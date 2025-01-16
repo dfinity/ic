@@ -1772,6 +1772,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "candid-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+]
+
+[[package]]
 name = "candid_derive"
 version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
