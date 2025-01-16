@@ -26,7 +26,7 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_metrics_assert::{MetricsAssert, QueryCall};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
@@ -1237,8 +1237,8 @@ impl CkBtcSetup {
     }
 }
 
-impl QueryCall<UserError> for CkBtcSetup {
-    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+impl CanisterHttpQuery<UserError> for CkBtcSetup {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.env
             .query(self.minter_id, "http_request", request)
             .map(assert_reply)
