@@ -385,6 +385,29 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
+                Some(Ok(StoredCompilation::Disk(on_disk_serialized_module))) => {
+                    // This path is only used when sandboxing is disabled.
+                    // Otherwise the fd is implicitly duplicated when passed to
+                    // the sandbox process over the unix socket.
+                    let instance_pre = self.wasm_embedder.read_file_and_pre_instantiate(
+                        on_disk_serialized_module
+                            .bytes
+                            .try_clone()
+                            .expect("Unable to duplicate serialzed module file descriptor."),
+                    );
+                    let cache = EmbedderCache::new(instance_pre.clone());
+                    *guard = Some(cache.clone());
+                    match instance_pre {
+                        Ok(_) => Ok(CacheLookup {
+                            cache,
+                            serialized_module: Some(StoredCompilation::Disk(
+                                on_disk_serialized_module,
+                            )),
+                            compilation_result: None,
+                        }),
+                        Err(err) => Err(err),
+                    }
+                }
                 Some(Ok(StoredCompilation::Memory(serialized_module))) => {
                     let instance_pre = self
                         .wasm_embedder
@@ -399,10 +422,6 @@ impl WasmExecutorImpl {
                         }),
                         Err(err) => Err(err),
                     }
-                }
-                Some(Ok(StoredCompilation::Disk(_serialized_module))) => {
-                    // TODO(EXC-1780)
-                    panic!("On disk compilation cache not yet supported");
                 }
                 Some(Err(err)) => {
                     let cache: HypervisorResult<Module> = Err(err.clone());

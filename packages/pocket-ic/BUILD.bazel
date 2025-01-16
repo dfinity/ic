@@ -33,6 +33,7 @@ MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/error_types",
+    "@crate_index//:bitcoin",
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",

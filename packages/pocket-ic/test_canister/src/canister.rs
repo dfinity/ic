@@ -109,6 +109,18 @@ struct SignWithSchnorrArgument {
     pub message: Vec<u8>,
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: SchnorrKeyId,
+    pub aux: Option<SignWithSchnorrAux>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub enum SignWithSchnorrAux {
+    #[serde(rename = "bip341")]
+    Bip341(SignWithBip341Aux),
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct SignWithBip341Aux {
+    pub merkle_root_hash: ByteBuf,
 }
 
 #[derive(CandidType, Deserialize, Debug)]
@@ -144,11 +156,13 @@ async fn sign_with_schnorr(
     message: Vec<u8>,
     derivation_path: Vec<Vec<u8>>,
     key_id: SchnorrKeyId,
+    aux: Option<SignWithSchnorrAux>,
 ) -> Result<Vec<u8>, String> {
     let internal_request = SignWithSchnorrArgument {
         message,
         derivation_path,
         key_id,
+        aux,
     };
 
     let (internal_reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(

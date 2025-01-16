@@ -25,7 +25,7 @@ impl CallCanisters for PocketIc {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload();
+        let request_bytes = request.payload().map_err(PocketIcCallError::CandidEncode)?;
         let response = if request.update() {
             self.update_call(
                 canister_id,
