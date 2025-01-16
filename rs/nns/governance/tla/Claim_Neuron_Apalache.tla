@@ -1,16 +1,7 @@
 ---- MODULE Claim_Neuron_Apalache ----
 
 
-EXTENDS TLC, Variants
-
-(*
-@typeAlias: proc = Str;
-@typeAlias: account = Str;
-@typeAlias: neuronId = Int;
-@typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account: $account });
-@typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
-*)
-_type_alias_dummy == TRUE
+EXTENDS TLC, Variants, Common_Apalache
 
 \* CODE_LINK_INSERT_CONSTANTS
 
@@ -37,18 +28,6 @@ CONSTANTS
 *)
 
 VARIABLES
-    \* @type: $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int};
-    neuron,
-    \* @type: $account -> $neuronId;
-    neuron_id_by_account,
-    \* @type: Set($neuronId);
-    locks,
-    \* @type: Seq({caller : $proc, method_and_args: $methodCall });
-    governance_to_ledger,
-    \* @type: Set({caller: $proc, response: $methodResponse });
-    ledger_to_governance,
-    \* @type: $proc -> Str;
-    pc,
     \* @type: $proc -> Int;
     neuron_id,
     \* @type: $proc -> $account;
