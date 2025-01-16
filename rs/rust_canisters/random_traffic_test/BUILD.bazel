@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:rand",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [

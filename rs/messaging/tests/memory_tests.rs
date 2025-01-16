@@ -158,7 +158,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         }
     }
 
-    // Tick until all calls have concluded.
+    // Tick until all calls have concluded; or else fail the test.
     fixture.tick_to_conclusion(shutdown_phase_max_rounds, |fixture| {
         fixture.expect_guaranteed_response_message_memory_taken_at_most(
             "Wrap up",
@@ -238,7 +238,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
     fixture.stop_chatter(migrating_canister);
     fixture.migrate_canister(migrating_canister);
 
-    // Tick until all calls have concluded.
+    // Tick until all calls have concluded; or else fail the test.
     fixture.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
 }
 

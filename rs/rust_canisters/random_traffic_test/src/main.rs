@@ -51,6 +51,7 @@ struct Message {
     /// The depth of the call starting from 0 and incrementing by 1 for each downstream call.
     call_depth: u32,
     /// Optional padding, to bring the payload to the desired byte size.
+    #[serde(with = "serde_bytes")]
     padding: Vec<u8>,
 }
 
@@ -180,17 +181,13 @@ fn synchronous_rejections_count() -> u32 {
 /// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
 /// instead.
 fn should_make_downstream_call() -> bool {
-    RNG.with_borrow_mut(|rng| {
-        DOWNSTREAM_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0
-    })
+    RNG.with_borrow_mut(|rng| DOWNSTREAM_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0)
 }
 
 /// Flip the `BEST_EFFORT_COIN` to determine whether we should make a best-effort call or a
 /// guaranteed response call.
 fn make_best_effort_call() -> bool {
-    RNG.with_borrow_mut(|rng| {
-        BEST_EFFORT_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0
-    })
+    RNG.with_borrow_mut(|rng| BEST_EFFORT_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0)
 }
 
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
@@ -216,23 +213,21 @@ fn setup_call(
     // Once the call was successfully generated, insert a call timestamp and record at `index`.
     let index = next_call_index();
     RECORDS.with_borrow_mut(|records| {
-        assert!(records
-            .insert(
-                index,
-                (
-                    api::time(),
-                    Record {
-                        receiver,
-                        caller,
-                        call_tree_id,
-                        call_depth,
-                        sent_bytes: msg.count_bytes() as u32,
-                        timeout_secs,
-                        duration_and_reply: None,
-                    },
-                )
-            )
-            .is_none());
+        records.insert(
+            index,
+            (
+                api::time(),
+                Record {
+                    receiver,
+                    caller,
+                    call_tree_id,
+                    call_depth,
+                    sent_bytes: msg.count_bytes() as u32,
+                    timeout_secs,
+                    duration_and_reply: None,
+                },
+            ),
+        )
     });
 
     (call.call_raw(), index)

@@ -202,9 +202,11 @@ pub struct Metrics {
     pub downstream_calls_attempted: u32,
     pub calls_replied: u32,
     pub calls_rejected: u32,
+    pub calls_unknown_outcome: u32,
     pub sent_bytes: u32,
     pub received_bytes: u32,
     pub rejected_bytes: u32,
+    pub unknown_outcome_bytes: u32,
 }
 
 /// Extracts some basic metrics from the records.
@@ -222,6 +224,12 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
             Some((_, Reply::Bytes(received_bytes))) => {
                 metrics.calls_replied += 1;
                 metrics.received_bytes += received_bytes;
+            }
+            Some((_, Reply::Reject(reject_code, _)))
+                if RejectCode::try_from(*reject_code as u64).unwrap() == RejectCode::SysUnknown =>
+            {
+                metrics.calls_unknown_outcome += 1;
+                metrics.unknown_outcome_bytes += record.sent_bytes;
             }
             Some((_, Reply::Reject(..))) => {
                 metrics.calls_rejected += 1;

@@ -18106,6 +18106,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
