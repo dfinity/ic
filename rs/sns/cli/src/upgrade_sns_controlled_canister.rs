@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
-use candid::{CandidType, Decode, Deserialize, Encode, IDLArgs, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, TypeEnv};
+use candid_parser::{check_prog, parse_idl_args, IDLArgs, IDLProg};
 use clap::Parser;
 use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
 use ic_agent::{export::reqwest::Url, Agent};
@@ -67,7 +68,8 @@ fn load_wasm(wasm_path: PathBuf) -> Result<Vec<u8>> {
 pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Result<()> {
     eprintln!("Preparing to propose an SNS-controlled canister upgrade ...");
 
-    // 1. Check that we have a viable Wasm and a suitable upgrade arg.
+    // Prepare.
+
     let UpgradeSnsControlledCanisterArgs {
         root_canister_id,
         sns_neuron_id,
@@ -78,19 +80,51 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         summary,
     } = args;
 
-    let wasm_bytes = load_wasm(wasm_path)?;
-    let sha256_hash = ic_crypto_sha2::Sha256::hash(&wasm_bytes);
-
-    // TODO: Support candid args.
-    let canister_upgrade_arg =
-        candid_arg.map(|candid_arg| unimplemented!("Candid args are not yet supported"));
-
-    // 2. Check that the target is controlled by the SNS specified via the Root canister ID.
     let root_canister = sns::root::RootCanister {
         canister_id: root_canister_id.get(),
     };
+
+    // Check that the Root canister exists, identifying some SNS.
     let SnsCanisters { sns, dapps } = root_canister.list_sns_canisters(agent).await?;
 
+    // Check that the target canister exists, and see if it serves its Candid service definition.
+    let current_module_hash = agent
+        .read_state_canister_info(target_canister_id.get().0, "module_hash")
+        .await
+        .expect(
+            "Cannot read target canister's module hash. Please make sure the target canister\
+             is already installed; this tool cannot be used to *install* canisters, only \
+             to propose *upgrading* already installed, SNS-controlled canisters.",
+        );
+    let candid_service_ast = {
+        let candid_service = agent
+            .read_state_canister_metadata(target_canister_id.get().0, "icp:public candid:service")
+            .await
+            .expect("Cannot read target canister's metadata section `icp:public candid:service`.");
+        let candid_service = std::str::from_utf8(&candid_service)
+            .expect("Cannot decode target canister's Candid service definition.");
+        candid_service
+            .parse::<IDLProg>()
+            .expect("Cannot parse target canister's Candid service definition.")
+    };
+
+    // Validate the upgrade arg against the Candid service definition.
+    let canister_upgrade_arg = if let Some(candid_arg) = candid_arg {
+        // let args_ast =
+        //.expect("Cannot parse --candid_arg as Candid");
+
+        let mut type_env = TypeEnv::new();
+        check_prog(&mut type_env, &candid_service_ast)
+            .expect("")
+            .expect("Target canister's Candid service definition should include the main action.");
+
+        // Some(args_ast.to_bytes().expect("Cannot serialize upgrade arg."))
+        todo!()
+    } else {
+        None
+    };
+
+    // Check that the target is indeed controlled by the SNS.
     if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
         bail!(
             "{} is not one of the canisters controlled by the SNS with Root canister {}",
@@ -99,7 +133,17 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         );
     }
 
-    // 3. Create a store canister on the same subnet as the target.
+    // Check that we have a viable Wasm for this upgrade.
+    let wasm_bytes = load_wasm(wasm_path)?;
+    let new_module_hash = ic_crypto_sha2::Sha256::hash(&wasm_bytes);
+    assert_ne!(
+        new_module_hash.to_vec(),
+        current_module_hash,
+        "Target canister is already running Wasm module with SHA256 {}. Nothing to do.",
+        format_full_hash(&new_module_hash),
+    );
+
+    // Create a store canister on the same subnet as the target.
     let subnet = nns::registry::get_subnet_for_canister(agent, target_canister_id).await?;
 
     let caller_principal = agent.get_principal().map_err(|err| anyhow::anyhow!(err))?;
@@ -178,3 +222,13 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
 
     Ok(())
 }
+
+fn format_full_hash(hash: &[u8]) -> String {
+    hash.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+#[cfg(test)]
+mod tests;

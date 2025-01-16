@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
+    "@crate_index//:candid_parser",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",

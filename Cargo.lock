@@ -11760,6 +11760,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "candid",
+ "candid_parser",
  "clap 4.5.23",
  "cycles-minting-canister",
  "futures",
