@@ -2,40 +2,24 @@
 
 use candid::{CandidType, Decode, Deserialize, Encode};
 use regex::Regex;
-use serde_bytes::ByteBuf;
 use std::fmt::Debug;
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct HttpRequest {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: ByteBuf,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct HttpResponse {
-    pub status_code: u16,
-    pub headers: Vec<(String, String)>,
-    pub body: ByteBuf,
-}
 
 pub struct MetricsAssert<T> {
     actual: T,
     metrics: Vec<String>,
 }
 
-pub trait QueryCall<E: Debug> {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
+pub trait CanisterHttpQuery<E: Debug> {
+    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, E>;
 }
 
 impl<T> MetricsAssert<T> {
-    pub fn from_query_call<E>(actual: T) -> Self
+    pub fn from_http_query<E>(actual: T) -> Self
     where
-        T: QueryCall<E>,
+        T: CanisterHttpQuery<E>,
         E: Debug,
     {
-        let request = HttpRequest {
+        let request = http::HttpRequest {
             method: "GET".to_string(),
             url: "/metrics".to_string(),
             headers: Default::default(),
@@ -43,9 +27,9 @@ impl<T> MetricsAssert<T> {
         };
         let response = Decode!(
             &actual
-                .query_call(Encode!(&request).expect("failed to encode HTTP request"))
+                .http_get(Encode!(&request).expect("failed to encode HTTP request"))
                 .expect("failed to retrieve metrics"),
-            HttpResponse
+            http::HttpResponse
         )
         .unwrap();
         assert_eq!(response.status_code, 200_u16);
@@ -93,7 +77,7 @@ impl<T> MetricsAssert<T> {
 }
 
 #[cfg(feature = "pocket_ic")]
-pub use pocket_ic_query_call::PocketIcQueryCall;
+pub use pocket_ic_query_call::PocketIcHttpQuery;
 
 #[cfg(feature = "pocket_ic")]
 mod pocket_ic_query_call {
@@ -101,13 +85,13 @@ mod pocket_ic_query_call {
     use candid::Principal;
     use pocket_ic::{management_canister::CanisterId, PocketIc, UserError, WasmResult};
 
-    pub trait PocketIcQueryCall {
+    pub trait PocketIcHttpQuery {
         fn get_pocket_ic(&self) -> &PocketIc;
         fn get_canister_id(&self) -> CanisterId;
     }
 
-    impl<T: PocketIcQueryCall> QueryCall<UserError> for T {
-        fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+    impl<T: PocketIcHttpQuery> CanisterHttpQuery<UserError> for T {
+        fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
             self.get_pocket_ic()
                 .query_call(
                     self.get_canister_id(),
@@ -122,5 +106,25 @@ mod pocket_ic_query_call {
                     }
                 })
         }
+    }
+}
+
+mod http {
+    use super::*;
+    use serde_bytes::ByteBuf;
+
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    pub struct HttpRequest {
+        pub method: String,
+        pub url: String,
+        pub headers: Vec<(String, String)>,
+        pub body: ByteBuf,
+    }
+
+    #[derive(Clone, Debug, CandidType, Deserialize)]
+    pub struct HttpResponse {
+        pub status_code: u16,
+        pub headers: Vec<(String, String)>,
+        pub body: ByteBuf,
     }
 }

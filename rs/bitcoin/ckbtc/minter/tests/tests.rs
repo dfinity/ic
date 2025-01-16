@@ -1238,7 +1238,7 @@ impl CkBtcSetup {
 }
 
 impl QueryCall<UserError> for CkBtcSetup {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.env
             .query(self.minter_id, "http_request", request)
             .map(assert_reply)

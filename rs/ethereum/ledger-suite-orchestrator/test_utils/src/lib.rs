@@ -14,7 +14,7 @@ use ic_management_canister_types::{
     CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
     Payload,
 };
-use ic_metrics_assert::{MetricsAssert, QueryCall};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
@@ -305,7 +305,7 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
-        MetricsAssert::from_query_call(self)
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
@@ -347,8 +347,8 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
-impl QueryCall<UserError> for LedgerSuiteOrchestrator {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
+    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.as_ref()
             .query(self.ledger_suite_orchestrator_id, "http_request", request)
             .map(assert_reply)

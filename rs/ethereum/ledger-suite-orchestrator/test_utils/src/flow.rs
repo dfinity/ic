@@ -12,7 +12,7 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
     Payload,
 };
-use ic_metrics_assert::{MetricsAssert, QueryCall};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
@@ -89,7 +89,7 @@ impl ManagedCanistersAssert {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<Self> {
-        MetricsAssert::from_query_call(self)
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
@@ -425,9 +425,9 @@ impl ManagedCanistersAssert {
     }
 }
 
-impl QueryCall<UserError> for ManagedCanistersAssert {
-    fn query_call(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
-        self.setup.query_call(request)
+impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
+    fn http_get(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.setup.http_get(request)
     }
 }
 
