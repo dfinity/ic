@@ -165,7 +165,7 @@ enum Opt {
 #[derive(Debug, Clone, clap::Args)]
 #[group(multiple = false)]
 struct HeightsArgs {
-    /// Copy the latest state only.
+    /// Copy the latest state only, or none if there are no states in the source.
     ///
     /// Mutually exclusive with `--heights`. If neither is specified, all heights are copied.
     #[clap(long = "latest")]

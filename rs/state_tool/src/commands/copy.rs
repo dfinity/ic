@@ -15,8 +15,9 @@ pub enum Heights {
 
 /// Copy checkpoints from the state directory at `source` to the state directory at `destination`.
 ///
-/// If `heights` is `Heights::All`, all checkpoints from the source are copied, if it is `Heights::Latest` only the maximum height
-/// from `src` is copied. Otherwise, only listed checkpoints are copied.
+/// If `heights` is `Heights::All`, all checkpoints from the source are copied. If it is `Heights::Latest` only the maximum height
+/// from `src` is copied (no-op if there are no checkpoints).
+/// Otherwise, only listed checkpoints are copied.
 /// Optionally, if the heights are listed explicitly then the copied checkpoints can be given a different height in the destination.
 ///
 /// Apart from copying the checkpoints, the relevant entries are also copied from the `states_metadata.pbuf` file, containing the manifest.
@@ -58,11 +59,14 @@ fn do_copy_with_state_layouts(
     dst_layout: &StateLayout,
     heights: Vec<(Height, Height)>,
 ) -> Result<(), String> {
-    let src_metadata = load_metadata_proto(&src_layout.states_metadata());
-    let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata());
+    if heights.is_empty() {
+        return Ok(());
+    }
 
-    for (src_height, dst_height) in heights {
-        if let Ok(cp_layout) = dst_layout.checkpoint_verified(dst_height) {
+    // Check if all checkpoints exist at the source and none exist at the destination.
+    // We do this before copying anything to avoid partially copying checkpoints.
+    for (src_height, dst_height) in heights.iter() {
+        if let Ok(cp_layout) = dst_layout.checkpoint_verified(*dst_height) {
             return Err(format!(
                 "Checkpoint {} already exists at {}",
                 dst_height,
@@ -70,10 +74,15 @@ fn do_copy_with_state_layouts(
             ));
         }
 
-        if src_layout.checkpoint_verified(src_height).is_err() {
+        if src_layout.checkpoint_verified(*src_height).is_err() {
             return Err(format!("Checkpoint {} does not exist at src", src_height));
         }
+    }
 
+    let src_metadata = load_metadata_proto(&src_layout.states_metadata());
+    let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata());
+
+    for (src_height, dst_height) in heights {
         dst_layout
             .copy_and_sync_checkpoint(
                 &format!("import_{}", dst_height),
