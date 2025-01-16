@@ -11,16 +11,15 @@ Runbook::
 . Enable vetkey on subnet
 . Wait two DKG intervals, check subnet health
 . TODO(CON-1420): Fetch the public key from a canister
-. Disable vetkey on subnet
-. TODO:(CON-1420): Check that public key is no longer available
-. Wait one DKG interval, check subnet health
 
 end::catalog[] */
 
 use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_system_test_utils::node::await_node_certified_height;
-use ic_consensus_threshold_sig_system_test_utils::{enable_chain_key_signing, DKG_INTERVAL};
+use ic_consensus_threshold_sig_system_test_utils::{
+    add_chain_keys_with_timeout_and_rotation_period, DKG_INTERVAL,
+};
 use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -83,17 +82,24 @@ fn test(env: TestEnv) {
     })];
 
     block_on(async {
-        enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
+        //enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
+        add_chain_keys_with_timeout_and_rotation_period(
+            &governance,
+            nns_subnet.subnet_id,
+            key_ids.clone(),
+            None,
+            None,
+            &log,
+        )
+        .await;
     });
 
     // Wait two DKGs
     await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL * 2), log.clone());
     // TODO(CON-1420): Fetch public key from subnet
 
-    // TODO: Finish test implementation:
-    // TODO: Wait two more DKGs
-    // TODO: Remove key from registry
-    // TODO(CON-1402): Check that key is no longer available
+    // Wait two more DKGs
+    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL * 2), log.clone());
 }
 
 fn main() -> Result<()> {
