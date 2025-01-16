@@ -34,10 +34,12 @@ thread_local! {
     static RECORDS: RefCell<BTreeMap<u32, (u64, Record)>> = RefCell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
-    /// A Binomial distribution used to determine whether to make a downstream call or not.
-    static DOWNSTREAM_CALL_DISTRIBUTION: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([0, 1]).unwrap());
-    /// A Binomial distribution used to determine whether to make a best-effort call or not.
-    static BEST_EFFORT_CALL_DISTRIBUTION: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([1, 0]).unwrap());
+    /// A `COIN` that can be 'flipped' to determine whether to make a downstream call or not.
+    /// The default value set here will yield only 'reply'.
+    static DOWNSTREAM_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([0, 1]).unwrap());
+    /// A `COIN` that can be 'flipped' to determine whether to make a best-effort call or a guaranteed response call.
+    /// The default value set here will yield only 'best_effort'
+    static BEST_EFFORT_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([1, 0]).unwrap());
 }
 
 /// The intercanister message sent to `handle_call()` by the heartbeat of this canister
@@ -97,22 +99,22 @@ fn sample((min, max): (u32, u32)) -> u32 {
 
 /// Generates a random payload size for a call.
 fn call_bytes() -> u32 {
-    CONFIG.with_borrow(|config| sample(config.call_bytes))
+    CONFIG.with_borrow(|config| sample(config.call_bytes_range))
 }
 
 /// Generates a random payload size for a reply.
 fn reply_bytes() -> u32 {
-    CONFIG.with_borrow(|config| sample(config.reply_bytes))
+    CONFIG.with_borrow(|config| sample(config.reply_bytes_range))
 }
 
 /// Generates a random number of simulated instructions for generating a reply.
 fn instructions_count() -> u32 {
-    CONFIG.with_borrow(|config| sample(config.instructions_count))
+    CONFIG.with_borrow(|config| sample(config.instructions_count_range))
 }
 
 /// Generates a timeout in seconds for a best-effort call.
 fn timeout_secs() -> u32 {
-    CONFIG.with_borrow(|config| sample(config.timeout_secs))
+    CONFIG.with_borrow(|config| sample(config.timeout_secs_range))
 }
 
 /// Picks a random receiver from `config.receivers` if any; otherwise return own canister ID.
@@ -128,11 +130,11 @@ fn receiver() -> CanisterId {
 /// Sets the test config; returns the current config.
 #[update]
 fn set_config(config: Config) -> Config {
-    // Update weighted distributions.
-    DOWNSTREAM_CALL_DISTRIBUTION.replace(
-        WeightedIndex::<u32>::new([config.reply_weight, config.downstream_call_weight]).unwrap(),
+    // Update `COINS`.
+    DOWNSTREAM_CALL_COIN.replace(
+        WeightedIndex::<u32>::new([config.downstream_call_weight, config.reply_weight]).unwrap(),
     );
-    BEST_EFFORT_CALL_DISTRIBUTION.replace(
+    BEST_EFFORT_CALL_COIN.replace(
         WeightedIndex::<u32>::new([config.best_effort_weight, config.guaranteed_response_weight])
             .unwrap(),
     );
@@ -175,17 +177,19 @@ fn synchronous_rejections_count() -> u32 {
     SYNCHRONOUS_REJECTIONS_COUNT.get()
 }
 
-/// Determines whether to make a downstream call or reply.
+/// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
+/// instead.
 fn should_make_downstream_call() -> bool {
     RNG.with_borrow_mut(|rng| {
-        DOWNSTREAM_CALL_DISTRIBUTION.with_borrow(|distr| distr.sample(rng)) == 0
+        DOWNSTREAM_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0
     })
 }
 
-/// Determines whether to make a best-effort call or a guaranteed response call.
+/// Flip the `BEST_EFFORT_COIN` to determine whether we should make a best-effort call or a
+/// guaranteed response call.
 fn make_best_effort_call() -> bool {
     RNG.with_borrow_mut(|rng| {
-        BEST_EFFORT_CALL_DISTRIBUTION.with_borrow(|distr| distr.sample(rng)) == 0
+        BEST_EFFORT_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0
     })
 }
 

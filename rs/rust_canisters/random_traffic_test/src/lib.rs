@@ -14,13 +14,13 @@ pub struct Config {
     /// A list of canister IDs, i.e. receivers for calls made by this canister.
     pub receivers: Vec<CanisterId>,
     /// `(min, max)` for the payload size in bytes included in a call.
-    pub call_bytes: (u32, u32),
+    pub call_bytes_range: (u32, u32),
     /// `(min, max)` for the payload size in bytes included in a reply.
-    pub reply_bytes: (u32, u32),
+    pub reply_bytes_range: (u32, u32),
     /// `(min, max)` for the simulated number of instructions to generate a reply.
-    pub instructions_count: (u32, u32),
+    pub instructions_count_range: (u32, u32),
     /// `(min, max)` for the timeout in seconds used for best-effort calls.
-    pub timeout_secs: (u32, u32),
+    pub timeout_secs_range: (u32, u32),
     /// The maximum number of calls attempted per heartbeat.
     pub calls_per_heartbeat: u32,
     /// The weight for making a reply used in a binominal distribution together with
@@ -41,10 +41,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             receivers: vec![],
-            call_bytes: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
-            reply_bytes: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
-            instructions_count: (0, 0),
-            timeout_secs: (10, 100),
+            call_bytes_range: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
+            reply_bytes_range: (0, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32),
+            instructions_count_range: (0, 0),
+            timeout_secs_range: (10, 100),
             calls_per_heartbeat: 3,
             reply_weight: 1,
             downstream_call_weight: 0,
@@ -105,10 +105,10 @@ impl Config {
 
         Ok(Self {
             receivers,
-            call_bytes: (*call_bytes.start(), *call_bytes.end()),
-            reply_bytes: (*reply_bytes.start(), *reply_bytes.end()),
-            instructions_count: (*instructions_count.start(), *instructions_count.end()),
-            timeout_secs: (*timeout_secs.start(), *timeout_secs.end()),
+            call_bytes_range: (*call_bytes.start(), *call_bytes.end()),
+            reply_bytes_range: (*reply_bytes.start(), *reply_bytes.end()),
+            instructions_count_range: (*instructions_count.start(), *instructions_count.end()),
+            timeout_secs_range: (*timeout_secs.start(), *timeout_secs.end()),
             calls_per_heartbeat,
             reply_weight,
             downstream_call_weight,
