@@ -249,13 +249,11 @@ impl Summary {
             let current_transcript = self.current_transcripts.remove(&tag);
 
             let transcript = next_transcript.or(current_transcript);
-            match transcript {
-                Some(transcript) => {
-                    next_transcripts.insert(tag, transcript);
-                }
-                // TODO: Warn if no single trancript could be found
-                None => (),
+
+            if let Some(transcript) = transcript {
+                next_transcripts.insert(tag, transcript);
             }
+            // TODO: Warn if no single trancript could be found
         }
 
         // TODO: Warn if transcripts are left over
