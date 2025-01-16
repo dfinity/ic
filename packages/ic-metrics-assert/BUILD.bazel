@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_doc", "rust_doc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,3 +29,13 @@ package(default_visibility = ["//visibility:public"])
         ],
     ]
 ]
+
+rust_doc(
+    name = "doc",
+    crate = ":ic-metrics-assert",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-metrics-assert",
+)

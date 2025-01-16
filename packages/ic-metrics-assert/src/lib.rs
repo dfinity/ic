@@ -1,5 +1,7 @@
 //! Fluent assertions for metrics.
 
+#![forbid(missing_docs)]
+
 use candid::{CandidType, Decode, Deserialize, Encode};
 use regex::Regex;
 use std::fmt::Debug;
@@ -83,7 +85,7 @@ impl<T> MetricsAssert<T> {
     }
 
     /// Returns the internal instance being tested.
-    pub fn actual(self) -> T {
+    pub fn into(self) -> T {
         self.actual
     }
 

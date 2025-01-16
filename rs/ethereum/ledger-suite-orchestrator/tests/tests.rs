@@ -139,7 +139,7 @@ fn should_discover_new_archive_and_top_up() {
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .check_metrics()
         .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
-        .actual()
+        .into()
         .trigger_creation_of_archive()
         .assert_ledger_has_cycles(100_000_000_000_000_u128)
         .assert_all_archives_have_cycles(100_000_000_000_000_u128);
@@ -151,7 +151,7 @@ fn should_discover_new_archive_and_top_up() {
         .assert_all_archives_have_cycles(100_000_000_000_000_u128)
         .check_metrics()
         .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1")
-        .actual();
+        .into();
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
@@ -993,7 +993,7 @@ mod upgrade {
             .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())
             .check_metrics()
             .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
-            .actual();
+            .into();
 
         // Run task DiscoverArchives pre-emptively to ensure it's not run during upgrade
         // so that we can test the case where the orchestrator doesn't know about the archive
@@ -1002,12 +1002,12 @@ mod upgrade {
         let managed_canisters = managed_canisters
             .check_metrics()
             .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
-            .actual()
+            .into()
             .trigger_creation_of_archive()
             .check_metrics()
             // the orchestrator is not yet aware of the archive
             .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
-            .actual();
+            .into();
 
         let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
             ledger_suite_orchestrator_wasm(),
@@ -1032,7 +1032,7 @@ mod upgrade {
             .check_metrics()
             // the orchestrator is not yet aware of the archive
             .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
-            .actual()
+            .into()
             .setup;
 
         orchestrator.env.tick();
