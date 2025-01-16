@@ -605,9 +605,9 @@ impl BitcoinAdapterResponse {
     pub fn count_bytes(&self) -> usize {
         let BitcoinAdapterResponse {
             response,
-            callback_id: _,
+            callback_id,
         } = &self;
-        response.count_bytes() + std::mem::size_of::<u64>()
+        response.count_bytes() + size_of_val(callback_id)
     }
 }
 

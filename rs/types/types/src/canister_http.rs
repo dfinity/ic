@@ -472,13 +472,13 @@ pub struct CanisterHttpResponse {
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
-            id: _,
-            timeout: _,
+            id,
+            timeout,
             canister_id,
             content,
         } = &self;
-        size_of::<CallbackId>()
-            + size_of::<Time>()
+        size_of_val(id)
+            + size_of_val(timeout)
             + canister_id.get_ref().data_size()
             + content.count_bytes()
     }
@@ -524,10 +524,10 @@ impl From<&CanisterHttpReject> for RejectContext {
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
         let CanisterHttpReject {
-            reject_code: _,
+            reject_code,
             message,
         } = &self;
-        size_of::<RejectCode>() + message.len()
+        size_of_val(reject_code) + message.len()
     }
 }
 
