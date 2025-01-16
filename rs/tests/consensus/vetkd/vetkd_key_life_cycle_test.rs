@@ -12,13 +12,17 @@ Runbook::
 . Wait two DKG intervals, check subnet health
 . TODO(CON-1420): Fetch the public key from a canister
 . Disable vetkey on subnet
-. TODO:(CON-1420): Check that public key has vanished
+. TODO:(CON-1420): Check that public key is no longer available
 . Wait one DKG interval, check subnet health
 
 end::catalog[] */
 
 use anyhow::Result;
-use ic_consensus_threshold_sig_system_test_utils::DKG_INTERVAL;
+use canister_test::Canister;
+use ic_consensus_system_test_utils::node::await_node_certified_height;
+use ic_consensus_threshold_sig_system_test_utils::{enable_chain_key_signing, DKG_INTERVAL};
+use ic_management_canister_types::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -30,6 +34,7 @@ use ic_system_test_driver::{
         },
     },
     systest,
+    util::{block_on, runtime_from_url},
 };
 use ic_types::Height;
 use slog::info;
@@ -65,13 +70,30 @@ fn test(env: TestEnv) {
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters.");
 
-    // TODO: Wait some DKGs
+    // TODO(CON-1420): Install message canister to fetch keys
+
+    // Wait one DKG
+    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL), log.clone());
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    //let key_ids = vec![MasterPublicKeyId::];
+    let key_ids = vec![MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: String::from("some_vetkd_key"),
+    })];
 
-    // TODO: Implement the actual test
+    block_on(async {
+        enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
+    });
+
+    // Wait two DKGs
+    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL * 2), log.clone());
+    // TODO(CON-1420): Fetch public key from subnet
+
+    // TODO: Finish test implementation:
+    // TODO: Wait two more DKGs
+    // TODO: Remove key from registry
+    // TODO(CON-1402): Check that key is no longer available
 }
 
 fn main() -> Result<()> {

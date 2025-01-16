@@ -8,11 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 slog = { workspace = true }
 tokio = { workspace = true }
