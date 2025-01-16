@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::time::Duration;
 
-/// A full config for generating random calls and replies. Ranges are stored as individual u32
+/// A full config for generating random calls and replies. Ranges are stored as `(u32, u32)`
 /// because ranges don't implement `CandidType`.
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Hash)]
 pub struct Config {
@@ -120,9 +120,9 @@ impl Config {
 
 /// Records the outcome of an outgoing call.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
-pub enum Reply {
-    /// A response including a data payload of a distinct size was received.
-    Bytes(u32),
+pub enum Response {
+    /// A reply including a data payload of a distinct size was received.
+    Reply(u32),
     /// The call was rejected with a reject code and a reject message.
     Reject(u32, String),
 }
@@ -142,9 +142,9 @@ pub struct Record {
     pub sent_bytes: u32,
     /// The timeout in seconds set for a best-effort call; `None` for a guaranteed response call.
     pub timeout_secs: Option<u32>,
-    /// The kind of reply received, i.e. a payload or a reject response; and the duration after
-    /// which the reply was received (from when the call was made).
-    pub duration_and_reply: Option<(Duration, Reply)>,
+    /// The kind of response received, i.e. a reply with a payload or a reject response;
+    /// and the duration after which the response was received (from when the call was made).
+    pub duration_and_response: Option<(Duration, Response)>,
 }
 
 /// Human readable printer.
@@ -174,9 +174,9 @@ impl std::fmt::Debug for Record {
 
         write!(f, " sending {} bytes | ", self.sent_bytes)?;
 
-        match &self.duration_and_reply {
+        match &self.duration_and_response {
             None => write!(f, "..."),
-            Some((call_duration, Reply::Bytes(bytes))) => {
+            Some((call_duration, Response::Reply(bytes))) => {
                 write!(
                     f,
                     "duration[s]: {}, received {} bytes",
@@ -184,7 +184,7 @@ impl std::fmt::Debug for Record {
                     bytes
                 )
             }
-            Some((call_duration, Reply::Reject(error_code, error_msg))) => write!(
+            Some((call_duration, Response::Reject(error_code, error_msg))) => write!(
                 f,
                 "duration[s]: {}, reject({}): {error_msg}",
                 call_duration.as_secs(),
@@ -220,18 +220,18 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
             metrics.downstream_calls_attempted += 1;
         }
 
-        match &record.duration_and_reply {
-            Some((_, Reply::Bytes(received_bytes))) => {
+        match &record.duration_and_response {
+            Some((_, Response::Reply(received_bytes))) => {
                 metrics.calls_replied += 1;
                 metrics.received_bytes += received_bytes;
             }
-            Some((_, Reply::Reject(reject_code, _)))
+            Some((_, Response::Reject(reject_code, _)))
                 if RejectCode::try_from(*reject_code as u64).unwrap() == RejectCode::SysUnknown =>
             {
                 metrics.calls_unknown_outcome += 1;
                 metrics.unknown_outcome_bytes += record.sent_bytes;
             }
-            Some((_, Reply::Reject(..))) => {
+            Some((_, Response::Reject(..))) => {
                 metrics.calls_rejected += 1;
                 metrics.rejected_bytes += record.sent_bytes;
             }

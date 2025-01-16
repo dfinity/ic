@@ -224,7 +224,7 @@ fn setup_call(
                     call_depth,
                     sent_bytes: msg.count_bytes() as u32,
                     timeout_secs,
-                    duration_and_reply: None,
+                    duration_and_response: None,
                 },
             ),
         )
@@ -233,29 +233,32 @@ fn setup_call(
     (call.call_raw(), index)
 }
 
-/// Updates the record at `index` using the `response` to the corresponding call.
+/// Updates the record at `index` using the `result` of the corresponding call.
 ///
 /// Removes the record for a synchronous rejection since those can be quite numerous when the
 /// subnet is at its limits. Note that since the call `index` is part of the records, removing
 /// the records for synchronous rejections will result in gaps in these numbers thus they are
 /// still included indirectly.
-fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
-    // Updates the `Reply` at `index` in `RECORDS`.
-    let set_reply_in_call_record = move |reply: Reply| {
+fn update_record(result: &api::call::CallResult<Vec<u8>>, index: u32) {
+    // Updates the `Response` at `index` in `RECORDS`.
+    let set_reply_in_call_record = move |response: Response| {
         RECORDS.with_borrow_mut(|records| {
             let (call_timestamp, record) = records.get_mut(&index).unwrap();
             assert!(
-                record.duration_and_reply.is_none(),
+                record.duration_and_response.is_none(),
                 "duplicate reply received"
             );
-            let reply_timestamp = api::time();
-            assert!(reply_timestamp >= *call_timestamp, "retrograde blocktime");
+            let response_timestamp = api::time();
+            assert!(
+                response_timestamp >= *call_timestamp,
+                "retrograde blocktime"
+            );
 
-            let call_duration = Duration::from_nanos(reply_timestamp - *call_timestamp);
-            record.duration_and_reply = Some((call_duration, reply));
+            let call_duration = Duration::from_nanos(response_timestamp - *call_timestamp);
+            record.duration_and_response = Some((call_duration, response));
         });
     };
-    match response {
+    match result {
         Err((_, msg)) if is_synchronous_rejection(msg) => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
@@ -264,16 +267,16 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
                     .remove(&index)
                     .unwrap()
                     .1
-                    .duration_and_reply
+                    .duration_and_response
                     .is_none())
             });
         }
 
         Err((reject_code, msg)) => {
-            set_reply_in_call_record(Reply::Reject(*reject_code as u32, msg.to_string()));
+            set_reply_in_call_record(Response::Reject(*reject_code as u32, msg.to_string()));
         }
         Ok(result) => {
-            set_reply_in_call_record(Reply::Bytes(result.len() as u32));
+            set_reply_in_call_record(Response::Reply(result.len() as u32));
         }
     }
 }
