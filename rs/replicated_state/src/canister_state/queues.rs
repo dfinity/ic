@@ -1668,7 +1668,8 @@ impl CanisterQueues {
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed. Same with the size of guaranteed responses in streams.
+    /// cannot be computed. Size of guaranteed responses in streams is ignored as it is
+    /// limited.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
@@ -1890,9 +1891,8 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 }
 
 /// Tracks slot and guaranteed response memory reservations across input and
-/// output queues; and holds a (transient) byte size of responses already routed
-/// into streams (tracked separately, at the replicated state level, as messages
-/// are routed to and GC-ed from streams).
+/// output queues. Transient byte size of responses already routed into streams
+/// is ignored as the streams size is limited.
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
@@ -1922,8 +1922,7 @@ struct QueueStats {
 }
 
 impl QueueStats {
-    /// Returns the memory usage of reservations for guaranteed responses plus
-    /// guaranteed responses in streans.
+    /// Returns the memory usage of reservations for guaranteed responses.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
     }

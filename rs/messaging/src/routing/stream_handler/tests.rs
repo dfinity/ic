@@ -251,16 +251,13 @@ fn legacy_induct_loopback_stream_reject_response() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response generated.
             assert_eq!(
                 initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[(
@@ -443,7 +440,7 @@ fn legacy_induct_loopback_stream_reroute_response() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One request inducted, one response inducted and one reject response produced.
+            // One request inducted and one response inducted.
             assert_eq!(
                 initial_available_guaranteed_response_memory
                     // Inducting a request triggers a new reservation in the output queue.
@@ -452,11 +449,9 @@ fn legacy_induct_loopback_stream_reroute_response() {
                     - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64),
                 available_guaranteed_response_memory,
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister no longer hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -1293,8 +1288,6 @@ fn garbage_collect_local_state_success() {
                 stream_handler.garbage_collect_local_state(state, &mut (i64::MAX / 2), &slices);
 
             assert_eq!(pruned_state, expected_state);
-            // `available_guaranteed_response_memory` is a lower bound as it doesn't include garbage
-            // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&pruned_state),
                 initial_available_guaranteed_response_memory,
@@ -2338,11 +2331,9 @@ fn induct_stream_slices_partial_success() {
                     - response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -2459,18 +2450,16 @@ fn legacy_induct_stream_slices_partial_success() {
             );
 
             assert_eq!(expected_state, inducted_state);
-            // 2 requests and one response inducted (consuming 2 - 1 reservations); one reject response enqueued.
+            // 2 requests and one response inducted (consuming 2 - 1 reservations).
             assert_eq!(
                 initial_available_guaranteed_response_memory
                     - MAX_RESPONSE_COUNT_BYTES as i64
                     - response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -2767,16 +2756,13 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response enqueued.
             assert_eq!(
                 initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister not yet hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
@@ -2950,16 +2936,13 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response enqueued.
             assert_eq!(
                 initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister no longer hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
