@@ -1517,11 +1517,9 @@ fn test_max_number_of_request_headers(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let request_headers = (0..HTTP_HEADERS_MAX_NUMBER)
-        .map(|i| {
-            (HttpHeader {
-                name: format!("name{}", i),
-                value: format!("value{}", i),
-            })
+        .map(|i| HttpHeader {
+            name: format!("name{}", i),
+            value: format!("value{}", i),
         })
         .collect();
 
