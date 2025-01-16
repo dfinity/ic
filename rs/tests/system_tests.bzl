@@ -281,8 +281,6 @@ def system_test(
         "//rs/tests:k8s": True,
         "//conditions:default": False,
     })
-    if is_k8s:
-        tags.append("local")
 
     run_system_test(
         name = name,
@@ -292,7 +290,7 @@ def system_test(
         env = env,
         icos_images = icos_images,
         env_inherit = env_inherit,
-        tags = tags + ["requires-network", "system_test"] +
+        tags = tags + ["requires-network", "system_test"] + (["local"] if is_k8s else []) +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
