@@ -452,6 +452,7 @@ fn test_governance_proto_ids_in_nervous_system_functions_match() {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: None,
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -3430,6 +3431,7 @@ fn test_add_generic_nervous_system_function_succeeds() {
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(CanisterId::from(200).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(100).get()),
@@ -4400,6 +4402,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(invalid_canister_target.get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(1).get()),
@@ -4422,6 +4425,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(CanisterId::from(1).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(invalid_canister_target.get()),

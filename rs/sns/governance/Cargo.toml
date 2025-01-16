@@ -70,6 +70,7 @@ ic-utils = { path = "../../utils" }
 lazy_static = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+itertools = { workspace = true }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 prost = { workspace = true }

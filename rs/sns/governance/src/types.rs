@@ -75,6 +75,8 @@ pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 /// The Governance spec gives each Action a u64 equivalent identifier. This module gives
 /// those u64 values a human-readable const variable for use in the SNS.
 pub mod native_action_ids {
+    use crate::pb::v1::NervousSystemFunction;
+
     /// Unspecified Action.
     pub const UNSPECIFIED: u64 = 0;
 
@@ -122,6 +124,28 @@ pub mod native_action_ids {
 
     /// AdvanceSnsTargetVersion Action.
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
+
+    // When adding something to this list, make sure to update the below function.
+
+    pub fn built_in_functions() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::motion(),
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::add_generic_nervous_system_function(),
+            NervousSystemFunction::remove_generic_nervous_system_function(),
+            NervousSystemFunction::execute_generic_nervous_system_function(),
+            NervousSystemFunction::upgrade_sns_to_next_version(),
+            NervousSystemFunction::manage_sns_metadata(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::manage_ledger_parameters(),
+            NervousSystemFunction::manage_dapp_canister_settings(),
+            NervousSystemFunction::advance_sns_target_version(),
+        ]
+    }
 }
 
 impl governance::Mode {
@@ -2301,6 +2325,11 @@ impl NeuronRecipe {
         }
     }
 
+    /// Adds self.topic_followee entries
+    pub(crate) fn construct_topic_followees(&self) -> BTreeMap<u64, Followees> {
+        BTreeMap::new()
+    }
+
     pub(crate) fn construct_auto_staking_maturity(&self) -> Option<bool> {
         if self.is_neurons_fund_neuron() {
             Some(true)
@@ -3262,6 +3291,7 @@ pub(crate) mod tests {
                     name: "Amaze".to_string(),
                     description: Some("Best function evar.".to_string()),
                     function_type: Some(FunctionType::GenericNervousSystemFunction(GenericNervousSystemFunction {
+                        topic: None, // TODO: DO NOT MERGE: reexamine
                         target_canister_id: Some(*target_canister_id),
                         target_method_name: Some("Foo".to_string()),
                         validator_canister_id: Some(*target_canister_id),

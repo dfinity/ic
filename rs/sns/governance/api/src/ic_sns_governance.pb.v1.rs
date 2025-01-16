@@ -1,3 +1,4 @@
+use crate::topics;
 use std::collections::BTreeMap;
 
 /// A principal with a particular set of permissions over a neuron.
@@ -80,6 +81,8 @@ pub struct Neuron {
     /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
     /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees on topics, specified as a map of topic IDs to followees neuron IDs.
+    pub topic_followees: BTreeMap<topics::Topic, neuron::Followees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -208,6 +211,8 @@ pub struct NervousSystemFunction {
 }
 /// Nested message and enum types in `NervousSystemFunction`.
 pub mod nervous_system_function {
+    use super::*;
+
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
@@ -224,6 +229,8 @@ pub mod nervous_system_function {
         /// The signature of the method must be equivalent to the following:
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         pub validator_method_name: Option<String>,
+        /// The topic this function belongs to
+        pub topic: Option<topics::Topic>,
     }
     #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub enum FunctionType {
