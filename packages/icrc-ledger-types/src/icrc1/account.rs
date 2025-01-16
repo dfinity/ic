@@ -191,8 +191,8 @@ impl Storable for Account {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-/// Default way of encoding a `Principal` in a `Subaccount`.
-/// Can be used to create a separate `Subaccount` for each ledger user.
+/// Maps a `Principal` to a `Subaccount`.
+/// Can be used to create a separate `Subaccount` for each `Principal`.
 pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
     let mut subaccount = [0; 32];
     let principal = principal.as_slice();
@@ -201,7 +201,8 @@ pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
     subaccount
 }
 
-/// Decode `Principal` from a `Subaccount`, see `principal_to_subaccount` above.
+/// Maps a `Subaccount` to a `Principal`.
+/// Reverse of `principal_to_subaccount` above.
 pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
     let len = subaccount[0] as usize;
     Principal::from_slice(&subaccount[1..len + 1])
