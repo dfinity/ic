@@ -2418,73 +2418,6 @@ pub struct WaitForQuietState {
     #[prost(uint64, tag = "1")]
     pub current_deadline_timestamp_seconds: u64,
 }
-/// This is a view of the ProposalData returned by API queries and is NOT used
-/// for storage. The ballots are restricted to those of the caller's neurons and
-/// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ProposalInfo {
-    /// The unique id for this proposal.
-    #[prost(message, optional, tag = "1")]
-    pub id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
-    /// The ID of the neuron that made this proposal.
-    #[prost(message, optional, tag = "2")]
-    pub proposer: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    /// The amount of ICP in E8s to be charged to the proposer if the proposal is
-    /// rejected.
-    #[prost(uint64, tag = "3")]
-    pub reject_cost_e8s: u64,
-    /// The proposal originally submitted.
-    #[prost(message, optional, tag = "4")]
-    pub proposal: ::core::option::Option<Proposal>,
-    /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
-    #[prost(uint64, tag = "5")]
-    pub proposal_timestamp_seconds: u64,
-    /// See \[ProposalData::ballots\].
-    #[prost(map = "fixed64, message", tag = "6")]
-    pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// See \[ProposalData::latest_tally\].
-    #[prost(message, optional, tag = "7")]
-    pub latest_tally: ::core::option::Option<Tally>,
-    /// See \[ProposalData::decided_timestamp_seconds\].
-    #[prost(uint64, tag = "8")]
-    pub decided_timestamp_seconds: u64,
-    /// See \[ProposalData::executed_timestamp_seconds\].
-    #[prost(uint64, tag = "12")]
-    pub executed_timestamp_seconds: u64,
-    /// See \[ProposalData::failed_timestamp_seconds\].
-    #[prost(uint64, tag = "13")]
-    pub failed_timestamp_seconds: u64,
-    /// See \[ProposalData::failure_reason\].
-    #[prost(message, optional, tag = "18")]
-    pub failure_reason: ::core::option::Option<GovernanceError>,
-    /// See \[ProposalData::reward_event_round\].
-    #[prost(uint64, tag = "14")]
-    pub reward_event_round: u64,
-    /// Derived - see \[Topic\] for more information
-    #[prost(enumeration = "Topic", tag = "15")]
-    pub topic: i32,
-    /// Derived - see \[ProposalStatus\] for more information
-    #[prost(enumeration = "ProposalStatus", tag = "16")]
-    pub status: i32,
-    /// Derived - see \[ProposalRewardStatus\] for more information
-    #[prost(enumeration = "ProposalRewardStatus", tag = "17")]
-    pub reward_status: i32,
-    #[prost(uint64, optional, tag = "19")]
-    pub deadline_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(message, optional, tag = "20")]
-    pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
-    /// See \[ProposalData::total_potential_voting_power\].
-    #[prost(uint64, optional, tag = "21")]
-    pub total_potential_voting_power: ::core::option::Option<u64>,
-}
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
@@ -3086,6 +3019,12 @@ pub struct InstallCode {
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "7")]
+    pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
@@ -3913,19 +3852,6 @@ pub struct ListProposalInfo {
     /// request doesn't exceed the message size limit.
     #[prost(bool, optional, tag = "7")]
     pub omit_large_fields: ::core::option::Option<bool>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListProposalInfoResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub proposal_info: ::prost::alloc::vec::Vec<ProposalInfo>,
 }
 /// A request to list neurons. The "requested list", i.e., the list of
 /// neuron IDs to retrieve information about, is the union of the list

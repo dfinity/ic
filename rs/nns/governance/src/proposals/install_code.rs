@@ -172,6 +172,7 @@ mod tests {
 
     use candid::Decode;
     use ic_base_types::CanisterId;
+    use ic_crypto_sha2::Sha256;
     use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
     #[test]
@@ -182,6 +183,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
@@ -283,6 +286,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -319,6 +324,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -351,6 +358,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
             arg: Some(vec![]),
             skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -397,6 +406,8 @@ mod tests {
                 install_mode: Some(CanisterInstallMode::Upgrade as i32),
                 arg: Some(vec![4, 5, 6]),
                 skip_stopping_before_installing: None,
+                wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
             };
 
             assert_eq!(install_code.validate(), Ok(()));

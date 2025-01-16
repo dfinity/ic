@@ -22,6 +22,7 @@ use crate::{
 use canbench_rs::{bench, bench_fn, BenchResult};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_proto::pb::v1::Image;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
@@ -643,6 +644,8 @@ fn list_proposals_benchmark() -> BenchResult {
             wasm_module: Some(vec![0u8; 1 << 20]), // 1 MiB
             arg: Some(vec![0u8; 1 << 20]),         // 1 MiB
             install_mode: Some(CanisterInstallMode::Install as i32),
+            wasm_module_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            arg_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
             skip_stopping_before_installing: None,
         }),
         Action::CreateServiceNervousSystem(
@@ -669,7 +672,7 @@ fn list_proposals_benchmark() -> BenchResult {
 
     bench_fn(|| {
         let response = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
-        ic_nns_governance_api::pb::v1::ListProposalInfoResponse::from(response);
+        ic_nns_governance_api::pb::v1::ListProposalInfoResponse::from(response)
     })
 }
 

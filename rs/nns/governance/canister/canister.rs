@@ -782,9 +782,7 @@ fn get_neuron_info_by_id_or_subaccount(
 #[query]
 fn get_proposal_info(id: ProposalId) -> Option<ProposalInfo> {
     debug_log("get_proposal_info");
-    governance()
-        .get_proposal_info(&caller(), id)
-        .map(ProposalInfo::from)
+    GOVERNANCE.with_borrow(|governance| governance.get_proposal_info(&caller(), id))
 }
 
 #[query]
@@ -800,17 +798,13 @@ fn get_neurons_fund_audit_info(
 #[query]
 fn get_pending_proposals() -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    governance()
-        .get_pending_proposals(&caller())
-        .into_iter()
-        .map(ProposalInfo::from)
-        .collect()
+    GOVERNANCE.with_borrow(|governance| governance.get_pending_proposals(&caller()))
 }
 
 #[query]
 fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     debug_log("list_proposals");
-    governance().list_proposals(&caller(), &(req.into())).into()
+    GOVERNANCE.with_borrow(|governance| governance.list_proposals(&caller(), &req.into()))
 }
 
 #[query]
@@ -892,7 +886,10 @@ fn get_latest_reward_event() -> RewardEvent {
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
-    let votable = governance().get_neuron_ids_by_principal(&caller());
+    let votable = governance()
+        .get_neuron_ids_by_principal(&caller())
+        .into_iter()
+        .collect();
 
     governance()
         .get_managed_neuron_ids_for(votable)
