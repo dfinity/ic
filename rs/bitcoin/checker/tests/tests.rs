@@ -10,7 +10,7 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
-use ic_metrics_assert::{MetricsAssert, PocketIcQueryCall};
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -378,7 +378,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
+        MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -423,7 +423,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -467,7 +467,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from_query_call(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -755,7 +755,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from_query_call(&setup)
+    MetricsAssert::from_http_query(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -835,7 +835,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-impl PocketIcQueryCall for &Setup {
+impl PocketIcHttpQuery for &Setup {
     fn get_pocket_ic(&self) -> &PocketIc {
         &self.env
     }

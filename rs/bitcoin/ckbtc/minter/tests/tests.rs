@@ -1233,7 +1233,7 @@ impl CkBtcSetup {
     }
 
     pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
-        MetricsAssert::from_query_call(self)
+        MetricsAssert::from_http_query(self)
     }
 }
 
