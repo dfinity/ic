@@ -139,10 +139,12 @@ struct Bouncers {
     certifier: Arc<CertifierBouncer>,
     dkg: Arc<DkgBouncer>,
     idkg: Arc<idkg::IDkgBouncer>,
+    https_outcalls: Arc<CanisterHttpGossipImpl>,
 }
 
 impl Bouncers {
     fn new(
+        log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
         time_source: Arc<dyn TimeSource>,
@@ -165,12 +167,19 @@ impl Bouncers {
             state_reader.clone(),
         ));
 
+        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(
+            consensus_pool_cache.clone(),
+            state_reader.clone(),
+            log.clone(),
+        ));
+
         Self {
             ingress,
             consensus,
             dkg,
             idkg,
             certifier,
+            https_outcalls,
         }
     }
 }
@@ -348,12 +357,11 @@ fn start_consensus(
         artifact_pool_config,
         &catch_up_package,
     );
-
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
-
     let bouncers = Bouncers::new(
+        log,
         metrics_registry,
         subnet_id,
         time_source.clone(),
@@ -603,16 +611,11 @@ fn start_consensus(
     };
 
     {
-        let bouncer = Arc::new(CanisterHttpGossipImpl::new(
-            Arc::clone(&consensus_pool_cache),
-            Arc::clone(&state_reader),
-            log.clone(),
-        ));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
             artifact_pools.canister_http_pool.clone(),
-            bouncer,
+            bouncers.https_outcalls,
             metrics_registry.clone(),
         );
 
