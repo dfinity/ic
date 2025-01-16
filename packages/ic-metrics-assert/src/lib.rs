@@ -44,7 +44,7 @@ impl<T> MetricsAssert<T> {
         let response = Decode!(
             &actual
                 .query_call(Encode!(&request).expect("failed to encode HTTP request"))
-                .expect("failed to query get_transactions on the ledger"),
+                .expect("failed to retrieve metrics"),
             HttpResponse
         )
         .unwrap();
