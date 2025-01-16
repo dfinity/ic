@@ -3233,6 +3233,7 @@ dependencies = [
  "stubborn-io",
  "subtle",
  "syn 1.0.109",
+ "syscalls",
  "tar",
  "tarpc",
  "tempfile",
@@ -10885,6 +10886,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.87",
+]
+
+[[package]]
+name = "syscalls"
+version = "0.6.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43d0e35dc7d73976a53c7e6d7d177ef804a0c0ee774ec77bcc520c2216fd7cbe"
+dependencies = [
+ "serde",
+ "serde_repr",
 ]
 
 [[package]]

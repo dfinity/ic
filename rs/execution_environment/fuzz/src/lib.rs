@@ -13,6 +13,8 @@ use nix::unistd::Pid;
 use procfs::process::Process;
 use std::collections::BTreeSet;
 
+use syscalls::Sysno;
+
 #[cfg(target_os = "linux")]
 use nix::{sys::ptrace, sys::wait::waitpid, unistd::fork, unistd::ForkResult};
 
@@ -83,6 +85,15 @@ where
         }
         Ok(ForkResult::Parent { child }) => {
             std::thread::sleep(std::time::Duration::from_secs(5));
+            let allowed_syscalls: BTreeSet<Sysno> = BTreeSet::from([
+                Sysno::mmap,
+                Sysno::mprotect,
+                Sysno::munmap,
+                Sysno::madvise,
+                Sysno::sendmsg,
+                Sysno::sigaltstack,
+                Sysno::futex,
+            ]);
             loop {
                 // This code employs a manual heuristic to determine which process PID to attach to,
                 // specifically targeting the one executing the Wasm code.
@@ -100,7 +111,7 @@ where
                     children.pop_last();
                 }
                 let child = children.last().unwrap();
-                trace(name, Pid::from_raw((*child).into()));
+                trace(name, Pid::from_raw((*child).into()), &allowed_syscalls);
             }
         }
         Err(err) => {
@@ -117,7 +128,7 @@ where
     sandbox();
 }
 
-fn trace(name: &str, child: Pid) {
+fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
     if let Err(err) = ptrace::attach(child) {
         println!(
             "ptrace: failed to attach process {}::{}: {}",
@@ -144,8 +155,10 @@ fn trace(name: &str, child: Pid) {
                 }
 
                 if let Ok(regs) = ptrace::getregs(child) {
-                    // TODO: Add a lookup against allowed syscalls and panic if not present.
-                    println!("Syscall name: {:?} {}::{}", regs.orig_rax, name, child,);
+                    let sysno = Sysno::from(regs.orig_rax as u32);
+                    if !allowed_syscalls.contains(&sysno) {
+                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
+                    }
                 }
 
                 if let Ok(_) = ptrace::syscall(child, None) {
@@ -154,8 +167,10 @@ fn trace(name: &str, child: Pid) {
             }
             WaitStatus::PtraceSyscall(_) => {
                 if let Ok(regs) = ptrace::getregs(child) {
-                    // TODO: Add a lookup against allowed syscalls and panic if not present.
-                    println!("Syscall name: {:?} {}::{}", regs.orig_rax, name, child,);
+                    let sysno = Sysno::from(regs.orig_rax as u32);
+                    if !allowed_syscalls.contains(&sysno) {
+                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
+                    }
                 }
 
                 if let Ok(_) = ptrace::syscall(child, None) {

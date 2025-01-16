@@ -1,5 +1,5 @@
 {
-  "checksum": "ab80704b0d49d0f9576eac66bb53aa9f54552117194e8919b1343fe056fdf47c",
+  "checksum": "07aeef0cb557cc9ccec423a101deb85ca915034d9870de83ef80d8edcd3e64c2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19215,6 +19215,10 @@
             {
               "id": "syn 1.0.109",
               "target": "syn"
+            },
+            {
+              "id": "syscalls 0.6.18",
+              "target": "syscalls"
             },
             {
               "id": "tar 0.4.39",
@@ -69495,6 +69499,95 @@
       ],
       "license_file": "LICENSE"
     },
+    "syscalls 0.6.18": {
+      "name": "syscalls",
+      "version": "0.6.18",
+      "package_url": "https://github.com/jasonwhite/syscalls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/syscalls/0.6.18/download",
+          "sha256": "43d0e35dc7d73976a53c7e6d7d177ef804a0c0ee774ec77bcc520c2216fd7cbe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syscalls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "syscalls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde",
+            "serde_repr",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "syscalls 0.6.18",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_repr 0.1.19",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.18"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "BSD-2-Clause",
+      "license_ids": [
+        "BSD-2-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
     "system-configuration 0.5.1": {
       "name": "system-configuration",
       "version": "0.5.1",
@@ -87371,6 +87464,7 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
+    "syscalls 0.6.18",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.12.0",

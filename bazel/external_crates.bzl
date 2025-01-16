@@ -1243,6 +1243,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "syscalls": crate.spec(
+                version = "^0.6.18",
+            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
