@@ -101,9 +101,9 @@ function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" && \
-          -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" && \
-          -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
+    if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" &&
+        -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" &&
+        -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
@@ -218,9 +218,9 @@ main() {
             validate_domain_name
         fi
 
-        if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" && \
-              -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" && \
-              -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
+        if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" &&
+            -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" &&
+            -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
             setup_ipv4_network
             ping_ipv4_gateway
         fi
