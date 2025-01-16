@@ -62,6 +62,7 @@ impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
 
 impl CountBytes for SelfValidatingPayload {
     fn count_bytes(&self) -> usize {
-        self.0.iter().map(|x| x.count_bytes()).sum()
+        let SelfValidatingPayload(responses) = &self;
+        responses.iter().map(|x| x.count_bytes()).sum()
     }
 }

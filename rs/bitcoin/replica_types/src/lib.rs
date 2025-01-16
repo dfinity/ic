@@ -414,6 +414,7 @@ impl From<v1::SendTransactionResponse> for SendTransactionResponse {
 impl SendTransactionResponse {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
+        let SendTransactionResponse {} = &self;
         0
     }
 }
@@ -429,7 +430,11 @@ pub struct BitcoinReject {
 impl BitcoinReject {
     /// Returns the size of this `RejectResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        size_of_val(&self.reject_code) + self.message.len()
+        let BitcoinReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -598,7 +603,11 @@ impl TryFrom<v1::BitcoinAdapterResponse> for BitcoinAdapterResponse {
 impl BitcoinAdapterResponse {
     /// Returns the size of this `BitcoinAdapterResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        self.response.count_bytes() + std::mem::size_of::<u64>()
+        let BitcoinAdapterResponse {
+            response,
+            callback_id: _,
+        } = &self;
+        response.count_bytes() + std::mem::size_of::<u64>()
     }
 }
 
@@ -718,15 +727,10 @@ pub struct GetSuccessorsResponseComplete {
 impl GetSuccessorsResponseComplete {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        self.count_blocks_bytes() + self.count_next_bytes()
-    }
-
-    pub fn count_blocks_bytes(&self) -> usize {
-        self.blocks.iter().map(|b| b.len()).sum::<usize>()
-    }
-
-    pub fn count_next_bytes(&self) -> usize {
-        self.next.iter().map(|n| n.len()).sum::<usize>()
+        let GetSuccessorsResponseComplete { blocks, next } = &self;
+        let blocks_bytes = blocks.iter().map(|b| b.len()).sum::<usize>();
+        let next_bytes = next.iter().map(|n| n.len()).sum::<usize>();
+        blocks_bytes + next_bytes
     }
 }
 
