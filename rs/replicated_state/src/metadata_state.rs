@@ -995,7 +995,7 @@ impl SystemMetadata {
     ///
     /// In the first phase (see [`Self::split()`]), the ingress history was left
     /// untouched on both subnets, in order to make it trivial to verify that no
-    /// tampering had occurred. StreamMap, subnet call contexts and metrics and all
+    /// tampering had occurred. Streams, subnet call contexts and metrics and all
     /// other metadata were preserved on subnet A' and set to default on subnet B.
     ///
     /// In this second phase, `ingress_history` is pruned, retaining only messages
