@@ -236,7 +236,7 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
     // Current transcripts come from next transcripts of the last_summary.
-    let current_transcripts = last_summary.clone().into_next_transcripts();
+    let current_transcripts = as_next_transcripts(last_summary);
     let vet_key_ids = get_enabled_vet_keys(
         subnet_id,
         registry_client,
@@ -306,6 +306,21 @@ fn create_transcript(
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
+}
+
+/// Return the set of next transcripts for all tags. If for some tag
+/// the next transcript is not available, the current transcript is used.
+fn as_next_transcripts(summary: &Summary) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    let mut next_transcripts = summary.next_transcripts().clone();
+
+    for (tag, transcript) in summary.current_transcripts().iter() {
+        if !next_transcripts.contains_key(tag) {
+            next_transcripts.insert(tag.clone(), transcript.clone());
+            // TODO: Log this case
+        }
+    }
+
+    next_transcripts
 }
 
 #[allow(clippy::type_complexity)]
@@ -1256,26 +1271,25 @@ mod tests {
             // Remove configs from `genesis_summary`. This emulates the
             // behaviour of DKG failing validations.
             // In this case, the `current_transcripts` are being reshared.
-            // TODO: This is no longer true and we will need a new way to test this
-            // genesis_summary.configs.clear();
-            // let next_summary = create_summary_payload(&genesis_summary);
-            // dbg!(&next_summary
-            //     .configs
-            //     .keys()
-            //     .map(|id| id.dkg_tag.clone())
-            //     .collect::<Vec<_>>());
-            // dbg!(&next_summary.current_transcripts().keys());
-            // dbg!(&next_summary.next_transcripts().keys());
-            // for (_, conf) in next_summary.configs.iter() {
-            //     let tag = &conf.dkg_id().dkg_tag;
-            //     match tag {
-            //         NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
-            //             next_summary.clone().current_transcript(tag),
-            //             &conf.resharing_transcript().clone().unwrap()
-            //         ),
-            //         NiDkgTag::LowThreshold => (),
-            //     }
-            // }
+            genesis_summary.configs.clear();
+            let next_summary = create_summary_payload(&genesis_summary);
+            dbg!(&next_summary
+                .configs
+                .keys()
+                .map(|id| id.dkg_tag.clone())
+                .collect::<Vec<_>>());
+            dbg!(&next_summary.current_transcripts().keys());
+            dbg!(&next_summary.next_transcripts().keys());
+            for (_, conf) in next_summary.configs.iter() {
+                let tag = &conf.dkg_id().dkg_tag;
+                match tag {
+                    NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => assert_eq!(
+                        next_summary.clone().current_transcript(tag).unwrap(),
+                        &conf.resharing_transcript().clone().unwrap()
+                    ),
+                    NiDkgTag::LowThreshold => (),
+                }
+            }
         });
     }
 
