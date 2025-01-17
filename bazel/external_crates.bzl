@@ -819,6 +819,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
+                features = [
+                    "ptrace",
+                ],
             ),
             "num-bigint": crate.spec(
                 version = "^0.4.6",
@@ -1233,6 +1236,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "fold",
                     "full",
                 ],
+            ),
+            "syscalls": crate.spec(
+                version = "^0.6.18",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",
