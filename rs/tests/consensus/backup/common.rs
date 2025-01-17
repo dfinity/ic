@@ -304,7 +304,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path =
         &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
-    let mut command = Command::new(&ic_backup_path);
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
@@ -400,7 +400,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
 
     info!(log, "Start again the backup process in a separate thread");
-    let mut command = Command::new(&ic_backup_path);
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
