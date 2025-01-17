@@ -97,7 +97,7 @@ pub enum RequestType {
     },
     #[serde(rename = "LIST_NEURONS")]
     #[serde(alias = "ListNeurons")]
-    ListNeurons,
+    ListNeurons { page_number: u64 },
     #[serde(rename = "FOLLOW")]
     #[serde(alias = "Follow")]
     Follow {
@@ -1393,7 +1393,10 @@ impl TransactionBuilder {
     }
 
     pub fn list_neurons(&mut self, req: &ListNeurons) -> Result<(), ApiError> {
-        let ListNeurons { account } = req;
+        let ListNeurons {
+            account,
+            page_number,
+        } = req;
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,

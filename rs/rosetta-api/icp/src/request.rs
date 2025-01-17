@@ -478,7 +478,10 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
-            RequestType::ListNeurons { .. } => Ok(Request::ListNeurons(ListNeurons { account })),
+            RequestType::ListNeurons { page_number } => Ok(Request::ListNeurons(ListNeurons {
+                account,
+                page_number: Some(*page_number),
+            })),
             RequestType::Follow {
                 neuron_index,
                 controller,

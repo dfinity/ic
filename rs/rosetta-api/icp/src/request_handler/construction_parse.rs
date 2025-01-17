@@ -550,8 +550,12 @@ fn list_neurons(
     requests: &mut Vec<Request>,
     _arg: Blob,
     from: AccountIdentifier,
+    page_number: Option<u64>,
 ) -> Result<(), ApiError> {
-    requests.push(Request::ListNeurons(ListNeurons { account: from }));
+    requests.push(Request::ListNeurons(ListNeurons {
+        account: from,
+        page_number,
+    }));
     Ok(())
 }
 
