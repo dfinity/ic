@@ -55,7 +55,7 @@ class BitcoinBlocklistHandler:
 }'''
 
     def format_address(self, address):
-        return '"' + address + '"'
+        return f'"{address}"'
 
 class EthereumBlocklistHandler:
 
@@ -84,7 +84,7 @@ class EthereumBlocklistHandler:
 }'''
 
     def format_address(self, address):
-        return 'ethereum_address!("' + address[2:] + '")'
+        return f'ethereum_address!("{address[2:]}")'
 
 
 def extract_addresses(currency, xml_file_path):
