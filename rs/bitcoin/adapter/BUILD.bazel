@@ -90,7 +90,7 @@ rust_binary(
 rust_test(
     name = "adapter_test",
     crate = ":adapter",
-    data = [
+    compile_data = [
         "test_data/first_2500_mainnet_headers.json",
         "test_data/first_2500_testnet_headers.json",
     ],

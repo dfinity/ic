@@ -553,11 +553,8 @@ where
         });
 
         for peers_sender in self.active_assembles.values() {
-            peers_sender.send_if_modified(|set| {
-                nodes_leaving_topology
-                    .iter()
-                    .any(|n| set.remove(*n))
-            });
+            peers_sender
+                .send_if_modified(|set| nodes_leaving_topology.iter().any(|n| set.remove(*n)));
         }
         debug_assert!(
             self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),

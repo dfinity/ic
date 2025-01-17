@@ -94,7 +94,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     let data_dir_path = tmp_dir.path().join("data");
     create_dir(data_dir_path.clone()).unwrap();
 
-    Command::new(bitcoind_path)
+    let mut bitcoin_d_process = Command::new(bitcoind_path)
         .arg(format!("-conf={}", conf_path.display()))
         .arg(format!("-datadir={}", data_dir_path.display()))
         .spawn()
@@ -180,4 +180,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             n += 1;
         }
     }
+
+    // Kill the task to avoid zombie process.
+    bitcoin_d_process.kill().unwrap();
+    bitcoin_d_process.wait().unwrap();
 }
