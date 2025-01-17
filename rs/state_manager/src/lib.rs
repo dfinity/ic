@@ -63,7 +63,6 @@ use ic_types::{
     SubnetId,
 };
 use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
-use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};

@@ -1,5 +1,5 @@
 use crate::{
-    checkpoint::{validate_checkpoint_and_remove_unverified_marker, validate_eq_checkpoint},
+    checkpoint::validate_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
