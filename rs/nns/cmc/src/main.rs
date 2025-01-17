@@ -3687,4 +3687,78 @@ mod tests {
             original_blocks_notified,
         );
     }
+
+    #[test]
+    fn test_clear_block_processing_status_happy() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            target_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that target block was deleted.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            btreemap! {
+                red_herring_block_index => NotificationStatus::Processing,
+                // target_block_index no longer present.
+            },
+        );
+    }
+
+    #[test]
+    fn test_clear_block_processing_status_not_processing() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            target_block_index => NotificationStatus::NotifiedTopUp(Ok(Cycles::new(1_000_000_000_000))),
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that blocks_notified not changed.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
+
+    #[test]
+    fn test_clear_block_processing_status_absent_entirely() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that blocks_notified not changed.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
 }
