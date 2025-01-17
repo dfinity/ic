@@ -19,23 +19,9 @@ impl Registry {
 
         let mut mutations = vec![];
 
-        // Filter Node Operator IDs that have an associated NodeOperatorRecord in the Registry
-        let valid_node_operator_ids_from_blobs: Vec<PrincipalId> = payload
-            .node_operators_to_remove
-            .into_iter()
-            .filter_map(|bytes| {
-                PrincipalId::try_from(bytes)
-                    .ok()
-                    .filter(|node_operator_id| {
-                        let node_operator_record_key =
-                            make_node_operator_record_key(*node_operator_id).into_bytes();
-                        self.get(&node_operator_record_key, self.latest_version())
-                            .is_some()
-                    })
-            })
-            .collect();
-        let valid_node_operator_ids = payload
-            .node_operator_principals_to_remove
+        // Filter Node Operator IDs that have a NodeOperatorRecord in the Registry
+        let mut valid_node_operator_ids_to_remove: Vec<PrincipalId> = payload
+            .principal_ids_to_remove()
             .into_iter()
             .filter(|node_operator_id| {
                 let node_operator_record_key =
@@ -44,12 +30,10 @@ impl Registry {
                     .is_some()
             })
             .collect();
-        let mut valid_node_operator_ids =
-            [valid_node_operator_ids_from_blobs, valid_node_operator_ids].concat();
 
-        self.filter_node_operators_that_have_nodes(&mut valid_node_operator_ids);
+        self.filter_node_operators_that_have_nodes(&mut valid_node_operator_ids_to_remove);
 
-        for node_operator_id in valid_node_operator_ids {
+        for node_operator_id in valid_node_operator_ids_to_remove {
             let node_operator_record_key =
                 make_node_operator_record_key(node_operator_id).into_bytes();
             mutations.push(RegistryMutation {
@@ -90,17 +74,43 @@ pub struct RemoveNodeOperatorsPayload {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub node_operators_to_remove: Vec<Vec<u8>>,
 
-    // In Protobuf, a repeated field is effectively optional in the sense that if it
-    // is not included on the wire or if it has no elements, it defaults to an empty list.
-    #[prost(message, repeated, tag = "2")]
-    pub node_operator_principals_to_remove: Vec<PrincipalId>,
+    // In protobuf (specifically proto3), "repeated" fields are not truly "optional"
+    // and cannot directly be marked as optional in addition to "repeated".
+    // Therefore, prost does not directly permit something like
+    // #[prost(message, repeated, optional, tag = "...")] to yield Option<Vec<T>>.
+    // However, for backwards compatibility Candid requires the added fields to be optional
+    // So it's necessary to wrap the repeated field in a separate (sub-)message that
+    // itself can be optional.
+    #[prost(message, optional, tag = "2")]
+    pub node_operator_principals_to_remove: Option<NodeOperatorPrincipals>,
+}
+
+/// Wrapper message for the optional repeated field
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize, Hash)]
+pub struct NodeOperatorPrincipals {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: Vec<PrincipalId>,
 }
 
 impl RemoveNodeOperatorsPayload {
     pub fn new(node_operators_to_remove: Vec<PrincipalId>) -> Self {
         Self {
             node_operators_to_remove: vec![],
-            node_operator_principals_to_remove: node_operators_to_remove,
+            node_operator_principals_to_remove: Some(NodeOperatorPrincipals {
+                principals: node_operators_to_remove,
+            }),
         }
+    }
+
+    pub fn principal_ids_to_remove(&self) -> Vec<PrincipalId> {
+        self.node_operators_to_remove
+            .iter()
+            .filter_map(|bytes| PrincipalId::try_from(bytes.clone()).ok())
+            .chain(
+                self.node_operator_principals_to_remove
+                    .as_ref()
+                    .map_or_else(Vec::new, |principals| principals.principals.clone()),
+            )
+            .collect()
     }
 }
