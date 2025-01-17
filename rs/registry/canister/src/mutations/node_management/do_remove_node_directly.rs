@@ -135,7 +135,7 @@ impl Registry {
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
         let subnet_list_record = get_subnet_list_record(self);
         let is_node_in_subnet = find_subnet_for_node(self, payload.node_id, &subnet_list_record);
-        let mut mutations1 = vec![];
+        let mut mutations = vec![];
         if let Some(subnet_id) = is_node_in_subnet {
             if new_node_id.is_some() {
                 // The node is in a subnet and is being replaced with a new node.
@@ -157,7 +157,7 @@ impl Registry {
                     &mut subnet_record,
                     subnet_membership,
                 );
-                mutations1 = vec![upsert(
+                mutations = vec![upsert(
                     make_subnet_record_key(subnet_id),
                     subnet_record.encode_to_vec(),
                 )];
@@ -184,14 +184,14 @@ impl Registry {
         //   * Delete the node record
         //   * Delete entries for node encryption keys
         //   * Increment NO's allowance by 1
-        let mut mutations2 = make_remove_node_registry_mutations(self, payload.node_id);
+        mutations.extend(make_remove_node_registry_mutations(self, payload.node_id));
         // mutation to update node operator value
-        mutations2.push(make_update_node_operator_mutation(
+        mutations.push(make_update_node_operator_mutation(
             node_operator_id,
             &new_node_operator_record,
         ));
 
-        [mutations1, mutations2].concat()
+        mutations
     }
 }
 

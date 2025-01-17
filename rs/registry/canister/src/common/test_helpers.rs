@@ -187,10 +187,13 @@ pub fn registry_add_node_operator_for_node(
         PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
     let node_operator_record_key = make_node_operator_record_key(node_operator_id);
 
-    if let None = registry.get(
-        node_operator_record_key.as_bytes(),
-        registry.latest_version(),
-    ) {
+    if registry
+        .get(
+            node_operator_record_key.as_bytes(),
+            registry.latest_version(),
+        )
+        .is_none()
+    {
         let node_operator_record = NodeOperatorRecord {
             node_allowance,
             ..Default::default()
