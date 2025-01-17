@@ -21,7 +21,7 @@ impl Registry {
 
         // Filter Node Operator IDs that have an associated NodeOperatorRecord in the Registry
         let valid_node_operator_ids_from_blobs: Vec<PrincipalId> = payload
-            .node_operators_to_remove_blobs
+            .node_operators_to_remove
             .into_iter()
             .filter_map(|bytes| {
                 PrincipalId::try_from(bytes)
@@ -35,7 +35,7 @@ impl Registry {
             })
             .collect();
         let valid_node_operator_ids = payload
-            .node_operators_to_remove
+            .node_operator_principals_to_remove
             .into_iter()
             .filter(|node_operator_id| {
                 let node_operator_record_key =
@@ -88,19 +88,19 @@ impl Registry {
 #[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize, Hash)]
 pub struct RemoveNodeOperatorsPayload {
     #[prost(bytes = "vec", repeated, tag = "1")]
-    pub node_operators_to_remove_blobs: Vec<Vec<u8>>,
+    pub node_operators_to_remove: Vec<Vec<u8>>,
 
     // In Protobuf, a repeated field is effectively optional in the sense that if it
     // is not included on the wire or if it has no elements, it defaults to an empty list.
     #[prost(message, repeated, tag = "2")]
-    pub node_operators_to_remove: Vec<PrincipalId>,
+    pub node_operator_principals_to_remove: Vec<PrincipalId>,
 }
 
 impl RemoveNodeOperatorsPayload {
     pub fn new(node_operators_to_remove: Vec<PrincipalId>) -> Self {
         Self {
-            node_operators_to_remove_blobs: vec![],
-            node_operators_to_remove,
+            node_operators_to_remove: vec![],
+            node_operator_principals_to_remove: node_operators_to_remove,
         }
     }
 }
