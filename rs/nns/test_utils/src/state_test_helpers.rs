@@ -1592,7 +1592,7 @@ pub fn list_all_neurons_and_combine_responses(
 
     // TODO use the variable from NNS Governance
     let pages_needed =
-        (response.total_neurons_found.unwrap()).div_ceil(request.page_size.unwrap_or(500));
+        (response.total_pages_available.unwrap()).div_ceil(request.page_size.unwrap_or(500));
 
     for page in 1..pages_needed {
         let mut new_request = request.clone();

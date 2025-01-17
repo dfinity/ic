@@ -2343,7 +2343,7 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
-            total_neurons_found: Some(1),
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2403,7 +2403,7 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
-            total_neurons_found: Some(1),
+            total_pages_available: Some(1),
         },
     );
 }

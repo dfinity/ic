@@ -215,7 +215,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
@@ -2281,7 +2281,9 @@ impl Governance {
         } = list_neurons;
 
         let page_number = page_number.unwrap_or(0);
-        let page_size = page_size.unwrap_or(MAX_LIST_NEURONS_RESULTS as u64);
+        let page_size = page_size
+            .unwrap_or(MAX_LIST_NEURONS_RESULTS as u64)
+            .min(MAX_LIST_NEURONS_RESULTS as u64);
 
         let include_empty_neurons_readable_by_caller = include_empty_neurons_readable_by_caller
             // This default is to maintain the previous behavior. (Unlike
@@ -2375,7 +2377,7 @@ impl Governance {
         ListNeuronsResponse {
             neuron_infos,
             full_neurons,
-            total_neurons_found,
+            total_pages_available: total_neurons_found,
         }
     }
 

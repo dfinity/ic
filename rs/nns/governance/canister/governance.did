@@ -446,7 +446,7 @@ type ListNeurons = record {
 type ListNeuronsResponse = record {
   neuron_infos : vec record { nat64; NeuronInfo };
   full_neurons : vec Neuron;
-  total_neurons_found: opt nat64;
+  total_pages_available: opt nat64;
 };
 
 type ListNodeProviderRewardsRequest = record {

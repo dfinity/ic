@@ -3480,6 +3480,20 @@ pub struct ListProposalInfoResponse {
 /// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
 /// the list of neuron IDs of neurons for which the caller is the
 /// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3510,8 +3524,8 @@ pub struct ListNeurons {
     /// existing (unmigrated) callers.
     #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
-    /// If this is set, we return the batch of neurons at a given page, using the limit size to
-    /// determine how pages are broken up.
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
     #[prost(uint64, optional, tag = "5")]
     pub page_number: Option<u64>,
     /// If this is set, we use the page limit provided to determine how large pages will be.
@@ -3536,11 +3550,10 @@ pub struct ListNeuronsResponse {
     /// `ManageNeuron` topic).
     #[prost(message, repeated, tag = "2")]
     pub full_neurons: Vec<Neuron>,
-    /// This is returned to tell the caller how many neurons are available to query.
-    /// If this is greater than the page size, additional requests must be made to see the full
-    /// list of neurons.
+    /// This is returned to tell the caller how many pages of results are available to query.
+    /// If there are fewer than the page_size neurons, this will equal 1.
     #[prost(uint64, optional, tag = "3")]
-    pub total_neurons_found: Option<u64>,
+    pub total_pages_available: Option<u64>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
