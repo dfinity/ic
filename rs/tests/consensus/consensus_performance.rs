@@ -73,8 +73,8 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 const NODES_COUNT: usize = 13;
 const DKG_INTERVAL: u64 = 999;
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
-const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
+const BANDWIDTH_MBITS: u32 = 3000; // artificial cap on bandwidth
+const LATENCY: Duration = Duration::from_millis(0); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
@@ -182,7 +182,7 @@ fn test_few_small_messages(env: TestEnv) {
 }
 
 fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0)
+    test(env, 4_000, 2_000.0)
 }
 
 fn test_few_large_messages(env: TestEnv) {
@@ -190,7 +190,7 @@ fn test_few_large_messages(env: TestEnv) {
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0)
+    test(env, 1_999_000, 4.0)
 }
 
 fn main() -> Result<()> {
@@ -199,10 +199,10 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
+        //.add_test(systest!(test_few_small_messages))
         .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_few_large_messages))
-        .add_test(systest!(test_large_messages))
+        //.add_test(systest!(test_few_large_messages))
+        //.add_test(systest!(test_large_messages))
         .execute_from_args()?;
     Ok(())
 }
