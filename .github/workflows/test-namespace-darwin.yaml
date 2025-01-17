@@ -32,6 +32,7 @@ jobs:
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
+          export CC=/opt/homebrew/opt/llvm/bin/clang
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
