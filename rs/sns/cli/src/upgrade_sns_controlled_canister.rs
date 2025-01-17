@@ -1,5 +1,6 @@
+use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use anyhow::{bail, Context, Result};
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::Principal;
 use candid_utils::validation::validate_upgrade_args;
 use clap::Parser;
 use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
@@ -12,12 +13,10 @@ use ic_nervous_system_agent::{
     sns::root::SnsCanisters,
 };
 use ic_sns_governance::pb::v1::{
-    manage_neuron, manage_neuron_response, proposal::Action, ChunkedCanisterWasm,
-    ManageNeuronResponse, NeuronId, Proposal, UpgradeSnsControlledCanister,
+    proposal::Action, ChunkedCanisterWasm, Proposal, UpgradeSnsControlledCanister,
 };
+use serde_cbor::Value;
 use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
-
-use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
 const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
@@ -25,24 +24,27 @@ const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 /// The arguments used to configure the upgrade_sns_controlled_canister command.
 #[derive(Debug, Parser)]
 pub struct UpgradeSnsControlledCanisterArgs {
-    #[clap(long)]
-    root_canister_id: CanisterId,
-
+    /// SNS neuron ID (subaccount) to be used for proposing the upgrade.
     #[clap(long)]
     sns_neuron_id: ParsedSnsNeuron,
 
+    /// ID of the target canister to be upgraded.
     #[clap(long)]
     target_canister_id: CanisterId,
 
+    /// Path to a ICP WASM module file (may be gzipped).
     #[clap(long)]
     wasm_path: PathBuf,
 
+    /// Upgrade argument for the Candid service.
     #[clap(long)]
     candid_arg: Option<String>,
 
+    /// URL (starting with https://) of a web page with a public announcement of this upgrade.
     #[clap(long)]
     proposal_url: Url,
 
+    /// Human-readable text explaining why this upgrade is being done (may be markdown).
     #[clap(long)]
     summary: String,
 }
@@ -71,7 +73,6 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     // Prepare.
 
     let UpgradeSnsControlledCanisterArgs {
-        root_canister_id,
         sns_neuron_id,
         target_canister_id,
         wasm_path,
@@ -79,13 +80,6 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         proposal_url,
         summary,
     } = args;
-
-    let root_canister = sns::root::RootCanister {
-        canister_id: root_canister_id.get(),
-    };
-
-    // Check that the Root canister exists, identifying some SNS.
-    let SnsCanisters { sns, dapps } = root_canister.list_sns_canisters(agent).await?;
 
     // Check that the target canister exists, and see if it serves its Candid service definition.
     let current_module_hash = agent
@@ -117,6 +111,63 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     } else {
         None
     };
+
+    // Find the Root canister of the SNS controlling the target.
+    let target_controllers = {
+        let controllers_blob = agent
+            .read_state_canister_info(target_canister_id.get().0, "controllers")
+            .await
+            .expect("Cannot read target canister's controllers.");
+
+        let cbor: Value = serde_cbor::from_slice(&controllers_blob)
+            .expect("Invalid cbor data for target controller's controllers.");
+
+        let Value::Array(controllers) = cbor else {
+            panic!("Expected controllers to be an array, but got {cbor:?}");
+        };
+
+        controllers
+            .into_iter()
+            .map(|elem| {
+                let Value::Bytes(bytes) = elem else {
+                    panic!("Expected element in controllers to be of type bytes, got {elem:?}");
+                };
+                Principal::try_from(&bytes).unwrap()
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let root_canister_id = {
+        let sns_root_controllers = target_controllers
+            .into_iter()
+            .filter_map(|controller| {
+                let controller = PrincipalId(controller);
+                if controller.is_self_authenticating() {
+                    return None;
+                }
+                // TODO: Check that the controller is actually an SNS Root, not soe other canister.
+                Some(controller)
+            })
+            .collect::<BTreeSet<_>>();
+
+        assert!(
+            !sns_root_controllers.is_empty(),
+            "The target canister is not controlled by an SNS Root."
+        );
+        assert_eq!(
+            sns_root_controllers.len(),
+            1,
+            "The target canister is controlled by more than one SNS Root!"
+        );
+        CanisterId::try_from_principal_id(*sns_root_controllers.first().unwrap()).unwrap()
+    };
+
+    let root_canister = sns::root::RootCanister {
+        canister_id: root_canister_id.get(),
+    };
+
+    // Check that the Root canister exists, identifying some SNS.
+    let SnsCanisters { sns, dapps } = root_canister.list_sns_canisters(agent).await?;
 
     // Check that the target is indeed controlled by the SNS.
     if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
