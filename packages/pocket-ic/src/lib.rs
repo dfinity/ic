@@ -695,7 +695,7 @@ impl PocketIc {
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
@@ -706,7 +706,7 @@ impl PocketIc {
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
     pub fn ingress_status_as(
         &self,
@@ -718,8 +718,8 @@ impl PocketIc {
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
