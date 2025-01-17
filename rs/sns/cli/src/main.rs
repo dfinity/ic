@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    let agent = args.agent()?;
+    let agent = args.agent().await?;
 
     match args.sub_command {
         SubCommand::DeployTestflight(args) => deploy_testflight(args),
