@@ -1581,48 +1581,29 @@ pub fn list_all_neurons_and_combine_responses(
     sender: PrincipalId,
     request: ListNeurons,
 ) -> ListNeuronsResponse {
-    assert!(
-        request.start_from_neuron_id.is_none(),
+    assert_eq!(
+        request.page_number.unwrap_or_default(),
+        0,
         "This method is intended to ensure all neurons \
-                        are paged through.  `start_from_neuron_id` should be None."
+                        are paged through.  `page_number` should be None or Some(0)"
     );
 
-    let mut response = list_neurons(
-        state_machine,
-        sender,
-        ListNeurons {
-            neuron_ids: vec![],
-            include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
-            include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: None,
-        },
-    );
+    let mut response = list_neurons(state_machine, sender, request.clone());
 
-    let mut next_neuron_id = response.total_neurons_found;
+    // TODO use the variable from NNS Governance
+    let pages_needed =
+        (response.total_neurons_found.unwrap()).div_ceil(request.page_size.unwrap_or(500));
 
-    let mut count = 0;
-    while next_neuron_id.is_some() {
+    for page in 1..pages_needed {
         let mut new_request = request.clone();
-        new_request.start_from_neuron_id = next_neuron_id;
+        new_request.page_number = Some(page);
         let mut new_response = list_neurons(state_machine, sender, new_request);
         response.full_neurons.append(&mut new_response.full_neurons);
         response
             .neuron_infos
             .extend(new_response.neuron_infos.into_iter());
-
-        next_neuron_id = new_response.total_neurons_found;
-
-        count += 1;
-        if count > 20 {
-            panic!(
-                "More than 20 requests were made to list_neurons.  \
-                    Did you intend to retrieve more than 10,000 neurons?"
-            );
-        }
     }
 
-    response.total_neurons_found = None;
     response
 }
 
@@ -1638,7 +1619,8 @@ pub fn list_neurons_by_principal(
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: None,
+            page_number: None,
+            page_size: None,
         },
     )
 }

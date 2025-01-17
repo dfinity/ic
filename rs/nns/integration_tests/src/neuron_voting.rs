@@ -403,7 +403,8 @@ fn test_voting_can_span_multiple_rounds() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: None,
+            page_number: None,
+            page_size: None,
         },
     );
 
@@ -429,7 +430,8 @@ fn test_voting_can_span_multiple_rounds() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: None,
+            page_number: None,
+            page_size: None,
         },
     );
 
