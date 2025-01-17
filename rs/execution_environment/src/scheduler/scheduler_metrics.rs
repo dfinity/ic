@@ -136,8 +136,8 @@ impl SchedulerMetrics {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",
                 "Number of rounds for which a canister was not scheduled.",
-                // 1, 2, 5, …, 100, 200, 500
-                decimal_buckets(0, 2),
+                // 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets(0, 3),
             ),
             canister_compute_allocation_violation: metrics_registry.int_counter(
                 "scheduler_compute_allocation_violations",

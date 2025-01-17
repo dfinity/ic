@@ -218,83 +218,77 @@ fn canister_queue_push_without_reserved_slot_panics() {
 /// Generator for an arbitrary inbound message reference.
 fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
-        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
-        1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
-        1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
+        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
+        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
     ]
 }
 
-proptest! {
-    #[test]
-    fn canister_queue_push_and_pop(
-        mut references in proptest::collection::vec_deque(
-            arbitrary_message_reference(),
-            10..20,
-        )
-    ) {
-        // Create a queue with large enough capacity.
-        let mut queue = InputQueue::new(20);
+#[test_strategy::proptest]
+fn canister_queue_push_and_pop(
+    #[strategy(proptest::collection::vec_deque(arbitrary_message_reference(), 10..20))]
+    mut references: VecDeque<InboundReference>,
+) {
+    // Create a queue with large enough capacity.
+    let mut queue = InputQueue::new(20);
 
-        // Push all references onto the queue.
-        for reference in references.iter() {
-            match reference {
-                reference if reference.kind() == Kind::Request => {
-                    queue.push_request(*reference);
-                }
-                reference => {
-                    queue.try_reserve_response_slot().unwrap();
-                    queue.push_response(*reference);
-                }
+    // Push all references onto the queue.
+    for reference in references.iter() {
+        match reference {
+            reference if reference.kind() == Kind::Request => {
+                queue.push_request(*reference);
             }
-            prop_assert_eq!(Ok(()), queue.check_invariants());
-        }
-
-        // Check the contents of the queue via `peek` and `pop`.
-        while let Some(r) = queue.peek() {
-            let reference = references.pop_front();
-            prop_assert_eq!(reference, Some(r));
-            prop_assert_eq!(reference, queue.pop());
-        }
-
-        // All references should have been consumed.
-        prop_assert!(references.is_empty());
-    }
-
-    #[test]
-    fn encode_roundtrip(
-        references in proptest::collection::vec_deque(
-            arbitrary_message_reference(),
-            10..20,
-        ),
-        reserved_slots in 0..3
-    ) {
-        let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-
-        // Push all references onto the queue.
-        for reference in references.iter() {
-            match reference {
-                reference if reference.kind() == Kind::Request => {
-                    queue.push_request(*reference);
-                }
-                reference => {
-                    queue.try_reserve_response_slot().unwrap();
-                    queue.push_response(*reference);
-                }
+            reference => {
+                queue.try_reserve_response_slot().unwrap();
+                queue.push_response(*reference);
             }
-            prop_assert_eq!(Ok(()), queue.check_invariants());
-        }
-        // And make `reserved_slots` additional reservations.
-        for _ in 0..reserved_slots {
-            queue.try_reserve_response_slot().unwrap();
         }
         prop_assert_eq!(Ok(()), queue.check_invariants());
-
-        let encoded: pb_queues::CanisterQueue = (&queue).into();
-        let decoded = encoded.try_into().unwrap();
-
-        assert_eq!(queue, decoded);
     }
+
+    // Check the contents of the queue via `peek` and `pop`.
+    while let Some(r) = queue.peek() {
+        let reference = references.pop_front();
+        prop_assert_eq!(reference, Some(r));
+        prop_assert_eq!(reference, queue.pop());
+    }
+
+    // All references should have been consumed.
+    prop_assert!(references.is_empty());
+}
+
+#[test_strategy::proptest]
+fn encode_roundtrip(
+    #[strategy(proptest::collection::vec_deque(arbitrary_message_reference(), 10..20))]
+    references: VecDeque<InboundReference>,
+    #[strategy(0..3)] reserved_slots: i32,
+) {
+    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+
+    // Push all references onto the queue.
+    for reference in references.iter() {
+        match reference {
+            reference if reference.kind() == Kind::Request => {
+                queue.push_request(*reference);
+            }
+            reference => {
+                queue.try_reserve_response_slot().unwrap();
+                queue.push_response(*reference);
+            }
+        }
+        prop_assert_eq!(Ok(()), queue.check_invariants());
+    }
+    // And make `reserved_slots` additional reservations.
+    for _ in 0..reserved_slots {
+        queue.try_reserve_response_slot().unwrap();
+    }
+    prop_assert_eq!(Ok(()), queue.check_invariants());
+
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
+    let decoded = encoded.try_into().unwrap();
+
+    prop_assert_eq!(queue, decoded);
 }
 
 #[test]
