@@ -2658,17 +2658,6 @@ impl StateManagerImpl {
                 .start_timer();
             switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory());
         }
-        {
-            let state2 = checkpoint::load_checkpoint(
-                &cp_layout,
-                self.own_subnet_type,
-                &self.metrics.checkpoint_metrics,
-                None,
-                Arc::clone(&self.get_fd_factory()),
-            )
-            .unwrap();
-            state.validate_eq(&state2).unwrap();
-        }
         let state = Arc::new(state);
         self.tip_channel
             .send(TipRequest::ValidateReplicatedState {
