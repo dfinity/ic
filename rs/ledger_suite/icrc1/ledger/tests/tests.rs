@@ -467,6 +467,11 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn icrc1_test_upgrade_serialization_from_v4() {
+    icrc1_test_upgrade_serialization(ledger_wasm());
+}
+
+#[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
     icrc1_test_upgrade_serialization(ledger_mainnet_wasm());
 }

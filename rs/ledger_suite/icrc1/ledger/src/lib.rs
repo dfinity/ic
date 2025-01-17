@@ -677,14 +677,13 @@ impl Ledger {
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
-            apply_transaction_no_trimming(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(
-                |err| {
+            apply_transaction_no_trimming(&mut ledger, mint, now, Tokens::ZERO, None)
+                .unwrap_or_else(|err| {
                     panic!(
                         "failed to mint {} tokens to {}: {:?}",
                         balance, account, err
                     )
-                },
-            );
+                });
         }
 
         ledger
@@ -1020,6 +1019,20 @@ impl Ledger {
             transactions: local_transactions,
             archived_transactions,
         }
+    }
+
+    /// Returns local ledger blocks.
+    pub fn get_ledger_blocks(&self, start: BlockIndex, length: usize) -> Vec<Block<Tokens>> {
+        let (_first_index, local_blocks, _archived_transactions) = self.query_blocks(
+            start,
+            length,
+            |enc_block| -> Block<Tokens> {
+                Block::decode(enc_block.clone()).expect("bug: failed to decode encoded block")
+            },
+            |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+        );
+
+        local_blocks
     }
 
     /// Returns blocks in the specified range.

@@ -238,28 +238,45 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    if upgrade_from_version < 2 {
-        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+    Access::with_ledger_mut(|ledger| {
         clear_stable_balances_data();
-        Access::with_ledger_mut(|ledger| {
-            ledger.copy_token_pool();
-        });
-    }
-    if upgrade_from_version == 0 {
-        set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
         clear_stable_allowance_data();
-        Access::with_ledger_mut(|ledger| {
-            ledger.clear_arrivals();
-        });
-    }
-    if !is_ready() {
-        log_message("Migration started.");
-        migrate_next_part(
-            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
-        );
-    }
+        let chain_length = ledger.blockchain().chain_length();
+        let blocks = ledger.get_ledger_blocks(0, chain_length as usize);
+        for (block_index, block) in blocks.iter().enumerate() {
+            apply_transaction_no_trimming(
+                ledger,
+                block.clone().transaction,
+                TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
+                block.effective_fee.unwrap_or(Tokens::ZERO),
+                Some(block_index as u64),
+            )
+            .expect(format!("failed to apply tx from block at index {}", block_index).as_str());
+        }
+    });
+
+    // if upgrade_from_version < 2 {
+    //     set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+    //     log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+    //     clear_stable_balances_data();
+    //     Access::with_ledger_mut(|ledger| {
+    //         ledger.copy_token_pool();
+    //     });
+    // }
+    // if upgrade_from_version == 0 {
+    //     set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+    //     log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+    //     clear_stable_allowance_data();
+    //     Access::with_ledger_mut(|ledger| {
+    //         ledger.clear_arrivals();
+    //     });
+    // }
+    // if !is_ready() {
+    //     log_message("Migration started.");
+    //     migrate_next_part(
+    //         MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+    //     );
+    // }
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
@@ -670,7 +687,7 @@ fn execute_transfer_not_async(
             )
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, effective_fee, None)?;
         Ok(block_idx)
     })
 }
@@ -867,15 +884,16 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
             memo: arg.memo,
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, expected_fee_tokens)
-            .map_err(convert_transfer_error)
-            .map_err(|err| {
-                let err: ApproveError = match err.try_into() {
-                    Ok(err) => err,
-                    Err(err) => ic_cdk::trap(&err),
-                };
-                err
-            })?;
+        let (block_idx, _) =
+            apply_transaction_no_trimming(ledger, tx, now, expected_fee_tokens, None)
+                .map_err(convert_transfer_error)
+                .map_err(|err| {
+                    let err: ApproveError = match err.try_into() {
+                        Ok(err) => err,
+                        Err(err) => ic_cdk::trap(&err),
+                    };
+                    err
+                })?;
         Ok(block_idx)
     })?;
 
