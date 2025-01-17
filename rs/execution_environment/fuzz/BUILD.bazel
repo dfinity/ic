@@ -23,9 +23,13 @@ rust_library(
         "//rs/canister_sandbox:backend_lib",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:nix",
-        "@crate_index//:procfs",
-        "@crate_index//:syscalls",
-    ],
+    ] + select({
+        "@rules_rust//rust/platform:linux": [
+            "@crate_index//:procfs",
+            "@crate_index//:syscalls",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_fuzz_test_binary(
