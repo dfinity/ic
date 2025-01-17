@@ -435,7 +435,7 @@ fn handle_list_neurons(
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: None,
         include_public_neurons_in_full_neurons: None,
-        page_number: None,
+        page_number: req.page_number,
         page_size: None,
     };
     let update = HttpCanisterUpdate {

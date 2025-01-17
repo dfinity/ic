@@ -1,18 +1,19 @@
-use crate::models::amount::{signed_amount, tokens_to_amount};
-use crate::models::operation::OperationType;
-use crate::models::seconds::Seconds;
-use crate::models::OperationIdentifier;
 use crate::{
     convert::to_model_account_identifier,
     errors::ApiError,
-    models::{self, Operation},
+    models::{
+        self,
+        amount::{signed_amount, tokens_to_amount},
+        operation::OperationType,
+        seconds::Seconds,
+        Operation, OperationIdentifier,
+    },
     transaction_id::TransactionIdentifier,
 };
 pub use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
-use rosetta_core::convert::principal_id_from_public_key;
-use rosetta_core::objects::ObjectMap;
+use rosetta_core::{convert::principal_id_from_public_key, objects::ObjectMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -370,6 +371,7 @@ pub struct NeuronInfo {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ListNeurons {
     pub account: icp_ledger::AccountIdentifier,
+    pub page_number: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
