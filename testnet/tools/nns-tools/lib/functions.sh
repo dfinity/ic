@@ -265,6 +265,24 @@ nns_neuron_info() {
         $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }
 
+##: nns_get_full_neuron
+## Usage: $1 <NNS_URL> <NEURON_ID>
+## Get the full neuron record for a given neuron ID
+## Note: You must be logged into the correct DFX identity to access the full neuron.
+## If using HSM keys, you must set the environment variable DFX_HSM_PIN correctly.
+nns_get_full_neuron() {
+       local NNS_URL=$1
+       local NEURON_ID=$2
+
+       local IC=$(repo_root)
+       local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
+
+
+       __dfx -q canister --network $NNS_URL \
+           call --candid "$GOV_DID" \
+           $(nns_canister_id governance) get_full_neuron "( $NEURON_ID : nat64 )"
+}
+
 ##: top_up_canister
 ## Tops up the wallet from the current dfx user's ICP balance
 top_up_canister() {
