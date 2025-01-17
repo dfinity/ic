@@ -9,7 +9,7 @@ load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -127,7 +127,7 @@ def icos_build(
             build_args = image_deps["build_args"],
             file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
@@ -143,28 +143,30 @@ def icos_build(
 
     # -------------------- Extract root partition --------------------
 
+    # Note that we defer injecting the files from images_deps["rootfs"]. These are mostly slower to build.
+
+    # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
+    # there are only two in our build.
+    PARTITION_ROOT_STRIP_PATHS = [
+        "/run",
+        "/boot",
+        "/var",
+        "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
+    ]
     ext4_image(
-        #        name = "static-partition-root-unsigned.img",
         name = "partition-root-unsigned.img",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
-        # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
-        # there are only two in our build.
-        strip_paths = [
-            "/run",
-            "/boot",
-            "/var",
-            "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
-        ],
+        strip_paths = PARTITION_ROOT_STRIP_PATHS,
         extra_files = {
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
@@ -172,13 +174,21 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
+    )
+
+    component_file_references_test(
+        name = name + "_component_file_references_test",
+        image = ":partition-root-unsigned.img",
+        component_files = image_deps["component_files"].keys(),
+        # Inherit tags for this test, to avoid triggering builds for local base images
+        tags = tags,
     )
 
     # -------------------- Extract boot partition --------------------
 
     ext4_image(
-        name = "static-partition-boot.img",
+        name = "partition-boot.img",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
@@ -186,46 +196,33 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
-    )
-
-    # Defer injection to this point to allow caching most of the built images
-    # -------------------- Inject extra files --------------------
-
-    #    inject_files(
-    #        name = "partition-root-unsigned.img",
-    #        testonly = malicious,
-    #        base = "static-partition-root-unsigned.img",
-    #        file_contexts = ":file_contexts",
-    #        extra_files = {
-    #            k: v
-    #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-    #        },
-    #        tags = ["manual", "no-cache"],
-    #    )
-    #    native.alias(
-    #        name = "partition-root-unsigned.img",
-    #        actual = "static-partition-root-unsigned.img",
-    #    )
-
-    # Inherit tags for this test, to avoid triggering builds for local base images
-    component_file_references_test(
-        name = name + "_component_file_references_test",
-        image = ":partition-root-unsigned.img",
-        component_files = image_deps["component_files"].keys(),
-        tags = tags,
+        extra_files = {
+            k: v
+            for k, v in (
+                image_deps["bootfs"].items() + [
+                    (":version.txt", "/version.txt:0644"),
+                    (":extra_boot_args", "/extra_boot_args:0644"),
+                ]
+            )
+        },
+        tags = ["manual", "no-cache"],
     )
 
     if upgrades:
-        inject_files(
+        ext4_image(
             name = "partition-root-test-unsigned.img",
             testonly = malicious,
-            base = "static-partition-root-unsigned.img",
+            src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
+            partition_size = image_deps["rootfs_size"],
+            strip_paths = PARTITION_ROOT_STRIP_PATHS,
             extra_files = {
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
             },
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
             tags = ["manual", "no-cache"],
         )
 
@@ -284,29 +281,16 @@ def icos_build(
                 tags = ["manual"],
             )
 
-    inject_files(
-        name = "partition-boot.img",
-        base = "static-partition-boot.img",
-        file_contexts = ":file_contexts",
-        prefix = "/boot",
-        extra_files = {
-            k: v
-            for k, v in (
-                image_deps["bootfs"].items() + [
-                    (":version.txt", "/version.txt:0644"),
-                    (":extra_boot_args", "/extra_boot_args:0644"),
-                ]
-            )
-        },
-        tags = ["manual", "no-cache"],
-    )
-
     if upgrades:
-        inject_files(
+        ext4_image(
             name = "partition-boot-test.img",
-            base = "static-partition-boot.img",
+            src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
-            prefix = "/boot",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot",
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
             extra_files = {
                 k: v
                 for k, v in (
@@ -685,7 +669,7 @@ def boundary_node_icos_build(
         build_args = image_deps["build_args"],
         file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # Helpful tool to print a hash of all input component files
@@ -731,20 +715,13 @@ EOF
     )
 
     ext4_image(
-        name = "static-partition-boot.img",
+        name = "partition-boot.img",
         src = ":rootfs-tree.tar",
         partition_size = "1G",
         subdir = "boot/",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
-    )
-
-    inject_files(
-        name = "partition-boot.img",
-        base = "static-partition-boot.img",
-        prefix = "/boot",
         extra_files = {
             k: v
             for k, v in (
@@ -758,31 +735,21 @@ EOF
     )
 
     ext4_image(
-        name = "static-partition-root-unsigned.img",
+        name = "partition-root-unsigned.img",
         src = ":rootfs-tree.tar",
         partition_size = "3G",
         strip_paths = [
             "/run",
             "/boot",
         ],
-        tags = ["manual"],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-    )
-
-    #    native.alias(
-    #        name = "partition-root-unsigned.img",
-    #        actual = "static-partition-root-unsigned.img",
-    #    )
-    inject_files(
-        name = "partition-root-unsigned.img",
-        base = "static-partition-root-unsigned.img",
         extra_files = {
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
         },
         tags = ["manual", "no-cache"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
     )
 
     native.genrule(

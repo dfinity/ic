@@ -107,16 +107,28 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
 
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract, extra_files):
-    commands = prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files)
+    # We batch all commands together and run them under bash. This is significantly faster than invoking fakeroot
+    # multiple times.
+    commands = "set -euo pipefail\n"
+    if in_file:
+        # Untar files to the base dir.
+        commands += f"""tar xf {in_file} --numeric-owner -C "{fs_basedir}" "{dir_to_extract}";\n"""
+
+        # Copy extra files to the base dir and set permissions.
+        for path_target in extra_files or []:
+            (path, target, mod) = path_target.split(":")
+            target_in_basedir = os.path.join(fs_basedir, dir_to_extract, target.lstrip("/"))
+            commands += f"""cp "{path}" "{target_in_basedir}";\n"""
+            commands += f"""chmod "{mod}" "{target_in_basedir}";\n"""
+    else:
+        commands += f"""chown root:root "{fs_basedir}";\n"""
+
     subprocess.run(
         ["fakeroot",
-         "-i",
-         fakeroot_statefile,
          "-s",
          fakeroot_statefile,
          "bash"],
         input=commands.encode(), check=True)
-
 
 def prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files):
     if in_file:
@@ -136,7 +148,8 @@ def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
-    parser.add_argument("--extra-files", help="", nargs='*')
+    parser.add_argument("--extra-files", help="Extra files to inject into the image. "
+                                              "Format: source_path:target_path_in_image:target_permissions", nargs='*')
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
