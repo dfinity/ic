@@ -81,12 +81,13 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-// https://dfinity.atlassian.net/browse/NNS1-1050: We are not following
-// standard/best practices for canister globals here.
-//
-// Do not access these global variables directly. Instead, use accessor
-// functions, which are defined immediately after.
-static mut GOVERNANCE: Option<Governance> = None;
+thread_local! {
+    static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<CdkRuntime>::new()),
+    ));
+}
 
 /*
 Recommendations for Using `unsafe` in the Governance canister:
@@ -135,7 +136,7 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
+    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 /// Returns a mutable reference to the global state.
@@ -143,19 +144,12 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
+    unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(gov);
-    }
+    GOVERNANCE.set(gov);
 
     governance()
         .validate()
@@ -164,7 +158,7 @@ fn set_governance(gov: Governance) {
 
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
-    schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), Bound::Unbounded);
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
@@ -283,19 +277,15 @@ const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
 // id.
 const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
 
-fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdProto) {
+fn schedule_adjust_neurons_storage(delay: Duration, next: Bound<NeuronIdProto>) {
     ic_cdk_timers::set_timer(delay, move || {
-        let next_neuron_id = governance_mut().batch_adjust_neurons_storage(start_neuron_id);
-        match next_neuron_id {
-            Some(next_neuron_id) => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_BATCH_INTERVAL,
-                next_neuron_id,
-            ),
-            None => schedule_adjust_neurons_storage(
-                ADJUST_NEURON_STORAGE_ROUND_INTERVAL,
-                NeuronIdProto { id: 0 },
-            ),
+        let next = governance_mut().batch_adjust_neurons_storage(next);
+        let next_delay = if next == Bound::Unbounded {
+            ADJUST_NEURON_STORAGE_ROUND_INTERVAL
+        } else {
+            ADJUST_NEURON_STORAGE_BATCH_INTERVAL
         };
+        schedule_adjust_neurons_storage(next_delay, next);
     });
 }
 

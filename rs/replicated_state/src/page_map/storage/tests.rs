@@ -562,7 +562,7 @@ fn write_overlays_and_verify_with_tempdir(
                 page_map.update(
                     combined_delta
                         .iter()
-                        .map(|(i, p)| (i, p.contents()))
+                        .map(|(i, p)| (*i, p.contents()))
                         .collect::<Vec<_>>()
                         .as_slice(),
                 );
@@ -1566,10 +1566,8 @@ mod proptest_tests {
         prop_vec(instruction_strategy(), 1..20)
     }
 
-    proptest! {
-        #[test]
-        fn random_instructions(instructions in instructions_strategy()) {
-            write_overlays_and_verify(instructions);
-        }
+    #[test_strategy::proptest]
+    fn random_instructions(#[strategy(instructions_strategy())] instructions: Vec<Instruction>) {
+        write_overlays_and_verify(instructions);
     }
 }

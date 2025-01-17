@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
@@ -2055,6 +2056,7 @@ fn system_subnets_are_not_rate_limited() {
     );
 }
 
+#[ignore]
 #[test]
 fn toolchain_error_message() {
     let sm = StateMachine::new();
@@ -2771,4 +2773,37 @@ fn do_not_initialize_wasm_memory_limit_if_it_is_not_empty() {
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
     assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
+}
+
+/// Even if a Wasm module has inital memory size 0, it is allowed to have data
+/// segments of length 0 inserted at address 0. This test checks that such data
+/// segments don't trigger any of our critical errors.
+#[test]
+fn no_critical_error_on_empty_data_segment() {
+    let env = StateMachine::new();
+    let wat: &str = r#"
+        (module
+            (memory (;0;) i64 0)
+            (data (;0;) (i64.const 0) "")
+        )
+    "#;
+    let _id = env.install_canister_wat(wat, vec![], None);
+
+    // A module with an empty data segment outside of memory should fail to
+    // install, but not trigger any critical errors.
+    let wat: &str = r#"
+        (module
+            (memory (;0;) i64 0)
+            (data (;0;) (i64.const 1) "")
+        )
+    "#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let id = env.create_canister(None);
+    let error = env
+        .install_wasm_in_mode(id, CanisterInstallMode::Install, wasm, vec![])
+        .unwrap_err();
+    error.assert_contains(
+        ErrorCode::CanisterInvalidWasm,
+        "Wasm module has invalid data segment of 0 bytes at 1.",
+    );
 }

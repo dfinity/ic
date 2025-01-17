@@ -10,9 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
 - The function `PocketIc::query_call_with_effective_principal` for making generic query calls (including management canister query calls).
-- The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message (`None` means that the status is unknown yet).
+- The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message.
 - The function `PocketIc::await_call_no_ticks` to await the status of an update call (submitted through an ingress message) becoming known without triggering round execution
   (round execution must be triggered separarely, e.g., on a "live" instance or by separate PocketIC library calls).
+
+### Changed
+- The response types `pocket_ic::WasmResult`, `pocket_ic::UserError`, and `pocket_ic::CallError` are replaced by a single reject response type `pocket_ic::RejectResponse`.
 
 
 

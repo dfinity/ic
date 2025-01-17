@@ -84,7 +84,7 @@ use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_lt};
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -262,6 +262,7 @@ impl CanisterManagerBuilder {
             SchedulerConfig::application_subnet().dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            Path::new("/tmp"),
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(

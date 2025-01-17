@@ -68,7 +68,7 @@ use crate::{
     },
     types::{
         function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock,
+        HeapGrowthPotential, LedgerUpdateLock, Wasm,
     },
 };
 use candid::{Decode, Encode};
@@ -165,6 +165,10 @@ pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 ho
 /// The maximum duration for which the upgrade periodic task lock may be held.
 /// Past this duration, the lock will be automatically released.
 const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
+
+/// Adopted-but-not-yet-executed upgrade proposals block other upgrade proposals from executing.
+/// But this is only true for proposals that are less than 1 day old, to prevent a stuck proposal from blocking all upgrades forever.
+const UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS: u64 = 60 * 60 * 24; // 1 day
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -2455,8 +2459,14 @@ impl Governance {
             .proposals
             .iter()
             .filter_map(|(id, proposal_data)| {
+                let proposal_expiry_time = proposal_data
+                    .decided_timestamp_seconds
+                    .checked_add(UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS)
+                    .unwrap_or_default();
+                let proposal_recent_enough = proposal_expiry_time > self.env.now();
                 if proposal_data.status() == ProposalDecisionStatus::Adopted
                     && proposal_data.is_upgrade_proposal()
+                    && proposal_recent_enough
                 {
                     Some(*id)
                 } else {
@@ -2507,9 +2517,12 @@ impl Governance {
 
         let mode = upgrade.mode_or_upgrade() as i32;
 
+        let wasm = Wasm::try_from(&upgrade)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
         self.upgrade_non_root_canister(
             target_canister_id,
-            upgrade.new_canister_wasm,
+            wasm,
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
@@ -2521,7 +2534,7 @@ impl Governance {
     async fn upgrade_non_root_canister(
         &mut self,
         target_canister_id: CanisterId,
-        wasm: Vec<u8>,
+        wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
     ) -> Result<(), GovernanceError> {
@@ -2535,11 +2548,27 @@ impl Governance {
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
 
-            let change_canister_arg =
+            let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
-                    .with_wasm(wasm)
                     .with_arg(arg)
                     .with_mode(mode);
+
+            match wasm {
+                Wasm::Bytes(bytes) => {
+                    change_canister_arg = change_canister_arg.with_wasm(bytes);
+                }
+                Wasm::Chunked {
+                    wasm_module_hash,
+                    store_canister_id,
+                    chunk_hashes_list,
+                } => {
+                    change_canister_arg = change_canister_arg.with_chunked_wasm(
+                        wasm_module_hash,
+                        store_canister_id,
+                        chunk_hashes_list,
+                    );
+                }
+            };
 
             Encode!(&change_canister_arg).unwrap()
         };
@@ -2567,7 +2596,7 @@ impl Governance {
         proposal_id: Option<u64>,
     ) -> Result<(), GovernanceError> {
         let upgrade_proposals_in_progress = self.upgrade_proposals_in_progress();
-        if upgrade_proposals_in_progress != proposal_id.into_iter().collect() {
+        if !upgrade_proposals_in_progress.is_subset(&proposal_id.into_iter().collect()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::ResourceExhausted,
                 format!(
@@ -2690,7 +2719,7 @@ impl Governance {
             for target_canister_id in canister_ids_to_upgrade {
                 self.upgrade_non_root_canister(
                     target_canister_id,
-                    target_wasm.clone(),
+                    Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
                 )
@@ -2757,7 +2786,7 @@ impl Governance {
             for target_canister_id in canister_ids_to_upgrade {
                 self.upgrade_non_root_canister(
                     target_canister_id,
-                    target_wasm.clone(),
+                    Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
                 )
@@ -2954,7 +2983,7 @@ impl Governance {
 
         self.upgrade_non_root_canister(
             ledger_canister_id,
-            ledger_wasm,
+            Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
         )

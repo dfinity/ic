@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/clients",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/types/base_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:colored",
+    "@crate_index//:futures",
+    "@crate_index//:ic-agent",
+    "@crate_index//:rgb",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+rust_binary(
+    name = "release-runscript",
+    srcs = [
+        "src/main.rs",
+    ],
+    deps = DEPENDENCIES,
+)

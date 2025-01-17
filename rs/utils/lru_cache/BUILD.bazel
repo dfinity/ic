@@ -17,7 +17,9 @@ rust_library(
 rust_test(
     name = "lru_cache_test",
     crate = ":lru_cache",
-    deps = [],
+    deps = [
+        "@crate_index//:proptest",
+    ],
 )
 
 rust_doc_test(

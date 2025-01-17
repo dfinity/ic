@@ -279,6 +279,22 @@ pub struct RateLimiting {
     /// How frequently to poll for rules (from file or canister)
     #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
     pub rate_limit_generic_poll_interval: Duration,
+
+    /// Time-to-idle for rules that have the `ip_group_prefix`.
+    /// If no requests are coming for the given shard - it will be removed.
+    #[clap(env, long, default_value = "1h", value_parser = parse_duration)]
+    pub rate_limit_generic_tti: Duration,
+
+    /// Maximum number of shards that we store (per rule)
+    #[clap(env, long, default_value = "30000")]
+    pub rate_limit_generic_max_shards: u64,
+
+    /// Whether to use the number of API BNs from the registry to scale the rate limit rules.
+    /// E.g. if a ratelimit action is set to "500/1h" and the number of API BNs is 5 then the
+    /// rule would be adjusted to "100/1h" so that the total ratelimit of all API BNs would be "500/1h".
+    /// Important: if after the divison the numerator would be less than 1 then it would be rounded to 1.
+    #[clap(env, long)]
+    pub rate_limit_generic_autoscale: bool,
 }
 
 #[derive(Args)]
@@ -340,8 +356,8 @@ pub struct Bouncer {
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
-    pub bouncer_burst_size: u64,
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_burst_size: u32,
 
     /// For how long to ban the IPs
     #[clap(env, long, default_value = "10m", value_parser = parse_duration)]

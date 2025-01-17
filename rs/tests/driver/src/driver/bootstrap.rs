@@ -17,8 +17,6 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
@@ -88,8 +86,8 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = if ic.with_mainnet_config {
-        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
-        read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+        let mainnet_nns_subnet_revisions_path = "mainnet_nns_subnet_revision.txt".to_string();
+        read_dependency_to_string(mainnet_nns_subnet_revisions_path.clone())?
     } else {
         read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
@@ -286,25 +284,27 @@ pub fn setup_and_start_vms(
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
-                    let url = format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config_url"),
-                        CONF_IMG_FNAME
+                    // https://kubevirt.io/user-guide/storage/disks_and_volumes/#containerdisk
+                    // build container disk that holds config fat disk for guestos
+                    // push it to local container registry
+                    let command = format!(
+                        "set -xe; \
+                        mkdir -p /var/sysimage/tnet; \
+                        ctr=$(sudo buildah --root /var/sysimage/tnet from scratch); \
+                        sudo buildah --root /var/sysimage/tnet copy --chown=107:107 $ctr {0} /disk/; \
+                        sudo buildah --root /var/sysimage/tnet commit $ctr harbor-core.harbor.svc.cluster.local/tnet/config:{1}; \
+                        sudo buildah --root /var/sysimage/tnet push --tls-verify=false --creds 'robot$tnet+tnet:TestingPOC1' harbor-core.harbor.svc.cluster.local/tnet/config:{1}",
+                        conf_img_path.display(), tnet_node.name.clone().unwrap()
                     );
-                    info!(
-                        t_env.logger(),
-                        "Uploading image {} to {}",
-                        conf_img_path.clone().display().to_string(),
-                        url.clone()
-                    );
-                    block_on(upload_image(conf_img_path.as_path(), &url))
-                        .expect("Failed to upload config image");
-                    block_on(tnet_node.deploy_config_image(
-                        CONF_IMG_FNAME,
-                        "config",
-                        DataVolumeContentType::Kubevirt,
-                    ))
-                    .expect("deploying config image failed");
+                    let output = Command::new("bash")
+                        .arg("-c")
+                        .arg(command)
+                        .output()
+                        .expect("Failed to execute command");
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        bail!("Error building and pushing config container config image: {}", stderr);
+                    }
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
@@ -582,6 +582,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
+        node_reward_type: None,
     }
 }
 

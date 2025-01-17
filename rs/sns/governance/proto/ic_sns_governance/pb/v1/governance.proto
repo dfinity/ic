@@ -312,6 +312,17 @@ message Motion {
   string motion_text = 1;
 }
 
+// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+message ChunkedCanisterWasm {
+  // Obligatory check sum of the overall WASM to be reassembled from chunks.
+  bytes wasm_module_hash = 1;
+  // Obligatory; indicates which canister stores the WASM chunks.
+  ic_base_types.pb.v1.PrincipalId store_canister_id = 2;
+  // Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+  // one chunk.
+  repeated bytes chunk_hashes_list = 3;
+}
+
 // A proposal function that upgrades a canister that is controlled by the
 // SNS governance canister.
 message UpgradeSnsControlledCanister {
@@ -323,6 +334,9 @@ message UpgradeSnsControlledCanister {
   optional bytes canister_upgrade_arg = 3;
   // Canister install_code mode.
   optional types.v1.CanisterInstallMode mode = 4;
+  // If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+  // an empty, and this field should be set instead.
+  optional ChunkedCanisterWasm chunked_canister_wasm = 5;
 }
 
 // A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
@@ -437,6 +451,7 @@ message ManageDappCanisterSettings {
   optional LogVisibility log_visibility = 6;
 
   optional uint64 wasm_memory_limit = 7;
+  optional uint64 wasm_memory_threshold = 8;
 }
 
 // Unlike `Governance.Version`, this message has optional fields and is the recommended one
