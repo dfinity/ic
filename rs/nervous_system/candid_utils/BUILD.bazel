@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "candid_utils",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "**/*tests.rs",
+        ],
+    ),
+    aliases = ALIASES,
+    crate_name = "candid_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "candid_utils_test",
+    srcs = glob(
+        ["src/**"],
+    ),
+    aliases = ALIASES,
+    crate_root = "src/lib.rs",
+    data = [],
+    env = {},
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
