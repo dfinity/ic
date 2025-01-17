@@ -1,41 +1,43 @@
-// This module defines how replicated queries are executed.
+// This module defines how replicated calls to update or query methods and canister tasks are executed.
 // See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
-//
-// A replicated query is a call to a `canister_query` function in update
-// context.
 
 use crate::execution::common::{
-    finish_call_with_error, ingress_status_with_processing_state, into_message_or_task,
-    update_round_limits, validate_message, wasm_result_to_query_response,
+    action_to_response, apply_canister_state_changes, finish_call_with_error,
+    ingress_status_with_processing_state, into_message_or_task, update_round_limits,
+    validate_message, wasm_result_to_query_response,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
+use ic_management_canister_types::IC_00;
+use ic_replicated_state::{num_bytes_try_from, CallContextAction, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{
-    messages::{
-        CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessageOrTask, RequestMetadata,
-    },
-    Cycles, NumBytes, NumInstructions, Time,
+use ic_types::messages::{
+    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessageOrTask, CanisterTask,
+    RequestMetadata,
 };
+use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
-// Execute an inter-canister request or an ingress message as a replicated query.
+#[cfg(test)]
+mod tests;
+
+// Execute an inter-canister call message or a canister task.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_replicated_query(
+pub fn execute_call_or_task(
     clean_canister: CanisterState,
-    req: CanisterCall,
+    call_or_task: CanisterCallOrTask,
     method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
     execution_parameters: ExecutionParameters,
@@ -43,6 +45,8 @@ pub fn execute_replicated_query(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
@@ -52,15 +56,19 @@ pub fn execute_replicated_query(
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
-                let reveal_top_up = canister.controllers().contains(req.sender());
+                let reveal_top_up = call_or_task
+                    .caller()
+                    .map(|caller| canister.controllers().contains(&caller))
+                    .unwrap_or_default();
 
                 let is_wasm64_execution = canister
                     .execution_state
                     .as_ref()
                     .is_some_and(|es| es.is_wasm64);
 
-                let prepaid_execution_cycles =
-                    match round.cycles_account_manager.prepay_execution_cycles(
+                let prepaid_execution_cycles = match round
+                    .cycles_account_manager
+                    .prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
                         message_memory_usage,
@@ -70,24 +78,38 @@ pub fn execute_replicated_query(
                         reveal_top_up,
                         is_wasm64_execution.into(),
                     ) {
-                        Ok(cycles) => cycles,
-                        Err(err) => {
-                            return finish_call_with_error(
-                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                                canister,
-                                CanisterCallOrTask::Call(req),
-                                NumInstructions::from(0),
-                                round.time,
-                                execution_parameters.subnet_type,
-                                round.log,
-                            );
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
+                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            canister
+                                .system_state
+                                .task_queue
+                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                            canister
+                                .system_state
+                                .task_queue
+                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
-                    };
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            call_or_task,
+                            NumInstructions::from(0),
+                            round.time,
+                            execution_parameters.subnet_type,
+                            round.log,
+                        );
+                    }
+                };
                 (canister, prepaid_execution_cycles, false)
             }
         };
-
-    let call_origin = CallOrigin::from(&req);
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
@@ -99,25 +121,29 @@ pub fn execute_replicated_query(
         clean_canister.system_state.reserved_balance(),
     );
 
-    let request_metadata = match &req {
-        CanisterCall::Request(request) => request.metadata.for_downstream_call(),
-        CanisterCall::Ingress(_) => RequestMetadata::for_new_call_tree(time),
+    let request_metadata = match &call_or_task {
+        CanisterCallOrTask::Update(CanisterCall::Request(request))
+        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
+            request.metadata.for_downstream_call()
+        }
+        _ => RequestMetadata::for_new_call_tree(time),
     };
 
     let original = OriginalContext {
-        call_origin,
-        call: req,
-        prepaid_execution_cycles,
+        call_origin: CallOrigin::from(&call_or_task),
         method,
+        call_or_task,
+        prepaid_execution_cycles,
         execution_parameters,
         subnet_size,
         time,
         request_metadata,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
+        log_dirty_pages,
     };
 
-    let helper = match ReplicatedQueryHelper::new(&clean_canister, &original, deallocation_sender) {
+    let helper = match UpdateHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
             return finish_err(
@@ -130,26 +156,54 @@ pub fn execute_replicated_query(
         }
     };
 
-    let api_type = ApiType::replicated_query(
-        time,
-        original.call.method_payload().to_vec(),
-        *original.call.sender(),
-        helper.call_context_id(),
-    );
+    let api_type = match &original.call_or_task {
+        CanisterCallOrTask::Update(msg) => ApiType::update(
+            time,
+            msg.method_payload().to_vec(),
+            msg.cycles(),
+            *msg.sender(),
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Query(msg) => ApiType::replicated_query(
+            time,
+            msg.method_payload().to_vec(),
+            *msg.sender(),
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterHeartbeat,
+            time,
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterGlobalTimer,
+            time,
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
+            time,
+            helper.call_context_id(),
+        ),
+    };
 
+    let memory_usage = helper.canister().memory_usage();
+    let message_memory_usage = helper.canister().message_memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
-        helper.canister().memory_usage(),
-        helper.canister().message_memory_usage(),
+        memory_usage,
+        message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
-
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
             info!(
@@ -161,15 +215,22 @@ pub fn execute_replicated_query(
             );
             update_round_limits(round_limits, &slice);
 
-            let ingress_status = match (resuming_aborted, &original.call) {
+            let ingress_status = match (resuming_aborted, &original.call_or_task) {
                 (true, _) => {
                     // Resuming an aborted execution doesn't change the ingress
                     // status.
                     None
                 }
-                (false, call) => ingress_status_with_processing_state(call, original.time),
+                (false, CanisterCallOrTask::Task(_)) => {
+                    // Canister tasks do not have ingress status.
+                    None
+                }
+                (false, CanisterCallOrTask::Update(call))
+                | (false, CanisterCallOrTask::Query(call)) => {
+                    ingress_status_with_processing_state(call, original.time)
+                }
             };
-            let paused_execution = Box::new(PausedReplicatedQueryExecution {
+            let paused_execution = Box::new(PausedCallExecution {
                 paused_wasm_execution,
                 paused_helper: helper.pause(),
                 original,
@@ -182,12 +243,20 @@ pub fn execute_replicated_query(
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
             update_round_limits(round_limits, &slice);
-            helper.finish(output, clean_canister, state_changes, original, round)
+            helper.finish(
+                output,
+                clean_canister,
+                state_changes,
+                original,
+                round,
+                round_limits,
+                call_tree_metrics,
+            )
         }
     }
 }
 
-/// Finishes a replicated query execution early due to an error. The only state
+/// Finishes an update call execution early due to an error. The only state
 /// change that is applied to the clean canister state is refunding the prepaid
 /// execution cycles.
 fn finish_err(
@@ -225,7 +294,7 @@ fn finish_err(
     finish_call_with_error(
         err,
         canister,
-        CanisterCallOrTask::Call(original.call),
+        original.call_or_task,
         instructions_used,
         round.time,
         original.execution_parameters.subnet_type,
@@ -234,11 +303,11 @@ fn finish_err(
 }
 
 /// Context variables that remain the same throughout the entire deterministic
-/// time slicing execution of an replicated query execution.
+/// time slicing execution of an update call execution.
 #[derive(Debug)]
 struct OriginalContext {
     call_origin: CallOrigin,
-    call: CanisterCall,
+    call_or_task: CanisterCallOrTask,
     prepaid_execution_cycles: Cycles,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
@@ -247,26 +316,27 @@ struct OriginalContext {
     request_metadata: RequestMetadata,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
 /// call execution.
 #[derive(Debug)]
-struct PausedReplicatedQueryHelper {
+struct PausedUpdateHelper {
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
 }
 
-/// A helper that implements and keeps track of replicated query steps.
-/// It is used to safely pause and resume an replicated query execution.
-struct ReplicatedQueryHelper {
+/// A helper that implements and keeps track of update call steps.
+/// It is used to safely pause and resume an update call execution.
+struct UpdateHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     deallocation_sender: DeallocationSender,
 }
 
-impl ReplicatedQueryHelper {
+impl UpdateHelper {
     /// Applies the initial state changes and performs the initial validation.
     fn new(
         clean_canister: &CanisterState,
@@ -275,27 +345,65 @@ impl ReplicatedQueryHelper {
     ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
-        if let WasmMethod::CompositeQuery(_) = &original.method {
-            let user_error = UserError::new(
-                ErrorCode::CompositeQueryCalledInReplicatedMode,
-                "Composite query cannot be called in replicated mode",
-            );
-            return Err(user_error);
-        }
-
         validate_message(&canister, &original.method)?;
+
+        match original.call_or_task {
+            CanisterCallOrTask::Update(_) => {
+                let wasm_memory_usage = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or(NumBytes::new(0), |es| {
+                        num_bytes_try_from(es.wasm_memory.size).unwrap()
+                    });
+
+                if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+                    // A Wasm memory limit of 0 means unlimited.
+                    if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                        let err = HypervisorError::WasmMemoryLimitExceeded {
+                            bytes: wasm_memory_usage,
+                            limit: wasm_memory_limit,
+                        };
+                        return Err(err.into_user_error(&canister.canister_id()));
+                    }
+                }
+            }
+            CanisterCallOrTask::Query(_) => {
+                if let WasmMethod::CompositeQuery(_) = &original.method {
+                    let user_error = UserError::new(
+                        ErrorCode::CompositeQueryCalledInReplicatedMode,
+                        "Composite query cannot be called in replicated mode",
+                    );
+                    return Err(user_error);
+                }
+            }
+            CanisterCallOrTask::Task(_) => {
+                // TODO(RUN-957): Enforce the wasm memory limit in heartbeat and timer
+                // after canister logging ships.
+            }
+        }
 
         let call_context_id = canister
             .system_state
             .new_call_context(
                 original.call_origin.clone(),
-                original.call.cycles(),
+                original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
             )
             .unwrap();
 
         let initial_cycles_balance = canister.system_state.balance();
+
+        match original.call_or_task {
+            CanisterCallOrTask::Update(_)
+            | CanisterCallOrTask::Query(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
+            CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
+                // The global timer is one-off.
+                canister.system_state.global_timer = CanisterTimer::Inactive;
+            }
+        }
 
         Ok(Self {
             canister,
@@ -306,47 +414,49 @@ impl ReplicatedQueryHelper {
     }
 
     /// Returns a struct with all the necessary information to replay the
-    /// performed replicated query steps in subsequent rounds.
-    fn pause(self) -> PausedReplicatedQueryHelper {
+    /// performed update call steps in subsequent rounds.
+    fn pause(self) -> PausedUpdateHelper {
         self.deallocation_sender.send(Box::new(self.canister));
-        PausedReplicatedQueryHelper {
+        PausedUpdateHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
         }
     }
 
-    /// Replays the previous replicated query steps on the given clean canister.
+    /// Replays the previous update call steps on the given clean canister.
     /// Returns an error if any step fails. Otherwise, it returns an instance of
     /// the helper that can be used to continue the update call execution.
     fn resume(
         clean_canister: &CanisterState,
         original: &OriginalContext,
-        paused: PausedReplicatedQueryHelper,
+        paused: PausedUpdateHelper,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
         let helper = Self::new(clean_canister, original, deallocation_sender)?;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
-            let msg = "Mismatch in cycles balance when resuming a replicated query".to_string();
+            let msg = "Mismatch in cycles balance when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
         }
         if helper.call_context_id != paused.call_context_id {
-            let msg = "Mismatch in call context id when resuming a replicated query".to_string();
+            let msg = "Mismatch in call context id when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
         }
         Ok(helper)
     }
 
-    /// Finishes a replicated query execution that could have run multiple rounds
+    /// Finishes an update call execution that could have run multiple rounds
     /// due to deterministic time slicing.
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
         clean_canister: CanisterState,
         canister_state_changes: CanisterStateChanges,
-        mut original: OriginalContext,
+        original: OriginalContext,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         self.canister.append_log(&mut output.canister_log);
         self.canister
@@ -381,6 +491,7 @@ impl ReplicatedQueryHelper {
                 clean_canister.canister_id(),
                 err,
             );
+            self.deallocation_sender.send(Box::new(self.canister));
             // Perf counter: no need to update the call context, as it won't be saved.
             return finish_err(
                 clean_canister,
@@ -391,39 +502,54 @@ impl ReplicatedQueryHelper {
             );
         }
 
-        if let Err(err) = canister_state_changes.system_state_changes.apply_changes(
-            round.time,
-            &mut self.canister.system_state,
-            round.network_topology,
-            round.hypervisor.subnet_id(),
-            round.log,
-        ) {
-            return finish_err(
-                clean_canister,
-                output.num_instructions_left,
-                err.into_user_error(&original.canister_id),
-                original,
-                round,
-            );
-        }
-        self.canister.system_state.canister_version += 1;
-        self.deallocation_sender.send(Box::new(clean_canister));
+        let heap_delta = match original.call_or_task {
+            // Update methods and tasks can persist changes to the canister's state.
+            CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
+                apply_canister_state_changes(
+                    canister_state_changes,
+                    self.canister.execution_state.as_mut().unwrap(),
+                    &mut self.canister.system_state,
+                    &mut output,
+                    round_limits,
+                    round.time,
+                    round.network_topology,
+                    round.hypervisor.subnet_id(),
+                    round.log,
+                    round.counters.state_changes_error,
+                    call_tree_metrics,
+                    original.time,
+                    &|system_state| self.deallocation_sender.send(Box::new(system_state)),
+                );
 
-        let is_wasm64_execution = self
-            .canister
-            .execution_state
-            .as_ref()
-            .is_some_and(|es| es.is_wasm64);
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            output.num_instructions_left,
-            original.execution_parameters.instruction_limits.message(),
-            original.prepaid_execution_cycles,
-            round.counters.execution_refund_error,
-            original.subnet_size,
-            is_wasm64_execution.into(),
-            round.log,
-        );
+                if output.wasm_result.is_ok() {
+                    NumBytes::from((output.instance_stats.dirty_pages() * ic_sys::PAGE_SIZE) as u64)
+                } else {
+                    NumBytes::from(0)
+                }
+            }
+            // Query methods do not persist changes to the canister's state.
+            CanisterCallOrTask::Query(_) => {
+                if let Err(err) = canister_state_changes.system_state_changes.apply_changes(
+                    round.time,
+                    &mut self.canister.system_state,
+                    round.network_topology,
+                    round.hypervisor.subnet_id(),
+                    round.log,
+                ) {
+                    return finish_err(
+                        clean_canister,
+                        output.num_instructions_left,
+                        err.into_user_error(&original.canister_id),
+                        original,
+                        round,
+                    );
+                }
+                self.canister.system_state.canister_version += 1;
+                NumBytes::from(0)
+            }
+        };
+
+        self.deallocation_sender.send(Box::new(clean_canister));
 
         let instructions_used = NumInstructions::from(
             original
@@ -444,31 +570,71 @@ impl ReplicatedQueryHelper {
             )
             .unwrap();
 
-        let result = output.wasm_result;
-        let result = result.map_err(|err| err.into_user_error(&self.canister.canister_id()));
-        let refund = match action {
-            CallContextAction::Reply { refund, .. }
-            | CallContextAction::Reject { refund, .. }
-            | CallContextAction::NoResponse { refund, .. }
-            | CallContextAction::Fail { refund, .. } => refund,
-            CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
-                original.call.take_cycles()
+        let response = match original.call_or_task {
+            CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => action_to_response(
+                &self.canister,
+                action,
+                original.call_origin,
+                round.time,
+                round.log,
+                round.counters.ingress_with_cycles_error,
+            ),
+            CanisterCallOrTask::Query(_) => {
+                let result = output
+                    .wasm_result
+                    .map_err(|err| err.into_user_error(&self.canister.canister_id()));
+                let refund = match action {
+                    CallContextAction::Reply { refund, .. }
+                    | CallContextAction::Reject { refund, .. }
+                    | CallContextAction::NoResponse { refund, .. }
+                    | CallContextAction::Fail { refund, .. } => refund,
+                    CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
+                        original.call_or_task.cycles()
+                    }
+                };
+                wasm_result_to_query_response(
+                    result,
+                    &self.canister,
+                    round.time,
+                    original.call_origin,
+                    round.log,
+                    refund,
+                )
             }
         };
-        let response = wasm_result_to_query_response(
-            result,
-            &self.canister,
-            round.time,
-            original.call_origin,
+
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .is_some_and(|es| es.is_wasm64);
+
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            output.num_instructions_left,
+            original.execution_parameters.instruction_limits.message(),
+            original.prepaid_execution_cycles,
+            round.counters.execution_refund_error,
+            original.subnet_size,
+            is_wasm64_execution.into(),
             round.log,
-            refund,
         );
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                &original.method.name(),
+                output.instance_stats.dirty_pages(),
+                instructions_used,
+            );
+        }
 
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
-            heap_delta: NumBytes::from(0),
+            heap_delta,
             call_duration: call_context
                 .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
@@ -484,20 +650,20 @@ impl ReplicatedQueryHelper {
 }
 
 #[derive(Debug)]
-struct PausedReplicatedQueryExecution {
+struct PausedCallExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
-    paused_helper: PausedReplicatedQueryHelper,
+    paused_helper: PausedUpdateHelper,
     original: OriginalContext,
 }
 
-impl PausedExecution for PausedReplicatedQueryExecution {
+impl PausedExecution for PausedCallExecution {
     fn resume(
         self: Box<Self>,
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
-        _call_tree_metrics: &dyn CallTreeMetrics,
+        call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
@@ -506,7 +672,7 @@ impl PausedExecution for PausedReplicatedQueryExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        let helper = match ReplicatedQueryHelper::resume(
+        let helper = match UpdateHelper::resume(
             &clean_canister,
             &self.original,
             self.paused_helper,
@@ -547,7 +713,7 @@ impl PausedExecution for PausedReplicatedQueryExecution {
                     slice.executed_instructions,
                 );
                 update_round_limits(round_limits, &slice);
-                let paused_execution = Box::new(PausedReplicatedQueryExecution {
+                let paused_execution = Box::new(PausedCallExecution {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
                     original: self.original,
@@ -576,7 +742,15 @@ impl PausedExecution for PausedReplicatedQueryExecution {
                     instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
-                helper.finish(output, clean_canister, state_changes, self.original, round)
+                helper.finish(
+                    output,
+                    clean_canister,
+                    state_changes,
+                    self.original,
+                    round,
+                    round_limits,
+                    call_tree_metrics,
+                )
             }
         }
     }
@@ -589,11 +763,11 @@ impl PausedExecution for PausedReplicatedQueryExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message_or_task = into_message_or_task(CanisterCallOrTask::Call(self.original.call));
+        let message_or_task = into_message_or_task(self.original.call_or_task);
         (message_or_task, self.original.prepaid_execution_cycles)
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        into_message_or_task(CanisterCallOrTask::Call(self.original.call.clone()))
+        into_message_or_task(self.original.call_or_task.clone())
     }
 }

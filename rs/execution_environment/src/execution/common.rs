@@ -538,7 +538,8 @@ pub(crate) fn finish_call_with_error(
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
     let response = match call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
+        CanisterCallOrTask::Update(CanisterCall::Request(request))
+        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -549,7 +550,8 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        CanisterCallOrTask::Call(CanisterCall::Ingress(ingress)) => {
+        CanisterCallOrTask::Update(CanisterCall::Ingress(ingress))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(ingress)) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,
@@ -591,10 +593,12 @@ pub(crate) fn finish_call_with_error(
 
 pub(crate) fn into_message_or_task(call_or_task: CanisterCallOrTask) -> CanisterMessageOrTask {
     match call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
+        CanisterCallOrTask::Update(CanisterCall::Request(r))
+        | CanisterCallOrTask::Query(CanisterCall::Request(r)) => {
             CanisterMessageOrTask::Message(CanisterMessage::Request(r))
         }
-        CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
+        CanisterCallOrTask::Update(CanisterCall::Ingress(i))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(i)) => {
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
         }
         CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
