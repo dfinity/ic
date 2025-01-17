@@ -3793,7 +3793,7 @@ impl From<pb::ListNeuronsResponse> for pb_api::ListNeuronsResponse {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-            total_neurons_found: item.total_neurons_found,
+            total_pages_available: item.total_pages_available,
         }
     }
 }
@@ -3806,7 +3806,7 @@ impl From<pb_api::ListNeuronsResponse> for pb::ListNeuronsResponse {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-            total_neurons_found: item.total_neurons_found,
+            total_pages_available: item.total_pages_available,
         }
     }
 }
