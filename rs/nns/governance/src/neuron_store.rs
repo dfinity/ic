@@ -1256,7 +1256,7 @@ impl NeuronStore {
     pub fn get_non_empty_neuron_ids_readable_by_caller(
         &self,
         caller: PrincipalId,
-    ) -> Vec<NeuronId> {
+    ) -> BTreeSet<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
             self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
                 .unwrap_or(false)

@@ -12,7 +12,7 @@ on the process that this file is part of, see
 ### List Neurons Paging
 
 In the case where more than 500 neurons would be returned from the API, the API will now
-return a `next_start_from_neuron_id` field in the response. The value can then be added
+return a `total_neurons_found` field in the response. The value can then be added
 to the next request to get the next set of neurons.
 
 This will only affect neuron holders with more than 500 neurons, which is a small minority.

@@ -3510,13 +3510,14 @@ pub struct ListNeurons {
     /// existing (unmigrated) callers.
     #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
-    /// If this is set, it skips all neuron IDs until this value is reached, then returns
-    /// the remaining neurons up until the internal limit is reached.  This is only needed
-    /// if the caller is paginating through the list of neurons, and did not get the full
-    /// list in the first request. If neurons are included in `neuron_ids` that do not exist,
-    /// it is possible that fewer neurons will be returned than the limit.
+    /// If this is set, we return the batch of neurons at a given page, using the limit size to
+    /// determine how pages are broken up.
     #[prost(uint64, optional, tag = "5")]
-    pub start_from_neuron_id: Option<u64>,
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    #[prost(uint64, optional, tag = "6")]
+    pub page_size: Option<u64>,
 }
 /// A response to a `ListNeurons` request.
 ///
@@ -3535,10 +3536,11 @@ pub struct ListNeuronsResponse {
     /// `ManageNeuron` topic).
     #[prost(message, repeated, tag = "2")]
     pub full_neurons: Vec<Neuron>,
-    /// This is returned if there are more neurons to list.  The caller can repeat the original
-    /// request with `start_from_neuron_id` set to the value of this field to get the next batch.
+    /// This is returned to tell the caller how many neurons are available to query.
+    /// If this is greater than the page size, additional requests must be made to see the full
+    /// list of neurons.
     #[prost(uint64, optional, tag = "3")]
-    pub next_start_from_neuron_id: Option<u64>,
+    pub total_neurons_found: Option<u64>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

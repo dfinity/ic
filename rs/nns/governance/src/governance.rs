@@ -2242,11 +2242,9 @@ impl Governance {
     /// TODO(NNS1-2499): inline this.
     /// Return the Neuron IDs of all Neurons that have `principal` as their
     /// controller or as one of their hot keys.
-    pub fn get_neuron_ids_by_principal(&self, principal_id: &PrincipalId) -> Vec<NeuronId> {
+    pub fn get_neuron_ids_by_principal(&self, principal_id: &PrincipalId) -> BTreeSet<NeuronId> {
         self.neuron_store
             .get_neuron_ids_readable_by_caller(*principal_id)
-            .into_iter()
-            .collect()
     }
 
     /// Return the union of `followees` with the set of Neuron IDs of all
@@ -2278,8 +2276,12 @@ impl Governance {
             include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller,
             include_public_neurons_in_full_neurons,
-            start_from_neuron_id,
+            page_number,
+            page_size,
         } = list_neurons;
+
+        let page_number = page_number.unwrap_or(0);
+        let page_size = page_size.unwrap_or(MAX_LIST_NEURONS_RESULTS as u64);
 
         let include_empty_neurons_readable_by_caller = include_empty_neurons_readable_by_caller
             // This default is to maintain the previous behavior. (Unlike
@@ -2307,32 +2309,32 @@ impl Governance {
                     .get_non_empty_neuron_ids_readable_by_caller(caller)
             }
         } else {
-            Vec::new()
+            BTreeSet::new()
         };
 
         // Concatenate (explicit and implicit)-ly included neurons.
-        let mut requested_neuron_ids: Vec<NeuronId> =
+        let mut requested_neuron_ids: BTreeSet<NeuronId> =
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
 
-        if let Some(start_from_neuron_id) = start_from_neuron_id {
-            requested_neuron_ids = requested_neuron_ids
-                .into_iter()
-                .skip_while(|id| id.id != *start_from_neuron_id)
-                .collect();
-        }
+        let total_neurons_found = Some(requested_neuron_ids.len() as u64);
 
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
         let mut full_neurons = vec![];
 
-        let mut next_start_from_neuron_id = None;
+        let chunks: Vec<Vec<NeuronId>> = requested_neuron_ids
+            .into_iter()
+            .chunks(page_size as usize)
+            .into_iter()
+            .map(|chunk| chunk.collect())
+            .collect();
+
+        let empty = Vec::new();
+        let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
+
         // Populate the above two neuron collections.
-        for (count, neuron_id) in &mut requested_neuron_ids.into_iter().enumerate() {
-            if count >= MAX_LIST_NEURONS_RESULTS {
-                next_start_from_neuron_id = Some(neuron_id.id);
-                break;
-            }
+        for neuron_id in current_page {
             // Ignore when a neuron is not found. It is not guaranteed that a
             // neuron will be found, because some of the elements in
             // requested_neuron_ids are supplied by the caller.
@@ -2373,7 +2375,7 @@ impl Governance {
         ListNeuronsResponse {
             neuron_infos,
             full_neurons,
-            next_start_from_neuron_id,
+            total_neurons_found,
         }
     }
 
