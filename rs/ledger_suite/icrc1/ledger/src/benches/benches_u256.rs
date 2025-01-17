@@ -1,16 +1,18 @@
 use crate::{
     benches::{
-        assert_has_num_balances, emulate_archive_blocks, icrc1_transfer, max_length_principal,
-        mint_tokens, upgrade, NUM_TRANSFERS,
+        assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
+        test_account_offset, upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
     },
-    init_state, Access, Account, LOG,
+    icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, Account, LOG,
 };
 use assert_matches::assert_matches;
 use canbench_rs::{bench, BenchResult};
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_icrc1_ledger::{FeatureFlags, InitArgs, InitArgsBuilder};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 156, 1, 1]);
 
@@ -31,22 +33,74 @@ fn bench_icrc1_transfers() -> BenchResult {
 
     canbench_rs::bench_fn(|| {
         {
-            let _p = canbench_rs::bench_scope("before_upgrade");
-            for i in 0..NUM_TRANSFERS {
+            let _p = canbench_rs::bench_scope("icrc1_transfer");
+            for i in 0..NUM_OPERATIONS {
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
-                    to: Account {
-                        owner: max_length_principal(i),
-                        subaccount: Some([11_u8; 32]),
-                    },
+                    to: test_account(i),
                     created_at_time: Some(start_time + i as u64),
                     ..cketh_transfer()
                 };
-                let result = icrc1_transfer(account_with_tokens.owner, transfer.clone());
+                let result = icrc_transfer(account_with_tokens.owner, None, transfer.clone());
                 assert_matches!(result, Ok(_));
                 emulate_archive_blocks::<Access>(&LOG);
             }
-            assert_has_num_balances(NUM_TRANSFERS + 2);
+            assert_has_num_balances(NUM_OPERATIONS + 2);
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc2_approve");
+            for i in 0..NUM_OPERATIONS {
+                let approve = ApproveArgs {
+                    from_subaccount: account_with_tokens.subaccount,
+                    spender: test_account(i),
+                    created_at_time: Some(start_time + i as u64),
+                    amount: u128::MAX.into(),
+                    expected_allowance: Some(0u64.into()),
+                    expires_at: Some(u64::MAX),
+                    fee: None,
+                    memo: Some(MEMO.to_vec().into()),
+                };
+                let result = icrc2_approve_not_async(account_with_tokens.owner, approve.clone());
+                assert_matches!(result, Ok(_));
+                emulate_archive_blocks::<Access>(&LOG);
+            }
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc2_transfer_from");
+            for i in 0..NUM_OPERATIONS {
+                let spender = test_account(i);
+                let transfer = TransferArg {
+                    from_subaccount: account_with_tokens.subaccount,
+                    to: test_account_offset(i),
+                    created_at_time: Some(start_time + i as u64),
+                    ..cketh_transfer()
+                };
+                let result =
+                    icrc_transfer(account_with_tokens.owner, Some(spender), transfer.clone());
+                assert_matches!(result, Ok(_));
+                emulate_archive_blocks::<Access>(&LOG);
+            }
+            assert_has_num_balances(2 * NUM_OPERATIONS + 2);
+        }
+        for i in 0..NUM_GET_BLOCKS {
+            let spender = test_account(i);
+            let transfer = TransferArg {
+                from_subaccount: account_with_tokens.subaccount,
+                to: test_account_offset(i),
+                created_at_time: Some(1_000_000_000 + start_time + i as u64),
+                ..cketh_transfer()
+            };
+            let result = icrc_transfer(account_with_tokens.owner, Some(spender), transfer.clone());
+            assert_matches!(result, Ok(_));
+        }
+        {
+            let req = GetBlocksRequest {
+                start: Nat::from(3 * NUM_OPERATIONS),
+                length: Nat::from(NUM_GET_BLOCKS),
+            };
+            let _p = canbench_rs::bench_scope("icrc3_get_blocks");
+            let blocks_res = icrc3_get_blocks(vec![req]);
+            assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
         }
         upgrade();
     })
@@ -85,6 +139,13 @@ fn cketh_ledger_init_args_with_archive() -> InitArgs {
         .build()
 }
 
+const MEMO: [u8; 61] = [
+    0x82_u8, 0x00, 0x83, 0x54, 0x04, 0xc5, 0x63, 0x84, 0x17, 0x78, 0xc9, 0x3f, 0x41, 0xdc, 0x1a,
+    0x89, 0x82, 0x1a, 0xe1, 0xc6, 0x75, 0xbb, 0xe8, 0x15, 0x58, 0x20, 0xb5, 0xa1, 0x01, 0xfb, 0x96,
+    0xc5, 0xcf, 0x22, 0x4d, 0xf0, 0xd5, 0x02, 0x9b, 0x56, 0xbe, 0x81, 0xfc, 0x65, 0xce, 0x61, 0xf8,
+    0x99, 0x11, 0xb7, 0x71, 0x23, 0x27, 0x8a, 0xe7, 0xf4, 0x67, 0xb7, 0x19, 0x01, 0x2c,
+];
+
 /// ckETH ledger transaction 495542
 fn cketh_transfer() -> TransferArg {
     TransferArg {
@@ -98,16 +159,7 @@ fn cketh_transfer() -> TransferArg {
         },
         fee: None,
         created_at_time: None,
-        memo: Some(
-            vec![
-                0x82_u8, 0x00, 0x83, 0x54, 0x04, 0xc5, 0x63, 0x84, 0x17, 0x78, 0xc9, 0x3f, 0x41,
-                0xdc, 0x1a, 0x89, 0x82, 0x1a, 0xe1, 0xc6, 0x75, 0xbb, 0xe8, 0x15, 0x58, 0x20, 0xb5,
-                0xa1, 0x01, 0xfb, 0x96, 0xc5, 0xcf, 0x22, 0x4d, 0xf0, 0xd5, 0x02, 0x9b, 0x56, 0xbe,
-                0x81, 0xfc, 0x65, 0xce, 0x61, 0xf8, 0x99, 0x11, 0xb7, 0x71, 0x23, 0x27, 0x8a, 0xe7,
-                0xf4, 0x67, 0xb7, 0x19, 0x01, 0x2c,
-            ]
-            .into(),
-        ),
+        memo: Some(MEMO.to_vec().into()),
         amount: 19_998_200_000_000_000_000_u128.into(),
     }
 }
