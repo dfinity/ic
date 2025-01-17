@@ -1,9 +1,10 @@
 ---- MODULE Disburse_Neuron_Apalache ----
 
-EXTENDS TLC, Variants, Common_Apalache
+EXTENDS TLC, Variants, Common_Apalache, Integers
 
 \* CODE_LINK_INSERT_CONSTANTS
 
+(*
 CONSTANTS
     \* @type: Set($account);
     Account_Ids,
@@ -24,9 +25,11 @@ CONSTANTS
     MIN_STAKE,
     \* The transfer fee charged by the ledger canister
     \* @type: Int;
-    TRANSACTION_FEE,
-    \* @type: ($neurons, $neuronId) => Set(Int);
-    POSSIBLE_DISBURSE_AMOUNTS(_, _)
+    TRANSACTION_FEE
+
+\* @type: ($neurons, $neuronId) => Set(Int);
+POSSIBLE_DISBURSE_AMOUNTS(_neuron, _nid) == Nat
+*)
 
 VARIABLES
     \* Not used by this model, but it's a global variable used by spawn_neurons, so
