@@ -45,7 +45,7 @@ def limit_file_contexts(file_contexts, base_path):
             continue
         if base_path:
             if line.startswith(base_path):
-                lines.append(line[len(base_path) :])
+                lines.append(line[len(base_path):])
         else:
             lines.append(line)
     return "\n".join(lines) + "\n"
@@ -105,41 +105,40 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         )
 
 
-def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
-    if in_file:
-        subprocess.run(
-            [
-                "fakeroot",
-                "-s",
-                fakeroot_statefile,
-                "tar",
-                "xf",
-                in_file,
-                "--numeric-owner",
-                "-C",
-                fs_basedir,
-                dir_to_extract,
-            ],
-            check=True,
-        )
-    else:
-        subprocess.run(
-            [
-                "fakeroot",
-                "-s",
-                fakeroot_statefile,
-                "chown",
-                "root:root",
-                fs_basedir,
-            ],
-            check=True,
-        )
+def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract, extra_files):
+    # We batch all commands together and run them under bash. This is significantly faster than invoking fakeroot
+    # multiple times.
+    commands = prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files)
+    subprocess.run(
+        ["fakeroot",
+         "-i",
+         fakeroot_statefile,
+         "-s",
+         fakeroot_statefile,
+         "bash"],
+        input=commands.encode(), check=True)
 
+
+def prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files):
+    commands = "set -euo pipefail\n"
+    if in_file:
+        commands += f"tar xf {in_file} --numeric-owner -C {fs_basedir} {dir_to_extract};\n"
+
+        for path_target in extra_files or []:
+            (path, target, mod) = path_target.split(":")
+            target_in_basedir = os.path.join(fs_basedir, target.lstrip("/"))
+            commands += f"cp {path} {target_in_basedir};\n"
+            commands += f"chmod {mod} {target_in_basedir};\n"
+
+        return commands
+    else:
+        return f"chown root:root {fs_basedir}"
 
 def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
+    parser.add_argument("--extra-files", help="", nargs='*')
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -179,6 +178,7 @@ def main():
     out_file = args.output
     image_size = args.size
     limit_prefix = args.path
+    extra_files = args.extra_files
     file_contexts_file = args.file_contexts
     strip_paths = args.strip_paths
     if limit_prefix and limit_prefix[0] == "/":
@@ -206,7 +206,7 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
-    prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
+    prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     subprocess.run(["sync"], check=True)
 
