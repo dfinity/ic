@@ -4,19 +4,19 @@ use ic_canister_sandbox_backend_lib::{
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
+use std::collections::BTreeSet;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
-use nix::sys::ptrace::Options;
-use nix::sys::wait::WaitStatus;
-use nix::unistd::Pid;
-use procfs::process::Process;
-use std::collections::BTreeSet;
-
-use syscalls::Sysno;
-
 #[cfg(target_os = "linux")]
-use nix::{sys::ptrace, sys::wait::waitpid, unistd::fork, unistd::ForkResult};
+use {
+    nix::{
+        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitStatus, unistd::fork,
+        unistd::ForkResult, unistd::Pid,
+    },
+    procfs::process::Process,
+    syscalls::Sysno,
+};
 
 #[allow(improper_ctypes)]
 extern "C" {
@@ -118,7 +118,7 @@ where
                     children.pop_last();
                 }
                 let child = children.last().unwrap();
-                trace(name, Pid::from_raw((*child).into()), &allowed_syscalls);
+                trace(name, Pid::from_raw(*child), &allowed_syscalls);
             }
         }
         Err(err) => {
@@ -161,8 +161,11 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
                     }
                 }
 
-                if let Ok(_) = ptrace::syscall(child, None) {
-                    continue;
+                if let Err(err) = ptrace::syscall(child, None) {
+                    panic!(
+                        "ptrace: failed to continue to next syscall {}::{}: {}",
+                        name, child, err
+                    );
                 }
             }
             WaitStatus::PtraceSyscall(_) => {
@@ -173,8 +176,11 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
                     }
                 }
 
-                if let Ok(_) = ptrace::syscall(child, None) {
-                    continue;
+                if let Err(err) = ptrace::syscall(child, None) {
+                    panic!(
+                        "ptrace: failed to continue to next syscall {}::{}: {}",
+                        name, child, err
+                    );
                 }
             }
             WaitStatus::Exited(..) => {
@@ -204,11 +210,9 @@ fn get_children(parent_pid: i32) -> BTreeSet<i32> {
 
     if let Ok(process) = Process::new(parent_pid) {
         if let Ok(tasks) = process.tasks() {
-            for task in tasks {
-                if let Ok(task) = task {
-                    let child_pid = task.tid;
-                    pids.insert(child_pid);
-                }
+            for task in tasks.flatten() {
+                let child_pid = task.tid;
+                pids.insert(child_pid);
             }
         }
     }
