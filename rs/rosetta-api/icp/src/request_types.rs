@@ -858,6 +858,23 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct ListNeuronsMetadata {
+    page_number: Option<u64>,
+}
+
+impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse LIST_NEURONS operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FollowMetadata {
     pub topic: i32,
     pub followees: Vec<u64>,
@@ -1406,7 +1423,12 @@ impl TransactionBuilder {
             amount: None,
             related_operations: None,
             coin_change: None,
-            metadata: None,
+            metadata: Some(
+                ListNeuronsMetadata {
+                    page_number: *page_number,
+                }
+                .try_into()?,
+            ),
         });
         Ok(())
     }

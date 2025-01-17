@@ -144,7 +144,9 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
-            Request::ListNeurons(ListNeurons { .. }) => Ok(RequestType::ListNeurons),
+            Request::ListNeurons(ListNeurons { page_number, .. }) => Ok(RequestType::ListNeurons {
+                page_number: page_number.unwrap_or_default(),
+            }),
             Request::Follow(Follow {
                 neuron_index,
                 controller,
