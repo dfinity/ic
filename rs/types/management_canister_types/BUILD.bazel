@@ -24,7 +24,7 @@ temporary_whitelist = [
     "//rs/determinism_test:__subpackages__",  # permanent?
     "//rs/drun:__subpackages__",
     "//rs/ethereum:__subpackages__",
-    "//rs/http_outcalls:__subpackages__",  # permanent?
+    "//rs/https_outcalls:__subpackages__",  # permanent?
     "//rs/ingress_manager:__subpackages__",  # permanent?
     "//rs/interfaces:__subpackages__",
     "//rs/ledger_suite:__subpackages__",
