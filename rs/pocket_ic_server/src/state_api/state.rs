@@ -38,7 +38,7 @@ use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
 };
-use pocket_ic::{ErrorCode, UserError, WasmResult};
+use pocket_ic::RejectResponse;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -230,7 +230,7 @@ impl PocketIcApiStateBuilder {
 pub enum OpOut {
     NoOutput,
     Time(u64),
-    CanisterResult(Result<WasmResult, UserError>),
+    CanisterResult(Result<Vec<u8>, RejectResponse>),
     CanisterId(CanisterId),
     Controllers(Vec<PrincipalId>),
     Cycles(u128),
@@ -256,24 +256,6 @@ pub enum PocketIcError {
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
-}
-
-impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
-    fn from(
-        r: Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>,
-    ) -> Self {
-        let res = {
-            match r {
-                Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
-                Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
 }
 
 impl std::fmt::Debug for OpOut {
@@ -612,8 +594,7 @@ async fn handler(
                     |_| ErrorCause::RequestTooLarge,
                 )
             })?
-            .to_bytes()
-            .to_vec();
+            .to_bytes();
 
         let args = HttpGatewayRequestArgs {
             canister_request: CanisterRequest::from_parts(parts, body),

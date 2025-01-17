@@ -10,6 +10,7 @@ use self::message_pool::{
     Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
@@ -165,7 +166,7 @@ pub struct CanisterQueues {
     ///
     /// Used for response deduplication (whether due to a locally generated reject
     /// response to a best-effort call; or due to a malicious / buggy subnet).
-    callbacks_with_enqueued_response: BTreeSet<CallbackId>,
+    callbacks_with_enqueued_response: MutableIntMap<CallbackId, ()>,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -365,13 +366,13 @@ struct MessageStoreImpl {
     /// `CanisterInput::DeadlineExpired` by `peek_input()` / `pop_input()` (and
     /// "inflated" by `SystemState` into `SysUnknown` reject responses based on the
     /// callback).
-    expired_callbacks: BTreeMap<InboundReference, CallbackId>,
+    expired_callbacks: MutableIntMap<InboundReference, CallbackId>,
 
     /// Compact reject responses (`CallbackIds`) replacing best-effort responses
     /// that were shed. These are returned as `CanisterInput::ResponseDropped` by
     /// `peek_input()` / `pop_input()` (and "inflated" by `SystemState` into
     /// `SysUnknown` reject responses based on the callback).
-    shed_responses: BTreeMap<InboundReference, CallbackId>,
+    shed_responses: MutableIntMap<InboundReference, CallbackId>,
 }
 
 impl MessageStoreImpl {
@@ -555,7 +556,7 @@ trait InboundMessageStore: MessageStore<CanisterInput> {
     fn callbacks_with_enqueued_response(
         &self,
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
-    ) -> Result<BTreeSet<CallbackId>, String>;
+    ) -> Result<MutableIntMap<CallbackId, ()>, String>;
 }
 
 impl InboundMessageStore for MessageStoreImpl {
@@ -568,8 +569,8 @@ impl InboundMessageStore for MessageStoreImpl {
     fn callbacks_with_enqueued_response(
         &self,
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
-    ) -> Result<BTreeSet<CallbackId>, String> {
-        let mut callbacks = BTreeSet::new();
+    ) -> Result<MutableIntMap<CallbackId, ()>, String> {
+        let mut callbacks = MutableIntMap::new();
         canister_queues
             .values()
             .flat_map(|(input_queue, _)| input_queue.iter())
@@ -604,7 +605,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     }
                 };
 
-                if callbacks.insert(callback_id) {
+                if callbacks.insert(callback_id, ()).is_none() {
                     Ok(())
                 } else {
                     Err(format!(
@@ -759,9 +760,10 @@ impl CanisterQueues {
                 match self.canister_queues.get_mut(&sender) {
                     Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => {
                         // Check against duplicate responses.
-                        if !self
+                        if self
                             .callbacks_with_enqueued_response
-                            .insert(response.originator_reply_callback)
+                            .insert(response.originator_reply_callback, ())
+                            .is_some()
                         {
                             debug_assert_eq!(Ok(()), self.test_invariants());
                             if response.deadline == NO_DEADLINE {
@@ -797,7 +799,8 @@ impl CanisterQueues {
                             // aleady checked for a matching callback). Silently drop it.
                             debug_assert!(self
                                 .callbacks_with_enqueued_response
-                                .contains(&response.originator_reply_callback));
+                                .get(&response.originator_reply_callback)
+                                .is_some());
                             return Ok(false);
                         }
                     }
@@ -854,7 +857,11 @@ impl CanisterQueues {
         };
 
         // Check against duplicate responses.
-        if !self.callbacks_with_enqueued_response.insert(callback_id) {
+        if self
+            .callbacks_with_enqueued_response
+            .insert(callback_id, ())
+            .is_some()
+        {
             // There is already a response enqueued for the callback.
             return Ok(false);
         }
@@ -921,7 +928,10 @@ impl CanisterQueues {
 
             if let Some(msg_) = &msg {
                 if let Some(callback_id) = msg_.response_callback_id() {
-                    assert!(self.callbacks_with_enqueued_response.remove(&callback_id));
+                    assert!(self
+                        .callbacks_with_enqueued_response
+                        .remove(&callback_id)
+                        .is_some());
                 }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
@@ -1334,13 +1344,6 @@ impl CanisterQueues {
             .oversized_guaranteed_requests_extra_bytes
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses routed from
-    /// output queues into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queue_stats
-            .transient_stream_guaranteed_responses_size_bytes = size_bytes;
-    }
-
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1560,7 +1563,8 @@ impl CanisterQueues {
                 // request that was still in an output queue.
                 assert!(self
                     .callbacks_with_enqueued_response
-                    .insert(response.originator_reply_callback));
+                    .insert(response.originator_reply_callback, ())
+                    .is_none());
                 let reference = self.store.insert_inbound(response.into());
                 Arc::make_mut(input_queue).push_response(reference);
 
@@ -1639,8 +1643,6 @@ impl CanisterQueues {
         let calculated_stats = Self::calculate_queue_stats(
             &self.canister_queues,
             self.queue_stats.guaranteed_response_memory_reservations,
-            self.queue_stats
-                .transient_stream_guaranteed_responses_size_bytes,
         );
         if self.queue_stats != calculated_stats {
             return Err(format!(
@@ -1667,13 +1669,13 @@ impl CanisterQueues {
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed. Same with the size of guaranteed responses in streams.
+    /// cannot be computed. Size of guaranteed responses in streams is ignored as it is
+    /// limited.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
         guaranteed_response_memory_reservations: usize,
-        transient_stream_guaranteed_responses_size_bytes: usize,
     ) -> QueueStats {
         let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
@@ -1685,7 +1687,6 @@ impl CanisterQueues {
             guaranteed_response_memory_reservations,
             input_queues_reserved_slots,
             output_queues_reserved_slots,
-            transient_stream_guaranteed_responses_size_bytes,
         }
     }
 }
@@ -1743,7 +1744,7 @@ fn input_queue_type_fn<'a>(
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
         fn callback_references_to_proto(
-            callback_references: &BTreeMap<message_pool::InboundReference, CallbackId>,
+            callback_references: &MutableIntMap<message_pool::InboundReference, CallbackId>,
         ) -> Vec<pb_queues::canister_queues::CallbackReference> {
             callback_references
                 .iter()
@@ -1792,7 +1793,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         fn callback_references_try_from_proto(
             callback_references: Vec<pb_queues::canister_queues::CallbackReference>,
-        ) -> Result<BTreeMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
+        ) -> Result<MutableIntMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
         {
             callback_references
                 .into_iter()
@@ -1853,7 +1854,6 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
-            0,
         );
 
         let input_schedule = InputSchedule::try_from((
@@ -1892,9 +1892,8 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 }
 
 /// Tracks slot and guaranteed response memory reservations across input and
-/// output queues; and holds a (transient) byte size of responses already routed
-/// into streams (tracked separately, at the replicated state level, as messages
-/// are routed to and GC-ed from streams).
+/// output queues. Transient byte size of responses already routed into streams
+/// is ignored as the streams size is limited.
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
@@ -1921,22 +1920,12 @@ struct QueueStats {
     /// Count of slots reserved in output queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     output_queues_reserved_slots: usize,
-
-    /// Transient: size in bytes of guaranteed responses routed from `output_queues`
-    /// into streams and not yet garbage collected.
-    ///
-    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
-    /// every streams mutation (induction, routing, GC). And is (re)populated during
-    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
-    transient_stream_guaranteed_responses_size_bytes: usize,
 }
 
 impl QueueStats {
-    /// Returns the memory usage of reservations for guaranteed responses plus
-    /// guaranteed responses in streans.
+    /// Returns the memory usage of reservations for guaranteed responses.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
-            + self.transient_stream_guaranteed_responses_size_bytes
     }
 
     /// Updates the stats to reflect the enqueueing of the given message in the given

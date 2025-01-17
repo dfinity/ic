@@ -9,8 +9,8 @@ use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
 use ic_consensus::{
     certification::CertificationCrypto,
     consensus::{validator::Validator, ValidatorMetrics},
-    dkg::DkgKeyManager,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
     pool_reader::PoolReader, registry_version_at_height,
