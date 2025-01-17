@@ -196,8 +196,8 @@ def icos_build(
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    (":version.txt", "/boot/version.txt:0644"),
-                    (":extra_boot_args", "/boot/extra_boot_args:0644"),
+                    (":version.txt", "/version.txt:0644"),
+                    (":extra_boot_args", "/extra_boot_args:0644"),
                 ]
             )
         },
@@ -291,8 +291,8 @@ def icos_build(
                     k: v
                     for k, v in (
                         image_deps["bootfs"].items() + [
-                            (":version-test.txt", "/boot/version.txt:0644"),
-                            (":extra_boot_test_args", "/boot/extra_boot_args:0644"),
+                            (":version-test.txt", "/version.txt:0644"),
+                            (":extra_boot_test_args", "/extra_boot_args:0644"),
                         ]
                     )
                 },
@@ -721,8 +721,8 @@ EOF
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    ("version.txt", "/boot/version.txt:0644"),
-                    ("extra_boot_args", "/boot/extra_boot_args:0644"),
+                    ("version.txt", "/version.txt:0644"),
+                    ("extra_boot_args", "/extra_boot_args:0644"),
                 ]
             )
         },
