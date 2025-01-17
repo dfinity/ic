@@ -402,7 +402,7 @@ fn test_validate_sub_manifest() {
 
     let encoded_manifest = encode_manifest(&manifest);
     let num =
-        (encoded_manifest.len() + DEFAULT_CHUNK_SIZE as usize - 1) / DEFAULT_CHUNK_SIZE as usize;
+        encoded_manifest.len().div_ceil(DEFAULT_CHUNK_SIZE as usize);
     assert!(
         num > 1,
         "This test does not cover the case where the encoded manifest is divided into multiple pieces."

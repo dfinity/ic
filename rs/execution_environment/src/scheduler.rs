@@ -138,7 +138,6 @@ impl SchedulerRoundLimits {
 
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
-
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
@@ -222,7 +221,7 @@ impl SchedulerImpl {
             state = new_state;
             ongoing_long_install_code |= state
                 .canister_state(canister_id)
-                .map_or(false, |canister| canister.has_paused_install_code());
+                .is_some_and(|canister| canister.has_paused_install_code());
 
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
@@ -1658,7 +1657,7 @@ impl Scheduler for SchedulerImpl {
 
 ////////////////////////////////////////////////////////////////////////
 /// Filtered Canisters
-
+///
 /// This struct represents a collection of canister IDs.
 struct FilteredCanisters {
     /// Active canisters during the execution of the inner round.
@@ -1823,7 +1822,7 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
-            if instructions_used.map_or(false, |instructions| instructions.get() > 0) {
+            if instructions_used.is_some_and( |instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.
                 executed_canister_ids.insert(new_canister.canister_id());
             }
@@ -2324,7 +2323,7 @@ fn is_next_method_chosen(
         .system_state
         .task_queue
         .front()
-        .map_or(false, |task| task.is_hook())
+        .is_some_and( |task| task.is_hook())
     {
         return true;
     }

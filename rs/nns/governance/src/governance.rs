@@ -1057,7 +1057,7 @@ impl Proposal {
     fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     fn omit_large_fields(self) -> Self {
@@ -1177,7 +1177,7 @@ impl ProposalData {
     pub fn is_manage_neuron(&self) -> bool {
         self.proposal
             .as_ref()
-            .map_or(false, Proposal::is_manage_neuron)
+            .is_some_and(Proposal::is_manage_neuron)
     }
 
     pub fn reward_status(
@@ -1936,6 +1936,10 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
             .now_or_never()
             .expect("Future could not execute in non-WASM environment");
     }
+}
+
+fn error_string_to_governance_error(error: String) -> GovernanceError {
+    GovernanceError::new_with_message(ErrorType::InvalidProposal, error)
 }
 
 impl Governance {
@@ -5308,12 +5312,6 @@ impl Governance {
     }
 
     fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
-        impl From<String> for GovernanceError {
-            fn from(message: String) -> Self {
-                Self::new_with_message(ErrorType::InvalidProposal, message)
-            }
-        }
-
         if proposal.topic() == Topic::Unspecified {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }

@@ -265,7 +265,7 @@ async fn handle_call(msg: Message) -> Vec<u8> {
     fn should_make_downstream_call() -> bool {
         RNG.with_borrow_mut(|rng| {
             WeightedIndex::new([CALL_WEIGHT.get(), REPLY_WEIGHT.get()])
-                .map_or(false, |dist| dist.sample(rng) == 0)
+                .is_some_and(|dist| dist.sample(rng) == 0)
         })
     }
 

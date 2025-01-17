@@ -7587,7 +7587,7 @@ fn declaring_too_many_tables_fails() {
 fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
     wasm()
         .stable64_grow(
-            (bytes + WASM_PAGE_SIZE_IN_BYTES as u64 - 1) / WASM_PAGE_SIZE_IN_BYTES as u64,
+            bytes.div_ceil(WASM_PAGE_SIZE_IN_BYTES as u64),
         )
         .stable64_read(0, bytes)
         .blob_length()

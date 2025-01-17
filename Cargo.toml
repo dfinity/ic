@@ -320,7 +320,6 @@ members = [
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
-    "rs/rust_canisters/pmap",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_reader",
