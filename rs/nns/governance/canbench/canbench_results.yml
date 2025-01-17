@@ -109,7 +109,7 @@ benches:
     scopes: {}
   list_proposals:
     total:
-      instructions: 168096090
+      instructions: 6478119
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -127,13 +127,13 @@ benches:
     scopes: {}
   neuron_data_validation_heap:
     total:
-      instructions: 408061806
+      instructions: 408061813
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   neuron_data_validation_stable:
     total:
-      instructions: 363763694
+      instructions: 363763701
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -145,7 +145,7 @@ benches:
     scopes: {}
   neuron_metrics_calculation_stable:
     total:
-      instructions: 2489560
+      instructions: 2494760
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
