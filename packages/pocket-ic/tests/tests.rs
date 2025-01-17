@@ -2220,3 +2220,43 @@ fn test_reject_response_type() {
         assert!(!err.certified);
     }
 }
+
+#[test]
+fn loading_snapshot_resets_global_timer() {
+    let pic = PocketIc::new();
+
+    // We create a test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We take a snapshot of the test canister.
+    pic.stop_canister(canister, None).unwrap();
+    let snapshot = pic.take_canister_snapshot(canister, None, None).unwrap();
+    pic.start_canister(canister, None).unwrap();
+
+    // We set the global timer to 10s from now.
+    update_candid::<_, ((),)>(&pic, canister, "set_timer", ((),)).unwrap();
+
+    // We load the snapshot of the test canister taken before setting the global timer.
+    pic.stop_canister(canister, None).unwrap();
+    pic.load_canister_snapshot(canister, None, snapshot.id)
+        .unwrap();
+    pic.start_canister(canister, None).unwrap();
+
+    // We advance time by 10s and execute a couple of rounds to see if the global timer triggers.
+    pic.advance_time(std::time::Duration::from_secs(10));
+    for _ in 0..4 {
+        pic.tick();
+    }
+
+    // there shouldn't be any logs since the timer should be reset after loading the snapshot
+    let logs: Vec<_> = pic
+        .fetch_canister_logs(canister, Principal::anonymous())
+        .unwrap()
+        .into_iter()
+        .map(|log| String::from_utf8(log.content).unwrap())
+        .collect();
+    println!("logs: {:?}", logs);
+    assert!(logs.is_empty());
+}
