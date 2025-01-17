@@ -1,7 +1,11 @@
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{BufReader, Read, SeekFrom};
+use std::io::{BufReader, ErrorKind, Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
+use std::os::unix::fs::FileExt;
+use sys_util::SeekHole;
+
+const BLOCK_LEN: usize = 1024 * 1024;
 
 fn main() {
     // let mut digest = Sha256::new();
@@ -15,6 +19,97 @@ fn main() {
     // println!("{:?}", digest.finalize())
     println!("{:?}", hasher.finalize())
 }
+
+enum Block<'a> {
+    Hole,
+    Data(&'a [u8]),
+}
+
+// fn iterate_blocks(mut file: &mut File, callback: &mut impl FnMut(Block)) -> std::io::Result<()> {
+//     let file_len = file.metadata()?.len();
+//     let mut buf = vec![0; BLOCK_LEN];
+//     let mut current_position = 0;
+//
+//     while current_position < file_len {
+//         let Some(next_hole) = file.seek_hole(current_position)? else {
+//             return Ok(());
+//         };
+//
+//         while current_position < next_hole {
+//             match file.read_exact_at(&mut buf[..], current_position) {
+//                 Ok(_) => {
+//                     callback(Block::Data(&buf));
+//                     current_position += BLOCK_LEN as u64;
+//                 }
+//                 Err(error) if error.kind() == ErrorKind::UnexpectedEof => {
+//                     buf.clear();
+//                     file.seek(SeekFrom::Start(current_position))?;
+//                     file.read_to_end(&mut buf)?;
+//                     callback(Block::Data(&buf));
+//                     return Ok(());
+//                 }
+//                 other_error => return other_error,
+//             }
+//         }
+//
+//         let next_data = file.seek_data(current_position)?.unwrap_or(file_len);
+//
+//         while current_position + BLOCK_LEN as u64 <= next_data {
+//             current_position += BLOCK_LEN as u64;
+//             callback(Block::Hole);
+//         }
+//
+//         if
+//     }
+//
+//     Ok(())
+// }
+
+fn iterate_blocks(mut file: &mut File, callback: &mut impl FnMut(Block)) -> std::io::Result<()> {
+    let file_len = file.metadata()?.len();
+    let mut buf = vec![0; BLOCK_LEN];
+    let mut current_position = 0;
+
+    while current_position < file_len {
+        if current_position + BLOCK_LEN as u64 > file_len {
+
+    }
+
+
+    let Some(next_hole) = file.seek_hole(current_position)? else {
+            return Ok(());
+        };
+
+        while current_position < next_hole {
+            match file.read_exact_at(&mut buf[..], current_position) {
+                Ok(_) => {
+                    callback(Block::Data(&buf));
+                    current_position += BLOCK_LEN as u64;
+                }
+                Err(error) if error.kind() == ErrorKind::UnexpectedEof => {
+                    buf.clear();
+                    file.seek(SeekFrom::Start(current_position))?;
+                    file.read_to_end(&mut buf)?;
+                    callback(Block::Data(&buf));
+                    return Ok(());
+                }
+                other_error => return other_error,
+            }
+        }
+
+        let next_data = file.seek_data(current_position)?.unwrap_or(file_len);
+
+        while current_position + BLOCK_LEN as u64 <= next_data {
+            current_position += BLOCK_LEN as u64;
+            callback(Block::Hole);
+        }
+
+        if
+    }
+
+    Ok(())
+}
+
 //
 //
 // const MAX_BLOCK_SIZE: usize = 512;

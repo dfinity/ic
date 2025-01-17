@@ -4185,6 +4185,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "sha2 0.10.8",
+ "sys_util",
  "xxhash-rust",
 ]
 

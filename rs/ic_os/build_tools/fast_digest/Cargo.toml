@@ -7,3 +7,4 @@ edition = "2021"
 sha2 = { workspace = true }
 blake3 = "1.5.5"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+sys_util = "0.1.0"
