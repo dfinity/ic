@@ -1,4 +1,4 @@
-use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
+use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger, InMemoryLedgerState};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
@@ -2404,6 +2404,148 @@ fn apply_arg_with_caller(
                 .expect("transfer failed")
         }
     }
+}
+
+pub fn test_bil_migration_fix<Tokens>(
+    ledger_wasm_install: Vec<u8>,
+    ledger_wasm_upgrade: Vec<u8>,
+    ledger_wasm_fix: Vec<u8>,
+    ledger_wasm_v4: Vec<u8>,
+    init_args: Vec<u8>,
+    upgrade_args: Vec<u8>,
+    minter: Arc<BasicIdentity>,
+    verify_blocks: bool,
+) where
+    Tokens: TokensType + Default + std::fmt::Display + From<u64>,
+{
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter_principal: Principal = minter.sender().unwrap();
+    const INITIAL_TX_BATCH_SIZE: usize = 100;
+    const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 9 * ADDITIONAL_TX_BATCH_SIZE;
+    runner
+        .run(
+            &(valid_transactions_strategy(minter, FEE, TOTAL_TX_COUNT, now).no_shrink(),),
+            |(transactions,)| {
+                let env = StateMachine::new();
+                env.set_time(now);
+                let ledger_id = env
+                    .install_canister(ledger_wasm_install.clone(), init_args.clone(), None)
+                    .unwrap();
+
+                let mut in_memory_ledger = InMemoryLedger::<Account, Tokens>::default();
+
+                let mut tx_index = 0;
+                let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
+
+                let mut add_tx_and_verify = |in_memory_ledger: &mut InMemoryLedger::<Account, Tokens>, num_mints: u64| {
+                    while tx_index < tx_index_target {
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
+                        in_memory_ledger.apply_arg_with_caller(
+                            &transactions[tx_index],
+                            TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
+                                env.time(),
+                            )),
+                            minter_principal,
+                            Some(FEE.into()),
+                        );
+                        tx_index += 1;
+                    }
+                    tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
+                    in_memory_ledger.verify_balances_and_allowances(
+                        &env,
+                        ledger_id,
+                        tx_index as u64 + num_mints,
+                    );
+                };
+                add_tx_and_verify(&mut in_memory_ledger, 0);
+
+                let mut test_broken_upgrade = |ledger_wasm: Vec<u8>| {
+                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
+                        .unwrap();
+                    let ledger_balance_store_entries =
+                        parse_metric(&env, ledger_id, "ledger_balance_store_entries");
+                    println!("ledger_balance_store_entries: {}", ledger_balance_store_entries);
+                    assert_eq!(ledger_balance_store_entries, 0);
+                    let ledger_num_approvals =
+                        parse_metric(&env, ledger_id, "ledger_num_approvals");
+                    println!("ledger_num_approvals: {}", ledger_num_approvals);
+                    assert_eq!(ledger_num_approvals, 0);
+                    let ledger_total_transactions =
+                        parse_metric(&env, ledger_id, "ledger_total_transactions");
+                    println!("ledger_total_transactions: {}", ledger_total_transactions);
+                    assert_eq!(ledger_total_transactions, 100);
+                    for i in 0..15 {
+                        send_transfer(
+                            &env,
+                            ledger_id,
+                            minter_principal,
+                            &TransferArg {
+                                from_subaccount: None,
+                                to: Account::from(candid::Principal::from(PrincipalId::new_user_test_id(i))),
+                                amount: 1_000_000_u64.into(),
+                                fee: None,
+                                created_at_time: None,
+                                memo: None,
+                            },
+                        ).unwrap();
+                        in_memory_ledger.process_mint(
+                            &Account::from(candid::Principal::from(PrincipalId::new_user_test_id(i))),
+                            &Tokens::from(1_000_000_u64)
+                        );
+                    }
+                    let ledger_total_transactions =
+                        parse_metric(&env, ledger_id, "ledger_total_transactions");
+                    println!("ledger_total_transactions: {}", ledger_total_transactions);
+                    assert_eq!(ledger_total_transactions, 115);
+                    let ledger_balance_store_entries =
+                        parse_metric(&env, ledger_id, "ledger_balance_store_entries");
+                    println!("ledger_balance_store_entries: {}", ledger_balance_store_entries);
+                    assert_eq!(ledger_balance_store_entries, 15);
+                    let ledger_num_approvals =
+                        parse_metric(&env, ledger_id, "ledger_num_approvals");
+                    println!("ledger_num_approvals: {}", ledger_num_approvals);
+                    assert_eq!(ledger_num_approvals, 0);
+                };
+
+                let mut test_upgrade = |ledger_wasm: Vec<u8>, expected_migration_steps: u64, in_memory_ledger: &mut InMemoryLedger::<Account, Tokens>| {
+                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
+                        .unwrap();
+                    wait_ledger_ready(&env, ledger_id, 10);
+                    let stable_upgrade_migration_steps =
+                        parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
+                    assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
+                    add_tx_and_verify(in_memory_ledger, 15);
+                };
+
+                // Go through the broken upgrade path
+                println!("testing the broken upgrade");
+                test_broken_upgrade(ledger_wasm_upgrade.clone());
+
+                // Test if the old serialized approvals and balances are correctly deserialized
+                println!("testing the fix upgrade");
+                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
+                // Test the new wasm serialization
+                println!("testing the fix upgrade again");
+                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
+                // Test deserializing from memory manager
+                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
+                // Test upgrading to the latest official release
+                test_upgrade(ledger_wasm_v4.clone(), 0, &mut in_memory_ledger);
+                test_upgrade(ledger_wasm_v4.clone(), 0, &mut in_memory_ledger);
+
+                if verify_blocks {
+                    // This will also verify the ledger blocks.
+                    // The current implementation of the InMemoryLedger cannot get blocks
+                    // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
+                    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+                }
+
+                Ok(())
+            },
+        )
+        .unwrap();
 }
 
 pub fn test_upgrade_serialization<Tokens>(
