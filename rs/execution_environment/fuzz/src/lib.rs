@@ -135,6 +135,7 @@ where
     sandbox();
 }
 
+#[cfg(target_os = "linux")]
 fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
     if let Err(err) = ptrace::attach(child) {
         println!(
@@ -205,6 +206,7 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn get_children(parent_pid: i32) -> BTreeSet<i32> {
     let mut pids = BTreeSet::new();
 
