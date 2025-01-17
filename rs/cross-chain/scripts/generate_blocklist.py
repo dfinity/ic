@@ -56,6 +56,12 @@ class BitcoinBlocklistHandler:
 
     def format_address(self, address):
         return f'"{address}"'
+    
+    def currency_symbol(self):
+        return 'XBT'
+    
+    def sort(self, addresses):
+        return sorted(addresses)
 
 class EthereumBlocklistHandler:
 
@@ -85,16 +91,19 @@ class EthereumBlocklistHandler:
 
     def format_address(self, address):
         return f'ethereum_address!("{address[2:]}")'
+    
+    def currency_symbol(self):
+        return 'ETH'
+    
+    def sort(self, addresses):
+        return sorted(addresses, key=lambda x: int(x[2:], 16))
 
 
-def extract_addresses(currency, xml_file_path):
+def extract_addresses(handler, xml_file_path):
     tree = ET.parse(xml_file_path)
     root = tree.getroot()
 
     addresses = []
-
-    # Generate the currency-specific suffix.
-    currency_suffix = 'XBT' if currency == 'BTC' else 'ETH'
 
     # Iterate over all ID elements.
     for id_item in root.findall(PREFIX + 'sdnEntry/' + PREFIX + 'idList' + '/' + PREFIX + 'id'):
@@ -105,14 +114,14 @@ def extract_addresses(currency, xml_file_path):
                 id_dict[sub_item.tag] = sub_item.text
 
         # Read the address, if any.
-        if id_dict[PREFIX + 'idType'] == DIGITAL_CURRENCY_TYPE_PREFIX + currency_suffix:
+        if id_dict[PREFIX + 'idType'] == DIGITAL_CURRENCY_TYPE_PREFIX + handler.currency_symbol():
             address = id_dict[PREFIX + 'idNumber']
             addresses.append(address)
 
     # Remove duplicates.
     addresses = list(set(addresses))
     # Sort the addresses.
-    addresses.sort()
+    addresses = handler.sort(addresses)
     return addresses
 
 def store_blocklist(blocklist_handler, addresses, filename):
@@ -138,7 +147,7 @@ if __name__ == '__main__':
     else:
         blocklist_handler = EthereumBlocklistHandler()
     print('Extracting addresses from ' + args.input + '...')
-    addresses = extract_addresses(args.currency, args.input)
+    addresses = extract_addresses(blocklist_handler, args.input)
     print('Done. Found ' + str(len(addresses)) + ' addresses.')
     print('Storing the addresses in the file ' + args.output + '...')
     store_blocklist(blocklist_handler, addresses, args.output)
