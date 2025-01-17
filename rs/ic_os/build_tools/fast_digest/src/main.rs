@@ -10,14 +10,20 @@ use std::os::unix::fs::FileExt;
 use std::path::Path;
 use xxhash_rust::xxh3;
 
-const BLOCK_LEN: usize = 1024 * 1024 * 2;
+const BLOCK_LEN: usize = 1024 * 1024;
 const BLOCK_LEN_U64: u64 = BLOCK_LEN as u64;
 
+/// A tool for calculating checksums of files optimized for processing sparse files.
+///
+/// Research paper: https://www.scitepress.org/Papers/2024/127645/127645.pdf
 fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect();
+    // The first arg is the own executable path.
     if args.len() != 2 {
-        // The first arg is the own executable path
-        bail!("The program takes 1 argument, the file name")
+        bail!(
+            "The program takes 1 argument, the file name, received {}",
+            args.len() - 1
+        );
     }
     let path = &args[1];
 
@@ -31,10 +37,10 @@ fn main() -> anyhow::Result<()> {
 
 fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
     let mut outer_hasher = xxh3::Xxh3::new();
-    let all_zero_hash = xxh3::xxh3_128(&vec![0; BLOCK_LEN]).to_le_bytes();
+    let hole_hash = xxh3::xxh3_128(&vec![0; BLOCK_LEN]).to_le_bytes();
     iterate_blocks(file, |block| match block {
         Block::Hole => {
-            outer_hasher.update(&all_zero_hash);
+            outer_hasher.update(&hole_hash);
         }
         Block::Data(bytes) => {
             outer_hasher.update(&xxh3::xxh3_128(bytes).to_le_bytes());
@@ -45,48 +51,50 @@ fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
 }
 
 enum Block<'a> {
+    /// A hole of BLOCK_LEN bytes. If the last block is a hole of less than BLOCK_LEN, it will be
+    /// represented by a Data block of zero bytes instead.
     Hole,
+    /// Data block. This is always BLOCK_LEN long, except in the last block.
     Data(&'a [u8]),
 }
 
 fn iterate_blocks(file: &mut File, mut callback: impl FnMut(Block)) -> std::io::Result<()> {
     let file_len = file.metadata()?.len();
     let mut buf = vec![0; BLOCK_LEN];
-    let mut offset = 0;
     let mut state = state_at(file, 0, file_len)?;
 
-    while offset < file_len / BLOCK_LEN_U64 * BLOCK_LEN_U64 {
+    for block in 0..file_len / BLOCK_LEN_U64 {
+        let block_start_offset = block * BLOCK_LEN_U64;
+
         match state {
-            State::InHole { next_data } => {
-                // Check that we wouldn't pass `next_data` in this block. If we would, switch to
-                // data state.
-                if offset + BLOCK_LEN_U64 <= next_data {
-                    callback(Block::Hole);
-                    offset += BLOCK_LEN_U64;
-                } else {
-                    state = State::InData {
-                        next_hole: seek_hole(file, offset + BLOCK_LEN_U64)?.unwrap_or(file_len),
-                    };
-                }
+            // If we are in a hole but would pass `next_data` in this block, switch to data state.
+            State::InHole { next_data } if block_start_offset + BLOCK_LEN_U64 > next_data => {
+                state = State::InData {
+                    next_hole: seek_hole(file, block_start_offset + BLOCK_LEN_U64)?
+                        .unwrap_or(file_len),
+                };
             }
-            State::InData { next_hole } => {
-                // Check that we haven't passed the next hole. If we did, switch to hole state.
-                if offset < next_hole {
-                    file.read_exact_at(&mut buf, offset)?;
-                    callback(Block::Data(&buf));
-                    offset += BLOCK_LEN_U64;
-                } else {
-                    state = State::InHole {
-                        next_data: seek_data(file, offset)?.unwrap_or(file_len),
-                    };
-                }
+            // If we are in data state but already passed `next_hole`, switch to hole state.
+            State::InData { next_hole } if block_start_offset >= next_hole => {
+                state = State::InHole {
+                    next_data: seek_data(file, block_start_offset)?.unwrap_or(file_len),
+                };
+            }
+            _ => {}
+        }
+
+        match state {
+            State::InHole { .. } => callback(Block::Hole),
+            State::InData { .. } => {
+                file.read_exact_at(&mut buf, block_start_offset)?;
+                callback(Block::Data(&buf));
             }
         }
     }
 
-    // In case remaining data doesn't fit into a full block
+    // Handle remaining data that doesn't fit into a full block.
     buf.clear();
-    file.seek(SeekFrom::Start(offset))?;
+    file.seek(SeekFrom::Start(file_len / BLOCK_LEN_U64 * BLOCK_LEN_U64))?;
     file.read_to_end(&mut buf)?;
     callback(Block::Data(&buf));
 
@@ -111,9 +119,9 @@ fn state_at(file: &mut File, offset: u64, file_len: u64) -> std::io::Result<Stat
     Ok(result)
 }
 
-// Seeks hole in `file` starting from offset `from`. If `from` is outside the file or if there
-// are no more holes in the file, the return value Ok(None) otherwise the return value is
-// Ok(start_of_hole) and the file is seeked to that position.
+/// Seek hole in `file` starting from offset `from`. If `from` is outside the file or if there
+/// are no more holes in the file, the return value Ok(None) otherwise the return value is
+/// Ok(start_of_hole) and the file is seeked to that position.
 fn seek_hole(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
     // NOTE: u64 does not fully fit in i64, but i64::MAX is 9_223_372_036_854_775_807
     // (8 exbibytes) and we won't be seeing files this large any time soon.
@@ -126,7 +134,7 @@ fn seek_hole(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
     }
 }
 
-// See `seek_hole` above for documentation.
+/// See `seek_hole` above for documentation.
 fn seek_data(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
     // NOTE: u64 does not fully fit in i64, but i64::MAX is 9_223_372_036_854_775_807
     // (8 exbibytes) and we won't be seeing files this large any time soon.
@@ -150,23 +158,6 @@ mod tests {
     mod iterate_blocks {
         use super::*;
 
-        fn verify_file(mut file: File) {
-            let mut contents_actual = vec![];
-            file.rewind().unwrap();
-            iterate_blocks(&mut file, |block| match block {
-                Block::Hole => contents_actual.extend_from_slice(&[0; BLOCK_LEN]),
-                Block::Data(data) => contents_actual.extend_from_slice(data),
-            })
-            .unwrap();
-
-            file.rewind().unwrap();
-            let mut contents_expected = vec![];
-            file.read_to_end(&mut contents_expected).unwrap();
-
-            // We don't use assert_eq because it would print the contents which is too long.
-            assert!(contents_actual == contents_expected);
-        }
-
         // This test ensures that the test environment supports sparse files.
         // Otherwise, the rest of the test cases would be useless.
         #[test]
@@ -186,7 +177,7 @@ mod tests {
 
             assert!(
                 holes >= 1,
-                "Expected at least 1 hole, file system likely doesn't support sparse files"
+                "Expected at least 1 hole, filesystem likely doesn't support sparse files."
             );
         }
 
@@ -262,6 +253,23 @@ mod tests {
             file.set_len(_8mb as u64 * 8).unwrap();
 
             verify_file(file);
+        }
+
+        fn verify_file(mut file: File) {
+            let mut contents_actual = vec![];
+            file.rewind().unwrap();
+            iterate_blocks(&mut file, |block| match block {
+                Block::Hole => contents_actual.extend_from_slice(&[0; BLOCK_LEN]),
+                Block::Data(data) => contents_actual.extend_from_slice(data),
+            })
+            .unwrap();
+
+            file.rewind().unwrap();
+            let mut contents_expected = vec![];
+            file.read_to_end(&mut contents_expected).unwrap();
+
+            // We don't use assert_eq because it would print the contents which is too long.
+            assert!(contents_actual == contents_expected);
         }
     }
 
