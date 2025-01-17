@@ -111,8 +111,6 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     commands = prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files)
     subprocess.run(
         ["fakeroot",
-         "-i",
-         fakeroot_statefile,
          "-s",
          fakeroot_statefile,
          "bash"],
