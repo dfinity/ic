@@ -236,7 +236,12 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
     // Current transcripts come from next transcripts of the last_summary.
+
+    dbg!(&height);
+
+    dbg!(&last_summary.next_transcripts().keys());
     let current_transcripts = as_next_transcripts(last_summary);
+
     let vet_key_ids = get_enabled_vet_keys(
         subnet_id,
         registry_client,
@@ -282,6 +287,13 @@ pub(super) fn create_summary_payload(
         validation_context.registry_version,
         &vet_key_ids,
     )?);
+
+    dbg!(&configs
+        .iter()
+        .map(|conf| conf.dkg_id().dkg_tag.clone())
+        .collect::<Vec<_>>());
+    dbg!(&current_transcripts.keys());
+    dbg!(&next_transcripts.keys());
 
     Ok(Summary::new(
         configs,
@@ -1540,12 +1552,14 @@ mod tests {
             let summary = dkg_block.payload.as_ref().as_summary();
             let dkg_summary = &summary.dkg;
 
+            // The genesis summary does not have vetkeys enabled
             let vet_key_ids = get_enabled_vet_keys(
                 replica_config.subnet_id,
                 &*registry,
                 dkg_block.context.registry_version,
             )
             .unwrap();
+            assert_eq!(vet_key_ids.len(), 0);
 
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(0));
@@ -1553,20 +1567,24 @@ mod tests {
                 cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
-            assert_eq!(dkg_summary.configs.len(), 2);
 
-            assert_eq!(vet_key_ids.len(), 0);
+            // This summary does not contain a config for the vetkey yet
+            assert_eq!(dkg_summary.configs.len(), 2);
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+
+            // Since it is the genesis summary, it also has no current transcripts
+            assert_eq!(dkg_summary.next_transcripts().len(), 0);
             for tag in tags_iter(&vet_key_ids) {
-                let config = dkg_summary
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
-                let current_transcript = dkg_summary.current_transcript(&tag).unwrap();
-                let next_transcript = dkg_summary.next_transcript(&tag);
-                // TODO
+                let _ = dkg_summary.current_transcript(&tag).unwrap();
             }
 
+            // Add the vetkey to the registry
             pool.advance_round_normal_operation();
             add_subnet_record(
                 &registry_data_provider,
@@ -1578,11 +1596,62 @@ mod tests {
                     .build(),
             );
             registry.update_to_latest_version();
-            pool.advance_round_normal_operation_n(
-                dkg_interval_length + (dkg_interval_length + 1) * 0,
+
+            pool.advance_round_normal_operation_n(dkg_interval_length);
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            // At this point the summary has a registry version with a vetkey
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
+            assert_eq!(dkg_summary.height, Height::from(5));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
             );
 
-            // TODO
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+            assert_eq!(dkg_summary.next_transcripts().len(), 2);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+
+                match tag {
+                    // Vetkeys should not have transcripts yet, since the configs where only added in
+                    // this summary
+                    NiDkgTag::HighThresholdForKey(_) => {
+                        assert!(current_transcript.is_none() && next_transcript.is_none())
+                    }
+                    NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => {
+                        assert!(current_transcript.is_some() && next_transcript.is_some())
+                    }
+                };
+            }
+
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
             let cup = PoolReader::new(&pool).get_highest_catch_up_package();
             let dkg_block = cup.content.block.as_ref();
             assert_eq!(
@@ -1599,30 +1668,86 @@ mod tests {
                 dkg_block.context.registry_version,
             )
             .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
 
             // This membership registry version corresponds to the registry version from
             // the block context of the previous summary.
             assert_eq!(dkg_summary.configs.len(), 3);
-            //assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
-            //assert_eq!(dkg_summary.height, Height::from(5));
-            // assert_eq!(
-            //     cup.get_oldest_registry_version_in_use(),
-            //     RegistryVersion::from(5)
-            // );
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
+            assert_eq!(dkg_summary.height, Height::from(10));
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(5)
+            );
 
-            assert_eq!(vet_key_ids.len(), 1);
+            assert_eq!(dkg_summary.current_transcripts().len(), 2);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
             for tag in tags_iter(&vet_key_ids) {
-                let config = dkg_summary
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == tag)
                     .unwrap();
                 let current_transcript = dkg_summary.current_transcript(&tag);
                 let next_transcript = dkg_summary.next_transcript(&tag);
-                // TODO
+
+                match tag {
+                    // There should be a vetkey next transcript but not a current one
+                    NiDkgTag::HighThresholdForKey(_) => {
+                        assert!(current_transcript.is_none() && next_transcript.is_some())
+                    }
+                    NiDkgTag::LowThreshold | NiDkgTag::HighThreshold => {
+                        assert!(current_transcript.is_some() && next_transcript.is_some())
+                    }
+                };
             }
 
-            todo!();
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
+            assert_eq!(
+                dkg_block.context.registry_version,
+                RegistryVersion::from(6),
+                "The newest registry version is used."
+            );
+            let summary = dkg_block.payload.as_ref().as_summary();
+            let dkg_summary = &summary.dkg;
+
+            let vet_key_ids = get_enabled_vet_keys(
+                replica_config.subnet_id,
+                &*registry,
+                dkg_block.context.registry_version,
+            )
+            .unwrap();
+            assert_eq!(vet_key_ids.len(), 1);
+
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
+            assert_eq!(dkg_summary.height, Height::from(15));
+            // The oldest registry in use is no longer 5
+            assert_eq!(
+                cup.get_oldest_registry_version_in_use(),
+                RegistryVersion::from(6)
+            );
+
+            assert_eq!(dkg_summary.current_transcripts().len(), 3);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            for tag in tags_iter(&vet_key_ids) {
+                // Check that every tag has a config in the summary
+                let _ = dkg_summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == tag)
+                    .unwrap();
+                let current_transcript = dkg_summary.current_transcript(&tag);
+                let next_transcript = dkg_summary.next_transcript(&tag);
+
+                // All tags have all transcripts now
+                assert!(current_transcript.is_some() && next_transcript.is_some());
+            }
         });
     }
 }
