@@ -1703,12 +1703,12 @@ impl ExecutionEnvironment {
 
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
-                // A query call is expected to finish quickly, so DTS is not supported for it.
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Disabled,
+                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
-                    max_instructions_per_message_without_dts,
+                    instruction_limits.slice(),
                 );
+                println!("instruction_limits: {:?}", instruction_limits);
                 let execution_parameters = self.execution_parameters(
                     &canister,
                     instruction_limits,
@@ -1720,12 +1720,13 @@ impl ExecutionEnvironment {
                     canister,
                     req,
                     method,
+                    prepaid_execution_cycles,
                     execution_parameters,
                     time,
                     round,
                     round_limits,
                     subnet_size,
-                    &self.metrics.state_changes_error,
+                    self.deallocator_thread.sender(),
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,

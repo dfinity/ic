@@ -115,6 +115,12 @@ fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
     )
 }
 
+// Helper function to allow testing both update and query methods with the same test.
+fn with_update_and_replicated_query<F: FnOnce(String) + Clone>(test: F) {
+    test.clone()("update".to_string());
+    test("query".to_string());
+}
+
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
@@ -236,6 +242,86 @@ fn dts_update_concurrent_cycles_change_succeeds() {
 }
 
 #[test]
+fn dts_replicated_query_concurrent_cycles_change_succeeds() {
+    // Test steps:
+    // 1. Canister A starts running the query method.
+    // 2. While canister A is paused, we emulate a postponed charge
+    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
+    // 3. The update method resumes and burns 1000 cycles.
+    // 4. The update method succeeds because there are enough cycles
+    //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_without_dts(instruction_limit)
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let cycles_to_burn = Cycles::new(1000);
+
+    let payload = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .cycles_burn128(cycles_to_burn)
+        .build();
+
+    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(1), None)
+        .unwrap();
+
+    test.ingress_raw(canister_id, "query", payload);
+
+    let freezing_threshold = test.freezing_threshold(canister_id);
+
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(canister_id),
+    );
+
+    let cycles_debit = Cycles::new(1000);
+
+    // Reset the cycles balance to simplify cycles bookkeeping.
+    let initial_cycles = freezing_threshold + max_execution_cost + cycles_debit + cycles_to_burn;
+    let initial_execution_cost = test.canister_execution_cost(canister_id);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_balance(initial_cycles);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - max_execution_cost,
+    );
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles
+            - cycles_to_burn
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - cycles_debit,
+    );
+}
+
+#[test]
 fn dts_update_concurrent_cycles_change_fails() {
     // Test steps:
     // 1. Canister A starts running the update method.
@@ -346,6 +432,94 @@ fn dts_update_concurrent_cycles_change_fails() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - (test.canister_execution_cost(a_id) - initial_execution_cost)
+            - cycles_debit,
+    );
+}
+
+#[test]
+fn dts_replicated_query_concurrent_cycles_change_fails() {
+    // Test steps:
+    // 1. Canister A starts running the query method.
+    // 2. While canister A is paused, we emulate a postponed charge
+    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
+    // 3. The update method resumes and burns 1000 cycles.
+    // 4. The update method succeeds because there are enough cycles
+    //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_without_dts(instruction_limit)
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let cycles_to_burn = Cycles::new(1000);
+
+    let payload = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .cycles_burn128(cycles_to_burn)
+        .build();
+
+    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(1), None)
+        .unwrap();
+
+    let (ingress_id, _) = test.ingress_raw(canister_id, "query", payload);
+
+    let freezing_threshold = test.freezing_threshold(canister_id);
+
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(canister_id),
+    );
+
+    let cycles_debit = Cycles::new(1000);
+
+    // Reset the cycles balance to simplify cycles bookkeeping.
+    let initial_cycles = freezing_threshold + max_execution_cost + cycles_debit;
+    let initial_execution_cost = test.canister_execution_cost(canister_id);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_balance(initial_cycles);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - max_execution_cost,
+    );
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+
+    assert!(err.description().contains(&format!(
+        "Canister {} is out of cycles: \
+             please top up the canister with at least",
+        canister_id
+    )));
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
             - cycles_debit,
     );
 }
@@ -611,378 +785,401 @@ fn hitting_access_limit_fails_non_replicated_query() {
 }
 
 #[test]
-fn dts_update_resume_fails_due_to_cycles_change() {
-    // Test steps:
-    // 1. Canister A starts running the update method.
-    // 2. While canister A is paused, we change its cycles balance.
-    // 3. The update method resumes, detects the cycles balance mismatch, and
-    //    fails.
-    let instruction_limit = 1_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
-        .with_manual_execution()
-        .build();
+fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
+    with_update_and_replicated_query(|method| {
+        // Test steps:
+        // 1. Canister A starts running the update|query method.
+        // 2. While canister A is paused, we change its cycles balance.
+        // 3. The update|query method resumes, detects the cycles balance mismatch, and
+        //    fails.
+        let instruction_limit = 1_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(10_000)
+            .with_manual_execution()
+            .build();
 
-    let a_id = test.universal_canister().unwrap();
+        let a_id = test.universal_canister().unwrap();
 
-    let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
-        .build();
+        let a = wasm()
+            .stable64_grow(1)
+            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
+            .build();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a);
 
-    test.execute_slice(a_id);
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        test.execute_slice(a_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    // Change the cycles balance of the clean canister.
-    let balance = test.canister_state(a_id).system_state.balance();
-    test.canister_state_mut(a_id)
-        .system_state
-        .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
+        // Change the cycles balance of the clean canister.
+        let balance = test.canister_state(a_id).system_state.balance();
+        test.canister_state_mut(a_id)
+            .system_state
+            .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
 
-    test.execute_slice(a_id);
+        test.execute_slice(a_id);
 
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::None,
-    );
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::None,
+        );
 
-    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    err.assert_contains(
-        ErrorCode::CanisterWasmEngineError,
-        &format!(
-            "Error from Canister {}: Canister encountered a Wasm engine error: \
+        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+        let message = if &method == "update" {
+            "an update call"
+        } else {
+            "a replicated query"
+        };
+        err.assert_contains(
+            ErrorCode::CanisterWasmEngineError,
+            &format!(
+                "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in cycles \
-             balance when resuming an update call",
-            a_id
-        ),
-    );
+             balance when resuming {}",
+                a_id, message
+            ),
+        );
+    });
 }
 
 #[test]
-fn dts_update_resume_fails_due_to_call_context_change() {
-    // Test steps:
-    // 1. Canister A starts running the update method.
-    // 2. While canister A is paused, we change its call context counter.
-    // 3. The update method resumes, detects the call context mismatch, and
-    //    fails.
-    let instruction_limit = 1_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
-        .with_manual_execution()
-        .build();
+fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
+    with_update_and_replicated_query(|method| {
+        // Test steps:
+        // 1. Canister A starts running the update|query method.
+        // 2. While canister A is paused, we change its call context counter.
+        // 3. The update|query method resumes, detects the call context mismatch, and
+        //    fails.
+        let instruction_limit = 1_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(10_000)
+            .with_manual_execution()
+            .build();
 
-    let a_id = test.universal_canister().unwrap();
+        let a_id = test.universal_canister().unwrap();
 
-    let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
-        .build();
+        let a = wasm()
+            .stable64_grow(1)
+            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
+            .build();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a);
 
-    test.execute_slice(a_id);
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        test.execute_slice(a_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    // Change the next call context id of the clean canister.
-    let time = test.time();
-    test.canister_state_mut(a_id)
-        .system_state
-        .new_call_context(
-            CallOrigin::SystemTask,
-            Cycles::new(0),
-            time,
-            RequestMetadata::for_new_call_tree(time),
-        )
-        .unwrap();
+        // Change the next call context id of the clean canister.
+        let time = test.time();
+        test.canister_state_mut(a_id)
+            .system_state
+            .new_call_context(
+                CallOrigin::SystemTask,
+                Cycles::new(0),
+                time,
+                RequestMetadata::for_new_call_tree(time),
+            )
+            .unwrap();
 
-    test.execute_slice(a_id);
+        test.execute_slice(a_id);
 
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::None,
-    );
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::None,
+        );
 
-    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
-
-    assert_eq!(
-        err.description(),
-        format!(
-            "Error from Canister {}: Canister encountered a Wasm engine error: \
+        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
+        let message = if &method == "update" {
+            "an update call"
+        } else {
+            "a replicated query"
+        };
+        assert_eq!(
+            err.description(),
+            format!(
+                "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in call \
-             context id when resuming an update call",
-            a_id
-        )
-    );
+             context id when resuming {}",
+                a_id, message
+            )
+        );
+    });
 }
 
 #[test]
-fn dts_update_does_not_expire_while_executing() {
-    // Test steps:
-    // 1. Canister A starts running the update method.
-    // 2. While canister A is paused, we fast forward the time by 1h.
-    // 3. The update resumes and should not fail due to ingress expiration.
-    let instruction_limit = 100_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(1_000_000)
-        .with_manual_execution()
-        .build();
+fn dts_replicated_execution_does_not_expire_while_executing() {
+    with_update_and_replicated_query(|method| {
+        // Test steps:
+        // 1. Canister A starts running the update|query method.
+        // 2. While canister A is paused, we fast forward the time by 1h.
+        // 3. The update|query resumes and should not fail due to ingress expiration.
+        let instruction_limit = 100_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(1_000_000)
+            .with_manual_execution()
+            .build();
 
-    let a_id = test.universal_canister().unwrap();
+        let a_id = test.universal_canister().unwrap();
 
-    let a = wasm()
-        .instruction_counter_is_at_least(1_000_000)
-        .push_bytes(&[42])
-        .append_and_reply()
-        .build();
+        let a = wasm()
+            .instruction_counter_is_at_least(1_000_000)
+            .push_bytes(&[42])
+            .append_and_reply()
+            .build();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a.clone());
+        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a.clone());
 
-    test.execute_slice(a_id);
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        test.execute_slice(a_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    test.advance_time(Duration::from_secs(3600));
+        test.advance_time(Duration::from_secs(3600));
 
-    test.execute_message(a_id);
+        test.execute_message(a_id);
 
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::None,
-    );
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::None,
+        );
 
-    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![42]));
+        let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![42]));
 
-    // Now repeat the same steps but also abort the execution after advancing
-    // the time.
+        // Now repeat the same steps but also abort the execution after advancing
+        // the time.
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
-    test.execute_slice(a_id);
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        test.execute_slice(a_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    test.advance_time(Duration::from_secs(3600));
+        test.advance_time(Duration::from_secs(3600));
 
-    test.abort_all_paused_executions();
+        test.abort_all_paused_executions();
 
-    test.execute_message(a_id);
+        test.execute_message(a_id);
 
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::None,
-    );
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::None,
+        );
 
-    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![42]));
+        let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![42]));
+    });
 }
 
 #[test]
-fn dts_abort_of_call_works() {
-    let initial_cycles = 1_000_000_000_000_000;
-    // Test steps:
-    // 1. Canister A runs an update method that calls canister B.
-    // 2. The called update method of canister B runs with DTS.
-    // 3. The called update method is aborted.
-    // 4. The called update method resumes and succeeds.
-    let instruction_limit = 100_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(1_000_000)
-        .with_initial_canister_cycles(initial_cycles)
-        .with_manual_execution()
-        .build();
+fn dts_abort_of_replicated_execution_works() {
+    with_update_and_replicated_query(|method| {
+        let initial_cycles = 1_000_000_000_000_000;
+        // Test steps:
+        // 1. Canister A runs an update method that calls canister B.
+        // 2. The called update|query method of canister B runs with DTS.
+        // 3. The called update|query method is aborted.
+        // 4. The called update|query method resumes and succeeds.
+        let instruction_limit = 100_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(1_000_000)
+            .with_initial_canister_cycles(initial_cycles)
+            .with_manual_execution()
+            .build();
 
-    let a_id = test.universal_canister().unwrap();
-    let b_id = test.universal_canister().unwrap();
+        let a_id = test.universal_canister().unwrap();
+        let b_id = test.universal_canister().unwrap();
 
-    let transferred_cycles = Cycles::new(1000);
+        let transferred_cycles = Cycles::new(1000);
 
-    let b = wasm()
-        .instruction_counter_is_at_least(1_000_000)
-        .accept_cycles(transferred_cycles)
-        .push_bytes(&[42])
-        .append_and_reply()
-        .build();
+        let b = wasm()
+            .instruction_counter_is_at_least(1_000_000)
+            .accept_cycles(transferred_cycles)
+            .push_bytes(&[42])
+            .append_and_reply()
+            .build();
 
-    let a = wasm()
-        .call_with_cycles(
-            b_id,
-            "update",
-            call_args()
-                .other_side(b.clone())
-                .on_reject(wasm().reject_message().reject()),
-            transferred_cycles,
-        )
-        .build();
+        let a = wasm()
+            .call_with_cycles(
+                b_id,
+                method.clone(),
+                call_args()
+                    .other_side(b.clone())
+                    .on_reject(wasm().reject_message().reject()),
+                transferred_cycles,
+            )
+            .build();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+        let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
 
-    test.execute_message(a_id);
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::None,
-    );
+        test.execute_message(a_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::None,
+        );
 
-    test.induct_messages();
+        test.induct_messages();
 
-    test.execute_slice(b_id);
+        test.execute_slice(b_id);
 
-    assert_eq!(
-        test.canister_state(b_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        assert_eq!(
+            test.canister_state(b_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    test.abort_all_paused_executions();
+        test.abort_all_paused_executions();
 
-    test.execute_message(b_id);
+        test.execute_message(b_id);
 
-    test.induct_messages();
+        test.induct_messages();
 
-    test.execute_message(a_id);
+        test.execute_message(a_id);
 
-    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![42]));
+        let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![42]));
 
-    assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        Cycles::new(initial_cycles)
-            - transferred_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&[42])
-    );
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            Cycles::new(initial_cycles)
+                - transferred_cycles
+                - test.canister_execution_cost(a_id)
+                - test.call_fee(method, &b)
+                - test.reply_fee(&[42])
+        );
 
-    assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
-        Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
-    );
+        assert_eq!(
+            test.canister_state(b_id).system_state.balance(),
+            Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
+        );
+    });
 }
 
 #[test]
-fn dts_ingress_induction_cycles_debit_is_applied_on_aborts() {
-    // Test steps:
-    // 1. Canister A starts running the update method.
-    // 2. While canister A is paused, we emulate a postponed charge
-    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
-    // 3. The update method is aborted and we expected the cycles debit to be
-    //    applied.
-    let instruction_limit = 100_000_000;
-    let initial_canister_cycles = 1_000_000_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(1_000_000)
-        .with_initial_canister_cycles(initial_canister_cycles)
-        .with_manual_execution()
-        .build();
+fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts() {
+    with_update_and_replicated_query(|method| {
+        // Test steps:
+        // 1. Canister A starts running the update|query method.
+        // 2. While canister A is paused, we emulate a postponed charge
+        //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
+        // 3. The update|query method is aborted and we expected the cycles debit to be
+        //    applied.
+        let instruction_limit = 100_000_000;
+        let initial_canister_cycles = 1_000_000_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(1_000_000)
+            .with_initial_canister_cycles(initial_canister_cycles)
+            .with_manual_execution()
+            .build();
 
-    let a_id = test.universal_canister().unwrap();
+        let a_id = test.universal_canister().unwrap();
 
-    let a = wasm()
-        .instruction_counter_is_at_least(1_000_000)
-        .push_bytes(&[42])
-        .append_and_reply()
-        .build();
+        let a = wasm()
+            .instruction_counter_is_at_least(1_000_000)
+            .push_bytes(&[42])
+            .append_and_reply()
+            .build();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
-    test.execute_slice(a_id);
+        test.execute_slice(a_id);
 
-    assert_eq!(
-        test.canister_state(a_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    let cycles_debit = Cycles::new(1000);
-    test.canister_state_mut(a_id)
-        .system_state
-        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
-
-    assert!(
-        test.canister_state(a_id)
+        let cycles_debit = Cycles::new(1000);
+        test.canister_state_mut(a_id)
             .system_state
-            .ingress_induction_cycles_debit()
-            > Cycles::zero()
-    );
+            .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-    test.abort_all_paused_executions();
+        assert!(
+            test.canister_state(a_id)
+                .system_state
+                .ingress_induction_cycles_debit()
+                > Cycles::zero()
+        );
 
-    assert_eq!(
-        test.canister_state(a_id)
-            .system_state
-            .ingress_induction_cycles_debit(),
-        Cycles::zero()
-    );
+        test.abort_all_paused_executions();
 
-    test.execute_message(a_id);
+        assert_eq!(
+            test.canister_state(a_id)
+                .system_state
+                .ingress_induction_cycles_debit(),
+            Cycles::zero()
+        );
 
-    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+        test.execute_message(a_id);
 
-    assert_eq!(result, WasmResult::Reply(vec![42]));
-    assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        Cycles::new(initial_canister_cycles) - test.canister_execution_cost(a_id) - cycles_debit
-    );
+        let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+
+        assert_eq!(result, WasmResult::Reply(vec![42]));
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            Cycles::new(initial_canister_cycles)
+                - test.canister_execution_cost(a_id)
+                - cycles_debit
+        );
+    });
 }
 
 #[test]
-fn dts_uninstall_with_aborted_update() {
-    let instruction_limit = 1_000_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
-        .with_manual_execution()
-        .build();
+fn dts_uninstall_with_aborted_replicated_execution() {
+    with_update_and_replicated_query(|method| {
+        let instruction_limit = 1_000_000;
+        let mut test = ExecutionTestBuilder::new()
+            .with_instruction_limit(instruction_limit)
+            .with_slice_instruction_limit(10_000)
+            .with_manual_execution()
+            .build();
 
-    let canister_id = test.universal_canister().unwrap();
+        let canister_id = test.universal_canister().unwrap();
 
-    let wasm_payload = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
-        .build();
+        let wasm_payload = wasm()
+            .stable64_grow(1)
+            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 10_000)
+            .build();
 
-    let (message_id, _) = test.ingress_raw(canister_id, "update", wasm_payload);
+        let (message_id, _) = test.ingress_raw(canister_id, method, wasm_payload);
 
-    test.execute_slice(canister_id);
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::ContinueLong,
-    );
+        test.execute_slice(canister_id);
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueLong,
+        );
 
-    test.abort_all_paused_executions();
+        test.abort_all_paused_executions();
 
-    test.uninstall_code(canister_id).unwrap();
+        test.uninstall_code(canister_id).unwrap();
 
-    test.execute_message(canister_id);
+        test.execute_message(canister_id);
 
-    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    err.assert_contains(ErrorCode::CanisterWasmModuleNotFound,
-        &format!(
-            "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
-            canister_id
-        )
-    );
+        let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+        err.assert_contains(ErrorCode::CanisterWasmModuleNotFound,
+            &format!(
+                "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
+                canister_id
+            )
+        );
+    });
 }
 
 #[test]
