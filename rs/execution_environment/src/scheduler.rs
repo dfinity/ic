@@ -603,24 +603,27 @@ impl SchedulerImpl {
         // are not polluted by canisters that haven't had any messages for a long time.
         for canister_id in &round_filtered_canisters.active_canister_ids {
             let canister_state = state.canister_state(canister_id).unwrap();
-            let canister_age = current_round.get()
-                - canister_state
-                    .scheduler_state
-                    .last_full_execution_round
-                    .get();
-            self.metrics.canister_age.observe(canister_age as f64);
-            // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-            // scheduled.
-            let allocation = Ratio::new(
-                canister_state
-                    .scheduler_state
-                    .compute_allocation
-                    .as_percent(),
-                100,
-            );
-            if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip() {
-                self.metrics.canister_compute_allocation_violation.inc();
-            }
+            // Newly created canisters have `last_full_execution_round` set to zero,
+            // and hence skew the `canister_age` metric.
+            let last_full_execution_round =
+                canister_state.scheduler_state.last_full_execution_round;
+            if last_full_execution_round.get() != 0 {
+                let canister_age = current_round.get() - last_full_execution_round.get();
+                self.metrics.canister_age.observe(canister_age as f64);
+                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
+                // scheduled.
+                let allocation = Ratio::new(
+                    canister_state
+                        .scheduler_state
+                        .compute_allocation
+                        .as_percent(),
+                    100,
+                );
+                if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
+                {
+                    self.metrics.canister_compute_allocation_violation.inc();
+                }
+            };
         }
 
         for (message_id, status) in ingress_execution_results {
