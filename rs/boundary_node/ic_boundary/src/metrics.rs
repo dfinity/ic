@@ -500,8 +500,17 @@ pub async fn metrics_middleware(
     let ip_family = request
         .extensions()
         .get::<Arc<ConnInfo>>()
-        .map(|x| x.remote_addr.family())
-        .unwrap_or("0");
+        .map(|x| {
+            let f = x.remote_addr.family();
+            if f == "v4" {
+                4
+            } else if f == "v6" {
+                6
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
 
     let remote_addr = request
         .extensions()

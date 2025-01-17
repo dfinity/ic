@@ -32,4 +32,5 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 
 [dev-dependencies]
+ic-state-machine-tests = { path = "../state_machine_tests" }
 tempfile = { workspace = true }

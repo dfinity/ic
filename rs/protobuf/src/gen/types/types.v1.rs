@@ -1528,11 +1528,18 @@ pub struct IngressIdOffset {
     pub offset: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signed_request_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub buffer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<IngressMessage>,
 }
 /// Stripped consensus artifacts messages below
 #[derive(Clone, PartialEq, ::prost::Message)]

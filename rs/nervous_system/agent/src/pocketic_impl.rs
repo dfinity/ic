@@ -22,9 +22,7 @@ impl<'a> PocketIcAgent<'a> {
 #[derive(Error, Debug)]
 pub enum PocketIcCallError {
     #[error("pocket_ic error: {0}")]
-    PocketIc(pocket_ic::UserError),
-    #[error("canister rejected the request: {0}")]
-    Reject(String),
+    PocketIc(pocket_ic::RejectResponse),
     #[error("canister request could not be encoded: {0}")]
     CandidEncode(candid::Error),
     #[error("canister did not respond with the expected response type: {0}")]
@@ -42,7 +40,7 @@ impl CallCanisters for PocketIcAgent<'_> {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload();
+        let request_bytes = request.payload().map_err(PocketIcCallError::CandidEncode)?;
         let response = if request.update() {
             self.pocket_ic
                 .update_call(canister_id, self.sender, request.method(), request_bytes)
@@ -54,14 +52,20 @@ impl CallCanisters for PocketIcAgent<'_> {
         }
         .map_err(PocketIcCallError::PocketIc)?;
 
-        match response {
-            pocket_ic::WasmResult::Reply(reply) => {
-                let response = candid::decode_one(reply.as_slice())
-                    .map_err(PocketIcCallError::CandidDecode)?;
-                Ok(response)
-            }
-            pocket_ic::WasmResult::Reject(reject) => Err(PocketIcCallError::Reject(reject)),
-        }
+        candid::decode_one(response.as_slice()).map_err(PocketIcCallError::CandidDecode)
+    }
+}
+
+impl CallCanisters for PocketIc {
+    type Error = PocketIcCallError;
+    async fn call<R: Request>(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+        request: R,
+    ) -> Result<R::Response, Self::Error> {
+        PocketIcAgent::new(self, Principal::anonymous())
+            .call(canister_id, request)
+            .await
     }
 }
 

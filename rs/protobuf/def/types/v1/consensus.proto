@@ -204,9 +204,15 @@ message IngressIdOffset {
   uint64 offset = 3;
 }
 
+message IngressMessage {
+  bytes message_id = 1;
+  uint64 expiry = 2;
+  bytes signed_request_bytes = 3;
+}
+
 message IngressPayload {
-  repeated IngressIdOffset id_and_pos = 1;
-  bytes buffer = 2;
+  reserved 1, 2;
+  repeated IngressMessage ingress_messages = 3;
 }
 
 // Stripped consensus artifacts messages below

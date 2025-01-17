@@ -58,7 +58,10 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedSender},
+    watch,
+};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
@@ -331,7 +334,7 @@ fn start_consensus(
         let consensus_pool = Arc::clone(&consensus_pool);
 
         let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
-        let (outbound_tx, inbound_rx, _) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let (outbound_tx, inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -366,7 +369,9 @@ fn start_consensus(
         join_handles.push(jh);
     };
 
-    let ingress_sender = {
+    let user_ingress_tx = {
+        #[allow(clippy::disallowed_methods)]
+        let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
         let bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
@@ -376,19 +381,20 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx, inbound_tx) =
+        let (outbound_tx, inbound_rx) =
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS);
         // Create the ingress client.
         let jh = create_ingress_handlers(
             outbound_tx,
             inbound_rx,
+            user_ingress_rx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        inbound_tx
+        user_ingress_tx
     };
 
     {
@@ -411,7 +417,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx, _) =
+        let (outbound_tx, inbound_rx) =
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the certification client.
         let jh = create_artifact_handler(
@@ -435,7 +441,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx, _) =
+        let (outbound_tx, inbound_rx) =
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the DKG client.
         let jh = create_artifact_handler(
@@ -483,7 +489,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx, _) =
+        let (outbound_tx, inbound_rx) =
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
@@ -519,7 +525,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx, _) =
+        let (outbound_tx, inbound_rx) =
             new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
@@ -544,7 +550,7 @@ fn start_consensus(
 
     (
         artifact_pools.ingress_pool,
-        ingress_sender,
+        user_ingress_tx,
         join_handles,
         new_p2p_consensus,
     )

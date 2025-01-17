@@ -4,9 +4,8 @@ use crate::common::rest::{
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
-    Topology,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
@@ -17,7 +16,7 @@ use crate::management_canister::{
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{CallError, IngressStatusResult, PocketIcBuilder, UserError, WasmResult};
+use crate::{IngressStatusResult, PocketIcBuilder, RejectResponse};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -547,7 +546,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         self.submit_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -566,7 +565,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let endpoint = "update/submit_ingress_message";
         let raw_canister_call = RawCanisterCall {
             sender: sender.as_slice().to_vec(),
@@ -575,24 +574,14 @@ impl PocketIc {
             payload,
             effective_principal,
         };
-        let res: RawSubmitIngressResult = self.post(endpoint, raw_canister_call).await;
-        match res {
-            RawSubmitIngressResult::Ok(message_id) => Ok(message_id),
-            RawSubmitIngressResult::Err(user_error) => Err(user_error),
-        }
+        self.post(endpoint, raw_canister_call).await
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    pub async fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    pub async fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let endpoint = "update/await_ingress_message";
         let result: RawCanisterResult = self.post(endpoint, message_id).await;
-        match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        }
+        result.into()
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
@@ -608,18 +597,11 @@ impl PocketIc {
             raw_message_id,
             raw_caller: caller.map(|caller| caller.into()),
         };
-        match self.try_post(endpoint, raw_ingress_status_args).await {
+        let result: Result<Option<RawCanisterResult>, (StatusCode, String)> =
+            self.try_post(endpoint, raw_ingress_status_args).await;
+        match result {
             Ok(None) => IngressStatusResult::NotAvailable,
-            Ok(Some(raw_result)) => {
-                let result = match raw_result {
-                    RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                        RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                        RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-                    },
-                    RawCanisterResult::Err(user_error) => Err(user_error),
-                };
-                IngressStatusResult::Success(result)
-            }
+            Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
                 assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for PocketIc::ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
                 IngressStatusResult::Forbidden(message)
@@ -633,7 +615,7 @@ impl PocketIc {
     pub async fn await_call_no_ticks(
         &self,
         message_id: RawMessageId,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(Duration::from_millis(10))
             .with_max_interval(Duration::from_secs(1))
@@ -657,7 +639,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         self.update_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -676,7 +658,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         self.query_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -698,7 +680,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let endpoint = "read/query";
         self.canister_call(
             endpoint,
@@ -716,7 +698,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Principal,
-    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+    ) -> Result<Vec<CanisterLogRecord>, RejectResponse> {
         with_candid::<_, (FetchCanisterLogsResult,), _>(
             (CanisterIdRecord { canister_id },),
             |payload| async {
@@ -740,7 +722,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResult, CallError> {
+    ) -> Result<CanisterStatusResult, RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), (CanisterStatusResult,)>(
             self,
             Principal::management_canister(),
@@ -873,7 +855,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         chunk: Vec<u8>,
-    ) -> Result<Vec<u8>, CallError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         call_candid_as::<_, (UploadChunkResult,)>(
             self,
             Principal::management_canister(),
@@ -892,7 +874,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Vec<u8>>, CallError> {
+    ) -> Result<Vec<Vec<u8>>, RejectResponse> {
         call_candid_as::<_, (StoredChunksResult,)>(
             self,
             Principal::management_canister(),
@@ -911,7 +893,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -934,7 +916,7 @@ impl PocketIc {
         chunk_hashes_list: Vec<Vec<u8>>,
         wasm_module_hash: Vec<u8>,
         arg: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -964,7 +946,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         if wasm_module.len() + arg.len() < INSTALL_CHUNKED_CODE_THRESHOLD {
             call_candid_as::<(InstallCodeArgs,), ()>(
                 self,
@@ -1036,7 +1018,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
             CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
                 wasm_memory_persistence: Some(
@@ -1060,7 +1042,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
             CanisterInstallMode::Reinstall,
             canister_id,
@@ -1077,7 +1059,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1096,7 +1078,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         replace_snapshot: Option<Vec<u8>>,
-    ) -> Result<Snapshot, CallError> {
+    ) -> Result<Snapshot, RejectResponse> {
         call_candid_as::<_, (Snapshot,)>(
             self,
             Principal::management_canister(),
@@ -1119,7 +1101,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -1141,7 +1123,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Snapshot>, CallError> {
+    ) -> Result<Vec<Snapshot>, RejectResponse> {
         call_candid_as::<_, (Vec<Snapshot>,)>(
             self,
             Principal::management_canister(),
@@ -1161,7 +1143,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -1183,7 +1165,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         settings: CanisterSettings,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<_, ()>(
             self,
             Principal::management_canister(),
@@ -1206,7 +1188,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         new_controllers: Vec<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let settings = CanisterSettings {
             controllers: Some(new_controllers),
             ..CanisterSettings::default()
@@ -1232,7 +1214,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1250,7 +1232,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1268,7 +1250,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1492,7 +1474,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let raw_canister_call = RawCanisterCall {
             sender: sender.as_slice().to_vec(),
             canister_id: canister_id.as_slice().to_vec(),
@@ -1502,13 +1484,7 @@ impl PocketIc {
         };
 
         let result: RawCanisterResult = self.post(endpoint, raw_canister_call).await;
-        match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        }
+        result.into()
     }
 
     pub(crate) async fn update_call_with_effective_principal(
@@ -1518,7 +1494,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let message_id = self
             .submit_call_with_effective_principal(
                 canister_id,
@@ -1572,7 +1548,7 @@ pub async fn call_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1598,7 +1574,7 @@ pub async fn call_candid<Input, Output>(
     effective_principal: RawEffectivePrincipal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1620,7 +1596,7 @@ pub async fn query_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1636,7 +1612,7 @@ pub async fn query_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1653,7 +1629,7 @@ pub async fn update_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1669,7 +1645,7 @@ pub async fn update_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1685,15 +1661,15 @@ where
 pub async fn with_candid<Input, Output, Fut>(
     input: Input,
     f: impl FnOnce(Vec<u8>) -> Fut,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
-    Fut: Future<Output = Result<WasmResult, UserError>>,
+    Fut: Future<Output = Result<Vec<u8>, RejectResponse>>,
 {
     let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes).await {
-        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+    f(in_bytes).await.map(|out_bytes| {
+        decode_args(&out_bytes).unwrap_or_else(|e| {
             panic!(
                 "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
                 std::any::type_name::<Output>(),
@@ -1701,10 +1677,8 @@ where
                 out_bytes,
                 String::from_utf8_lossy(&out_bytes),
             )
-        })),
-        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
-        Err(user_error) => Err(CallError::UserError(user_error)),
-    }
+        })
+    })
 }
 
 fn setup_tracing(pid: u32) -> Option<WorkerGuard> {

@@ -2309,69 +2309,65 @@ const BATCH_TIME_RANGE: Range<u64> = (u64::MAX / 2)..(u64::MAX / 2 + MAX_NUM_DAY
 #[allow(dead_code)]
 const NODE_ID_RANGE: Range<u64> = 0..20;
 
-proptest! {
-    /// Checks that `check_soft_invariants()` does not return an error when observing random
-    /// node IDs at random mostly sorted and slightly permuted timestamps.
-    /// Such invariants are checked indirectly at the bottom of `observe()` where
-    /// `check_soft_invariants()` is called. There is an additional call to
-    /// `check_soft_invariants()` at the end of the test to ensure the test doesn't
-    /// silently pass when the production code is changed.
-    /// Querying `metrics_since()` is also checked using completely random time stamps to
-    /// ensure there are no hidden panics.
-    #[test]
-    fn blockmaker_metrics_check_soft_invariants(
-        (mut time_u64, random_time_u64, node_ids_u64) in (0..MAX_NUM_DAYS)
-        .prop_flat_map(|num_elements| {
-            (
-                proptest::collection::vec(BATCH_TIME_RANGE, num_elements),
-                proptest::collection::vec(any::<u64>(), num_elements),
-                proptest::collection::vec(NODE_ID_RANGE, num_elements),
-            )
-        })
-    ) {
-        // Sort timestamps, then slightly permute them by inserting some
-        // duplicates and swapping elements in some places.
-        time_u64.sort();
-        if !time_u64.is_empty() {
-            for index in 0..(time_u64.len() - 1) {
-                if time_u64[index] % 23 == 0 {
-                    time_u64[index + 1] = time_u64[index];
-                }
-                if time_u64[index] % 27 == 0 {
-                    time_u64.swap(index, index + 1);
-                }
+/// Checks that `check_soft_invariants()` does not return an error when observing random
+/// node IDs at random mostly sorted and slightly permuted timestamps.
+/// Such invariants are checked indirectly at the bottom of `observe()` where
+/// `check_soft_invariants()` is called. There is an additional call to
+/// `check_soft_invariants()` at the end of the test to ensure the test doesn't
+/// silently pass when the production code is changed.
+/// Querying `metrics_since()` is also checked using completely random time stamps to
+/// ensure there are no hidden panics.
+#[test_strategy::proptest]
+fn blockmaker_metrics_check_soft_invariants(
+    #[strategy(0..MAX_NUM_DAYS)] _num_elements: usize,
+    #[strategy(proptest::collection::vec(BATCH_TIME_RANGE, #_num_elements))] mut time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(any::<u64>(), #_num_elements))] random_time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(NODE_ID_RANGE, #_num_elements))] node_ids_u64: Vec<u64>,
+) {
+    // Sort timestamps, then slightly permute them by inserting some
+    // duplicates and swapping elements in some places.
+    time_u64.sort();
+    if !time_u64.is_empty() {
+        for index in 0..(time_u64.len() - 1) {
+            if time_u64[index] % 23 == 0 {
+                time_u64[index + 1] = time_u64[index];
+            }
+            if time_u64[index] % 27 == 0 {
+                time_u64.swap(index, index + 1);
             }
         }
-
-        let mut metrics = BlockmakerMetricsTimeSeries::default();
-        // Observe a unique node ID first to ensure the pruning process
-        // is triggered once the metrics reach capacity.
-        metrics.observe(
-            Time::from_nanos_since_unix_epoch(0),
-            &BlockmakerMetrics {
-                blockmaker: node_test_id(NODE_ID_RANGE.end + 10),
-                failed_blockmakers: vec![],
-            }
-        );
-        // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
-        // will be triggered passively each time `observe()` is called.
-        // Additionally, query snapshots at random times and consume the iterator to ensure
-        // there are no hidden panics in `metrics_since()`.
-        for ((batch_time_u64, query_time_u64), node_id_u64) in time_u64
-            .into_iter()
-            .zip(random_time_u64.into_iter())
-            .zip(node_ids_u64.into_iter())
-        {
-            metrics.observe(
-                Time::from_nanos_since_unix_epoch(batch_time_u64),
-                &BlockmakerMetrics {
-                    blockmaker: node_test_id(node_id_u64),
-                    failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
-                }
-            );
-            metrics.metrics_since(Time::from_nanos_since_unix_epoch(query_time_u64)).count();
-        }
-
-        prop_assert!(metrics.check_soft_invariants().is_ok());
     }
+
+    let mut metrics = BlockmakerMetricsTimeSeries::default();
+    // Observe a unique node ID first to ensure the pruning process
+    // is triggered once the metrics reach capacity.
+    metrics.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(NODE_ID_RANGE.end + 10),
+            failed_blockmakers: vec![],
+        },
+    );
+    // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
+    // will be triggered passively each time `observe()` is called.
+    // Additionally, query snapshots at random times and consume the iterator to ensure
+    // there are no hidden panics in `metrics_since()`.
+    for ((batch_time_u64, query_time_u64), node_id_u64) in time_u64
+        .into_iter()
+        .zip(random_time_u64.into_iter())
+        .zip(node_ids_u64.into_iter())
+    {
+        metrics.observe(
+            Time::from_nanos_since_unix_epoch(batch_time_u64),
+            &BlockmakerMetrics {
+                blockmaker: node_test_id(node_id_u64),
+                failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
+            },
+        );
+        metrics
+            .metrics_since(Time::from_nanos_since_unix_epoch(query_time_u64))
+            .count();
+    }
+
+    prop_assert!(metrics.check_soft_invariants().is_ok());
 }

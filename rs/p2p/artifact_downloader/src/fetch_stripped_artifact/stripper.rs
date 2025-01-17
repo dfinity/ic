@@ -55,7 +55,7 @@ impl Strippable for &IngressPayload {
 
     fn strip(self) -> Self::Output {
         Self::Output {
-            ingress_messages: self.message_ids(),
+            ingress_messages: self.message_ids().cloned().collect(),
         }
     }
 }

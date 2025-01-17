@@ -135,6 +135,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -261,6 +262,7 @@ fn test_upgrade_canister_proposal_reinstall() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: Some(wasm().build()),
                     mode: Some(CanisterInstallModeProto::Reinstall.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -418,6 +420,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -520,6 +523,7 @@ fn test_upgrade_canister_proposal_too_large() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42; 2_000_000]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -641,6 +645,7 @@ fn test_upgrade_after_state_shrink() {
                     new_canister_wasm: governance_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()

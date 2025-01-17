@@ -270,6 +270,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl AsRef<[u8]> for SignedRequestBytes {

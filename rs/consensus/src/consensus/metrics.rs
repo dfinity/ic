@@ -157,7 +157,7 @@ impl BatchStats {
         self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
-            .extend_from_slice(&payload.ingress.message_ids());
+            .extend(payload.ingress.message_ids().cloned());
     }
 }
 

@@ -35,6 +35,7 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch, Notify},
 };
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use turmoil::Sim;
 
 pub struct CustomUdp {
@@ -378,7 +379,7 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx, _) =
+                let (outbound_tx, inbound_tx) =
                     consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
@@ -446,12 +447,15 @@ pub fn start_test_processor(
 ) -> Box<dyn JoinGuard> {
     let time_source = Arc::new(SysTimeSource::new());
     let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
-    run_artifact_processor(
+    run_artifact_processor::<
+        U64Artifact,
+        UnboundedReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>,
+    >(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),
         outbound_tx,
-        inbound_rx,
+        inbound_rx.into(),
         vec![],
     )
 }

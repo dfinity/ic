@@ -71,4 +71,7 @@ if [ "${total_diff}" != "0" ]; then
         echo "  - ${name} time improved by ${diff}%"
     done
 fi
-# rm -f "${TMP_FILE}"
+rm -f "${TMP_FILE}"
+
+# Return an error is there are changes, so the calling script might retry or report an error.
+[ "${total_diff}" != "0" ]

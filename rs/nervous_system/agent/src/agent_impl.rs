@@ -25,7 +25,7 @@ impl CallCanisters for Agent {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload();
+        let request_bytes = request.payload().map_err(AgentCallError::CandidEncode)?;
         let response = if request.update() {
             let request = self
                 .update(&canister_id, request.method())

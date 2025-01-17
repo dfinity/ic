@@ -114,4 +114,8 @@ service : {
   execute_many_instructions : (nat64) -> ();
   canister_log : (text) -> ();
   time : () -> (nat64) query;
+  reject_query : () -> () query;
+  reject_update : () -> ();
+  trap_query : () -> () query;
+  trap_update : () -> ();
 }

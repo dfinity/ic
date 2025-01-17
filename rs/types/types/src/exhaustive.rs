@@ -1,5 +1,6 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::artifact::IngressMessageId;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
@@ -28,6 +29,7 @@ use crate::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
+use crate::messages::SignedRequestBytes;
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
@@ -1001,6 +1003,8 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
         Some(self.key_id())
     }
 }
+
+impl HasId<IngressMessageId> for SignedRequestBytes {}
 
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}

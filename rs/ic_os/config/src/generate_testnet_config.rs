@@ -181,7 +181,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
             .iter()
             .map(|s| Url::parse(s))
             .collect::<Result<Vec<Url>, _>>()?,
-        None => vec![Url::parse("https://wiki.internetcomputer.org")?],
+        None => vec![Url::parse("https://cloudflare.com/cdn-cgi/trace")?],
     };
 
     let use_node_operator_private_key = use_node_operator_private_key.unwrap_or(false);

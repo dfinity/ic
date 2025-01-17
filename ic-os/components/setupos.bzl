@@ -16,6 +16,7 @@ component_files = {
     Label("//ic-os/components/setupos-scripts:check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
     Label("//ic-os/components/setupos-scripts:install-hostos.sh"): "/opt/ic/bin/install-hostos.sh",
     Label("//ic-os/components/setupos-scripts:check-network.sh"): "/opt/ic/bin/check-network.sh",
+    Label("//ic-os/components/setupos-scripts:check-ntp.sh"): "/opt/ic/bin/check-ntp.sh",
     Label("//ic-os/components/setupos-scripts:output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("//ic-os/components/setupos-scripts:setupos.sh"): "/opt/ic/bin/setupos.sh",
     Label("//ic-os/components/setupos-scripts:config.service"): "/etc/systemd/system/config.service",

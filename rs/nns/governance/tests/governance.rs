@@ -136,10 +136,7 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
-use ic_nns_governance::{
-    pb::v1::governance::{neuron_in_flight_command, NeuronInFlightCommand},
-    storage::reset_stable_memory,
-};
+use ic_nns_governance::storage::reset_stable_memory;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -4264,6 +4261,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 /// If we approve KYC for Principals 1 and 2, neurons A, B and C should have
 /// `kyc_verified=true`, while neuron D still has `kyc_verified=false`
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_approve_kyc() {
     let governance_proto = fixture_for_approve_kyc();
     let driver = fake::FakeDriver::default()
@@ -6716,6 +6714,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -15039,71 +15038,4 @@ impl CMC for StubCMC {
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
         unimplemented!()
     }
-}
-
-// TODO(NNS1-3526): Remove after deployed and confirmed fix
-#[test]
-fn test_locked_neuron_is_unlocked_and_icp_is_minted() {
-    let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
-    let neuron_id = 17912780790050115461;
-    let mut nns = NNSBuilder::new()
-        .set_start_time(epoch)
-        .add_neuron(
-            NeuronBuilder::new(neuron_id, 1_200_000, PrincipalId::new_user_test_id(42))
-                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(epoch))),
-        )
-        .create();
-
-    nns.governance.heap_data.in_flight_commands.insert(
-        neuron_id,
-        NeuronInFlightCommand {
-            timestamp: 1728911670,
-            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
-                id: neuron_id,
-            })),
-        },
-    );
-
-    // B/c of how this test is setup, the neuron will have stake.
-    // We just want to make sure it can only incrase once.
-    assert_eq!(
-        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
-        1_200_000
-    );
-
-    nns.governance
-        .fix_locked_spawn_neuron()
-        .now_or_never()
-        .unwrap()
-        .expect("Failed to fix locked spawn neuron");
-
-    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 0);
-    assert_eq!(
-        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
-        1_200_000 * 2
-    );
-
-    // Nothing happens if you call it again with a differnt lock time.
-    nns.governance.heap_data.in_flight_commands.insert(
-        neuron_id,
-        NeuronInFlightCommand {
-            timestamp: 1728911671,
-            command: Some(neuron_in_flight_command::Command::Spawn(NeuronId {
-                id: neuron_id,
-            })),
-        },
-    );
-    nns.governance
-        .fix_locked_spawn_neuron()
-        .now_or_never()
-        .unwrap()
-        .expect("Failed to fix locked spawn neuron");
-
-    // Lock is not cleared b/c we didn't target that lock
-    assert_eq!(nns.governance.heap_data.in_flight_commands.len(), 1);
-    // Balance doesn't change this time.
-    assert_eq!(
-        nns.get_account_balance(nns.get_neuron_account_id(neuron_id)),
-        1_200_000 * 2
-    );
 }

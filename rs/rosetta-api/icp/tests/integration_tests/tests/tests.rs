@@ -18,7 +18,6 @@ use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
-use pocket_ic::WasmResult;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
@@ -506,7 +505,7 @@ async fn test_rosetta_blocks_mode_enabled() {
     );
 }
 
-// a simple trait to simplify unwrapping and decoding a WasmResult
+// a simple trait to simplify unwrapping and decoding Vec<u8>
 trait UnwrapCandid {
     fn unwrap(&self) -> &[u8];
     fn unwrap_as<T: CandidType + for<'a> Deserialize<'a>>(&self) -> T {
@@ -514,12 +513,9 @@ trait UnwrapCandid {
     }
 }
 
-impl UnwrapCandid for WasmResult {
+impl UnwrapCandid for Vec<u8> {
     fn unwrap(&self) -> &[u8] {
-        match self {
-            WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(err) => panic!("Cannot unwrap Reject: {err}"),
-        }
+        self.as_slice()
     }
 }
 
