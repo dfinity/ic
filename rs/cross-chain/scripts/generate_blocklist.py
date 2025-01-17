@@ -1,6 +1,6 @@
 import sys
 import xml.etree.ElementTree as ET
-
+import argparse
 
 # The following steps need to be carried out to update the blocklist for BTC or ETH.
 #
@@ -125,23 +125,21 @@ def store_blocklist(blocklist_handler, addresses, filename):
     blocklist_file.write(blocklist_handler.postamble())
     blocklist_file.close()
 
-if __name__ == '__main__':  
-    if len(sys.argv) < 3:
-        print('Usage: ' + sys.argv[0] + ' [currency (BTC or ETH)] [path to SDN.XML file] (output file)')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--currency', '-c', type=str, choices=['BTC', 'ETH'], help='select the currency (BTC or ETH)')
+    parser.add_argument('--input', '-i', type=str, help='read the provided SDN.XML file')
+    parser.add_argument('--output', '-o', type=str, default=DEFAULT_BLOCKLIST_FILENAME, help='write the output to the provided path')
+
+    args = parser.parse_args()
+    
+    if args.currency == 'BTC':
+        blocklist_handler = BitcoinBlocklistHandler()
     else:
-        filename = DEFAULT_BLOCKLIST_FILENAME if len(sys.argv) == 3 else sys.argv[3]
-        currency = sys.argv[1].upper()
-        if currency not in ['BTC', 'ETH']:
-            print('Error: The currency must be BTC or ETH.')
-        else:
-            if currency == 'BTC':
-                blocklist_handler = BitcoinBlocklistHandler()
-            else:
-                blocklist_handler = EthereumBlocklistHandler()
-            file_path = sys.argv[2]
-            print('Extracting addresses from ' + file_path + '...')
-            addresses = extract_addresses(currency, file_path)
-            print('Done. Found ' + str(len(addresses)) + ' addresses.')
-            print('Storing the addresses in the file ' + filename + '...')
-            store_blocklist(blocklist_handler, addresses, filename)
-            print('Done.')
+        blocklist_handler = EthereumBlocklistHandler()
+    print('Extracting addresses from ' + args.input + '...')
+    addresses = extract_addresses(args.currency, args.input)
+    print('Done. Found ' + str(len(addresses)) + ' addresses.')
+    print('Storing the addresses in the file ' + args.output + '...')
+    store_blocklist(blocklist_handler, addresses, args.output)
+    print('Done.')
