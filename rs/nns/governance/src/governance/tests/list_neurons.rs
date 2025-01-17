@@ -56,8 +56,8 @@ fn test_list_neurons_with_paging() {
     let response_with_0_page_number = governance.list_neurons(&request, user_id);
 
     assert_eq!(response_with_0_page_number, response_with_no_page_number);
-    assert_eq!(response.full_neurons.len(), 500);
-    assert_eq!(response.total_pages_available, Some(2));
+    assert_eq!(response_with_0_page_number.full_neurons.len(), 500);
+    assert_eq!(response_with_0_page_number.total_pages_available, Some(2));
 
     let response = governance.list_neurons(
         &ListNeurons {
