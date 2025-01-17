@@ -11,7 +11,7 @@ on the process that this file is part of, see
 
 ## Changed
 
-### Support for node redeployment and node replacement even if it's in a subnet.
+### Support for node redeployment and replacement even if the node is in a subnet
 
 During node redeployments support for replacing an existing node with the same
 IP address even if the existing node is currently in a subnet.
