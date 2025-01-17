@@ -12,14 +12,14 @@ on the process that this file is part of, see
 ### List Neurons Paging
 
 In the case where more than 500 neurons would be returned from the API, the API will now
-return a `total_neurons_found` field in the response. The value can then be added
-to the next request to get the next set of neurons.
+return a `total_pages_available` field in the response. The API can then be queried
+for the additional pages, which are 0-indexed (so that the first page is 0).
 
 This will only affect neuron holders with more than 500 neurons, which is a small minority.
 
 The advantage of this is that is now possible for neuron holders with many inactive neurons
-to list all of their neurons, while also limiting the amount of work the endpoint does in a 
-single request.
+to list all of their neurons, whereas before, after a certain point, the response size was 
+too large to be returned, and no data could be retrieved.
 
 ### Periodic Confirmation
 

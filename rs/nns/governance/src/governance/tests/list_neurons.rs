@@ -57,7 +57,7 @@ fn test_list_neurons_with_paging() {
 
     assert_eq!(response_with_0_page_number, response_with_no_page_number);
     assert_eq!(response.full_neurons.len(), 500);
-    assert_eq!(response.total_neurons_found, Some(999));
+    assert_eq!(response.total_pages_available, Some(2));
 
     let response = governance.list_neurons(
         &ListNeurons {
@@ -72,7 +72,7 @@ fn test_list_neurons_with_paging() {
     );
 
     assert_eq!(response.full_neurons.len(), 499);
-    assert_eq!(response.total_pages_available, Some(999));
+    assert_eq!(response.total_pages_available, Some(2));
 
     // Assert maximum page size cannot be exceeded
     let response = governance.list_neurons(
@@ -88,5 +88,5 @@ fn test_list_neurons_with_paging() {
     );
 
     assert_eq!(response.full_neurons.len(), 500);
-    assert_eq!(response.total_pages_available, Some(999));
+    assert_eq!(response.total_pages_available, Some(2));
 }
