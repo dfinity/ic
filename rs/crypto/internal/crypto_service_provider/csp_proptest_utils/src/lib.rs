@@ -191,7 +191,9 @@ mod csp_basic_signature_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
-        TransientInternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"},
+        PublicKeyNotFound,
+        KeyIdInstantiationError
     );
 }
 
@@ -301,7 +303,9 @@ mod csp_multi_signature_error {
         SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in arb_key_id()},
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
-        TransientInternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"},
+        PublicKeyNotFound,
+        KeyIdInstantiationError
     );
 }
 

@@ -32,17 +32,38 @@ macro_rules! should_have_a_strategy_for_each_variant {
 }
 
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
-should_have_a_strategy_for_each_variant!(
-    CspBasicSignatureError,
-    CspBasicSignatureError::TransientInternalError {
-        internal_error: "dummy error to match upon".to_string(),
-    },
-    SecretKeyNotFound { .. },
-    UnsupportedAlgorithm { .. },
-    WrongSecretKeyType { .. },
-    MalformedSecretKey { .. },
-    TransientInternalError { .. }
-);
+#[test]
+// Ideally the `should_have_a_strategy_for_each_variant` macro was used to create
+// this test, but that macro doesn't support enums that have more than one
+// simple variants, i.e., variants that don't have tuple fields or struct fields.
+fn should_have_a_strategy_for_each_variant_of_csp_basic_signature_error() {
+    let error_to_match = CspBasicSignatureError::PublicKeyNotFound;
+    let _ = match error_to_match {
+        CspBasicSignatureError::SecretKeyNotFound { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_secret_key_not_found_variant(),
+        ),
+        CspBasicSignatureError::UnsupportedAlgorithm { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_unsupported_algorithm_variant(),
+        ),
+        CspBasicSignatureError::WrongSecretKeyType { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_wrong_secret_key_type_variant(),
+        ),
+        CspBasicSignatureError::MalformedSecretKey { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_malformed_secret_key_variant(),
+        ),
+        CspBasicSignatureError::TransientInternalError { .. } => {
+            proptest::strategy::Strategy::boxed(
+                crate::csp_basic_signature_error::arb_transient_internal_error_variant(),
+            )
+        }
+        CspBasicSignatureError::PublicKeyNotFound => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_public_key_not_found_variant(),
+        ),
+        CspBasicSignatureError::KeyIdInstantiationError => proptest::strategy::Strategy::boxed(
+            crate::csp_basic_signature_error::arb_key_id_instantiation_error_variant(),
+        ),
+    };
+}
 
 use ic_crypto_internal_csp::types::CspSignature;
 should_have_a_strategy_for_each_variant!(
@@ -107,16 +128,35 @@ should_have_a_strategy_for_each_variant!(
 );
 
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureError;
-should_have_a_strategy_for_each_variant!(
-    CspMultiSignatureError,
-    CspMultiSignatureError::TransientInternalError {
-        internal_error: "dummy error to match upon".to_string(),
-    },
-    SecretKeyNotFound { .. },
-    UnsupportedAlgorithm { .. },
-    WrongSecretKeyType { .. },
-    TransientInternalError { .. }
-);
+#[test]
+// Ideally the `should_have_a_strategy_for_each_variant` macro was used to create
+// this test, but that macro doesn't support enums that have more than one
+// simple variants, i.e., variants that don't have tuple fields or struct fields.
+fn should_have_a_strategy_for_each_variant_of_csp_multi_signature_error() {
+    let error_to_match = CspMultiSignatureError::PublicKeyNotFound;
+    let _ = match error_to_match {
+        CspMultiSignatureError::SecretKeyNotFound { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_multi_signature_error::arb_secret_key_not_found_variant(),
+        ),
+        CspMultiSignatureError::UnsupportedAlgorithm { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_multi_signature_error::arb_unsupported_algorithm_variant(),
+        ),
+        CspMultiSignatureError::WrongSecretKeyType { .. } => proptest::strategy::Strategy::boxed(
+            crate::csp_multi_signature_error::arb_wrong_secret_key_type_variant(),
+        ),
+        CspMultiSignatureError::TransientInternalError { .. } => {
+            proptest::strategy::Strategy::boxed(
+                crate::csp_multi_signature_error::arb_transient_internal_error_variant(),
+            )
+        }
+        CspMultiSignatureError::PublicKeyNotFound => proptest::strategy::Strategy::boxed(
+            crate::csp_multi_signature_error::arb_public_key_not_found_variant(),
+        ),
+        CspMultiSignatureError::KeyIdInstantiationError => proptest::strategy::Strategy::boxed(
+            crate::csp_multi_signature_error::arb_key_id_instantiation_error_variant(),
+        ),
+    };
+}
 
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 should_have_a_strategy_for_each_variant!(
