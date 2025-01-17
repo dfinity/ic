@@ -343,7 +343,7 @@ def _ext4_image_impl(ctx):
         args += ["--strip-paths"] + ctx.attr.strip_paths
 
     if ctx.attr.extra_files.items():
-        args += ["--extra-files"]
+        args.append("--extra-files")
     for input_target, install_target in ctx.attr.extra_files.items():
         args.append(input_target.files.to_list()[0].path + ":" + install_target)
         inputs += input_target.files.to_list()

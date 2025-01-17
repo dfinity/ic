@@ -277,27 +277,27 @@ def icos_build(
                 tags = ["manual"],
             )
 
-        if upgrades:
-            ext4_image(
-                name = "partition-boot-test.tzst",
-                src = ":rootfs-tree.tar",
-                file_contexts = ":file_contexts",
-                partition_size = image_deps["bootfs_size"],
-                subdir = "boot",
-                target_compatible_with = [
-                    "@platforms//os:linux",
-                ],
-                extra_files = {
-                    k: v
-                    for k, v in (
-                        image_deps["bootfs"].items() + [
-                            (":version-test.txt", "/version.txt:0644"),
-                            (":extra_boot_test_args", "/extra_boot_args:0644"),
-                        ]
-                    )
-                },
-                tags = ["manual", "no-cache"],
-            )
+    if upgrades:
+        ext4_image(
+            name = "partition-boot-test.tzst",
+            src = ":rootfs-tree.tar",
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot",
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
+            extra_files = {
+                k: v
+                for k, v in (
+                    image_deps["bootfs"].items() + [
+                        (":version-test.txt", "/version.txt:0644"),
+                        (":extra_boot_test_args", "/extra_boot_args:0644"),
+                    ]
+                )
+            },
+            tags = ["manual", "no-cache"],
+        )
 
     # -------------------- Assemble disk partitions ---------------
 
