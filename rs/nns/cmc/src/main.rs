@@ -1708,6 +1708,8 @@ fn set_block_status_to_processing(block_index: BlockIndex) -> Result<(), Notific
     })
 }
 
+/// If the block's status in blocks_notified is Processing, clear it. Otherwise,
+/// makes no changes (and logs an error).
 fn clear_block_processing_status(block_index: BlockIndex) {
     with_state_mut(|state| {
         // Fetch the block's status.
