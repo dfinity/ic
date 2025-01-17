@@ -23,18 +23,10 @@ pub struct Config {
     pub timeout_secs_range: (u32, u32),
     /// The maximum number of calls attempted per heartbeat.
     pub calls_per_heartbeat: u32,
-    /// The weight for making a reply used in a binominal distribution together with
-    /// `downstream_call_weight`.
-    pub reply_weight: u32,
-    /// The weight for making a downstream call used in a binomial distribution together with
-    /// `downstream_call_weight`.
-    pub downstream_call_weight: u32,
-    /// The weight for making a best-effort call used in a binomial distribution together with
-    /// `guaranteed_response_weight`.
-    pub best_effort_weight: u32,
-    /// The weight for making a guaranteed response call used in a binomial distribution together
-    /// with `best_effort_weight`.
-    pub guaranteed_response_weight: u32,
+    /// The probability for a making a dowstream call rather than reply in %.
+    pub downstream_call_percentage: u32,
+    /// The probability for making a best-effort call rather a guaranteed response call in %.
+    pub best_effort_call_percentage: u32,
 }
 
 impl Default for Config {
@@ -46,10 +38,8 @@ impl Default for Config {
             instructions_count_range: (0, 0),
             timeout_secs_range: (1, 100),
             calls_per_heartbeat: 3,
-            reply_weight: 1,
-            downstream_call_weight: 0,
-            best_effort_weight: 1,
-            guaranteed_response_weight: 0,
+            downstream_call_percentage: 0,
+            best_effort_call_percentage: 100,
         }
     }
 }
@@ -72,10 +62,8 @@ impl Config {
         instructions_count: RangeInclusive<u32>,
         timeout_secs: RangeInclusive<u32>,
         calls_per_heartbeat: u32,
-        reply_weight: u32,
-        downstream_call_weight: u32,
-        best_effort_weight: u32,
-        guaranteed_response_weight: u32,
+        downstream_call_percentage: u32,
+        best_effort_call_percentage: u32,
     ) -> Result<Self, String> {
         // Sanity checks. After passing these, the canister should run as intended.
         if call_bytes.is_empty() {
@@ -96,12 +84,6 @@ impl Config {
         if timeout_secs.is_empty() {
             return Err("empty timeout range".to_string());
         }
-        if reply_weight == 0 && downstream_call_weight == 0 {
-            return Err("bad downstream call weights, both 0".to_string());
-        }
-        if best_effort_weight == 0 && guaranteed_response_weight == 0 {
-            return Err("bad call type weights, both 0".to_string());
-        }
 
         Ok(Self {
             receivers,
@@ -110,10 +92,8 @@ impl Config {
             instructions_count_range: (*instructions_count.start(), *instructions_count.end()),
             timeout_secs_range: (*timeout_secs.start(), *timeout_secs.end()),
             calls_per_heartbeat,
-            reply_weight,
-            downstream_call_weight,
-            best_effort_weight,
-            guaranteed_response_weight,
+            downstream_call_percentage,
+            best_effort_call_percentage,
         })
     }
 }

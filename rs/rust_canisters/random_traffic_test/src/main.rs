@@ -36,10 +36,10 @@ thread_local! {
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
     /// A `COIN` that can be 'flipped' to determine whether to make a downstream call or not.
     /// The default value set here will yield only 'reply'.
-    static DOWNSTREAM_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([0, 1]).unwrap());
+    static DOWNSTREAM_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([0, 100]).unwrap());
     /// A `COIN` that can be 'flipped' to determine whether to make a best-effort call or a guaranteed response call.
     /// The default value set here will yield only 'best_effort'
-    static BEST_EFFORT_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([1, 0]).unwrap());
+    static BEST_EFFORT_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([100, 0]).unwrap());
 }
 
 /// The intercanister message sent to `handle_call()` by the heartbeat of this canister
@@ -131,13 +131,18 @@ fn receiver() -> CanisterId {
 /// Sets the test config; returns the current config.
 #[update]
 fn set_config(config: Config) -> Config {
+    fn to_weights(mut percentage: u32) -> [u32; 2] {
+        if percentage > 100 {
+            percentage = 100;
+        }
+        [percentage, 100 - percentage]
+    }
+
     // Update `COINS`.
-    DOWNSTREAM_CALL_COIN.replace(
-        WeightedIndex::<u32>::new([config.downstream_call_weight, config.reply_weight]).unwrap(),
-    );
+    DOWNSTREAM_CALL_COIN
+        .replace(WeightedIndex::<u32>::new(to_weights(config.downstream_call_percentage)).unwrap());
     BEST_EFFORT_CALL_COIN.replace(
-        WeightedIndex::<u32>::new([config.best_effort_weight, config.guaranteed_response_weight])
-            .unwrap(),
+        WeightedIndex::<u32>::new(to_weights(config.best_effort_call_percentage)).unwrap(),
     );
 
     CONFIG.replace(config)
@@ -155,8 +160,7 @@ fn seed_rng(seed: u64) {
 fn stop_chatter() -> Config {
     set_config(Config {
         calls_per_heartbeat: 0,
-        reply_weight: 1,
-        downstream_call_weight: 0,
+        downstream_call_percentage: 0,
         ..CONFIG.take()
     })
 }
@@ -181,13 +185,13 @@ fn synchronous_rejections_count() -> u32 {
 /// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
 /// instead.
 fn should_make_downstream_call() -> bool {
-    RNG.with_borrow_mut(|rng| DOWNSTREAM_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0)
+    RNG.with_borrow_mut(|rng| DOWNSTREAM_CALL_COIN.with_borrow(|coin| coin.sample(rng)) == 0)
 }
 
 /// Flip the `BEST_EFFORT_COIN` to determine whether we should make a best-effort call or a
 /// guaranteed response call.
 fn should_make_best_effort_call() -> bool {
-    RNG.with_borrow_mut(|rng| BEST_EFFORT_CALL_COIN.with_borrow(|distr| distr.sample(rng)) == 0)
+    RNG.with_borrow_mut(|rng| BEST_EFFORT_CALL_COIN.with_borrow(|coin| coin.sample(rng)) == 0)
 }
 
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
@@ -307,11 +311,11 @@ async fn heartbeat() {
 /// Handles incoming calls; this method is called from the heartbeat method.
 ///
 /// Replies if:
-/// - sampling the weighted binomial distribution tells us to do so.
+/// - flipping the coin tells us to do so.
 /// - if it tells us not to do so but the attempted downstream call fails for any reason.
 #[update]
 async fn handle_call(msg: Message) -> Vec<u8> {
-    // Make downstream calls as long as sampling the distribution tells us to do so.
+    // Make downstream calls as long as flipping the coin tells us to do so.
     while should_make_downstream_call() {
         let (future, record_index) = setup_call(msg.call_tree_id, msg.call_depth + 1);
 

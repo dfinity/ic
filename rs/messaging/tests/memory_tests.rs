@@ -31,16 +31,6 @@ const MB: u64 = KB * KB;
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
 prop_compose! {
-    /// Generates an arbitrary pair of weights such that w1 + w2 = total.
-    fn arb_weights(total: u32)(
-        w1 in 0..=total
-    ) -> (u32, u32)
-    {
-        (w1, total - w1)
-    }
-}
-
-prop_compose! {
     /// Generates a random `CanisterConfig` using reasonable ranges of values; receivers is empty
     /// and assumed to be populated manually.
     fn arb_canister_config(max_payload_bytes: u32, max_calls_per_heartbeat: u32)(
@@ -48,8 +38,8 @@ prop_compose! {
         max_reply_bytes in 0..=max_payload_bytes,
         calls_per_heartbeat in 0..=max_calls_per_heartbeat,
         max_timeout_secs in 10..=100_u32,
-        (reply_weight, downstream_call_weight) in arb_weights(4),
-        (best_effort_weight, guaranteed_response_weight) in arb_weights(4),
+        downstream_call_percentage in 0..=100_u32,
+        best_effort_call_percentage in 0..=100_u32,
     ) -> CanisterConfig {
         CanisterConfig::try_new(
             vec![],
@@ -58,10 +48,8 @@ prop_compose! {
             0..=0, // instructions_count
             0..=max_timeout_secs,
             calls_per_heartbeat,
-            reply_weight,
-            downstream_call_weight,
-            best_effort_weight,
-            guaranteed_response_weight,
+            downstream_call_percentage,
+            best_effort_call_percentage,
         )
         .expect("bad config inputs")
     }
@@ -295,8 +283,7 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
     fixture.set_config(
         local_canister,
         CanisterConfig {
-            best_effort_weight: 1,
-            guaranteed_response_weight: 0,
+            best_effort_call_percentage: 100,
             ..config.clone()
         },
     );
