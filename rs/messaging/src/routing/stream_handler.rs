@@ -391,7 +391,7 @@ impl StreamHandlerImpl {
         state
     }
 
-    /// Garbage collects outgoing streams based on the headers (signals and
+    /// Garbage collects outgoing `Streams` based on the headers (signals and
     /// `begin` indices) of the provided stream slices.
     fn garbage_collect_local_state(
         &self,
