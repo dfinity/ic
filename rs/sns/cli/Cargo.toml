@@ -26,6 +26,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
+candid-utils = { path = "../../nervous_system/candid_utils" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }

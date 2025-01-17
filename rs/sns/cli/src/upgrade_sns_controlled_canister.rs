@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
-use candid::{CandidType, Decode, Deserialize, Encode, Principal, TypeEnv};
-use candid_parser::{check_prog, parse_idl_args, IDLArgs, IDLProg};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid_utils::validation::validate_upgrade_args;
 use clap::Parser;
 use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
 use ic_agent::{export::reqwest::Url, Agent};
@@ -12,8 +12,8 @@ use ic_nervous_system_agent::{
     sns::root::SnsCanisters,
 };
 use ic_sns_governance::pb::v1::{
-    manage_neuron, manage_neuron_response, proposal::Action, ManageNeuronResponse, NeuronId,
-    Proposal, UpgradeSnsControlledCanister,
+    manage_neuron, manage_neuron_response, proposal::Action, ChunkedCanisterWasm,
+    ManageNeuronResponse, NeuronId, Proposal, UpgradeSnsControlledCanister,
 };
 use std::{collections::BTreeSet, fs::File, io::Read, path::PathBuf};
 
@@ -96,30 +96,24 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
              is already installed; this tool cannot be used to *install* canisters, only \
              to propose *upgrading* already installed, SNS-controlled canisters.",
         );
-    let candid_service_ast = {
+    let candid_service = {
         let candid_service = agent
             .read_state_canister_metadata(target_canister_id.get().0, "icp:public candid:service")
             .await
             .expect("Cannot read target canister's metadata section `icp:public candid:service`.");
-        let candid_service = std::str::from_utf8(&candid_service)
-            .expect("Cannot decode target canister's Candid service definition.");
-        candid_service
-            .parse::<IDLProg>()
-            .expect("Cannot parse target canister's Candid service definition.")
+        std::str::from_utf8(&candid_service)
+            .expect("Cannot decode target canister's Candid service definition.")
+            .to_string()
     };
 
     // Validate the upgrade arg against the Candid service definition.
     let canister_upgrade_arg = if let Some(candid_arg) = candid_arg {
-        // let args_ast =
-        //.expect("Cannot parse --candid_arg as Candid");
-
-        let mut type_env = TypeEnv::new();
-        check_prog(&mut type_env, &candid_service_ast)
-            .expect("")
-            .expect("Target canister's Candid service definition should include the main action.");
-
-        // Some(args_ast.to_bytes().expect("Cannot serialize upgrade arg."))
-        todo!()
+        match validate_upgrade_args(candid_service, candid_arg) {
+            Ok(candid_arg_bytes) => Some(candid_arg_bytes),
+            Err(err) => {
+                bail!(err);
+            }
+        }
     } else {
         None
     };
@@ -182,6 +176,11 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     )
     .await?;
 
+    let chunk_hashes_list = uploaded_chunk_hashes
+        .into_iter()
+        .map(|chunk_hash| chunk_hash.hash)
+        .collect();
+
     // 5. Propose to upgrade the target canister to a Wasm assembled from the uploaded chunks.
     let sns_governance = sns::governance::GovernanceCanister {
         canister_id: sns.governance.canister_id,
@@ -200,7 +199,11 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
                 new_canister_wasm: vec![],
                 canister_upgrade_arg,
                 mode: Some(CanisterInstallMode::Upgrade as i32),
-                // TODO: use `uploaded_chunk_hashes` / `sha256_hash`
+                chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                    wasm_module_hash: new_module_hash.to_vec(),
+                    store_canister_id: Some(store_canister_id.get()),
+                    chunk_hashes_list,
+                }),
             },
         )),
     };

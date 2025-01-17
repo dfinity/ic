@@ -68,16 +68,3 @@ impl CallCanisters for PocketIc {
             .await
     }
 }
-
-impl CallCanisters for PocketIc {
-    type Error = PocketIcCallError;
-    async fn call<R: Request>(
-        &self,
-        canister_id: impl Into<Principal> + Send,
-        request: R,
-    ) -> Result<R::Response, Self::Error> {
-        PocketIcAgent::new(self, Principal::anonymous())
-            .call(canister_id, request)
-            .await
-    }
-}
