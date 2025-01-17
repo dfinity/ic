@@ -141,10 +141,14 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
     let mut n = 101;
     // retry generating blocks until the bitcoind is up and running
+    let start = std::time::Instant::now();
     loop {
         match btc_rpc.generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap()) {
             Ok(_) => break,
-            Err(bitcoincore_rpc::Error::JsonRpc(_)) => {
+            Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
+                if start.elapsed() > std::time::Duration::from_secs(30) {
+                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
             Err(err) => panic!("Unexpected error when talking to bitcoind: {}", err),
