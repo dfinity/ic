@@ -2212,6 +2212,10 @@ message InstallCode {
   optional bytes arg = 4;
   // Whether to skip stopping the canister before installing. Optional. Default is false.
   optional bool skip_stopping_before_installing = 5;
+  // The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+  optional bytes wasm_module_hash = 6;
+  // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+  optional bytes arg_hash = 7;
 }
 
 message StopOrStartCanister {

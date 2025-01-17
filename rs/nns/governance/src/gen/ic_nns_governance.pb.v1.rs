@@ -3086,6 +3086,12 @@ pub struct InstallCode {
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "7")]
+    pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
