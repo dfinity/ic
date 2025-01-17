@@ -115,10 +115,10 @@ impl Registry {
                     )
                 });
             assert_eq!(
-                    node_provider_caller, node_provider_of_the_node,
-                    "The node provider {:?} of the caller {}, does not match the node provider {:?} of the node {}.",
-                    node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
-                );
+                node_provider_caller, node_provider_of_the_node,
+                "The node provider {:?} of the caller {}, does not match the node provider {:?} of the node {}.",
+                node_provider_caller, caller_id, node_provider_of_the_node, payload.node_id
+            );
         }
 
         // 3. Ensure the node is not an API Boundary Node.
@@ -126,10 +126,10 @@ impl Registry {
         let api_bn_id = self.get_api_boundary_node_record(payload.node_id);
         if api_bn_id.is_some() {
             panic!(
-                        "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
-                        LOG_PREFIX,
-                        make_api_boundary_node_record_key(payload.node_id)
-                    );
+                "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
+                LOG_PREFIX,
+                make_api_boundary_node_record_key(payload.node_id)
+            );
         }
 
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.

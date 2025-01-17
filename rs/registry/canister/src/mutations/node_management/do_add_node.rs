@@ -793,14 +793,13 @@ mod tests {
             "Original subnet membership (node ids): {:?}",
             subnet_membership
         );
-        // Prepare payload to add a new node with the same IP address and port as an existing node.
+
+        // Add a new node with the same IP address and port as an existing node, which should replace the existing node
         let (mut payload, _valid_pks) = prepare_add_node_payload(2);
-        let e = expected_remove_node.http.unwrap();
+        let http = expected_remove_node.http.unwrap();
         payload
             .http_endpoint
-            .clone_from(&format!("[{}]:{}", e.ip_addr, e.port));
-
-        // Add the new node, which should replace the existing node in the subnet
+            .clone_from(&format!("[{}]:{}", http.ip_addr, http.port));
         let new_node_id = registry
             .do_add_node_(payload.clone(), node_operator_id)
             .expect("failed to add a node");
@@ -834,7 +833,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add nodes to the registry
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
         let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 1);
@@ -853,6 +852,11 @@ mod tests {
         // Verify node operator allowance is decremented
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
         assert_eq!(updated_operator.node_allowance, 0);
+
+        // Verify all nodes are in the registry
+        for node_id in node_ids {
+            assert!(registry.get_node(node_id).is_some());
+        }
     }
 
     #[test]
