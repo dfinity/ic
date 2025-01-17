@@ -9686,6 +9686,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-nervous-system-clients",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-sns-governance",
