@@ -100,25 +100,25 @@ where
                 Sysno::sigaltstack,
                 Sysno::futex,
                 Sysno::close,
+                Sysno::restart_syscall,
             ]);
-            loop {
-                // This code employs a manual heuristic to determine which process PID to attach to,
-                // specifically targeting the one executing the Wasm code.
-                //
-                // The child process spawns a total of 14 threads. Since PIDs are monotonically increasing
-                // and the tid are stored in a BTreeSet, they are ordered based on their creation sequence.
-                //
-                // By tracing all PIDs and analyzing the associated syscalls, we observe that the critical
-                // threads to attach to are typically among the last few, specifically [n-2] and [n-1].
-                //
-                // NOTE: If the code design changes in the future, this heuristic will need to be revisited
-                // and updated accordingly.
-                let mut children = get_children(child.into());
-                for _ in 0..1 {
-                    children.pop_last();
-                }
-                let child = children.last().unwrap();
-                trace(name, Pid::from_raw(*child), &allowed_syscalls);
+            let children = get_children(child.into());
+            let threads: Vec<_> = children
+                .iter()
+                .map(|child| {
+                    std::thread::spawn({
+                        let allowed_syscalls = allowed_syscalls.clone();
+                        let child = *child;
+                        let name = name.to_string();
+                        move || {
+                            trace(name, Pid::from_raw(child), allowed_syscalls);
+                        }
+                    })
+                })
+                .collect();
+
+            for handle in threads {
+                handle.join().unwrap();
             }
         }
         Err(err) => {
@@ -136,7 +136,7 @@ where
 }
 
 #[cfg(target_os = "linux")]
-fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
+fn trace(name: String, child: Pid, allowed_syscalls: BTreeSet<Sysno>) {
     if let Err(err) = ptrace::attach(child) {
         println!(
             "ptrace: failed to attach process {}::{}: {}",
@@ -145,6 +145,7 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
         return;
     }
 
+    let mut is_syscall_entry = true;
     while let Ok(result) = waitpid(child, None) {
         match result {
             WaitStatus::Stopped(..) => {
@@ -155,13 +156,6 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
                     );
                 }
 
-                if let Ok(regs) = ptrace::getregs(child) {
-                    let sysno = Sysno::from(regs.orig_rax as u32);
-                    if !allowed_syscalls.contains(&sysno) {
-                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
-                    }
-                }
-
                 if let Err(err) = ptrace::syscall(child, None) {
                     panic!(
                         "ptrace: failed to continue to next syscall {}::{}: {}",
@@ -170,13 +164,16 @@ fn trace(name: &str, child: Pid, allowed_syscalls: &BTreeSet<Sysno>) {
                 }
             }
             WaitStatus::PtraceSyscall(_) => {
-                if let Ok(regs) = ptrace::getregs(child) {
-                    let sysno = Sysno::from(regs.orig_rax as u32);
-                    if !allowed_syscalls.contains(&sysno) {
-                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
+                if is_syscall_entry {
+                    if let Ok(regs) = ptrace::getregs(child) {
+                        let sysno = Sysno::from(regs.orig_rax as u32);
+                        if !allowed_syscalls.contains(&sysno) {
+                            panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
+                        }
                     }
                 }
 
+                is_syscall_entry = !is_syscall_entry;
                 if let Err(err) = ptrace::syscall(child, None) {
                     panic!(
                         "ptrace: failed to continue to next syscall {}::{}: {}",
