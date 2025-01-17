@@ -599,13 +599,13 @@ enum RunCommandError<'a> {
     },
 }
 
-impl<'a> Display for RunCommandError<'a> {
+impl Display for RunCommandError<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "{}", self.new_report())
     }
 }
 
-impl<'a> RunCommandError<'a> {
+impl RunCommandError<'_> {
     fn new_report(&self) -> String {
         match self {
             RunCommandError::UnableToRunCommand { command, error } => {

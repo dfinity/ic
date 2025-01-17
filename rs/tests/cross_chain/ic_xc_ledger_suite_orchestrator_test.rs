@@ -431,7 +431,7 @@ struct LedgerOrchestratorCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerOrchestratorCanister<'a> {
+impl LedgerOrchestratorCanister<'_> {
     async fn call_canister_ids(&self, contract: Erc20Contract) -> Option<ManagedCanisterIds> {
         self.canister
             .query_("canister_ids", dfn_candid::candid, (contract,))
