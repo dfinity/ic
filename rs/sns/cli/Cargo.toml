@@ -18,6 +18,7 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
+dfx-core = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
