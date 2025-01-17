@@ -883,27 +883,18 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
         5 => neuron_with_staked_maturity,
     });
 
-    // Verify that the non-empty neurons readable by the controller and hot key are neurons 3, 4 and
-    // 5, while a principal that's not controller or hot key can't read any.
-    let neuron_id_vec_to_u64_hash_set = |neuron_ids: Vec<NeuronId>| -> BTreeSet<u64> {
-        neuron_ids
-            .into_iter()
-            .map(|neuron_id| neuron_id.id)
-            .collect()
-    };
-
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller),
         btreeset! { 3, 4, 5 }
             .into_iter()
-            .map(|id| NeuronId::from_u64(id))
+            .map(NeuronId::from_u64)
             .collect()
     );
     assert_eq!(
         neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key),
         btreeset! { 3, 4, 5 }
             .into_iter()
-            .map(|id| NeuronId::from_u64(id))
+            .map(NeuronId::from_u64)
             .collect()
     );
     assert_eq!(
