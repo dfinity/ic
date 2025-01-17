@@ -23,7 +23,6 @@ use crate::common::Wasm64;
 
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
-
 /// Represent a block of WAT code with corresponding imports and local variables.
 #[derive(Default)]
 pub struct Block {
@@ -161,7 +160,6 @@ impl Block {
 
 ////////////////////////////////////////////////////////////////////////
 /// WAT Function Builder
-
 /// Represent a WAT function with corresponding imports.
 #[derive(Default)]
 pub struct Func {
@@ -188,7 +186,6 @@ impl Func {
 
 ////////////////////////////////////////////////////////////////////////
 /// Helper functions
-
 /// Return a new block prepended and appended with the specified lines.
 fn wrap_lines(prefix: &str, lines: Vec<String>, suffix: &str) -> Vec<String> {
     vec![prefix.into()]

@@ -1637,8 +1637,10 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
-    let process = cmd
-        .spawn()
+
+    // TODO: This process must be killed at some point
+    // to avoid it becoming a zombie.
+    cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 
     loop {
@@ -1653,9 +1655,6 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-
-    process.kill();
-    process.wait().unwrap();
 }
 
 #[derive(Error, Debug)]
