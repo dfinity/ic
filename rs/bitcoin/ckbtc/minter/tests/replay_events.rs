@@ -5,6 +5,18 @@ use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
 use std::path::PathBuf;
 
+fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {
+    let mut count = 0;
+    for event in events {
+        match &event.payload {
+            EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                count += 1;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(count, 0);
+}
 #[tokio::test]
 async fn should_migrate_events_for_mainnet() {
     use ic_ckbtc_minter::storage::{decode_event, encode_event, migrate_events};
@@ -29,6 +41,7 @@ async fn should_migrate_events_for_mainnet() {
     assert!(removed > 0);
     assert!(!new_events.is_empty());
     assert_eq!(new_events.len() + removed, old_events.len());
+    assert_useless_events_is_empty(new_events.iter().map(|bytes| decode_event(&bytes)));
 
     let state =
         replay::<SkipCheckInvariantsImpl>(new_events.iter().map(|bytes| decode_event(&bytes)))
@@ -39,6 +52,43 @@ async fn should_migrate_events_for_mainnet() {
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 21_723_786_340);
+}
+
+#[tokio::test]
+async fn should_migrate_events_for_testnet() {
+    use ic_ckbtc_minter::storage::{decode_event, encode_event, migrate_events};
+    use ic_stable_structures::{
+        log::Log as StableLog,
+        memory_manager::{MemoryId, MemoryManager},
+        DefaultMemoryImpl,
+    };
+
+    GetEventsFile::Testnet
+        .retrieve_and_store_events_if_env()
+        .await;
+
+    let mgr = MemoryManager::init(DefaultMemoryImpl::default());
+    let old_events = StableLog::new(mgr.get(MemoryId::new(0)), mgr.get(MemoryId::new(1)));
+    let new_events = StableLog::new(mgr.get(MemoryId::new(2)), mgr.get(MemoryId::new(3)));
+    let events = GetEventsFile::Testnet.deserialize().events;
+    events.iter().for_each(|event| {
+        old_events.append(&encode_event(event)).unwrap();
+    });
+    let removed = migrate_events(&old_events, &new_events);
+    assert!(removed > 0);
+    assert!(!new_events.is_empty());
+    assert_eq!(new_events.len() + removed, old_events.len());
+    assert_useless_events_is_empty(new_events.iter().map(|bytes| decode_event(&bytes)));
+
+    let state =
+        replay::<SkipCheckInvariantsImpl>(new_events.iter().map(|bytes| decode_event(&bytes)))
+            .expect("Failed to replay events");
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
+
+    assert_eq!(state.btc_network, Network::Testnet);
+    assert_eq!(state.get_total_btc_managed(), 16578205978);
 }
 
 #[tokio::test]
