@@ -1422,9 +1422,6 @@ fn max_canister_memory_size_is_different_between_wasm32_vs_wasm64() {
     let res32 = env.execute_ingress(wasm32_canister, "update", vec![]);
     let res64 = env.execute_ingress(wasm64_canister, "update", vec![]);
 
-    println!("{:?}", res32);
-    println!("{:?}", res64);
-
     assert_eq!(res32.unwrap_err().code(), ErrorCode::CanisterOutOfMemory);
     assert_replied(res64);
 }
