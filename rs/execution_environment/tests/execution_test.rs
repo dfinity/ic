@@ -995,7 +995,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            max_canister_memory_size: NumBytes::from(10 * MIB),
+            max_canister_memory_size_wasm32: NumBytes::from(10 * MIB),
             ..Default::default()
         },
     ));

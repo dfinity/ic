@@ -95,7 +95,8 @@ pub(super) struct QueryContext<'a> {
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
     data_certificate: (Vec<u8>, CanisterId),
-    max_canister_memory_size: NumBytes,
+    max_canister_memory_size_wasm32: NumBytes,
+    max_canister_memory_size_wasm64: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -130,7 +131,8 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
         canister_guaranteed_callback_quota: u64,
-        max_canister_memory_size: NumBytes,
+        max_canister_memory_size_wasm32: NumBytes,
+        max_canister_memory_size_wasm64: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
@@ -158,7 +160,8 @@ impl<'a> QueryContext<'a> {
             state,
             network_topology,
             data_certificate: (data_certificate, canister_id),
-            max_canister_memory_size,
+            max_canister_memory_size_wasm32,
+            max_canister_memory_size_wasm64,
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -1083,9 +1086,20 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
+        let is_wasm64_execution = canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
+        let max_canister_memory_size = if is_wasm64_execution {
+            self.max_canister_memory_size_wasm64
+        } else {
+            self.max_canister_memory_size_wasm32
+        };
+
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
+            canister_memory_limit: canister.memory_limit(max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,

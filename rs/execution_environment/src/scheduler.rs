@@ -1070,7 +1070,15 @@ impl SchedulerImpl {
     ) -> bool {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
-            if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+
+            let canister_is_wasm64 = canister
+                .execution_state
+                .as_ref()
+                .map_or(false, |es| es.is_wasm64);
+
+            if let Err(err) = canister
+                .check_invariants(self.exec_env.max_canister_memory_size(canister_is_wasm64))
+            {
                 let msg = format!(
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
                     CANISTER_INVARIANT_BROKEN,
