@@ -1,0 +1,18 @@
+# Adjust target naming to match what zig expects.
+diff --git a/src/lib.rs b/src/lib.rs
+index f75b951..8e770a7 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -2091,6 +2091,12 @@ impl Build {
+                         target.versioned_llvm_target(None)
+                     };
+ 
++                    let llvm_target = match llvm_target.clone() {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => "x86_64-linux-gnu",
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => "wasm32-freestanding-musl",
++                        _other => &llvm_target,
++                    };
++
+                     // Pass `--target` with the LLVM target to properly
+                     // configure Clang even when cross-compiling.
+                     cmd.push_cc_arg(format!("--target={llvm_target}").into());

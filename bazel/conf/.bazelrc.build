@@ -141,3 +141,8 @@ test --test_env=CLICOLOR_FORCE=true
 
 # Give canceled actions some more time to cleanup
 common --local_termination_grace_seconds=90
+
+# Always compile with zig cc
+# https://github.com/uber/hermetic_cc_toolchain/tree/8e68b7221ca72c10268338eb1734530438e5ccb7?tab=readme-ov-file#use-case-always-compile-with-zig-cc
+build --action_env BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build --sandbox_add_mount_pair=/tmp
