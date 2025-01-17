@@ -3971,11 +3971,11 @@ pub struct ListNeurons {
     /// If this is set, we return the batch of neurons at a given page, using the limit size to
     /// determine how pages are broken up.
     #[prost(uint64, optional, tag = "5")]
-    pub page_number: Option<u64>,
+    pub page_number: ::core::option::Option<u64>,
     /// If this is set, we use the page limit provided to determine how large pages will be.
     /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
     #[prost(uint64, optional, tag = "6")]
-    pub page_size: Option<u64>,
+    pub page_size: ::core::option::Option<u64>,
 }
 /// A response to a `ListNeurons` request.
 ///
@@ -4002,7 +4002,7 @@ pub struct ListNeuronsResponse {
     pub full_neurons: ::prost::alloc::vec::Vec<Neuron>,
     /// This is returned to tell the caller how many neurons are available to query.
     /// If this is greater than the page size, additional requests must be made to see the full
-    /// list of neurons.  
+    /// list of neurons.
     #[prost(fixed64, optional, tag = "3")]
     pub total_neurons_found: ::core::option::Option<u64>,
 }
