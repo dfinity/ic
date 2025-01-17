@@ -143,7 +143,7 @@ pub enum NotificationStatus {
     NotifiedMint(NotifyMintCyclesResult),
     /// The transaction did not have a supported memo (or icrc1_memo).
     /// Therefore, we decided to send the ICP back to its source (minus fee).
-    AutomaticallyRefunded(Result<Option<BlockIndex>, NotifyError>),
+    AutomaticallyRefunded(Option<BlockIndex>),
 }
 
 /// Version of the State type.
@@ -1288,8 +1288,7 @@ async fn notify_mint_cycles(
         });
     }
 
-    let (amount, from) =
-        fetch_transaction(block_index, subaccount, MEMO_MINT_CYCLES).await?;
+    let (amount, from) = fetch_transaction(block_index, subaccount, MEMO_MINT_CYCLES).await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
@@ -1696,37 +1695,16 @@ fn get_u64_memo(transaction: &Transaction) -> Memo {
     Memo(u64::from_le_bytes(icrc1_memo))
 }
 
-// TODO: Use this in notify_* functions. So much repetition...
-fn set_block_status_to_processing<R>(
-    block_index: BlockIndex,
-    unless: impl Fn(&NotificationStatus) -> Option<R>,
-) -> Option<Result<R, NotifyError>> {
-    with_state_mut(|state| {
-        let occupied_entry = match state.blocks_notified.entry(block_index) {
-            Entry::Occupied(entry) => entry,
+/// If the block has no status in blocks_notified, set it to Processing.
+/// Otherwise, makes no changes, and returns the block's current status.
+fn set_block_status_to_processing(block_index: BlockIndex) -> Result<(), NotificationStatus> {
+    with_state_mut(|state| match state.blocks_notified.entry(block_index) {
+        Entry::Occupied(entry) => Err(entry.get().clone()),
 
-            Entry::Vacant(entry) => {
-                entry.insert(NotificationStatus::Processing);
-                return None;
-            }
-        };
-
-        let caller_should_return = match occupied_entry.get() {
-            NotificationStatus::Processing => Err(NotifyError::Processing),
-
-            status => {
-                if let Some(ok) = unless(status) {
-                    Ok(ok)
-                } else {
-                    Err(NotifyError::InvalidTransaction(format!(
-                        "Block {} has already been processed: {:?}",
-                        block_index, status,
-                    )))
-                }
-            }
-        };
-
-        Some(caller_should_return)
+        Entry::Vacant(entry) => {
+            entry.insert(NotificationStatus::Processing);
+            Ok(())
+        }
     })
 }
 
@@ -1860,15 +1838,36 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     };
 
     // Set block's status to Processing before calling ledger.
-    let early_return_value = set_block_status_to_processing(
-        incoming_block_index,
-        |_notification_status: &NotificationStatus| None,
+    let reason_for_refund = format!(
+        "Memo ({}) in the incoming ICP transfer does not correspond to \
+         any of the operations that the Cycles Minting canister offers.",
+        memo.0,
     );
-    if let Some(early_return_value) = early_return_value {
-        return early_return_value;
+    if let Err(prior_block_status) = set_block_status_to_processing(incoming_block_index) {
+        // Do not proceed, because block is either being processed, or was
+        // finished being processed earlier.
+        use NotificationStatus::{
+            AutomaticallyRefunded, NotifiedCreateCanister, NotifiedMint, NotifiedTopUp, Processing,
+        };
+        return match prior_block_status {
+            Processing => Err(NotifyError::Processing),
+
+            AutomaticallyRefunded(block_index) => Err(NotifyError::Refunded {
+                block_index,
+                reason: reason_for_refund,
+            }),
+
+            // This should not be possible, since we already verified that memo is in MEANINGFUL_MEMOS.
+            NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
+                Err(NotifyError::InvalidTransaction(format!(
+                    "Block has already been processed: {:?}",
+                    prior_block_status,
+                )))
+            }
+        };
     }
 
-    // Call ledger to send the ICP back.
+    // Now, it is safe to call ledger to send the ICP back, so do it.
     let refund_result = refund_icp(
         incoming_to_subaccount,
         incoming_from,
@@ -1877,22 +1876,22 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     )
     .await;
     // Handle errors.
-    if let Err(err) = refund_result {
+    let refund_block_index = refund_result.map_err(|err| {
         // Allow the user to retry.
         clear_block_processing_status(incoming_block_index);
 
-        return Err(err);
-    }
+        // Do not actually change the err.
+        err
+    })?;
 
     // Sending the ICP back succeeded. Therefore, update the block's status to
     // AutomaticallyRefunded.
     let old_entry_value = with_state_mut(|state| {
         state.blocks_notified.insert(
             incoming_block_index,
-            NotificationStatus::AutomaticallyRefunded(refund_result.clone()),
+            NotificationStatus::AutomaticallyRefunded(refund_block_index),
         )
     });
-
     // Log if the block's previous status somehow changed out from under us
     // while we were waiting for the ledger call to return. There is no known
     // way for this to happen (except, ofc, bugs).
@@ -1906,12 +1905,8 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     }
 
     Err(NotifyError::Refunded {
-        reason: format!(
-            "Memo ({}) in the incoming ICP transfer does not correspond to \
-             any of the operations that the Cycles Minting canister offers.",
-            memo.0,
-        ),
-        block_index: refund_result.unwrap_or_default(),
+        reason: reason_for_refund,
+        block_index: refund_block_index,
     })
 }
 
@@ -2752,6 +2747,7 @@ fn get_subnet_selection(
 mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+    use maplit::btreemap;
     use rand::Rng;
     use serde_bytes::ByteBuf;
     use std::str::FromStr;
@@ -3636,5 +3632,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_happy() {
+        let red_herring_block_index = 0xDEADBEEF;
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: btreemap! {
+                    red_herring_block_index => NotificationStatus::Processing,
+                },
+                ..Default::default()
+            }))
+        });
+
+        let target_block_index = 42;
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            btreemap! {
+                // Existing data untouched.
+                red_herring_block_index => NotificationStatus::Processing,
+                // New entry.
+                target_block_index => NotificationStatus::Processing,
+            },
+        );
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_already_has_status() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            // Danger! Block ALREADY has status.
+            target_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Err(NotificationStatus::Processing));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
     }
 }

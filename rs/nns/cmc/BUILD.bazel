@@ -55,6 +55,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:candid_parser",
     "@crate_index//:futures",
+    "@crate_index//:maplit",
     "@crate_index//:serde_bytes",
 ]
 
