@@ -1,5 +1,5 @@
 {
-  "checksum": "b9642475d0faabe29f70c002aaede852562dae05dad3bda705eee7103ddce811",
+  "checksum": "f9106b21c4c605032607acabc6e6c407a33a1457ae8fd8acc1b003ba2c0b58b2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5440,7 +5440,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -9531,7 +9531,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -10662,20 +10662,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cc 1.0.83": {
+    "cc 1.1.37": {
       "name": "cc",
-      "version": "1.0.83",
+      "version": "1.1.37",
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cc/1.0.83/download",
-          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "url": "https://static.crates.io/crates/cc/1.1.37/download",
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
         }
       },
       "targets": [
@@ -10701,97 +10695,98 @@
           "common": [],
           "selects": {
             "aarch64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ],
             "arm-unknown-linux-gnueabi": [
-              "jobserver",
               "parallel"
             ],
             "i686-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "i686-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "powerpc-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "s390x-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-freebsd": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ]
           }
         },
         "deps": {
-          "common": [],
+          "common": [
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            }
+          ],
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
-              }
-            ],
-            "cfg(unix)": [
+              },
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -10799,62 +10794,90 @@
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.26",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "1.0.83"
+        "version": "1.1.37"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -18345,7 +18368,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -21821,7 +21844,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -23805,7 +23828,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -29736,7 +29759,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -35657,14 +35680,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "jobserver 0.1.26": {
+    "jobserver 0.1.32": {
       "name": "jobserver",
-      "version": "0.1.26",
-      "package_url": "https://github.com/alexcrichton/jobserver-rs",
+      "version": "0.1.32",
+      "package_url": "https://github.com/rust-lang/jobserver-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/jobserver/0.1.26/download",
-          "sha256": "936cfd212a0155903bcbc060e316fb6cc7cbf2e1907329391ebadc1fe0ce77c2"
+          "url": "https://static.crates.io/crates/jobserver/0.1.32/download",
+          "sha256": "48d1dbcbbeb6a7fec7e059840aa538bd62aaccf972c7346c4d9d2059312853d0"
         }
       },
       "targets": [
@@ -35697,10 +35720,10 @@
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.1.26"
+        "edition": "2021",
+        "version": "0.1.32"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -38088,7 +38111,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -38370,7 +38393,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38471,7 +38494,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38577,7 +38600,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38686,7 +38709,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38784,7 +38807,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -39195,7 +39218,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -39969,7 +39992,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -45007,7 +45030,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -47453,7 +47476,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -52343,7 +52366,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -59078,7 +59101,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -59195,7 +59218,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63586,7 +63609,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63671,7 +63694,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63760,7 +63783,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -68098,7 +68121,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -71648,7 +71671,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -80162,7 +80185,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -80701,7 +80724,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -86253,7 +86276,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -87322,7 +87345,7 @@
     "candid 0.10.10",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
-    "cc 1.0.83",
+    "cc 1.1.37",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",

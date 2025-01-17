@@ -4,7 +4,7 @@ use futures::stream;
 use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
+use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -1365,7 +1365,7 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
         use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
@@ -1425,26 +1425,16 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             proposal: sns_pb::Proposal,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-            let response = manage_neuron(
-                pocket_ic,
-                canister_id,
-                sender,
-                neuron_id,
-                sns_pb::manage_neuron::Command::MakeProposal(proposal),
-            )
-            .await;
-            use sns_pb::manage_neuron_response::Command;
-            let response = match response.command {
-                Some(Command::MakeProposal(response)) => Ok(response),
-                Some(Command::Error(err)) => Err(err),
-                _ => panic!("Proposal failed unexpectedly: {:#?}", response),
-            }?;
-            let proposal_id = response.proposal_id.unwrap_or_else(|| {
-                panic!(
-                    "First SNS proposal response did not contain a proposal_id: {:#?}",
-                    response
-                )
-            });
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let governance = GovernanceCanister::new(canister_id);
+            let proposal_id = governance
+                .submit_proposal(&agent, neuron_id, proposal)
+                .await
+                .map_err(|err| match err {
+                    SubmitProposalError::GovernanceError(e) => e,
+                    e => panic!("Unexpected error: {e}"),
+                })?;
+
             wait_for_proposal_execution(pocket_ic, canister_id, proposal_id).await
         }
 
