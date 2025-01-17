@@ -674,8 +674,7 @@ fn list_proposals_benchmark() -> BenchResult {
     }
 
     bench_fn(|| {
-        let response = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
-        let _ = ic_nns_governance_api::pb::v1::ListProposalInfoResponse::from(response);
+        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
     })
 }
 
