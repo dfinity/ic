@@ -63,11 +63,11 @@ impl Registry {
         // release dashboard.)
         let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
-        let mut mutations1 = Vec::new();
+        let mut mutations = Vec::new();
         let num_removed_nodes = nodes_with_same_ip.len() as u64;
         if !nodes_with_same_ip.is_empty() {
             if nodes_with_same_ip.len() == 1 {
-                mutations1 = self.make_remove_or_replace_node_mutations(
+                mutations = self.make_remove_or_replace_node_mutations(
                     RemoveNodeDirectlyPayload {
                         node_id: nodes_with_same_ip[0],
                     },
@@ -75,21 +75,24 @@ impl Registry {
                     Some(node_id),
                 );
             } else {
+                // In the unlikely situation that multiple nodes share the same IP address as the new node,
+                // this will remove the existing nodes.
+                // While the situation is unexpected, the behavior is backwards compatible.
+                // This may happen only if there is a bug in the registry code and the registry invariant isn't enforced,
+                // due to which the node id was not properly removed.
                 for previous_node_id in nodes_with_same_ip {
-                    mutations1.extend(self.make_remove_or_replace_node_mutations(
+                    mutations.extend(self.make_remove_or_replace_node_mutations(
                         RemoveNodeDirectlyPayload {
                             node_id: previous_node_id,
                         },
                         caller_id,
+                        // If there are multiple nodes with the same IP, then each of them could in principle be in a (different) subnet.
+                        // In that case replacing all different node ids with the same new node isn't an option.
+                        // To cover for this corner case, we don't replace the node id but just remove the node and potentially fail.
                         None,
                     ));
                 }
             }
-
-            // Update the NO record, as the available allowance may have changed.
-            node_operator_record = get_node_operator_record(self, caller_id).map_err(|err| {
-                format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err)
-            })?
         }
 
         // 3. Check if adding one more node will get us over the cap for the Node Operator
@@ -160,7 +163,11 @@ impl Registry {
         };
 
         // 8. Insert node, public keys, and crypto keys
-        let mut mutations2 = make_add_node_registry_mutations(node_id, node_record, valid_pks);
+        mutations.extend(make_add_node_registry_mutations(
+            node_id,
+            node_record,
+            valid_pks,
+        ));
 
         // 9. Update the Node Operator record
         node_operator_record.node_allowance =
@@ -169,10 +176,10 @@ impl Registry {
         let update_node_operator_record =
             make_update_node_operator_mutation(caller_id, &node_operator_record);
 
-        mutations2.push(update_node_operator_record);
+        mutations.push(update_node_operator_record);
 
         // 10. Check invariants and then apply mutations
-        self.maybe_apply_mutation_internal([mutations1, mutations2].concat());
+        self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
 
@@ -308,18 +315,17 @@ fn now() -> Result<Time, String> {
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes,
+        invariant_compliant_registry, prepare_registry_with_nodes,
+        registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::mutations::common::test::TEST_NODE_ID;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
-    use ic_protobuf::registry::{node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetRecord};
+    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
     use ic_registry_canister_api::IPv4Config;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
-    use ic_test_utilities_types::ids::subnet_test_id;
     use itertools::Itertools;
     use lazy_static::lazy_static;
     use prost::Message;
@@ -768,49 +774,26 @@ mod tests {
         // Add nodes to the registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 6);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
-                .unwrap();
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
 
-        // Add node operator record
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 0, // No more nodes can be added, but we replace an existing node so node_allowance can be 0
-            ..Default::default()
-        };
-
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
-
-        // Create a subnet with the first node
-        let subnet_id = subnet_test_id(1000);
-        let mut subnet_list_record = registry.get_subnet_list_record();
-        let subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(
-            node_ids_and_dkg_pks.keys().take(4).copied().collect(),
-        );
-        registry.maybe_apply_mutation_internal(add_fake_subnet(
-            subnet_id,
-            &mut subnet_list_record,
-            subnet_record,
-            &node_ids_and_dkg_pks,
-        ));
-        let original_subnet_record = registry.get_subnet_or_panic(subnet_id);
-        let original_subnet_membership = original_subnet_record
+        // Create a subnet with the first 4 nodes
+        let subnet_id =
+            registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let subnet_membership = subnet_record
             .membership
             .iter()
             .map(|bytes| NodeId::from(PrincipalId::try_from(bytes).unwrap()))
             .collect::<Vec<NodeId>>();
         let expected_remove_node_id = node_ids[1]; // same offset as the subnet membership vector
-        let expected_remove_node = registry.get_node(original_subnet_membership[1]).unwrap();
+        let expected_remove_node = registry.get_node(subnet_membership[1]).unwrap();
 
         println!(
             "Original subnet membership (node ids): {:?}",
-            original_subnet_membership
+            subnet_membership
         );
-        // Prepare payload to add a new node
+        // Prepare payload to add a new node with the same IP address and port as an existing node.
         let (mut payload, _valid_pks) = prepare_add_node_payload(2);
         let e = expected_remove_node.http.unwrap();
         payload
@@ -824,7 +807,7 @@ mod tests {
 
         // Verify the subnet record is updated with the new node
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
-        let mut expected_membership = original_subnet_membership.clone();
+        let mut expected_membership = subnet_membership.clone();
         expected_membership[1] = new_node_id;
         expected_membership.sort();
         let actual_membership: Vec<NodeId> = subnet_record
@@ -841,7 +824,7 @@ mod tests {
         // Verify the new node is present in the registry
         assert!(registry.get_node(new_node_id).is_some());
 
-        // Verify node operator allowance is decremented
+        // Verify node operator allowance is unchanged
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
         assert_eq!(updated_operator.node_allowance, 0);
     }
@@ -853,22 +836,8 @@ mod tests {
         // Add nodes to the registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
-                .unwrap();
-
-        // Add node operator record
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 1,
-            ..Default::default()
-        };
-
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 1);
 
         // Prepare payload to add a new node
         let (payload, _valid_pks) = prepare_add_node_payload(2);
@@ -894,22 +863,8 @@ mod tests {
         // Add nodes to the registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
-                .unwrap();
-
-        // Add node operator record with zero allowance
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 0,
-            ..Default::default()
-        };
-
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
 
         // Prepare payload to add a new node
         let (payload, _valid_pks) = prepare_add_node_payload(2);
@@ -927,22 +882,8 @@ mod tests {
         // Add nodes to the registry
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id =
-            PrincipalId::try_from(registry.get_node_or_panic(node_ids[0]).node_operator_id)
-                .unwrap();
-
-        // Add node operator record
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 1,
-            ..Default::default()
-        };
-
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
+        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 1);
 
         // Prepare payload to add a new node
         let (payload, _valid_pks) = prepare_add_node_payload(2);

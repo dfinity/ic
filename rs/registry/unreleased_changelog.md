@@ -18,11 +18,11 @@ IP address even if the existing node is currently in a subnet.
 The new node id will be added to the subnet and the old node id will be removed
 from the subnet without any intervention being required from the users or the community.
 
-Previously, a proposal for removing and replacing the old node in the subnet was
-required to enable redeployments for such nodes.
+Previously, an additional NNS proposal for removing and replacing the old node in
+the subnet was required to enable redeployments for such nodes.
 Such behavior is conservative and not strictly necessary since the subnet
-decentralization is not affected if the new node has all properties
-identical as the old node.
+decentralization is not affected when the new node has all properties
+identical as the old node, which is the case if the IPv6 address is unchanged.
 
 ## Deprecated
 
