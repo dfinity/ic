@@ -6,7 +6,7 @@
 # Arguments:
 #   $1 - JSON path to the desired value (e.g., '.icos_settings.nns_urls')
 # Returns:
-#   The value if found, otherwise an empty string
+    # If key not found or value is "null", retuns empty string. Otherwise, returns value
 function get_config_value() {
     local CONFIG_FILE="/var/ic/config/config.json"
     local key=$1
