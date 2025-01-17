@@ -56,6 +56,8 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
                     maturity_to_spawn \in MIN_STAKE..neuron[parent_neuron_id].maturity;
                     child_neuron_id = FRESH_NEURON_ID(DOMAIN(neuron));
                 ) {
+                    \* TODO: this serves as a poor man's check that the parent isn't spawning, can we get away with that?
+                    await(neuron[parent_neuron_id].cached_stake > 0);
 
                     \* The code takes a lock on the child neuron, but releases it in the same message handler,
                     \* effectively only checking that the lock isn't already taken.
@@ -70,7 +72,7 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
     }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "6e2c3aa4" /\ chksum(tla) = "40669037")
+\* BEGIN TRANSLATION (chksum(pcal) = "17ce984d" /\ chksum(tla) = "60040455")
 VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, spawning_neurons
 
@@ -93,6 +95,7 @@ Spawn_Neuron(self) == /\ \/ /\ TRUE
                                  \E child_account_id \in Governance_Account_Ids \ DOMAIN neuron_id_by_account:
                                    \E maturity_to_spawn \in MIN_STAKE..neuron[parent_neuron_id].maturity:
                                      LET child_neuron_id == FRESH_NEURON_ID(DOMAIN(neuron)) IN
+                                       /\ (neuron[parent_neuron_id].cached_stake > 0)
                                        /\ child_neuron_id \notin locks
                                        /\ neuron_id_by_account' = (child_account_id :> child_neuron_id @@ neuron_id_by_account)
                                        /\ neuron' = (   child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn ]

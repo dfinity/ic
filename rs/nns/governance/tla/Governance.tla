@@ -227,15 +227,19 @@ Init == (* Global variables *)
             @@ [self \in Claim_Neuron_Process_Ids |-> "ClaimNeuron1"]
         /\ Ledger_Init
 
-Change_Neuoron_Fee ==
+Change_Neuron_Fee ==
+    \* TODO: it is probably correct that we can change the fee while the neuron is locked?
     \E nid \in DOMAIN(neuron):
         \E new_fee_value \in 0..Min({MAX_NEURON_FEE, neuron[nid].cached_stake}):
+            \* Does the model need to be more strict on how fees can be decreased?
             /\ neuron' = [neuron EXCEPT ![nid].fees = new_fee_value]
             /\ UNCHANGED <<neuron_id_by_account, locks, governance_to_ledger, ledger_to_governance, spawning_neurons, env_vars, local_vars >>
 
 Increase_Neuron_Maturity ==
     \E nid \in DOMAIN(neuron):
-        \E new_maturity \in (neuron[nid].maturity+1)..MAX_MATURITY:
+        \* TODO: true for the implementation?
+        /\ neuron[nid].cached_stake > 0
+        /\ \E new_maturity \in (neuron[nid].maturity+1)..MAX_MATURITY:
             /\ total_rewards' = total_rewards + new_maturity - neuron[nid].maturity
             /\ neuron' = [neuron EXCEPT ![nid].maturity = new_maturity]
             /\ UNCHANGED <<neuron_id_by_account, locks, governance_to_ledger, ledger_to_governance, spawning_neurons, ledger_vars, local_vars >>
@@ -244,19 +248,17 @@ Increase_Neuron_Maturity ==
 Next ==
     \* Combine the transitions of all the submodules, by taking the disjunction of the transitions of any submodule.
     \* Additionally, each disjunct leaves unchanged the variables that are not used by the submodule.
-    \/ 
-        /\ UNCHANGED env_vars
-        /\ 
-            \/ Claim!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
-            \/ Disburse!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Disburse_To!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Merge!Next /\ UNCHANGED <<neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Spawn_Neurons!Next /\ UNCHANGED <<source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-            \/ Split!Next /\ UNCHANGED << neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id >>
+    \/ Claim!Next /\  UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
+    \* \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \* \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Merge!Next /\ UNCHANGED <<env_vars, neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Spawn_Neurons!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Split!Next /\ UNCHANGED << env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, account, disburse_amount, to_account, ready_to_spawn_ids, child_account_id, child_neuron_id, parent_neuron_id >>
+    \* "Environment" transitions
     \/ Ledger_Process_Governance_Request /\ UNCHANGED << global_non_ledger_vars, local_vars >>
     \/ Ledger_User_Transfer /\ UNCHANGED << global_non_ledger_vars, local_vars, governance_to_ledger, ledger_to_governance, total_rewards >>
-    \/ Change_Neuoron_Fee
+    \/ Change_Neuron_Fee
     \/ Increase_Neuron_Maturity
 
 \*******************************************************************************
@@ -270,6 +272,9 @@ Can_Decrease_Stake_Sanity == [][\A n \in DOMAIN(neuron) \cap DOMAIN(neuron') : n
 
 Cached_Stake_Capped_By_Balance == \A n \in DOMAIN(neuron) :
     neuron[n].cached_stake <= balances[neuron[n].account]
+
+Fees_Smaller_Than_Cached_Stake == \A n \in DOMAIN(neuron):
+    neuron[n].fees <= neuron[n].cached_stake
 
 Cached_Stake_Capped_By_Balance_When_Not_Locked == \A n \in DOMAIN(neuron) :
     n \notin locks => neuron[n].cached_stake <= balances[neuron[n].account]
@@ -301,6 +306,7 @@ Full_Invariant ==   /\ Cached_Stake_Capped_By_Balance_When_Not_Locked
                     /\ Neurons_Have_Unique_Accounts
                     /\ Cached_Stake_Not_Underflowing
                     /\ Ready_To_Spawn_Ids_Exist
+                    /\ Fees_Smaller_Than_Cached_Stake
 
 \*******************************************************************************
 \* Symmetry optimizations for model checking
