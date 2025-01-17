@@ -50,6 +50,7 @@ pub enum PayloadCreationError {
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
     MissingDkgStartBlock,
+    InvalidSubnetId,
 }
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
@@ -236,18 +237,13 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
     // Current transcripts come from next transcripts of the last_summary.
-
-    dbg!(&height);
-
-    dbg!(&last_summary.next_transcripts().keys());
-    let current_transcripts = as_next_transcripts(last_summary);
+    let current_transcripts = as_next_transcripts(last_summary, &logger);
 
     let vet_key_ids = get_enabled_vet_keys(
         subnet_id,
         registry_client,
         validation_context.registry_version,
-    )
-    .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?;
+    )?;
 
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
@@ -288,13 +284,6 @@ pub(super) fn create_summary_payload(
         &vet_key_ids,
     )?);
 
-    dbg!(&configs
-        .iter()
-        .map(|conf| conf.dkg_id().dkg_tag.clone())
-        .collect::<Vec<_>>());
-    dbg!(&current_transcripts.keys());
-    dbg!(&next_transcripts.keys());
-
     Ok(Summary::new(
         configs,
         current_transcripts,
@@ -322,13 +311,16 @@ fn create_transcript(
 
 /// Return the set of next transcripts for all tags. If for some tag
 /// the next transcript is not available, the current transcript is used.
-fn as_next_transcripts(summary: &Summary) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+fn as_next_transcripts(
+    summary: &Summary,
+    logger: &ReplicaLogger,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
     let mut next_transcripts = summary.next_transcripts().clone();
 
     for (tag, transcript) in summary.current_transcripts().iter() {
         if !next_transcripts.contains_key(tag) {
+            warn!(logger, "Resusing current transcript for tag {:?}", tag);
             next_transcripts.insert(tag.clone(), transcript.clone());
-            // TODO: Log this case
         }
     }
 
@@ -1224,13 +1216,6 @@ mod tests {
                 )],
             );
             let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
-            dbg!(&genesis_summary
-                .configs
-                .keys()
-                .map(|id| id.dkg_tag.clone())
-                .collect::<Vec<_>>());
-            dbg!(&genesis_summary.current_transcripts().keys());
-            dbg!(&genesis_summary.next_transcripts().keys());
 
             // Let's ensure we have no summaries for the whole DKG interval.
             for _ in 0..dkg_interval_len {
@@ -1262,13 +1247,6 @@ mod tests {
 
             // Test the regular case (Both DKGs succeeded)
             let next_summary = create_summary_payload(&genesis_summary);
-            dbg!(&next_summary
-                .configs
-                .keys()
-                .map(|id| id.dkg_tag.clone())
-                .collect::<Vec<_>>());
-            dbg!(&next_summary.current_transcripts().keys());
-            dbg!(&next_summary.next_transcripts().keys());
             for (_, conf) in next_summary.configs.iter() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
@@ -1285,13 +1263,6 @@ mod tests {
             // In this case, the `current_transcripts` are being reshared.
             genesis_summary.configs.clear();
             let next_summary = create_summary_payload(&genesis_summary);
-            dbg!(&next_summary
-                .configs
-                .keys()
-                .map(|id| id.dkg_tag.clone())
-                .collect::<Vec<_>>());
-            dbg!(&next_summary.current_transcripts().keys());
-            dbg!(&next_summary.next_transcripts().keys());
             for (_, conf) in next_summary.configs.iter() {
                 let tag = &conf.dkg_id().dkg_tag;
                 match tag {
@@ -1517,6 +1488,13 @@ mod tests {
         });
     }
 
+    /// Test the generation of vetkeys
+    ///
+    /// 1. Create a subnet with 4 nodes and a genesis summary
+    /// 2. Add registry entry to add a vetkey
+    /// 3. Check that a config ends up in the next summary
+    /// 4. Check that the summary after that has a matching next transcript
+    /// 5. CHeck that the summary after that has matching current and next transcripts
     #[test]
     fn test_vet_key_local_transcript_generation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {

@@ -1,10 +1,10 @@
+use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::Block,
     crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
-    registry::RegistryClientError,
     NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
@@ -59,11 +59,11 @@ pub(crate) fn get_enabled_vet_keys(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<Vec<NiDkgMasterPublicKeyId>, RegistryClientError> {
-    // TODO: Handle None case
+) -> Result<Vec<NiDkgMasterPublicKeyId>, PayloadCreationError> {
     let subnet_record = registry_client
-        .get_subnet_record(subnet_id, registry_version)?
-        .unwrap();
+        .get_subnet_record(subnet_id, registry_version)
+        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?
+        .ok_or(PayloadCreationError::InvalidSubnetId)?;
 
     let keys = subnet_record
         .chain_key_config
