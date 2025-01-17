@@ -2319,8 +2319,6 @@ impl Governance {
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
 
-        let total_neurons_found = Some(requested_neuron_ids.len() as u64);
-
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
         let mut full_neurons = vec![];
@@ -2331,6 +2329,8 @@ impl Governance {
             .into_iter()
             .map(|chunk| chunk.collect())
             .collect();
+
+        let total_pages_available = Some(chunks.len() as u64);
 
         let empty = Vec::new();
         let current_page = chunks.get(page_number as usize).unwrap_or(&empty);
@@ -2377,7 +2377,7 @@ impl Governance {
         ListNeuronsResponse {
             neuron_infos,
             full_neurons,
-            total_pages_available: total_neurons_found,
+            total_pages_available,
         }
     }
 
