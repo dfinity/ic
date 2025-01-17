@@ -7,7 +7,6 @@ use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
 
-use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
 use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
@@ -16,10 +15,10 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready,
+    panic_if_not_ready, panic_if_read_only, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
+use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerState};
 use ic_ledger_canister_core::ledger::{
     apply_transaction_no_trimming, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -67,7 +66,6 @@ use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
     io::{Read, Write},
-    time::Duration,
 };
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
@@ -159,15 +157,15 @@ fn pre_upgrade() {
     });
 }
 
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 199_950_000_000;
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_950_000_000;
+// #[cfg(not(feature = "low-upgrade-instruction-limits"))]
+// const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 199_950_000_000;
+// #[cfg(not(feature = "low-upgrade-instruction-limits"))]
+// const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_950_000_000;
 
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
+// #[cfg(feature = "low-upgrade-instruction-limits")]
+// const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
+// #[cfg(feature = "low-upgrade-instruction-limits")]
+// const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
@@ -213,7 +211,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
-    let upgrade_from_version = Access::with_ledger_mut(|ledger| {
+    let _upgrade_from_version = Access::with_ledger_mut(|ledger| {
         if ledger.ledger_version > LEDGER_VERSION {
             panic!(
                 "Trying to downgrade from incompatible version {}. Current version is {}.",
@@ -255,6 +253,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         }
     });
 
+    set_ledger_state(LedgerState::ReadyReadOnly);
+    assert!(is_ready());
+
     // if upgrade_from_version < 2 {
     //     set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
     //     log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
@@ -283,62 +284,62 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
 }
 
-fn migrate_next_part(instruction_limit: u64) {
-    let instructions_migration_start = instruction_counter();
-    STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
-    let mut migrated_allowances = 0;
-    let mut migrated_expirations = 0;
-    let mut migrated_balances = 0;
+// fn migrate_next_part(instruction_limit: u64) {
+//     let instructions_migration_start = instruction_counter();
+//     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
+//     let mut migrated_allowances = 0;
+//     let mut migrated_expirations = 0;
+//     let mut migrated_balances = 0;
 
-    log_message("Migrating part of the ledger state.");
+//     log_message("Migrating part of the ledger state.");
 
-    Access::with_ledger_mut(|ledger| {
-        while instruction_counter() < instruction_limit {
-            let field = match ledger_state() {
-                LedgerState::Migrating(ledger_field) => ledger_field,
-                LedgerState::Ready => break,
-            };
-            match field {
-                LedgerField::Allowances => {
-                    if ledger.migrate_one_allowance() {
-                        migrated_allowances += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Migrating(
-                            LedgerField::AllowancesExpirations,
-                        ));
-                    }
-                }
-                LedgerField::AllowancesExpirations => {
-                    if ledger.migrate_one_expiration() {
-                        migrated_expirations += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-                    }
-                }
-                LedgerField::Balances => {
-                    if ledger.migrate_one_balance() {
-                        migrated_balances += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Ready);
-                    }
-                }
-            }
-        }
-        let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
-            instruction_counter());
-        if !is_ready() {
-            log_message(
-                format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
-            );
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
-            });
-        } else {
-            log_message(format!("Migration completed! {msg}").as_str());
-        }
-    });
-}
+//     Access::with_ledger_mut(|ledger| {
+//         while instruction_counter() < instruction_limit {
+//             let field = match ledger_state() {
+//                 LedgerState::Migrating(ledger_field) => ledger_field,
+//                 LedgerState::Ready => break,
+//             };
+//             match field {
+//                 LedgerField::Allowances => {
+//                     if ledger.migrate_one_allowance() {
+//                         migrated_allowances += 1;
+//                     } else {
+//                         set_ledger_state(LedgerState::Migrating(
+//                             LedgerField::AllowancesExpirations,
+//                         ));
+//                     }
+//                 }
+//                 LedgerField::AllowancesExpirations => {
+//                     if ledger.migrate_one_expiration() {
+//                         migrated_expirations += 1;
+//                     } else {
+//                         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+//                     }
+//                 }
+//                 LedgerField::Balances => {
+//                     if ledger.migrate_one_balance() {
+//                         migrated_balances += 1;
+//                     } else {
+//                         set_ledger_state(LedgerState::Ready);
+//                     }
+//                 }
+//             }
+//         }
+//         let instructions_migration = instruction_counter() - instructions_migration_start;
+//         let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+//             instruction_counter());
+//         if !is_ready() {
+//             log_message(
+//                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
+//             );
+//             ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+//                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+//             });
+//         } else {
+//             log_message(format!("Migration completed! {msg}").as_str());
+//         }
+//     });
+// }
 
 fn log_message(msg: &str) {
     ic_cdk::println!("{msg}");
@@ -696,6 +697,7 @@ fn execute_transfer_not_async(
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     panic_if_not_ready();
+    panic_if_read_only();
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -724,6 +726,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
+    panic_if_read_only();
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -829,6 +832,7 @@ fn get_data_certificate() -> DataCertificate {
 
 fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
     panic_if_not_ready();
+    panic_if_read_only();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 

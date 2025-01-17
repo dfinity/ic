@@ -534,6 +534,7 @@ pub enum LedgerField {
 pub enum LedgerState {
     Migrating(LedgerField),
     Ready,
+    ReadyReadOnly,
 }
 
 impl Default for LedgerState {
@@ -745,6 +746,7 @@ impl LedgerContext for Ledger {
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
         panic_if_not_ready();
+        panic_if_read_only();
         &mut self.stable_balances
     }
 
@@ -755,6 +757,7 @@ impl LedgerContext for Ledger {
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         panic_if_not_ready();
+        panic_if_read_only();
         &mut self.stable_approvals
     }
 
@@ -1023,7 +1026,7 @@ impl Ledger {
 
     /// Returns local ledger blocks.
     pub fn get_ledger_blocks(&self, start: BlockIndex, length: usize) -> Vec<Block<Tokens>> {
-        let (_first_index, local_blocks, _archived_transactions) = self.query_blocks(
+        let (first_index, local_blocks, archived_transactions) = self.query_blocks(
             start,
             length,
             |enc_block| -> Block<Tokens> {
@@ -1031,6 +1034,8 @@ impl Ledger {
             },
             |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
         );
+        assert_eq!(first_index, 0);
+        assert!(archived_transactions.is_empty());
 
         local_blocks
     }
@@ -1141,12 +1146,25 @@ impl Ledger {
 }
 
 pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
+    LEDGER_STATE.with(|s| {
+        matches!(*s.borrow(), LedgerState::Ready)
+            || matches!(*s.borrow(), LedgerState::ReadyReadOnly)
+    })
+}
+
+pub fn is_read_only() -> bool {
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::ReadyReadOnly))
 }
 
 pub fn panic_if_not_ready() {
     if !is_ready() {
         ic_cdk::trap("The Ledger is not ready");
+    }
+}
+
+pub fn panic_if_read_only() {
+    if is_read_only() {
+        ic_cdk::trap("The Ledger is read only");
     }
 }
 
