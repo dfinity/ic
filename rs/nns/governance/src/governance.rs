@@ -2338,7 +2338,7 @@ impl Governance {
             // Ignore when a neuron is not found. It is not guaranteed that a
             // neuron will be found, because some of the elements in
             // requested_neuron_ids are supplied by the caller.
-            let _ignore_when_neuron_not_found = self.with_neuron(&neuron_id, |neuron| {
+            let _ignore_when_neuron_not_found = self.with_neuron(neuron_id, |neuron| {
                 // Populate neuron_infos.
                 let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
 
