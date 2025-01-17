@@ -3766,7 +3766,8 @@ impl From<pb::ListNeurons> for pb_api::ListNeurons {
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
             include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-            start_from_neuron_id: item.start_from_neuron_id,
+            page_number: item.page_number,
+            page_size: item.page_size,
         }
     }
 }
@@ -3777,7 +3778,8 @@ impl From<pb_api::ListNeurons> for pb::ListNeurons {
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
             include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-            start_from_neuron_id: item.start_from_neuron_id,
+            page_number: item.page_number,
+            page_size: item.page_size,
         }
     }
 }
@@ -3791,7 +3793,7 @@ impl From<pb::ListNeuronsResponse> for pb_api::ListNeuronsResponse {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-            next_start_from_neuron_id: item.next_start_from_neuron_id,
+            total_neurons_found: item.total_neurons_found,
         }
     }
 }
@@ -3804,7 +3806,7 @@ impl From<pb_api::ListNeuronsResponse> for pb::ListNeuronsResponse {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-            next_start_from_neuron_id: item.next_start_from_neuron_id,
+            total_neurons_found: item.total_neurons_found,
         }
     }
 }

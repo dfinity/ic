@@ -1599,7 +1599,7 @@ pub fn list_all_neurons_and_combine_responses(
         },
     );
 
-    let mut next_neuron_id = response.next_start_from_neuron_id;
+    let mut next_neuron_id = response.total_neurons_found;
 
     let mut count = 0;
     while next_neuron_id.is_some() {
@@ -1611,7 +1611,7 @@ pub fn list_all_neurons_and_combine_responses(
             .neuron_infos
             .extend(new_response.neuron_infos.into_iter());
 
-        next_neuron_id = new_response.next_start_from_neuron_id;
+        next_neuron_id = new_response.total_neurons_found;
 
         count += 1;
         if count > 20 {
@@ -1622,7 +1622,7 @@ pub fn list_all_neurons_and_combine_responses(
         }
     }
 
-    response.next_start_from_neuron_id = None;
+    response.total_neurons_found = None;
     response
 }
 

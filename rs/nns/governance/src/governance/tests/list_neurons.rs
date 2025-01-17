@@ -48,13 +48,14 @@ fn test_list_neurons_with_paging() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: None,
+            page_number: Some(0),
+            page_size: None,
         },
         user_id,
     );
 
     assert_eq!(response.full_neurons.len(), 500);
-    assert_eq!(response.next_start_from_neuron_id, Some(501));
+    assert_eq!(response.total_neurons_found, Some(999));
 
     let response = governance.list_neurons(
         &ListNeurons {
@@ -62,26 +63,12 @@ fn test_list_neurons_with_paging() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: Some(501),
+            page_number: Some(1),
+            page_size: None,
         },
         user_id,
     );
 
     assert_eq!(response.full_neurons.len(), 499);
-    assert_eq!(response.next_start_from_neuron_id, None);
-
-    // Edge case, just barely fit all the neurons in second response
-    let response = governance.list_neurons(
-        &ListNeurons {
-            neuron_ids: vec![],
-            include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
-            include_public_neurons_in_full_neurons: None,
-            start_from_neuron_id: Some(500),
-        },
-        user_id,
-    );
-
-    assert_eq!(response.full_neurons.len(), 500);
-    assert_eq!(response.next_start_from_neuron_id, None);
+    assert_eq!(response.total_neurons_found, Some(999));
 }

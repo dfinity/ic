@@ -893,22 +893,21 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
     };
 
     assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller)
-        ),
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller),
         btreeset! { 3, 4, 5 }
+            .into_iter()
+            .map(|id| NeuronId::from_u64(id))
+            .collect()
     );
     assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key)
-        ),
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key),
         btreeset! { 3, 4, 5 }
+            .into_iter()
+            .map(|id| NeuronId::from_u64(id))
+            .collect()
     );
     assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store
-                .get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3))
-        ),
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3)),
         btreeset! {}
     );
 }
