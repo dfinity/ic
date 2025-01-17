@@ -4,7 +4,6 @@ use ic_canister_sandbox_backend_lib::{
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
-use std::collections::BTreeSet;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
@@ -15,6 +14,7 @@ use {
         unistd::ForkResult, unistd::Pid,
     },
     procfs::process::Process,
+    std::collections::BTreeSet,
     syscalls::Sysno,
 };
 
