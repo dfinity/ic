@@ -699,10 +699,22 @@ impl PocketIc {
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
-        caller: Option<Principal>,
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub fn ingress_status_as(
+        &self,
+        message_id: RawMessageId,
+        caller: Principal,
     ) -> IngressStatusResult {
         let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.ingress_status(message_id, caller).await })
+        runtime.block_on(async { self.pocket_ic.ingress_status_as(message_id, caller).await })
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
