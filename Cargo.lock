@@ -12528,6 +12528,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-types",
@@ -14040,7 +14041,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "assert_matches",
  "base32",
