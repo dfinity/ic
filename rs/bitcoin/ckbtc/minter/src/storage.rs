@@ -11,11 +11,11 @@ use ic_stable_structures::{
 use serde::Deserialize;
 use std::cell::RefCell;
 
-const OLD_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
-const OLD_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
+const V0_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
+const V0_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
 
-const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(2);
-const LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(3);
+const V1_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(2);
+const V1_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 type VMem = VirtualMemory<DefaultMemoryImpl>;
 type EventLog = StableLog<Vec<u8>, VMem, VMem>;
@@ -25,24 +25,24 @@ thread_local! {
         MemoryManager::init(DefaultMemoryImpl::default())
     );
 
-    /// The log of the ckBTC state modifications.
-    static OLD_EVENTS: RefCell<EventLog> = MEMORY_MANAGER
+    /// The v0 log of the ckBTC state modifications that should be migrated to v1 and then set to empty.
+    static V0_EVENTS: RefCell<EventLog> = MEMORY_MANAGER
         .with(|m|
               RefCell::new(
                   StableLog::init(
-                      m.borrow().get(OLD_LOG_INDEX_MEMORY_ID),
-                      m.borrow().get(OLD_LOG_DATA_MEMORY_ID)
+                      m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
+                      m.borrow().get(V0_LOG_DATA_MEMORY_ID)
                   ).expect("failed to initialize stable log")
               )
         );
 
-    /// The log of the ckBTC state modifications.
-    static EVENTS: RefCell<EventLog> = MEMORY_MANAGER
+    /// The latest log of the ckBTC state modifications.
+    static V1_EVENTS: RefCell<EventLog> = MEMORY_MANAGER
         .with(|m|
               RefCell::new(
                   StableLog::init(
-                      m.borrow().get(LOG_INDEX_MEMORY_ID),
-                      m.borrow().get(LOG_DATA_MEMORY_ID)
+                      m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
+                      m.borrow().get(V1_LOG_DATA_MEMORY_ID)
                   ).expect("failed to initialize stable log")
               )
         );
@@ -57,7 +57,7 @@ impl Iterator for EventIterator {
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {
-        EVENTS.with(|events| {
+        V1_EVENTS.with(|events| {
             let events = events.borrow();
 
             match events.read_entry(self.pos, &mut self.buf) {
@@ -117,22 +117,22 @@ pub fn events() -> impl Iterator<Item = Event> {
 
 pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
-    OLD_EVENTS.with(|old_events| {
+    V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
         if old.len() > 0 {
-            EVENTS.with(|new| {
+            V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });
             *old = MEMORY_MANAGER.with(|m| {
                 StableLog::new(
-                    m.borrow().get(OLD_LOG_INDEX_MEMORY_ID),
-                    m.borrow().get(OLD_LOG_DATA_MEMORY_ID),
+                    m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V0_LOG_DATA_MEMORY_ID),
                 )
             });
         }
     });
     assert_eq!(
-        OLD_EVENTS.with(|events| events.borrow().len()),
+        V0_EVENTS.with(|events| events.borrow().len()),
         0,
         "Old events is not emptied after data migration"
     );
@@ -157,7 +157,7 @@ pub fn migrate_events(old_events: &EventLog, new_events: &EventLog) -> u64 {
 
 /// Returns the current number of events in the log.
 pub fn count_events() -> u64 {
-    EVENTS.with(|events| events.borrow().len())
+    V1_EVENTS.with(|events| events.borrow().len())
 }
 
 /// Records a new minter event.
@@ -166,7 +166,7 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
         timestamp: Some(runtime.time()),
         payload,
     });
-    EVENTS.with(|events| {
+    V1_EVENTS.with(|events| {
         events
             .borrow()
             .append(&bytes)
