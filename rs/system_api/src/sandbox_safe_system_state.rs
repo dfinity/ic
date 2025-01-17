@@ -16,7 +16,9 @@ use ic_management_canister_types::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::canister_state::system_state::{
+    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+};
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
 use ic_types::{
@@ -187,7 +189,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
+        let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -1270,55 +1272,21 @@ impl SandboxSafeSystemState {
     ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn check_on_low_wasm_memory_hook_condition(
+    pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
         memory_allocation: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit =
-            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
-
-        debug_assert!(
-            wasm_memory_usage <= memory_usage,
-            "Wasm memory usage {} is greater that memory usage {}.",
+        let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
+            memory_usage,
             wasm_memory_usage,
-            memory_usage
+            memory_allocation,
+            wasm_memory_limit,
+            self.wasm_memory_threshold,
         );
 
-        let memory_usage_without_wasm_memory =
-            NumBytes::new(memory_usage.get().saturating_sub(wasm_memory_usage.get()));
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
-        // as min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit).
-        let wasm_capacity = memory_allocation.map_or_else(
-            || wasm_memory_limit,
-            |memory_allocation| {
-                debug_assert!(
-                    memory_usage_without_wasm_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
-                    memory_usage_without_wasm_memory,
-                    memory_allocation
-                );
-                std::cmp::min(
-                    memory_allocation - memory_usage_without_wasm_memory,
-                    wasm_memory_limit,
-                )
-            },
-        );
-
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - wasm_memory_usage` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `wasm_memory_usage` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity < wasm_memory_usage + self.wasm_memory_threshold;
         self.system_state_changes
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
@@ -1602,7 +1570,7 @@ mod tests {
 
                             let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
 
-                            state.check_on_low_wasm_memory_hook_condition(
+                            state.update_status_of_low_wasm_memory_hook_condition(
                                 memory_allocation.map(|m| m.into()),
                                 wasm_memory_limit.map(|m| m.into()),
                                 memory_usage.into(),

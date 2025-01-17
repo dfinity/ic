@@ -135,7 +135,7 @@ pub use pocket_ic_query_call::PocketIcHttpQuery;
 mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
-    use pocket_ic::{management_canister::CanisterId, PocketIc, UserError, WasmResult};
+    use pocket_ic::{management_canister::CanisterId, PocketIc, RejectResponse};
 
     /// Provides an implementation of the [CanisterHttpQuery] trait in the case where the canister
     /// HTTP requests are made through an instance of [PocketIc].
@@ -147,21 +147,14 @@ mod pocket_ic_query_call {
         fn get_canister_id(&self) -> CanisterId;
     }
 
-    impl<T: PocketIcHttpQuery> CanisterHttpQuery<UserError> for T {
-        fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
-            self.get_pocket_ic()
-                .query_call(
-                    self.get_canister_id(),
-                    Principal::anonymous(),
-                    "http_request",
-                    request,
-                )
-                .map(|result| match result {
-                    WasmResult::Reply(bytes) => bytes,
-                    WasmResult::Reject(reject) => {
-                        panic!("Expected a successful reply, got a reject: {}", reject)
-                    }
-                })
+    impl<T: PocketIcHttpQuery> CanisterHttpQuery<RejectResponse> for T {
+        fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, RejectResponse> {
+            self.get_pocket_ic().query_call(
+                self.get_canister_id(),
+                Principal::anonymous(),
+                "http_request",
+                request,
+            )
         }
     }
 }

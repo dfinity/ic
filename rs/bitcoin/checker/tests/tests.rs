@@ -1,4 +1,4 @@
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
@@ -20,7 +20,7 @@ use pocket_ic::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
         CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
+    query_candid, PocketIc, PocketIcBuilder, RejectResponse,
 };
 use std::str::FromStr;
 
@@ -102,7 +102,7 @@ impl Setup {
         method: &str,
         args: Vec<u8>,
         cycles: u128,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let payload = wasm()
             .call_with_cycles(
                 PrincipalId(self.btc_checker_canister),
@@ -115,13 +115,6 @@ impl Setup {
             .build();
         self.env
             .submit_call(self.caller, self.controller, "update", payload)
-    }
-}
-
-fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
-    match result {
-        WasmResult::Reply(bytes) => decode_one(bytes).unwrap(),
-        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
 }
 
@@ -368,7 +361,7 @@ fn test_check_transaction_passed() {
             .expect("the fetch request didn't finish");
 
         assert!(matches!(
-            decode::<CheckTransactionResponse>(&result),
+            decode_one(&result).unwrap(),
             CheckTransactionResponse::Passed
         ));
 
@@ -415,7 +408,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Failed(addresses) if addresses.is_empty()
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -456,7 +449,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Passed
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -510,7 +503,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
@@ -528,7 +521,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
@@ -566,7 +559,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 500 error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 500")
@@ -606,7 +599,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 404 error is retriable too
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 404")
@@ -645,7 +638,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // Reject error is retriable too
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("Failed to directly connect")
@@ -685,7 +678,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // malformated tx error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("TxEncoding")
@@ -712,7 +705,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
@@ -743,7 +736,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
@@ -807,32 +800,21 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     };
 
     let response = Decode!(
-        &assert_reply(
-            setup
-                .env
-                .query_call(
-                    setup.btc_checker_canister,
-                    Principal::anonymous(),
-                    "http_request",
-                    Encode!(&request).expect("failed to encode HTTP request"),
-                )
-                .expect("failed to query get_transactions on the ledger")
-        ),
+        &setup
+            .env
+            .query_call(
+                setup.btc_checker_canister,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).expect("failed to encode HTTP request"),
+            )
+            .expect("failed to query get_transactions on the ledger"),
         HttpResponse
     )
     .unwrap();
 
     assert_eq!(response.status_code, 200_u16);
     response.body.into_vec()
-}
-
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
-    }
 }
 
 impl PocketIcHttpQuery for &Setup {
