@@ -1192,7 +1192,7 @@ impl Scheduler for SchedulerImpl {
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
         println!(
-            "[TL] [{}] [execute_round __] [start]",
+            "[TL] [{}] [execute_round] [start]",
             std::time::SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
