@@ -11,15 +11,19 @@ on the process that this file is part of, see
 
 ### List Neurons Paging
 
-In the case where more than 500 neurons would be returned from the API, the API will now
-return a `total_pages_available` field in the response. The API can then be queried
-for the additional pages, which are 0-indexed (so that the first page is 0).
+Two new fields are added to the request, and one to the response.
+
+The request now supports `page_size` and `page_number`.  If `page_size` is greater than 
+`MAX_LIST_NEURONS_RESULTS` (currently 500), the API will treat it as `MAX_LIST_NEURONS_RESULTS`, and
+continue procesisng the request.  If `page_number` is None, the API will treat it as Some(0)
+
+In the response, a field `total_pages_available` is available to tell the user how many
+additional requests need to be made.
 
 This will only affect neuron holders with more than 500 neurons, which is a small minority.
 
-The advantage of this is that is now possible for neuron holders with many inactive neurons
-to list all of their neurons, whereas before, after a certain point, the response size was 
-too large to be returned, and no data could be retrieved.
+This allows neuron holders with many neurons to list all of their neurons, whereas before, 
+responses could be too large to be sent by the protocol.
 
 ### Periodic Confirmation
 
