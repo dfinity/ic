@@ -3530,6 +3530,7 @@ pub struct ListNeurons {
     pub page_number: Option<u64>,
     /// If this is set, we use the page limit provided to determine how large pages will be.
     /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
     #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
 }
