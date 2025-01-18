@@ -23,6 +23,18 @@
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
+  "ck_btc_ledger_v4": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822"
+  },
+  "ck_btc_ledger_bil": {
+    "rev": "af791155fd0ccfcba65bfe21d976e69e923078bf",
+    "sha256": "f715516b1688a4de55d297c6bf770c0843f2fcd8ead81c4ace08d13886002a8d"
+  },
+  "ck_btc_ledger_bil_install": {
+    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
+    "sha256": "67cfcbabb79e683b6fc855450d9972c9efaa7a1cd28c6387965616fbead191ea"
+  },
   "ck_eth_archive": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "2d25f7831894100d48aa9043c65e87c293487523f0958c15760027d004fbbda9"

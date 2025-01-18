@@ -85,6 +85,18 @@ fn ledger_mainnet_v2_wasm() -> Vec<u8> {
     mainnet_wasm
 }
 
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_bil_wasm() -> Vec<u8> {
+    let mainnet_wasm = ledger_mainnet_bil_u64_wasm();
+    mainnet_wasm
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_bil_install_wasm() -> Vec<u8> {
+    let mainnet_wasm = ledger_mainnet_bil_install_u64_wasm();
+    mainnet_wasm
+}
+
 fn ledger_mainnet_v1_wasm() -> Vec<u8> {
     #[cfg(not(feature = "u256-tokens"))]
     let mainnet_wasm = ledger_mainnet_v1_u64_wasm();
@@ -104,8 +116,24 @@ fn ledger_mainnet_v2_u64_wasm() -> Vec<u8> {
 }
 
 #[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_bil_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_BIL_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_bil_install_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_BIL_INSTALL_VERSION_WASM_PATH").unwrap())
+        .unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_v1_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v4_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V4_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 fn ledger_mainnet_u256_wasm() -> Vec<u8> {
@@ -481,6 +509,17 @@ fn icrc1_test_upgrade_serialization_from_v2() {
     icrc1_test_upgrade_serialization(ledger_mainnet_v2_wasm());
 }
 
+#[cfg(not(feature = "u256-tokens"))]
+#[test]
+fn icrc1_test_upgrade_serialization_from_bil() {
+    icrc1_test_upgrade_serialization_bil(
+        ledger_mainnet_bil_install_wasm(),
+        ledger_mainnet_bil_wasm(),
+        ledger_wasm(),
+        ledger_mainnet_v4_u64_wasm(),
+    );
+}
+
 fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>) {
     let minter = Arc::new(minter_identity());
     let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
@@ -495,6 +534,40 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>) {
         upgrade_args,
         minter,
         true,
+        true,
+    );
+}
+
+fn icrc1_test_upgrade_serialization_bil(
+    ledger_install_wasm: Vec<u8>,
+    ledger_upgrade_wasm: Vec<u8>,
+    ledger_fix_wasm: Vec<u8>,
+    ledger_v4_wasm: Vec<u8>,
+) {
+    let minter = Arc::new(minter_identity());
+    let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(minter.sender().unwrap())
+        .with_archive_options(ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
+            cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
+        })
+        .with_transfer_fee(FEE);
+    let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    ic_ledger_suite_state_machine_tests::test_bil_migration_fix::<Tokens>(
+        ledger_install_wasm,
+        ledger_upgrade_wasm,
+        ledger_fix_wasm,
+        ledger_v4_wasm,
+        init_args,
+        upgrade_args,
+        minter,
         true,
     );
 }
