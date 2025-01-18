@@ -977,11 +977,14 @@ impl Ledger {
         length: usize,
         decode: impl Fn(&EncodedBlock) -> B,
         make_callback: impl Fn(Principal) -> ArchiveFn,
+        max_transactions: Option<usize>,
     ) -> (u64, Vec<B>, Vec<ArchivedRange<ArchiveFn>>) {
         let locations = block_locations(self, start, length);
 
-        let local_blocks_range =
-            range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);
+        let local_blocks_range = range_utils::take(
+            &locations.local_blocks,
+            max_transactions.unwrap_or(MAX_TRANSACTIONS_PER_REQUEST),
+        );
 
         let local_blocks: Vec<B> = self
             .blockchain
@@ -1014,6 +1017,7 @@ impl Ledger {
                 decoded_block.into()
             },
             |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+            None,
         );
 
         GetTransactionsResponse {
@@ -1033,6 +1037,7 @@ impl Ledger {
                 Block::decode(enc_block.clone()).expect("bug: failed to decode encoded block")
             },
             |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+            Some(1_000_000usize),
         );
         assert_eq!(first_index, 0);
         assert!(archived_transactions.is_empty());
@@ -1047,6 +1052,7 @@ impl Ledger {
             length,
             encoded_block_to_generic_block,
             |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+            None,
         );
 
         GetBlocksResponse {
@@ -1110,6 +1116,7 @@ impl Ledger {
                         "icrc3_get_blocks",
                     )
                 },
+                None,
             );
             for (id, block) in (first_index..).zip(local_blocks) {
                 blocks.push(icrc_ledger_types::icrc3::blocks::BlockWithId {
