@@ -3414,6 +3414,93 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CyclesBurn128, result, amount);
         result
     }
+
+    fn ic0_mat_mul(
+        &mut self,
+        a_values_ptr: u64,
+        a_scaling: u64,
+        b_values_ptr: u64,
+        b_scaling: u64,
+        output: u64,
+        heap: &mut [u8],
+        n: u64,
+        d: u64,
+    ) -> HypervisorResult<()> {
+        const GROUP_SIZE: usize = 64;
+        let n = n as usize;
+        let d = d as usize;
+
+        let a_values: *const i8 = (&heap[a_values_ptr as usize]) as *const u8 as *const i8;
+        let b_values: *const i8 = (&heap[b_values_ptr as usize]) as *const u8 as *const i8;
+
+        let a_scaling: *const f32 = (&heap[a_scaling as usize]) as *const u8 as *const f32;
+        let b_scaling: *const f32 = (&heap[b_scaling as usize]) as *const u8 as *const f32;
+
+        let output: *mut f32 = (&mut heap[output as usize]) as *mut u8 as *mut f32;
+
+        /*println!("a_values");
+        for i in 0..d * n {
+            unsafe {
+                println!("{}", *a_values.add(i));
+            }
+        }
+
+        println!("a_scaling");
+        for i in 0..64 {
+            unsafe {
+                println!("{}", *a_scaling.add(i));
+            }
+        }
+
+        println!("b_values");
+        for i in 0..1 {
+            unsafe {
+                println!("{}", *b_scaling.add(i));
+            }
+        }*/
+
+        /*
+        // `a` has dimensions (d, n)
+        debug_assert_eq!(a_values.len(), d * n);
+        // `b` has dimensions (n,)
+        debug_assert_eq!(b_values.len(), n);
+        // `output` has dimensions (d,)
+        debug_assert_eq!(output.len(), d);
+        */
+
+        for i in 0..d {
+            //for (i, output_i) in output.iter_mut().enumerate() {
+            let in_ = i * n;
+            let mut val = 0.0;
+
+            // matmul in groups of `GROUP_SIZE`.
+            for j in (0..n).step_by(GROUP_SIZE) {
+                // NOTE: Using raw pointer arithmetic as it reduces the overhead of bound checks.
+                // Expeirments showed that it reduces instructions by 6.6%.
+                unsafe {
+                    let b_group = b_values.add(j);
+                    let a_group = a_values.add(in_ + j);
+
+                    // multiply and sum both groups.
+                    let mut ival: i32 = 0;
+                    for i in 0..GROUP_SIZE {
+                        ival += *a_group.add(i) as i32 * *b_group.add(i) as i32;
+                    }
+
+                    val += ival as f32
+                        * *a_scaling.add((in_ + j) / GROUP_SIZE) as f32
+                        * *b_scaling.add(j / GROUP_SIZE) as f32;
+                }
+            }
+
+            unsafe {
+//                println!("storing {}", val);
+                *output.add(i) = val;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

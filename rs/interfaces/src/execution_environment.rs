@@ -1158,6 +1158,18 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    fn ic0_mat_mul(
+        &mut self,
+        a_values: u64,
+        a_scaling: u64,
+        b_values: u64,
+        b_scaling: u64,
+        output: u64,
+        heap: &mut [u8],
+        n: u64,
+        d: u64,
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

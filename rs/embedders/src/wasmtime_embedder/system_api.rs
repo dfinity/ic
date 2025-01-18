@@ -1235,6 +1235,32 @@ pub(crate) fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "mat_mul", {
+            move |mut caller: Caller<'_, StoreData>,
+                  a_values_ptr: u64,
+                  a_scaling: u64,
+                  b_values: u64,
+                  b_scaling: u64,
+                  output: u64,
+                  n: u64,
+                  d: u64| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_mat_mul(
+                        a_values_ptr,
+                        a_scaling,
+                        b_values,
+                        b_scaling,
+                        output,
+                        memory,
+                        n,
+                        d,
+                    )
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
