@@ -239,9 +239,11 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     Access::with_ledger_mut(|ledger| {
         clear_stable_balances_data();
         clear_stable_allowance_data();
+        ledger.balances_mut().token_pool = Tokens::max_value();
         let chain_length = ledger.blockchain().chain_length();
         let blocks = ledger.get_ledger_blocks(0, chain_length as usize);
         for (block_index, block) in blocks.iter().enumerate() {
+            assert!(block.clone().fee_collector.is_none());
             apply_transaction_no_trimming(
                 ledger,
                 block.clone().transaction,
