@@ -1037,6 +1037,7 @@ impl Ledger {
                 Block::decode(enc_block.clone()).expect("bug: failed to decode encoded block")
             },
             |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+            // None,
             Some(1_000_000usize),
         );
         assert_eq!(first_index, 0);
@@ -1052,7 +1053,7 @@ impl Ledger {
             length,
             encoded_block_to_generic_block,
             |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
-            None,
+            Some(5000usize),
         );
 
         GetBlocksResponse {

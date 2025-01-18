@@ -575,7 +575,7 @@ pub fn valid_transactions_strategy(
                             amount: Tokens::from_e8s(amount),
                             to,
                         },
-                        created_at_time,
+                        created_at_time: None,
                         memo: memo.clone(),
                     };
                     if to == minter || tx_hash_set_pointer.contains(&tx) {
@@ -588,7 +588,7 @@ pub fn valid_transactions_strategy(
                                 from_subaccount: minter.subaccount,
                                 to,
                                 amount: amount.into(),
-                                created_at_time,
+                                created_at_time: None,
                                 fee: None,
                                 memo,
                             }),
@@ -628,7 +628,7 @@ pub fn valid_transactions_strategy(
                                 from,
                                 spender: None,
                             },
-                            created_at_time,
+                            created_at_time: None,
                             memo: memo.clone(),
                         };
 
@@ -644,7 +644,7 @@ pub fn valid_transactions_strategy(
                                     from_subaccount: from.subaccount,
                                     to: minter,
                                     amount: amount.into(),
-                                    created_at_time,
+                                    created_at_time: None,
                                     fee: None,
                                     memo,
                                 }),
@@ -687,7 +687,7 @@ pub fn valid_transactions_strategy(
                                 spender: None,
                                 to,
                             },
-                            created_at_time,
+                            created_at_time: None,
                             memo: memo.clone(),
                         };
 
@@ -704,7 +704,7 @@ pub fn valid_transactions_strategy(
                                     from_subaccount: from.subaccount,
                                     to,
                                     amount: amount.into(),
-                                    created_at_time,
+                                    created_at_time: None,
                                     fee: fee.map(Nat::from),
                                     memo,
                                 }),
@@ -761,14 +761,10 @@ pub fn valid_transactions_strategy(
                                 spender,
                                 fee: fee.map(Tokens::from_e8s),
                                 amount: Tokens::from_e8s(amount),
-                                expected_allowance: if expect_allowance {
-                                    expected_allowance
-                                } else {
-                                    None
-                                },
+                                expected_allowance: None,
                                 expires_at,
                             },
-                            created_at_time,
+                            created_at_time: None,
                             memo: memo.clone(),
                         };
                         if spender == from
@@ -787,10 +783,10 @@ pub fn valid_transactions_strategy(
                                     from_subaccount: from.subaccount,
                                     spender,
                                     amount: amount.into(),
-                                    created_at_time,
+                                    created_at_time: None,
                                     fee: fee.map(Nat::from),
                                     memo,
-                                    expected_allowance: expected_allowance.map(Nat::from),
+                                    expected_allowance: None,
                                     expires_at,
                                 }),
                                 principal_to_basic_identity: HashMap::from([(
