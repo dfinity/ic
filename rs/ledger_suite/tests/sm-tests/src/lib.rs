@@ -2476,6 +2476,10 @@ pub fn test_bil_migration_fix<Tokens>(
                         parse_metric(&env, ledger_id, "ledger_total_transactions");
                     println!("ledger_total_transactions: {}", ledger_total_transactions);
                     assert_eq!(ledger_total_transactions, 100);
+                    let ledger_total_supply =
+                        parse_metric(&env, ledger_id, "ledger_total_supply");
+                    println!("ledger_total_supply: {}", ledger_total_supply);
+                    assert_eq!(ledger_total_supply, 0);
                     for i in 0..15 {
                         send_transfer(
                             &env,
@@ -2525,12 +2529,8 @@ pub fn test_bil_migration_fix<Tokens>(
 
                 // Test if the old serialized approvals and balances are correctly deserialized
                 println!("testing the fix upgrade");
-                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
-                // Test the new wasm serialization
-                println!("testing the fix upgrade again");
-                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
-                // Test deserializing from memory manager
-                test_upgrade(ledger_wasm_fix.clone(), 0, &mut in_memory_ledger);
+                env.upgrade_canister(ledger_id, ledger_wasm_fix.clone(), upgrade_args.clone())
+                    .unwrap();
                 // Test upgrading to the latest official release
                 test_upgrade(ledger_wasm_v4.clone(), 0, &mut in_memory_ledger);
                 test_upgrade(ledger_wasm_v4.clone(), 0, &mut in_memory_ledger);

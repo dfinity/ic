@@ -655,6 +655,7 @@ where
         ledger_id: CanisterId,
         num_ledger_blocks: u64,
     ) {
+        let actual_total_supply = parse_metric(env, ledger_id, "ledger_total_supply");
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
         println!(
@@ -782,6 +783,7 @@ where
             "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
             no_expiration_count, expiration_in_future_count, expiration_in_past_count
         );
+        assert_eq!(self.total_supply.clone().into(), candid::Nat::from(actual_total_supply));
     }
 }
 
