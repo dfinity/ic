@@ -14,7 +14,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification",
     "//rs/config",
-    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",

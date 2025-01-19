@@ -14,7 +14,6 @@ use axum::{
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
@@ -62,7 +61,6 @@ pub struct QueryServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
 }
@@ -79,7 +77,6 @@ impl QueryServiceBuilder {
         node_id: NodeId,
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         query_execution_service: QueryExecutionService,
     ) -> Self {
@@ -90,7 +87,6 @@ impl QueryServiceBuilder {
             health_status: None,
             malicious_flags: None,
             delegation_from_nns,
-            ingress_verifier,
             registry_client,
             query_execution_service,
         }
@@ -119,7 +115,7 @@ impl QueryServiceBuilder {
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
-            validator: build_validator(self.ingress_verifier, self.malicious_flags),
+            validator: build_validator(self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
         };

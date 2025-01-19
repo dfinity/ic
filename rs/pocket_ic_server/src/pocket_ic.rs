@@ -71,7 +71,6 @@ use ic_types::{
     CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_types::{NumBytes, Time};
-use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
@@ -1941,7 +1940,6 @@ impl Operation for CallRequest {
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
-                    Arc::new(StandaloneIngressSigVerifier),
                     ingress_filter,
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
@@ -2072,7 +2070,6 @@ impl Operation for QueryRequest {
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
-                    Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
@@ -2128,7 +2125,6 @@ impl Operation for CanisterReadStateRequest {
                     subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
-                    Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
                 .build_service();

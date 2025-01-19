@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/consensus",
     "//rs/consensus/utils",
     "//rs/crypto/ed25519",
-    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/secp256k1",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",

@@ -10,7 +10,6 @@ use crate::{
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
@@ -42,7 +41,6 @@ pub struct IngressValidatorBuilder {
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
@@ -55,7 +53,6 @@ impl IngressValidatorBuilder {
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
@@ -65,7 +62,6 @@ impl IngressValidatorBuilder {
             node_id,
             subnet_id,
             malicious_flags: None,
-            ingress_verifier,
             registry_client,
             ingress_filter,
             ingress_throttler,
@@ -85,7 +81,7 @@ impl IngressValidatorBuilder {
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
-            validator: build_validator(self.ingress_verifier, self.malicious_flags),
+            validator: build_validator(self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,

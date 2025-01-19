@@ -18,7 +18,6 @@ use ic_consensus::{
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_manager::AbortableBroadcastChannelBuilder;
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
@@ -117,7 +116,6 @@ pub fn setup_consensus_and_p2p(
     message_router: Arc<dyn MessageRouting>,
     consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
     certifier_crypto: Arc<dyn CertificationCrypto + Send + Sync>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -141,7 +139,6 @@ pub fn setup_consensus_and_p2p(
         catch_up_package,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
         Arc::clone(&registry_client),
         state_manager,
         state_reader,
@@ -230,7 +227,6 @@ fn start_consensus(
     // not downcast traits.
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -279,7 +275,6 @@ fn start_consensus(
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
         Arc::clone(&registry_client),
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
         metrics_registry.clone(),
         subnet_id,
         log.clone(),

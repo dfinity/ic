@@ -1,7 +1,5 @@
 mod root_of_trust {
-    use crate::internal::{
-        nns_root_public_key, ConstantRootOfTrustProvider, StandaloneIngressSigVerifier,
-    };
+    use crate::internal::{nns_root_public_key, ConstantRootOfTrustProvider};
     use crate::AuthenticationError::InvalidCanisterSignature;
     use crate::{
         HttpRequestVerifier, IngressMessageVerifier, RequestValidationError, TimeProvider,
@@ -19,7 +17,6 @@ mod root_of_trust {
         all_authentication_schemes, canister_signature_with_hard_coded_root_of_trust,
         hard_coded_root_of_trust, DirectAuthenticationScheme, HttpRequestBuilder,
     };
-    use std::sync::Arc;
 
     #[test]
     fn should_retrieve_root_of_trust() {
@@ -110,9 +107,7 @@ mod root_of_trust {
         IngressMessageVerifier {
             root_of_trust_provider,
             time_source: TimeProvider::Constant(current_time),
-            validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
-                StandaloneIngressSigVerifier,
-            )),
+            validator: ic_validator::HttpRequestVerifierImpl,
         }
     }
 }

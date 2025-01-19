@@ -221,8 +221,6 @@ mod tests {
     use super::*;
     use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::messages::{HttpCanisterUpdate, HttpRequest, HttpUserQuery, Query};
     use ic_types::time::current_time;
     use ic_types::{PrincipalId, UserId};
@@ -231,12 +229,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use std::convert::TryFrom;
-    use std::sync::Arc;
     use std::time::Duration;
     use tokio_test::assert_ok;
-
-    // The node id of the node that validates message signatures
-    const VALIDATOR_NODE_ID: u64 = 42;
 
     /// Create an HttpRequest with a non-anonymous user and then verify
     /// that `validate_message` manages to authenticate it.
@@ -277,7 +271,7 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
+        assert!(HttpRequestVerifierImpl
             .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
@@ -320,7 +314,7 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
+        assert!(HttpRequestVerifierImpl
             .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
@@ -355,7 +349,7 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
+        assert!(HttpRequestVerifierImpl
             .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
@@ -397,7 +391,7 @@ mod tests {
 
         // The signature matches
         let read_request = HttpRequest::<Query>::try_from(read).unwrap();
-        assert_ok!(request_validator().validate_request(
+        assert_ok!(HttpRequestVerifierImpl.validate_request(
             &read_request,
             test_start_time,
             &MockRootOfTrustProvider::new()
@@ -443,16 +437,10 @@ mod tests {
 
         // The signature matches
         let read_request = HttpRequest::<Query>::try_from(read).unwrap();
-        assert_ok!(request_validator().validate_request(
+        assert_ok!(HttpRequestVerifierImpl.validate_request(
             &read_request,
             test_start_time,
             &MockRootOfTrustProvider::new()
         ));
-    }
-
-    fn request_validator() -> HttpRequestVerifierImpl {
-        HttpRequestVerifierImpl::new(Arc::new(temp_crypto_component_with_fake_registry(
-            node_test_id(VALIDATOR_NODE_ID),
-        )))
     }
 }
