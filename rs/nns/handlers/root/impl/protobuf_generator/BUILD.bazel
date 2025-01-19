@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:prost.bzl", "protobuf_generator")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
 
 rust_library(
     name = "lib",

@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -44,6 +44,10 @@ rust_library(
     crate_name = "ic_nns_init",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = [
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 

@@ -1,6 +1,6 @@
 load("//bazel:canisters.bzl", "rust_canister")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
 
 DEPENDENCIES = []
 
@@ -14,5 +14,10 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/empty.did",
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
