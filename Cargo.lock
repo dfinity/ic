@@ -17228,7 +17228,6 @@ dependencies = [
  "ic-types",
  "ic-utils 0.39.0",
  "ic-utils-thread",
- "ic-validator-ingress-message",
  "itertools 0.12.1",
  "nix 0.29.0",
  "pocket-ic",
