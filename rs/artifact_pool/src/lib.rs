@@ -24,7 +24,10 @@ mod rocksdb_iterator;
 #[cfg(target_os = "macos")]
 mod rocksdb_pool;
 
-use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
+use ic_interfaces::{
+    consensus_pool::ValidatedArtifact,
+    p2p::consensus::UnvalidatedArtifact,
+};
 use ic_types::{ReplicaVersion, Time};
 use std::convert::TryFrom;
 use std::fs;
@@ -59,23 +62,6 @@ pub fn ensure_persistent_pool_replica_version_compatibility(pool_path: PathBuf) 
         }
         std::fs::create_dir_all(&pool_path).expect("Couldn't create a directory");
         set_replica_version(replica_version_file_path, &ReplicaVersion::default());
-    }
-}
-
-/// A trait to get timestamp.
-pub trait HasTimestamp {
-    fn timestamp(&self) -> Time;
-}
-
-impl<T> HasTimestamp for ValidatedArtifact<T> {
-    fn timestamp(&self) -> Time {
-        self.timestamp
-    }
-}
-
-impl<T> HasTimestamp for UnvalidatedArtifact<T> {
-    fn timestamp(&self) -> Time {
-        self.timestamp
     }
 }
 

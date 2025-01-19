@@ -37,6 +37,12 @@ impl<T> AsRef<T> for ValidatedArtifact<T> {
     }
 }
 
+impl<T> HasTimestamp for ValidatedArtifact<T> {
+    fn timestamp(&self) -> Time {
+        self.timestamp
+    }
+}
+
 pub type Mutations = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
@@ -500,4 +506,9 @@ impl<'a> Iterator for ChainIterator<'a> {
             .and_then(|block| self.get_parent_block(block));
         std::mem::replace(&mut self.cursor, parent)
     }
+}
+
+/// A trait to get timestamp.
+pub trait HasTimestamp {
+    fn timestamp(&self) -> Time;
 }
