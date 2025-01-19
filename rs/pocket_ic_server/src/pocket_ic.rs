@@ -1305,6 +1305,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
+                    api_bn_ips: vec![],
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -1472,6 +1473,7 @@ fn process_mock_canister_https_response(
                     timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
+                    api_bn_ips: vec![],
                 })
                 .unwrap();
             let response = loop {
