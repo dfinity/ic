@@ -46,9 +46,6 @@ pub struct CryptoLogEntry {
     pub dkg_transcript: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "15")]
     pub signed_bytes: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "16")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub allowed_tls_clients: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, optional, tag = "17")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_server: ::core::option::Option<::prost::alloc::string::String>,

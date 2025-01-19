@@ -5,7 +5,7 @@ use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::CspVault;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert};
+use ic_crypto_tls_interfaces::{TlsConfigError, TlsPublicKeyCert};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
@@ -21,7 +21,6 @@ pub fn server_config(
     vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
-    allowed_clients: SomeOrAllNodes,
     registry_version: RegistryVersion,
 ) -> Result<ServerConfig, TlsConfigError> {
     let self_tls_cert =
@@ -31,11 +30,8 @@ pub fn server_config(
             internal_error: format!("Cannot instantiate KeyId: {:?}", error),
         }
     })?;
-    let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-        allowed_clients.clone(),
-        registry_client,
-        registry_version,
-    );
+    let client_cert_verifier =
+        NodeClientCertVerifier::new_with_mandatory_client_auth(registry_client, registry_version);
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     Ok(

@@ -98,7 +98,6 @@ fn build_log_proto(def: &Path, out: &Path) {
         dkg_dealing,
         dkg_dealer,
         dkg_transcript,
-        allowed_tls_clients,
         tls_server,
         dkg_epoch,
         complainer,

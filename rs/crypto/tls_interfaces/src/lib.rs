@@ -7,7 +7,6 @@ use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{ClientConfig, ServerConfig};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
 use x509_parser::certificate::X509Certificate;
@@ -132,7 +131,6 @@ pub trait TlsConfig {
     ///   is an error in the setup of the node and registry.
     fn server_config(
         &self,
-        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError>;
 
@@ -214,28 +212,6 @@ pub enum TlsConfigError {
 impl Display for TlsConfigError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-/// A list of node IDs or all nodes present in the registry.
-pub enum SomeOrAllNodes {
-    Some(BTreeSet<NodeId>),
-    All,
-}
-
-impl SomeOrAllNodes {
-    pub fn new_with_single_node(node_id: NodeId) -> Self {
-        let mut nodes = BTreeSet::new();
-        nodes.insert(node_id);
-        Self::Some(nodes)
-    }
-
-    pub fn contains(&self, node_id: NodeId) -> bool {
-        match self {
-            SomeOrAllNodes::Some(node_ids) => node_ids.contains(&node_id),
-            SomeOrAllNodes::All => true,
-        }
     }
 }
 
