@@ -5,7 +5,7 @@ use std::{
 use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
+    ArtifactAssembler, AssembleResult, BouncerFactory, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -145,19 +145,26 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         id: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
-    ) -> Result<(ConsensusMessage, NodeId), Aborted> {
+    ) -> AssembleResult<ConsensusMessage> {
         let total_timer = self.metrics.total_block_assembly_duration.start_timer();
         // Download the Stripped message if it hasn't been pushed.
-        let (stripped_artifact, peer) = self
+        let (stripped_artifact, peer) = match self
             .fetch_stripped
             .assemble_message(id.clone(), artifact, peer_rx.clone())
-            .await?;
+            .await
+        {
+            AssembleResult::Unwanted => return AssembleResult::Unwanted,
+            AssembleResult::Done { message, peer_id } => (message, peer_id),
+        };
 
         let stripped_block_proposal = match stripped_artifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                return Ok((unstripped, peer));
+                return AssembleResult::Done {
+                    message: unstripped,
+                    peer_id: peer,
+                };
             }
         };
 
@@ -190,7 +197,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         while let Some(join_result) = join_set.join_next().await {
             let Ok((ingress, peer_id)) = join_result else {
-                return Err(Aborted {});
+                return AssembleResult::Unwanted;
             };
 
             if peer_id == self.node_id {
@@ -208,7 +215,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                     "Failed to ingress message {}. This is a bug.", err
                 );
 
-                return Err(Aborted {});
+                return AssembleResult::Unwanted;
             }
         }
 
@@ -227,19 +234,20 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ingress_messages_from_ingress_pool,
         );
 
-        let reconstructed_block_proposal = assembler.try_assemble().map_err(|err| {
-            warn!(
-                self.log,
-                "Failed to reassemble the block {}. This is a bug.", err
-            );
+        match assembler.try_assemble() {
+            Ok(reconstructed_block_proposal) => AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+                peer_id: peer,
+            },
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to reassemble the block {}. This is a bug.", err
+                );
 
-            Aborted {}
-        })?;
-
-        Ok((
-            ConsensusMessage::BlockProposal(reconstructed_block_proposal),
-            peer,
-        ))
+                AssembleResult::Unwanted
+            }
+        }
     }
 }
 

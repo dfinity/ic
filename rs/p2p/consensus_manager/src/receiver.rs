@@ -18,7 +18,7 @@ use axum::{
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, Peers};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
@@ -488,10 +488,10 @@ where
         select! {
             assemble_result = assemble_artifact => {
                 match assemble_result {
-                    Ok((artifact, peer_id)) => {
-                        let id = artifact.id();
+                    AssembleResult::Done { message, peer_id } => {
+                        let id = message.id();
                         // Send artifact to pool
-                        if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).is_err() {
+                        if sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id))).is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
 
@@ -508,7 +508,7 @@ where
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
                             .inc();
                     }
-                    Err(Aborted) => {
+                    AssembleResult::Unwanted => {
                         // wait for deletion from peers
                         // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
@@ -898,7 +898,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -978,7 +983,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1108,7 +1118,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1238,7 +1253,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1287,7 +1307,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1372,7 +1397,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1441,7 +1471,12 @@ mod tests {
             artifact_assembler
                 .expect_assemble_message()
                 .returning(|id, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
