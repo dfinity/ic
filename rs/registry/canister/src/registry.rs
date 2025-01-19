@@ -15,11 +15,11 @@ use ic_registry_transport::{
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
 use std::{
-    cmp::max,
     collections::{BTreeMap, VecDeque},
     fmt,
 };
 
+use crate::pb::v1::VersionTimestamp;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -94,6 +94,10 @@ pub struct Registry {
     /// RegistryAtomicMutateRequest.  We keep the serialized version around to
     /// make sure that hash trees stay the same even if protobuf schema evolves.
     pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
+
+    /// A map of times to registry versions, useful for determining the version the registry was
+    /// at at a particular time.
+    pub(crate) version_timestamps: BTreeMap<u64, Version>,
 }
 
 impl Registry {
@@ -180,7 +184,20 @@ impl Registry {
     /// Increments the latest version of the registry.
     fn increment_version(&mut self) -> Version {
         self.version += 1;
+        self.record_version_at_timestamp();
         self.version
+    }
+
+    /// Records the current version at the current timestamp.
+    /// If a version is already present at this timestamp, increments
+    /// the timestamp until it is unique.
+    fn record_version_at_timestamp(&mut self) {
+        let mut timestamp = dfn_core::api::time_nanos();
+        let version = self.version;
+        while self.version_timestamps.contains_key(&timestamp) {
+            timestamp += 1;
+        }
+        self.version_timestamps.insert(timestamp, version);
     }
 
     pub fn latest_version(&self) -> Version {
@@ -310,7 +327,6 @@ impl Registry {
         match repr_version {
             ReprVersion::Version1 => RegistryStableStorage {
                 version: repr_version as i32,
-                deltas: vec![],
                 changelog: self
                     .changelog
                     .iter()
@@ -319,19 +335,16 @@ impl Registry {
                         encoded_mutation: bytes.clone(),
                     })
                     .collect(),
-            },
-            ReprVersion::Unspecified => RegistryStableStorage {
-                version: repr_version as i32,
-                deltas: self
-                    .store
+                version_timestamps: self
+                    .version_timestamps
                     .iter()
-                    .map(|(key, values)| RegistryDelta {
-                        key: key.clone(),
-                        values: values.iter().cloned().collect(),
+                    .map(|(k, v)| VersionTimestamp {
+                        version: *v,
+                        timestamp_nanoseconds: *k,
                     })
                     .collect(),
-                changelog: vec![],
             },
+            ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
     }
 
@@ -413,48 +426,18 @@ impl Registry {
                     self.version = entry.version;
                     current_version = self.version;
                 }
+                self.version_timestamps = stable_repr
+                    .version_timestamps
+                    .into_iter()
+                    .map(
+                        |VersionTimestamp {
+                             version,
+                             timestamp_nanoseconds,
+                         }| { (timestamp_nanoseconds, version) },
+                    )
+                    .collect();
             }
-            ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<Version, Vec<RegistryMutation>>::new();
-                for delta in stable_repr.deltas.into_iter() {
-                    self.version = max(
-                        self.version,
-                        delta
-                            .values
-                            .last()
-                            .map(|registry_value| registry_value.version)
-                            .unwrap_or(0),
-                    );
-
-                    for v in delta.values.iter() {
-                        mutations_by_version
-                            .entry(v.version)
-                            .or_default()
-                            .push(RegistryMutation {
-                                mutation_type: if v.deletion_marker {
-                                    Type::Delete
-                                } else {
-                                    Type::Upsert
-                                } as i32,
-                                key: delta.key.clone(),
-                                value: v.value.clone(),
-                            })
-                    }
-
-                    self.store.insert(delta.key, VecDeque::from(delta.values));
-                }
-                // We iterated over keys in ascending order, so the mutations
-                // must also be sorted by key, resulting in canonical encoding.
-                for (v, mutations) in mutations_by_version.into_iter() {
-                    self.changelog_insert(
-                        v,
-                        &RegistryAtomicMutateRequest {
-                            mutations,
-                            preconditions: vec![],
-                        },
-                    );
-                }
-            }
+            ReprVersion::Unspecified => panic!("Unspecified version is not supported."),
         }
     }
 }
@@ -478,22 +461,11 @@ mod tests {
     /// This should bring back the registry in a state indistinguishable
     /// from the one before calling this method.
     fn serialize_then_deserialize(registry: Registry) {
-        let mut serialized_v0 = Vec::new();
-        registry
-            .serializable_form_at(ReprVersion::Unspecified)
-            .encode(&mut serialized_v0)
-            .expect("Error encoding registry");
         let mut serialized_v1 = Vec::new();
         registry
             .serializable_form_at(ReprVersion::Version1)
             .encode(&mut serialized_v1)
             .expect("Error encoding registry");
-
-        let restore_from_v0 = RegistryStableStorage::decode(serialized_v0.as_slice())
-            .expect("Error decoding registry");
-        let mut restored = Registry::new();
-        restored.from_serializable_form(restore_from_v0);
-        assert_eq!(restored, registry);
 
         let restore_from_v1 = RegistryStableStorage::decode(serialized_v1.as_slice())
             .expect("Error decoding registry");
@@ -1105,11 +1077,6 @@ mod tests {
     }
 
     #[test]
-    fn test_from_serializable_form_version_unspecified_max_size_delta() {
-        test_from_serializable_form_impl(0, ReprVersion::Unspecified)
-    }
-
-    #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
         test_from_serializable_form_impl(0, ReprVersion::Version1)
     }
@@ -1117,7 +1084,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version_unspecified_delta_too_large() {
-        test_from_serializable_form_impl(1, ReprVersion::Unspecified)
+        test_from_serializable_form_impl(1, ReprVersion::Version1)
     }
 
     #[test]
