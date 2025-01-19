@@ -216,7 +216,7 @@ impl Init {
             // 21
             missing_swap_opening_field_names.push("max_participant_icp_e8s".to_string());
         }
-        if self.swap_due_timestamp_seconds.is_none() {
+        if !self.testflight.unwrap_or_default() && self.swap_due_timestamp_seconds.is_none() {
             // 23
             missing_swap_opening_field_names.push("swap_due_timestamp_seconds".to_string());
         }
@@ -229,7 +229,7 @@ impl Init {
             missing_swap_opening_field_names
                 .push("neuron_basket_construction_parameters".to_string());
         }
-        if self.nns_proposal_id.is_none() {
+        if !self.testflight.unwrap_or_default() && self.nns_proposal_id.is_none() {
             // 26
             missing_swap_opening_field_names.push("nns_proposal_id".to_string());
         }
