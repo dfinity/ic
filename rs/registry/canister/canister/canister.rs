@@ -17,15 +17,11 @@ use ic_registry_canister_api::{
     AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
-    deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
-    deserialize_get_value_request,
-    pb::v1::{
+    deserialize_atomic_mutate_request, deserialize_get_changes_since_request, deserialize_get_value_request, deserialize_node_providers_rewards_request, pb::v1::{
         registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
         RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
-    },
-    serialize_atomic_mutate_response, serialize_get_changes_since_response,
-    serialize_get_value_response,
+    }, serialize_atomic_mutate_response, serialize_get_changes_since_response, serialize_get_value_response
 };
 use prost::Message;
 use registry_canister::{
@@ -894,6 +890,20 @@ fn get_node_providers_monthly_xdr_rewards() {
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
 fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
     registry().get_node_providers_monthly_xdr_rewards()
+}
+
+#[export_name = "canister_query get_node_providers_monthly_xdr_rewards_v1"]
+fn get_node_providers_monthly_xdr_rewards_v1() {
+    check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards_v1");
+    over(
+        candid_one,
+        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            let (from_ts, from_registry_version) = deserialize_node_providers_rewards_request(arg_data())
+            .map_err(|err| err.to_string())?;
+    
+            Ok(registry().get_node_providers_monthly_xdr_rewards_v1(from_ts, from_registry_version))
+        },
+    )
 }
 
 #[export_name = "canister_query get_api_boundary_node_ids"]
