@@ -239,6 +239,8 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     Access::with_ledger_mut(|ledger| {
         clear_stable_balances_data();
         clear_stable_allowance_data();
+        ledger.transactions_by_hash_mut().clear();
+        ledger.transactions_by_height_mut().clear();
         ledger.balances_mut().token_pool = Tokens::max_value();
         let chain_length = ledger.blockchain().chain_length();
         let blocks = ledger.get_ledger_blocks(0, chain_length as usize);
