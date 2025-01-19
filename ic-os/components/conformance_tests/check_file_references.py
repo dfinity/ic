@@ -11,12 +11,7 @@ import sys
 import tarfile
 import tempfile
 
-ALLOWED_UNDECLARED_DEPENDENCIES = {
-    "ic-os/components/misc/fetch-property.sh": {
-        # fetch-property.sh checks existence of metrics.sh
-        "/opt/ic/bin/metrics.sh",
-    }
-}
+ALLOWED_UNDECLARED_DEPENDENCIES = {}
 
 # Check file patterns /opt/ic/...
 COMPONENT_FILE_PATTERN = r"/opt/ic/[^\s'\"},)]+"
