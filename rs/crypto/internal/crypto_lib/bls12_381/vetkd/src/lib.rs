@@ -336,6 +336,46 @@ impl EncryptedKey {
         Ok(c)
     }
 
+    /// Combinine several shares into an encrypted key
+    pub fn combine_unchecked(
+        nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
+        reconstruction_threshold: usize,
+    ) -> Result<Self, EncryptedKeyCombinationError> {
+        if nodes.len() < reconstruction_threshold {
+            return Err(EncryptedKeyCombinationError::InsufficientShares);
+        }
+
+        let l = LagrangeCoefficients::at_zero(&nodes.iter().map(|i| i.0).collect::<Vec<_>>())
+            .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+
+        let c1 = l
+            .interpolate_g1(&nodes.iter().map(|i| &i.2.c1).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+        let c2 = l
+            .interpolate_g2(&nodes.iter().map(|i| &i.2.c2).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+        let c3 = l
+            .interpolate_g1(&nodes.iter().map(|i| &i.2.c3).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+
+        let c = Self { c1, c2, c3 };
+
+        // if !c.is_valid(master_pk, derivation_path, did, tpk) {
+        //     // Detect and return the invalid share id(s)
+        //     let mut invalid = vec![];
+
+        //     for (node_id, node_pk, node_eks) in nodes {
+        //         if !node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk) {
+        //             invalid.push(*node_id);
+        //         }
+        //     }
+
+        //     return Err(EncryptedKeyCombinationError::InvalidKeyShares(invalid));
+        // }
+
+        Ok(c)
+    }
+
     /// Check if this encrypted key is valid with respect to the provided derivation path
     pub fn is_valid(
         &self,
