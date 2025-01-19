@@ -17,7 +17,8 @@ pub mod util;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
+    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RawRandAction,
+    RoundInstructions, RoundLimits,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};

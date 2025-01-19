@@ -7,6 +7,7 @@ use std::{
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
+    execution_environment::Config as ExecConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -65,7 +66,8 @@ use maplit::btreemap;
 use std::time::Duration;
 
 use crate::{
-    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
+    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
+    RawRandAction, RoundLimits,
 };
 
 use super::{RoundSchedule, SchedulerImpl};
@@ -89,6 +91,7 @@ use std::collections::BTreeSet;
 /// test.send_ingress(canister_id, message);
 /// test.execute_round(ExecutionRoundType::OrdinaryRound);
 /// ```
+#[allow(dead_code)]
 pub(crate) struct SchedulerTest {
     // The current replicated state. The option type allows taking the state for
     // execution and then putting it back afterwards.
@@ -107,6 +110,8 @@ pub(crate) struct SchedulerTest {
     xnet_canister_id: CanisterId,
     // The actual scheduler.
     scheduler: SchedulerImpl,
+    // The execution config.
+    config: ExecConfig,
     // The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
     // Registry Execution Settings.
@@ -127,6 +132,7 @@ impl std::fmt::Debug for SchedulerTest {
     }
 }
 
+#[allow(dead_code)]
 impl SchedulerTest {
     pub fn state(&self) -> &ReplicatedState {
         self.state.as_ref().unwrap()
@@ -138,6 +144,10 @@ impl SchedulerTest {
 
     pub fn canister_state(&self, canister_id: CanisterId) -> &CanisterState {
         self.state().canister_state(&canister_id).unwrap()
+    }
+
+    pub fn own_subnet_id(&self) -> SubnetId {
+        self.state().metadata.own_subnet_id
     }
 
     pub fn metrics_registry(&self) -> &MetricsRegistry {
@@ -157,6 +167,12 @@ impl SchedulerTest {
 
     pub fn subnet_ingress_queue_size(&self) -> usize {
         self.state().subnet_queues().ingress_queue_size()
+    }
+
+    pub fn subnet_available_message_memory(&self) -> i64 {
+        let memory_taken = self.state.as_ref().unwrap().memory_taken();
+        self.config.subnet_message_memory_capacity.get() as i64
+            - memory_taken.guaranteed_response_messages().get() as i64
     }
 
     pub fn last_round(&self) -> ExecutionRound {
@@ -569,6 +585,7 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
+            &RawRandAction::Execute,
             self.registry_settings(),
             &self.replica_version,
             &BTreeMap::new(),
@@ -595,7 +612,7 @@ impl SchedulerTest {
         wasm_executor.round = self.round;
     }
 
-    fn next_canister_id(&mut self) -> CanisterId {
+    pub(crate) fn next_canister_id(&mut self) -> CanisterId {
         let canister_id = canister_test_id(self.next_canister_id);
         self.next_canister_id += 1;
         canister_id
@@ -925,7 +942,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             self.subnet_type,
             RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
-            config,
+            config.clone(),
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -956,6 +973,7 @@ impl SchedulerTestBuilder {
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),
             scheduler,
+            config,
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,

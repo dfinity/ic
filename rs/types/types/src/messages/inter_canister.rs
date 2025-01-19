@@ -1,7 +1,6 @@
 use crate::{
-    ingress::WasmResult,
-    time::{CoarseTime, UNIX_EPOCH},
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    ingress::WasmResult, time::CoarseTime, time::UNIX_EPOCH, CanisterId, CountBytes, Cycles, Funds,
+    NumBytes, SubnetId, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
@@ -10,7 +9,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -573,6 +572,17 @@ impl RequestOrResponse {
     pub fn is_best_effort(&self) -> bool {
         self.deadline() != NO_DEADLINE
     }
+
+    /// Returns `true` iff this message is addressed to the given subnet.
+    pub fn is_addressed_to_subnet(&self, own_subnet_id: SubnetId) -> bool {
+        let canister_id = self.receiver();
+        is_subnet_id(canister_id, own_subnet_id)
+    }
+}
+
+/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
+pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
+    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
