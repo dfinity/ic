@@ -57,6 +57,11 @@ REPOS_TO_SCAN = [
         "https://github.com/dfinity/papi",
         [Project(name="papi", path="papi", owner=Team.GIX_TEAM)],
     ),
+    Repository(
+        "candid-extractor",
+        "https://github.com/dfinity/candid-extractor",
+        [Project(name="candid-extractor", path="candid-extractor", owner=Team.SDK_TEAM)],
+    ),
 ]
 
 
