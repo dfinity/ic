@@ -54,6 +54,7 @@ cargo_build_script(
 
 rust_binary(
     name = "ic-workload-generator",
+    testonly = True,
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
     compile_data = ["src/counter.wat"],

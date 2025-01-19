@@ -62,6 +62,7 @@ ALIASES = {}
 
 rust_library(
     name = "replay",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replay",
@@ -76,6 +77,7 @@ rust_library(
 
 rust_binary(
     name = "ic-replay",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
