@@ -848,6 +848,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    remove_old_states: bool,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -920,6 +921,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    remove_old_states: bool,
 }
 
 impl StateMachineBuilder {
@@ -952,6 +954,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
+            remove_old_states: true,
         }
     }
 
@@ -1132,6 +1135,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_remove_old_states(self, remove_old_states: bool) -> Self {
+        Self {
+            remove_old_states,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1159,6 +1169,7 @@ impl StateMachineBuilder {
             self.is_root_subnet,
             self.seed,
             self.log_level,
+            self.remove_old_states,
         )
     }
 
@@ -1468,6 +1479,7 @@ impl StateMachine {
         is_root_subnet: bool,
         seed: [u8; 32],
         log_level: Option<Level>,
+        remove_old_states: bool,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1809,6 +1821,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            remove_old_states,
         }
     }
 
@@ -2396,7 +2409,9 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
-        self.state_manager.remove_states_below(batch_number);
+        if self.remove_old_states {
+            self.state_manager.remove_states_below(batch_number);
+        }
         assert_eq!(
             self.state_manager
                 .latest_state_certification_hash()

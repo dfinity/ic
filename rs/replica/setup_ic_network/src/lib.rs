@@ -230,7 +230,7 @@ pub fn setup_consensus_and_p2p(
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
 
-    let (ingress_pool, ingress_sender, join_handles, mut p2p_consensus) = start_consensus(
+    let (ingress_pool, ingress_sender, join_handles, p2p_consensus) = start_consensus(
         log,
         metrics_registry,
         rt_handle,
@@ -257,18 +257,21 @@ pub fn setup_consensus_and_p2p(
         max_certified_height_tx,
     );
 
-    // StateSync receive side => handler definition
-    let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
-        state_sync_client.clone(),
-        log.clone(),
-        metrics_registry,
-    );
+    // StateSync receive side + handler definition
+    let (state_sync_manager_router, state_sync_manager_runner) =
+        ic_state_sync_manager::build_state_sync_manager(
+            log,
+            metrics_registry,
+            rt_handle,
+            state_sync_client.clone(),
+        );
 
-    // Consensus receive side => handler definition
+    // Consensus receive side + handler definition
+    let (consensus_manager_router, consensus_manager_runner) = p2p_consensus.build();
 
     // Merge all receive side handlers => router
-    let p2p_router = state_sync_router
-        .merge(p2p_consensus.router())
+    let p2p_router = state_sync_manager_router
+        .merge(consensus_manager_router)
         .layer(TraceLayer::new_for_http());
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -299,17 +302,8 @@ pub fn setup_consensus_and_p2p(
     ));
 
     // Start the main event loops for StateSync and Consensus
-
-    let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
-        log,
-        metrics_registry,
-        rt_handle,
-        quic_transport.clone(),
-        state_sync_client,
-        state_sync_manager_rx,
-    );
-
-    let _cancellation_token = p2p_consensus.run(quic_transport, topology_watcher);
+    let _state_sync_manager = state_sync_manager_runner.start(quic_transport.clone());
+    let _cancellation_token = consensus_manager_runner.start(quic_transport, topology_watcher);
 
     (ingress_pool, ingress_sender, join_handles)
 }
