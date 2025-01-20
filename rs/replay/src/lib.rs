@@ -266,7 +266,7 @@ fn cmd_get_recovery_cup(
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::make_registry_cup_from_cup_contents(
+    let mut cup = ic_consensus::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,
@@ -274,12 +274,14 @@ fn cmd_get_recovery_cup(
         &player.log,
     )
     .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
+    cup.content.np_signed = true;
 
     println!(
-        "height: {}, time: {}, state_hash: {:?}",
+        "height: {}, time: {}, state_hash: {:?}, np_signed: {}",
         cup.height(),
         cup.content.block.as_ref().context.time,
-        cup.content.state_hash
+        cup.content.state_hash,
+        cup.content.np_signed
     );
 
     let mut file =

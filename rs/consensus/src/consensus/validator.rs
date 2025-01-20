@@ -2076,6 +2076,7 @@ pub mod test {
                         random_beacon_hash,
                         state_hash.clone(),
                         None,
+                        false,
                     )),
                     signature: ThresholdSignatureShare::fake(node_test_id(0)),
                 }
@@ -2196,6 +2197,7 @@ pub mod test {
                         random_beacon_hash,
                         state_hash.clone(),
                         oldest_registry_version,
+                        false,
                     )),
                     signature: ThresholdSignatureShare::fake(node_test_id(0)),
                 }

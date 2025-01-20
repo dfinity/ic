@@ -199,20 +199,28 @@ impl CatchUpPackageProvider {
             })
             .ok()?;
 
-        self.crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-                &CatchUpContentProtobufBytes::from(&protobuf),
-                subnet_id,
-                cup.content.block.get_value().context.registry_version,
-            )
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
+        if !cup.content.np_signed {
+            info!(self.logger, "Peer CUP isn't NP signed, checking signature");
+            self.crypto
+                .verify_combined_threshold_sig_by_public_key(
+                    &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
+                    &CatchUpContentProtobufBytes::from(&protobuf),
+                    subnet_id,
+                    cup.content.block.get_value().context.registry_version,
                 )
-            })
-            .ok()?;
+                .map_err(|e| {
+                    warn!(
+                        self.logger,
+                        "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
+                    )
+                })
+                .ok()?;
+        } else {
+            warn!(
+                self.logger,
+                "Peer CUP is NP signed, skipping signature check"
+            );
+        }
 
         Some((protobuf, cup))
     }

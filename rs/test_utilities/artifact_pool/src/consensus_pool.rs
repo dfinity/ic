@@ -342,6 +342,7 @@ impl TestConsensusPool {
                 HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon.clone()),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 None,
+                false,
             ),
             signature: ThresholdSignature {
                 signer: random_beacon.signature.signer,

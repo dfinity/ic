@@ -1257,6 +1257,8 @@ pub struct CatchUpPackageShare {
     pub signer: ::core::option::Option<NodeId>,
     #[prost(uint64, optional, tag = "8")]
     pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
+    #[prost(bool, tag = "9")]
+    pub np_signed: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpContent {
@@ -1272,6 +1274,8 @@ pub struct CatchUpContent {
     pub random_beacon_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, optional, tag = "6")]
     pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
+    #[prost(bool, tag = "7")]
+    pub np_signed: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {

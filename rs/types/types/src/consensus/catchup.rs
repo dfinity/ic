@@ -38,6 +38,8 @@ pub struct CatchUpContentT<T> {
     /// The oldest registry version that is still referenced by
     /// structures in replicated state.
     pub oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
+
+    pub np_signed: bool,
 }
 
 impl CatchUpContent {
@@ -47,6 +49,7 @@ impl CatchUpContent {
         random_beacon: HashedRandomBeacon,
         state_hash: CryptoHashOfState,
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
+        np_signed: bool,
     ) -> Self {
         Self {
             version: block.version().clone(),
@@ -54,6 +57,7 @@ impl CatchUpContent {
             random_beacon,
             state_hash,
             oldest_registry_version_in_use_by_replicated_state,
+            np_signed,
         }
     }
 
@@ -81,6 +85,7 @@ impl CatchUpContent {
             state_hash: share.state_hash,
             oldest_registry_version_in_use_by_replicated_state: share
                 .oldest_registry_version_in_use_by_replicated_state,
+            np_signed: share.np_signed,
         }
     }
 
@@ -110,6 +115,7 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
             oldest_registry_version_in_use_by_replicated_state: content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
+            np_signed: content.np_signed,
         }
     }
 }
@@ -136,6 +142,7 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
             content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(RegistryVersion::from),
+            content.np_signed,
         ))
     }
 }
@@ -255,6 +262,7 @@ impl From<&CatchUpContent> for CatchUpShareContent {
             state_hash: content.state_hash.clone(),
             oldest_registry_version_in_use_by_replicated_state: content
                 .oldest_registry_version_in_use_by_replicated_state,
+            np_signed: content.np_signed,
         }
     }
 }
@@ -276,6 +284,7 @@ impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
                 .content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
+            np_signed: cup_share.content.np_signed,
         }
     }
 }
@@ -298,6 +307,7 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
                 oldest_registry_version_in_use_by_replicated_state: cup_share
                     .oldest_registry_version_in_use_by_replicated_state
                     .map(RegistryVersion::from),
+                np_signed: cup_share.np_signed,
             },
             signature: ThresholdSignatureShare {
                 signature: ThresholdSigShareOf::new(ThresholdSigShare(cup_share.signature)),

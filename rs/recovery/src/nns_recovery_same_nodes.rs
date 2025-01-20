@@ -29,9 +29,9 @@ pub enum StepType {
     DownloadState,
     ICReplay,
     ValidateReplayOutput,
+    CopyIcState,
     UpdateRegistryLocalStore,
     CreateTars,
-    CopyIcState,
     GetRecoveryCUP,
     UploadCUPandRegistry,
     WaitForCUP,
@@ -260,10 +260,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 self.recovery.get_recovery_cup_step(self.params.subnet_id)?,
             )),
 
-            StepType::UploadCUPandRegistry => Ok(Box::new(
-                self.recovery
-                    .get_upload_cup_and_tar_step(self.params.subnet_id),
-            )),
+            StepType::UploadCUPandRegistry => {
+                Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(
+                    self.params.subnet_id,
+                    self.params.upload_method.unwrap(),
+                )))
+            }
 
             StepType::WaitForCUP => {
                 if let Some(method) = self.params.upload_method {

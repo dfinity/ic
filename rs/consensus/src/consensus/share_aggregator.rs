@@ -366,6 +366,7 @@ mod tests {
                         HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon.clone()),
                         state_hash,
                         oldest_registry_version_in_use_by_replicated_state,
+                        false,
                     ))
                         .into(),
                     signature: ThresholdSignatureShare::fake(node_id),
