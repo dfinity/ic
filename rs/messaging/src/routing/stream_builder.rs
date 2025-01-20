@@ -22,7 +22,7 @@ use ic_types::{
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -290,15 +290,15 @@ impl StreamBuilderImpl {
         /// Tests whether a stream is over the message count limit, byte limit or (if
         /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
         fn is_at_limit(
-            stream: Option<&Stream>,
+            stream: &btree_map::Entry<SubnetId, Stream>,
             max_stream_messages: usize,
             target_stream_size_bytes: usize,
             is_local_message: bool,
             destination_subnet_type: SubnetType,
         ) -> bool {
             let stream = match stream {
-                Some(stream) => stream,
-                None => return false,
+                btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
+                btree_map::Entry::Vacant(_) => return false,
             };
             let stream_messages_len = stream.messages().len();
 
@@ -359,8 +359,9 @@ impl StreamBuilderImpl {
             match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     if is_at_limit(
-                        streams.get(&dst_subnet_id),
+                        &dst_stream_entry,
                         max_stream_messages,
                         target_stream_size_bytes,
                         self.subnet_id == dst_subnet_id,
@@ -433,14 +434,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_subnet_id, msg);
+                            streams.entry(dst_subnet_id).or_default().push(msg);
                         }
                     };
                 }

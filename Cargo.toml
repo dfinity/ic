@@ -611,7 +611,7 @@ minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.2.0"
 nftables = "0.4"
-nix = "0.24.3"
+nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
@@ -712,6 +712,7 @@ tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
+tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.12.3"

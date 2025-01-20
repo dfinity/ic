@@ -276,6 +276,12 @@ def system_test(
     if uses_boundary_guestos:
         icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
 
+    # set "local" tag for k8s system tests due to rootful container image builds
+    is_k8s = select({
+        "//rs/tests:k8s": True,
+        "//conditions:default": False,
+    })
+
     run_system_test(
         name = name,
         src = test_driver_target,
@@ -284,7 +290,7 @@ def system_test(
         env = env,
         icos_images = icos_images,
         env_inherit = env_inherit,
-        tags = tags + ["requires-network", "system_test"] +
+        tags = tags + ["requires-network", "system_test"] + (["local"] if is_k8s else []) +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,

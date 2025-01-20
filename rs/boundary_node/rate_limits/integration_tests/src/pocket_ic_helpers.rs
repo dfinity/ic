@@ -7,9 +7,7 @@ use ic_nns_test_utils::common::{
     build_mainnet_registry_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::{
-    management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder, WasmResult,
-};
+use pocket_ic::{management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder};
 use rate_limits_api::InitArg;
 use serde::de::DeserializeOwned;
 
@@ -113,11 +111,6 @@ pub async fn canister_call<R: DeserializeOwned + CandidType>(
             .await
             .map_err(|err| err.to_string())?,
         _ => panic!("{method_type} is not allowed"),
-    };
-
-    let result = match result {
-        WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to {method} failed: {:#?}", s),
     };
 
     let decoded: R = Decode!(&result, R).unwrap();
