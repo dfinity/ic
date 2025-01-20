@@ -15886,6 +15886,8 @@ dependencies = [
  "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest 0.12.9",
+ "serde",
+ "serde_json",
  "slog",
  "tokio",
  "url",
