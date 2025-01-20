@@ -221,6 +221,8 @@ def main():
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",
         "clear",
+        "-d",
+        os.path.join(fs_basedir, limit_prefix),
         "-F",
         image_file,
         str(image_size),
@@ -258,7 +260,7 @@ def main():
     e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
-    e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
+    e2fsdroid_args += [image_file]
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     subprocess.run(["sync"], check=True)
