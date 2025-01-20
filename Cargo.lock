@@ -1772,6 +1772,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "candid-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+]
+
+[[package]]
 name = "candid_derive"
 version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5462,6 +5470,7 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "futures",
  "ic-artifact-pool",
  "ic-config",
  "ic-interfaces",
@@ -5471,6 +5480,7 @@ dependencies = [
  "ic-types",
  "prometheus",
  "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
@@ -5945,6 +5955,7 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
+ "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
@@ -5952,7 +5963,6 @@ dependencies = [
  "ic-universal-canister",
  "pocket-ic",
  "proptest",
- "regex",
  "scraper",
  "serde",
  "serde_json",
@@ -6579,6 +6589,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-core",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-state-machine-tests",
@@ -6595,7 +6606,6 @@ dependencies = [
  "mockall",
  "num-traits",
  "proptest",
- "regex",
  "ripemd",
  "scopeguard",
  "serde",
@@ -8415,6 +8425,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
+ "regex",
  "tempfile",
 ]
 
@@ -9404,6 +9415,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
@@ -9669,6 +9681,17 @@ dependencies = [
  "slog",
  "tokio",
  "tokio-metrics",
+]
+
+[[package]]
+name = "ic-metrics-assert"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "pocket-ic",
+ "regex",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -10729,6 +10752,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "turmoil",
 ]
 
@@ -11882,6 +11906,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_bytes",
+ "serde_json",
  "strum",
  "strum_macros",
  "tempfile",
@@ -12544,6 +12569,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
+ "ic-state-machine-tests",
  "ic-state-manager",
  "ic-sys",
  "ic-types",
@@ -13081,7 +13107,6 @@ dependencies = [
 name = "ic-test-utilities-types"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "bincode",
  "ic-canister-client-sender",
  "ic-crypto-ed25519",
@@ -13339,6 +13364,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "lru",
+ "proptest",
 ]
 
 [[package]]
@@ -14056,7 +14082,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "assert_matches",
  "base32",
@@ -17145,6 +17171,7 @@ version = "6.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
+ "bitcoin 0.28.2",
  "candid",
  "candid_parser",
  "ed25519-dalek",
@@ -18361,6 +18388,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "futures",
+ "getrandom",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk 0.16.0",
@@ -18448,6 +18476,28 @@ name = "relative-path"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+
+[[package]]
+name = "release-runscript"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "colored",
+ "futures",
+ "ic-agent",
+ "ic-base-types",
+ "ic-nervous-system-agent",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "rgb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "rend"
@@ -20936,6 +20986,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "tla_instrumentation"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "local_key",
  "sha2 0.10.8",

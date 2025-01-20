@@ -239,18 +239,6 @@ symlink_dir(
     },
 )
 
-symlink_dir(
-    name = "backup/binaries",
-    testonly = True,
-    targets = {
-        "//rs/backup:ic-backup": "ic-backup",
-        "//rs/replay:ic-replay": "ic-replay",
-        "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
-        "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
-        "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
-    },
-)
-
 symlink_dir_test(
     name = "cup_compatibility/binaries",
     targets = {

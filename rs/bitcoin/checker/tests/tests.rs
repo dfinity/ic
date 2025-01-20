@@ -1,4 +1,4 @@
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
@@ -8,18 +8,20 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
         CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
+    query_candid, PocketIc, PocketIcBuilder, RejectResponse,
 };
-use regex::Regex;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
@@ -100,7 +102,7 @@ impl Setup {
         method: &str,
         args: Vec<u8>,
         cycles: u128,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let payload = wasm()
             .call_with_cycles(
                 PrincipalId(self.btc_checker_canister),
@@ -113,13 +115,6 @@ impl Setup {
             .build();
         self.env
             .submit_call(self.caller, self.controller, "update", payload)
-    }
-}
-
-fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
-    match result {
-        WasmResult::Reply(bytes) => decode_one(bytes).unwrap(),
-        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
 }
 
@@ -366,7 +361,7 @@ fn test_check_transaction_passed() {
             .expect("the fetch request didn't finish");
 
         assert!(matches!(
-            decode::<CheckTransactionResponse>(&result),
+            decode_one(&result).unwrap(),
             CheckTransactionResponse::Passed
         ));
 
@@ -376,7 +371,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -413,7 +408,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Failed(addresses) if addresses.is_empty()
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -421,7 +416,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -454,7 +449,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Passed
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -465,7 +460,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -508,7 +503,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
@@ -526,7 +521,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
@@ -564,7 +559,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 500 error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 500")
@@ -604,7 +599,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 404 error is retriable too
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 404")
@@ -643,7 +638,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // Reject error is retriable too
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("Failed to directly connect")
@@ -683,7 +678,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // malformated tx error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("TxEncoding")
@@ -710,7 +705,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
@@ -741,7 +736,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
@@ -753,7 +748,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from_querying_metrics(&setup)
+    MetricsAssert::from_http_query(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -797,7 +792,7 @@ fn should_query_logs_and_metrics() {
 
 fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     use candid::Decode;
-    let request = ic_canisters_http_types::HttpRequest {
+    let request = HttpRequest {
         method: "GET".to_string(),
         url: url.into(),
         headers: Default::default(),
@@ -805,18 +800,16 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     };
 
     let response = Decode!(
-        &assert_reply(
-            setup
-                .env
-                .query_call(
-                    setup.btc_checker_canister,
-                    Principal::anonymous(),
-                    "http_request",
-                    Encode!(&request).expect("failed to encode HTTP request"),
-                )
-                .expect("failed to query get_transactions on the ledger")
-        ),
-        ic_canisters_http_types::HttpResponse
+        &setup
+            .env
+            .query_call(
+                setup.btc_checker_canister,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).expect("failed to encode HTTP request"),
+            )
+            .expect("failed to query get_transactions on the ledger"),
+        HttpResponse
     )
     .unwrap();
 
@@ -824,46 +817,12 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     response.body.into_vec()
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
-    }
-}
-
-pub struct MetricsAssert {
-    metrics: Vec<String>,
-}
-
-impl MetricsAssert {
-    fn from_querying_metrics(setup: &Setup) -> Self {
-        let response = make_http_query(setup, "/metrics");
-        let metrics = String::from_utf8_lossy(&response)
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics }
+impl PocketIcHttpQuery for &Setup {
+    fn get_pocket_ic(&self) -> &PocketIc {
+        &self.env
     }
 
-    fn assert_contains_metric_matching(self, pattern: &str) -> Self {
-        assert!(
-            !self.find_metrics_matching(pattern).is_empty(),
-            "Expected to find metric matching '{}', but none matched in:\n{:?}",
-            pattern,
-            self.metrics
-        );
-        self
-    }
-
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
-        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
-        self.metrics
-            .iter()
-            .filter(|line| regex.is_match(line))
-            .cloned()
-            .collect()
+    fn get_canister_id(&self) -> CanisterId {
+        self.btc_checker_canister
     }
 }

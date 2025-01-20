@@ -572,6 +572,15 @@ impl DkgDataPayload {
             messages,
         }
     }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let DkgDataPayload {
+            start_height: _,
+            messages,
+        } = self;
+        messages.is_empty()
+    }
 }
 
 impl NiDkgTag {

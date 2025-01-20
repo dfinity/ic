@@ -404,6 +404,9 @@ fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let mut neurons_fund_neurons = BTreeSet::new();
+    // When extrapolating to `MAX_NEURONS_FUND_PARTICIPANTS` (5K) neurons, the current performance
+    // of 12M instructions (as of the time of writing) becomes 600M instructions. This is relatively
+    // small compared to the instruction limit of 50B (or the 40B limit for application subnets).
     for _ in 0..100 {
         let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Typical)
             .with_maturity_e8s_equivalent(2_000_000_000)
