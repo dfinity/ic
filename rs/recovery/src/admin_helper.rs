@@ -149,7 +149,7 @@ impl AdminHelper {
         ic_admin
             // TODO: Switch to the new command name:
             // .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
-            .add_positional_argument("propose-to-update-subnet-replica-version")
+            .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
             .add_argument(
@@ -527,7 +527,7 @@ mod tests {
         assert_eq!(result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet-replica-version \
+            propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
