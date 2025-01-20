@@ -1685,6 +1685,9 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 

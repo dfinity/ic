@@ -490,7 +490,7 @@ impl<'a> ChainIterator<'a> {
     }
 }
 
-impl<'a> Iterator for ChainIterator<'a> {
+impl Iterator for ChainIterator<'_> {
     type Item = Block;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -231,7 +231,7 @@ where
 
         struct ProtobufVisitor<T: prost::Message>(PhantomData<T>);
 
-        impl<'de, T: prost::Message + Default> serde::de::Visitor<'de> for ProtobufVisitor<T> {
+        impl<T: prost::Message + Default> serde::de::Visitor<'_> for ProtobufVisitor<T> {
             type Value = Protobuf<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
