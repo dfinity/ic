@@ -165,10 +165,19 @@ impl BatchPayload {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ingress.is_empty()
-            && self.xnet.stream_slices.is_empty()
-            && self.self_validating.is_empty()
-            && self.canister_http.is_empty()
+        let BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+            canister_http,
+            query_stats,
+        } = &self;
+
+        ingress.is_empty()
+            && xnet.is_empty()
+            && self_validating.is_empty()
+            && canister_http.is_empty()
+            && query_stats.is_empty()
     }
 }
 
@@ -244,9 +253,41 @@ mod tests {
     /// This is a quick test to check the invariant, that the [`Default`] implementation
     /// of a payload section actually produces the empty payload,
     #[test]
+    fn default_batch_payload_is_zero_bytes() {
+        let BatchPayload {
+            ingress,
+            xnet: _, // No implementation of `CountBytes` for xnet.
+            self_validating,
+            canister_http,
+            query_stats,
+        } = BatchPayload::default();
+
+        assert_eq!(ingress.count_bytes(), 0);
+        assert_eq!(self_validating.count_bytes(), 0);
+        assert_eq!(canister_http.len(), 0);
+        assert_eq!(query_stats.len(), 0);
+    }
+
+    /// This is a quick test to check the invariant, that the [`Default`] implementation
+    /// of a payload section actually produces the empty payload,
+    #[test]
     fn default_batch_payload_is_empty() {
-        assert_eq!(IngressPayload::default().count_bytes(), 0);
-        assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
+        let payload = BatchPayload::default();
+        assert!(payload.is_empty());
+
+        let BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+            canister_http,
+            query_stats,
+        } = &payload;
+
+        assert!(ingress.is_empty());
+        assert!(xnet.is_empty());
+        assert!(self_validating.is_empty());
+        assert!(canister_http.is_empty());
+        assert!(query_stats.is_empty());
     }
 
     #[test]

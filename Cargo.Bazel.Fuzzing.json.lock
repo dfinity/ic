@@ -1,5 +1,5 @@
 {
-  "checksum": "befed3db2258ef5e97774c44951feb5c8ca098af84913123d4a8945afeac827c",
+  "checksum": "47779dd70947956334194045d833b520303bd12424c6ae738db137a5ede73532",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5439,7 +5439,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -9614,7 +9614,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -10766,20 +10766,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cc 1.0.83": {
+    "cc 1.1.37": {
       "name": "cc",
-      "version": "1.0.83",
+      "version": "1.1.37",
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cc/1.0.83/download",
-          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "url": "https://static.crates.io/crates/cc/1.1.37/download",
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
         }
       },
       "targets": [
@@ -10805,97 +10799,98 @@
           "common": [],
           "selects": {
             "aarch64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ],
             "arm-unknown-linux-gnueabi": [
-              "jobserver",
               "parallel"
             ],
             "i686-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "i686-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "powerpc-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "s390x-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-freebsd": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ]
           }
         },
         "deps": {
-          "common": [],
+          "common": [
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            }
+          ],
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
-              }
-            ],
-            "cfg(unix)": [
+              },
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -10903,62 +10898,90 @@
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "1.0.83"
+        "version": "1.1.37"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -18517,7 +18540,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -19399,6 +19422,10 @@
               "target": "syn"
             },
             {
+              "id": "syscalls 0.6.18",
+              "target": "syscalls"
+            },
+            {
               "id": "tar 0.4.39",
               "target": "tar"
             },
@@ -19465,6 +19492,10 @@
             {
               "id": "tokio-socks 0.5.2",
               "target": "tokio_socks"
+            },
+            {
+              "id": "tokio-stream 0.1.17",
+              "target": "tokio_stream"
             },
             {
               "id": "tokio-test 0.4.4",
@@ -21961,7 +21992,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -23946,7 +23977,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -29873,7 +29904,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -35815,14 +35846,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "jobserver 0.1.27": {
+    "jobserver 0.1.32": {
       "name": "jobserver",
-      "version": "0.1.27",
-      "package_url": "https://github.com/alexcrichton/jobserver-rs",
+      "version": "0.1.32",
+      "package_url": "https://github.com/rust-lang/jobserver-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/jobserver/0.1.27/download",
-          "sha256": "8c37f63953c4c63420ed5fd3d6d398c719489b9f872b9fa683262f8edd363c7d"
+          "url": "https://static.crates.io/crates/jobserver/0.1.32/download",
+          "sha256": "48d1dbcbbeb6a7fec7e059840aa538bd62aaccf972c7346c4d9d2059312853d0"
         }
       },
       "targets": [
@@ -35855,10 +35886,10 @@
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.1.27"
+        "edition": "2021",
+        "version": "0.1.32"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -38246,7 +38277,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -38528,7 +38559,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38629,7 +38660,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38735,7 +38766,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38844,7 +38875,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38942,7 +38973,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -39350,7 +39381,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -40120,7 +40151,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -45192,7 +45223,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -46328,7 +46359,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -46443,7 +46474,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -47638,7 +47669,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -52533,7 +52564,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -59224,7 +59255,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -59341,7 +59372,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63732,7 +63763,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63817,7 +63848,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63906,7 +63937,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -68244,7 +68275,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -69700,6 +69731,95 @@
       "license": "MIT",
       "license_ids": [
         "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "syscalls 0.6.18": {
+      "name": "syscalls",
+      "version": "0.6.18",
+      "package_url": "https://github.com/jasonwhite/syscalls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/syscalls/0.6.18/download",
+          "sha256": "43d0e35dc7d73976a53c7e6d7d177ef804a0c0ee774ec77bcc520c2216fd7cbe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syscalls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "syscalls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde",
+            "serde_repr",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "syscalls 0.6.18",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_repr 0.1.19",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.18"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "BSD-2-Clause",
+      "license_ids": [
+        "BSD-2-Clause"
       ],
       "license_file": "LICENSE"
     },
@@ -71705,7 +71825,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -73314,7 +73434,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -73680,14 +73800,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-stream 0.1.16": {
+    "tokio-stream 0.1.17": {
       "name": "tokio-stream",
-      "version": "0.1.16",
+      "version": "0.1.17",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-stream/0.1.16/download",
-          "sha256": "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
+          "url": "https://static.crates.io/crates/tokio-stream/0.1.17/download",
+          "sha256": "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
         }
       },
       "targets": [
@@ -73735,7 +73855,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.16"
+        "version": "0.1.17"
       },
       "license": "MIT",
       "license_ids": [
@@ -73791,7 +73911,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -74294,7 +74414,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -76524,7 +76644,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -80240,7 +80360,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -80779,7 +80899,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -86198,7 +86318,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -87346,7 +87466,7 @@
     "candid 0.10.10",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
-    "cc 1.0.83",
+    "cc 1.1.37",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
@@ -87575,6 +87695,7 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
+    "syscalls 0.6.18",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.12.0",
@@ -87593,6 +87714,7 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.2",
+    "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
     "tokio-util 0.7.13",
     "toml 0.5.11",
