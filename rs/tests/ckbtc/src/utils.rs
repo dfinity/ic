@@ -422,10 +422,7 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
     .unwrap()
 }
 
-pub async fn get_bitcoin_balance(
-    canister: &UniversalCanister<'_>,
-    btc_address: &Address,
-) -> u64 {
+pub async fn get_bitcoin_balance(canister: &UniversalCanister<'_>, btc_address: &Address) -> u64 {
     canister
         .update(wasm().call(management::bitcoin_get_balance(
             btc_address.to_string(),

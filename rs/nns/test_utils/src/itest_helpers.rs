@@ -505,10 +505,7 @@ pub async fn set_up_genesis_token_canister(
 }
 
 /// Compiles the ledger canister, builds it's initial payload and installs it
-pub async fn install_ledger_canister(
-    canister: &mut Canister<'_>,
-    args: LedgerCanisterInitPayload,
-) {
+pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCanisterInitPayload) {
     install_rust_canister(
         canister,
         "ledger-canister",
