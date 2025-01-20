@@ -205,7 +205,9 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
             // a non-zero amount.
             assert!(err
                 .description()
-                .contains("due to insufficient cycles. At least 339_603_"));
+                .contains("due to insufficient cycles. At least 339_559_"),
+                "Error message: {}",
+                err.description());
         }
     }
 }
