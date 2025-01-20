@@ -136,7 +136,7 @@ def store_blocklist(blocklist_handler, addresses, filename):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--currency', '-c', type=str, choices=['BTC', 'ETH'], help='select the currency (BTC or ETH)')
+    parser.add_argument('--currency', '-c', type=str, choices=['BTC', 'ETH'], help='select the currency')
     parser.add_argument('--input', '-i', type=str, help='read the provided SDN.XML file')
     parser.add_argument('--output', '-o', type=str, default=DEFAULT_BLOCKLIST_FILENAME, help='write the output to the provided path')
 
