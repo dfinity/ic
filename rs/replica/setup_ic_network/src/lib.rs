@@ -53,7 +53,9 @@ use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessage, HasHeight, dkg},
+    consensus::{
+        certification::CertificationMessage, dkg, CatchUpPackage, ConsensusMessage, HasHeight,
+    },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     replica_config::ReplicaConfig,
@@ -158,7 +160,6 @@ struct InboundAndOutboundChannels {
     dkg_outbound_tx: AbortableBroadcastSender<dkg::Message>,
     dkg_inbound_rx: AbortableBroadcastReceiver<dkg::Message>,
 }
-
 
 impl Bouncers {
     fn new(
