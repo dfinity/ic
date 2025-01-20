@@ -147,8 +147,6 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
