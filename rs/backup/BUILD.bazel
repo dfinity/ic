@@ -61,7 +61,7 @@ rust_binary(
 
 rust_test(
     name = "backup_test",
-    crate = ":backup",
     compile_data = ["test_data/fake_input_config.json.template"],
+    crate = ":backup",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
