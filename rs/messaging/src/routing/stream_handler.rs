@@ -16,7 +16,7 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_replicated_state::{
-    metadata_state::{StreamHandle, Streams},
+    metadata_state::{Stream, StreamMap},
     replicated_state::{
         ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
@@ -352,20 +352,20 @@ impl StreamHandlerImpl {
 
         let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
-        let mut loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
+        let loopback_stream = streams.get_mut(&self.subnet_id).unwrap();
 
         // 2. Garbage collect all initial messages and retain any rejected messages.
         let signals_end = loopback_stream.signals_end();
         let reject_signals = loopback_stream.reject_signals().clone();
         let rejected_messages = self.garbage_collect_messages(
-            &mut loopback_stream,
+            loopback_stream,
             self.subnet_id,
             signals_end,
             &reject_signals,
         );
 
         // 3. Garbage collect signals for all initial messages.
-        self.discard_signals_before(&mut loopback_stream, signals_end);
+        self.discard_signals_before(loopback_stream, signals_end);
 
         // 4. Respond to rejected requests and reroute rejected responses.
         self.handle_rejected_messages(
@@ -402,14 +402,14 @@ impl StreamHandlerImpl {
         let mut streams = state.take_streams();
         for (remote_subnet, stream_slice) in stream_slices {
             match streams.get_mut(remote_subnet) {
-                Some(mut stream) => {
+                Some(stream) => {
                     let rejected_messages = self.garbage_collect_messages(
-                        &mut stream,
+                        stream,
                         *remote_subnet,
                         stream_slice.header().signals_end(),
                         stream_slice.header().reject_signals(),
                     );
-                    self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
+                    self.garbage_collect_signals(stream, *remote_subnet, stream_slice);
 
                     if stream.reverse_stream_flags() != stream_slice.header().flags() {
                         stream.set_reverse_stream_flags(*stream_slice.header().flags());
@@ -462,7 +462,7 @@ impl StreamHandlerImpl {
     /// `signals_end` are invalid (not strictly increasing).
     fn garbage_collect_messages(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         signals_end: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
@@ -503,7 +503,7 @@ impl StreamHandlerImpl {
     /// if `stream_slice.messages.begin != stream.signals_end`.
     fn garbage_collect_signals(
         &self,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         remote_subnet: SubnetId,
         stream_slice: &StreamSlice,
     ) {
@@ -530,7 +530,7 @@ impl StreamHandlerImpl {
     }
 
     /// Wrapper around `Stream::discard_signals_before()` plus telemetry.
-    fn discard_signals_before(&self, stream: &mut StreamHandle, header_begin: StreamIndex) {
+    fn discard_signals_before(&self, stream: &mut Stream, header_begin: StreamIndex) {
         let signal_count_before = stream.reject_signals().len();
         stream.discard_signals_before(header_begin);
         self.observe_gced_reject_signals(signal_count_before - stream.reject_signals().len());
@@ -551,13 +551,13 @@ impl StreamHandlerImpl {
         rejected_messages: Vec<(RejectReason, RequestOrResponse)>,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        streams: &mut Streams,
+        streams: &mut StreamMap,
         available_guaranteed_response_memory: &mut i64,
     ) {
         fn reroute_response(
             response: RequestOrResponse,
             state: &ReplicatedState,
-            streams: &mut Streams,
+            streams: &mut StreamMap,
             log: &ReplicaLogger,
         ) {
             let new_destination = state
@@ -573,7 +573,7 @@ impl StreamHandlerImpl {
                 new_destination,
                 response,
             );
-            streams.get_mut_or_insert(new_destination).push(response);
+            streams.entry(new_destination).or_default().push(response);
         }
 
         for (reason, msg) in rejected_messages {
@@ -674,7 +674,7 @@ impl StreamHandlerImpl {
         for (remote_subnet_id, mut stream_slice) in stream_slices {
             // Output stream, for resulting signals and (in the initial iteration) reject
             // `Responses`.
-            let mut stream = streams.get_mut_or_insert(remote_subnet_id);
+            let stream = streams.entry(remote_subnet_id).or_default();
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
                 assert_eq!(
@@ -688,7 +688,7 @@ impl StreamHandlerImpl {
                     msg,
                     remote_subnet_id,
                     &mut state,
-                    &mut stream,
+                    stream,
                     available_guaranteed_response_memory,
                 );
             }
@@ -726,7 +726,7 @@ impl StreamHandlerImpl {
         msg: RequestOrResponse,
         remote_subnet_id: SubnetId,
         state: &mut ReplicatedState,
-        stream: &mut StreamHandle,
+        stream: &mut Stream,
         available_guaranteed_response_memory: &mut i64,
     ) {
         let msg_type = match msg {
@@ -749,8 +749,7 @@ impl StreamHandlerImpl {
                     if state.metadata.certification_version < CertificationVersion::V19 =>
                 {
                     // Unable to induct a request, generate reject response and push it into `stream`.
-                    *available_guaranteed_response_memory -=
-                        stream.push(generate_reject_response_for(reason, &request)) as i64;
+                    stream.push(generate_reject_response_for(reason, &request));
                     stream.push_accept_signal();
                 }
                 Some((reason, RequestOrResponse::Request(_))) => {

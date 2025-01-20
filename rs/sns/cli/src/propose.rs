@@ -204,7 +204,7 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
         r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#.to_string()
     };
 
-    let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
+    let disallowed_types = Mode::functions_disallowed_in_pre_initialization_swap()
         .into_iter()
         .map(|t| format!("  - {}", t.name))
         .join("\n");
