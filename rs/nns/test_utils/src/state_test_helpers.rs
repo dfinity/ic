@@ -6,8 +6,7 @@ use crate::common::{
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError,
-    SetAuthorizedSubnetworkListArgs,
+    IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
 };
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
@@ -2098,33 +2097,6 @@ pub fn get_average_icp_xdr_conversion_rate(
     )
     .expect("Failed to retrieve the average conversion rate");
     Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
-}
-
-pub fn notify_create_canister(
-    state_machine: &StateMachine,
-    caller: PrincipalId,
-    request: &NotifyCreateCanister,
-) -> Result<CanisterId, NotifyError> {
-    let result = state_machine
-        .execute_ingress_as(
-            caller,
-            CYCLES_MINTING_CANISTER_ID,
-            "notify_create_canister",
-            Encode!(&request).unwrap(),
-        )
-        .unwrap();
-
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!(
-                "get_changes_since was rejected by the NNS registry canister: {:#?}",
-                reject
-            )
-        }
-    };
-
-    Decode!(&result, Result<CanisterId, NotifyError>).unwrap()
 }
 
 pub fn cmc_set_default_authorized_subnetworks(

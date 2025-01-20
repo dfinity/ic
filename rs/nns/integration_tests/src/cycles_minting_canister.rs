@@ -36,7 +36,7 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        self, cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
+        cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
         set_up_universal_canister, setup_cycles_ledger, setup_nns_canisters,
         state_machine_builder_for_nns_tests, update_with_sender,
     },
@@ -888,34 +888,45 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
 
     // Step 2.2: Ask CMC to create a canister using the ICP that was just sent
     // to it (from USER1). This is where it is noticed (by CMC) that USER1 did
-    // something wrong.
+    // something wrong. Many requests are sent concurrently to verify that
+    // journaling/locking/deduplication works.
+    #[allow(deprecated)]
+    let notify_create_canister = Encode!(&NotifyCreateCanister {
+        block_index: create_canister_block_index,
+        controller: *TEST_USER1_PRINCIPAL,
 
-    let notify_create_canister = || -> Result<CanisterId, NotifyError> {
-        #[allow(deprecated)]
-        let notify_create_canister = NotifyCreateCanister {
-            block_index: create_canister_block_index,
-            controller: *TEST_USER1_PRINCIPAL,
+        // Nothing fancy.
+        subnet_type: None,
+        subnet_selection: None,
+        settings: None,
+    })
+    .unwrap();
+    let results = (0..100)
+        .map(|_i| {
+            state_machine.send_ingress_safe(
+                *TEST_USER1_PRINCIPAL,
+                CYCLES_MINTING_CANISTER_ID,
+                "notify_create_canister",
+                notify_create_canister.clone(),
+            )
+            .unwrap()
+        })
+        // It might seem silly to call collect, and then immediately after that
+        // call into_iter, but this is to ensure that await_ingress is not
+        // called until after ALL send_ingress_safe calls are made.
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|message_id| {
+            let result = state_machine.await_ingress(message_id, 500).unwrap();
 
-            // Nothing fancy.
-            subnet_type: None,
-            subnet_selection: None,
-            settings: None,
-        };
+            let result = match result {
+                WasmResult::Reply(ok) => ok,
+                _ => panic!("{:?}", result),
+            };
 
-        state_test_helpers::notify_create_canister(
-            &state_machine,
-            *TEST_USER1_PRINCIPAL,
-            &notify_create_canister,
-        )
-    };
-
-    // Ideally, we'd be able to do a bunch of these concurrently, because we
-    // want to verify that journaling successfully prevents interleaving from
-    // causing problems, but I'm not sure how to do that...
-    let original_result = notify_create_canister();
-    // Duplicate calls. Later, we verify that CMC is not fooled by these. I.e.
-    // it only performs one refund transfer.
-    let extra_results = (0..3).map(|_i| notify_create_canister());
+            Decode!(&result, Result<CanisterId, NotifyError>).unwrap()
+        })
+        .collect::<Vec<_>>();
 
     // Step 3: Verify results.
 
@@ -934,9 +945,42 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     }
 
     // Step 3.3: Verify that CMC returned Err.
-    let err = original_result.as_ref().unwrap_err();
+
+    // Step 3.3.1: Filter out Err(Processing), and freak out if there are any Ok.
+    let mut errs = results
+        .into_iter()
+        .filter_map(|result| {
+            match result {
+                Err(NotifyError::Processing) => None,
+                Ok(_) => panic!("{:?}", result),
+                Err(err) => Some(err),
+            }
+        })
+        .collect::<Vec<NotifyError>>();
+
+    // Step 3.3.2: Assert that all errs are the same.
+    let last_err = errs.pop().unwrap();
+    assert!(
+        errs.iter().all(|other_err| other_err == &last_err),
+        "{:?}\nvs.\n{:#?}",
+        last_err, errs,
+    );
+    assert!(
+        errs.len() >= 2, // If errs is empty, then the previous assert is trivial.
+        "{}: {:#?}",
+        errs.len(), errs,
+    );
+    // I tried cranking up the concurrent calls, but I could never get
+    // Processing to occur. That is, this would always print concurrency - 1.
+    println!("errs.len() == {}", errs.len());
+
+    // Step 3.3.3: Verify that the errors are of the right type. This depends on
+    // whether automatic refund is enabled. If so, then they errs should be
+    // Refunded; otherwise, they should be InvalidTransaction.
+    //
+    // (Most of the code here is for inspecting the reason.)
     if IS_AUTOMATIC_REFUND_ENABLED {
-        match err {
+        match &last_err {
             NotifyError::Refunded {
                 reason,
                 block_index: refund_block_index,
@@ -951,15 +995,15 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                         lower_reason.contains(&key_word),
                         r#""{}" not in {:?}"#,
                         key_word,
-                        err
+                        last_err
                     );
                 }
             }
 
-            _ => panic!("{:?}", err),
+            _ => panic!("{:?}", last_err),
         };
     } else {
-        match err {
+        match &last_err {
             NotifyError::InvalidTransaction(reason) => {
                 // Inspect reason.
                 let lower_reason = reason.to_lowercase();
@@ -975,18 +1019,13 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                         lower_reason.contains(&key_word),
                         r#""{}" not in {:?}"#,
                         key_word,
-                        err
+                        last_err
                     );
                 }
             }
 
-            _ => panic!("{:?}", err),
+            _ => panic!("{:?}", last_err),
         };
-    }
-
-    // Step 3.4: Verify that subsequent calls get the same result.
-    for extra_result in extra_results {
-        assert_eq!(extra_result, original_result);
     }
 }
 
