@@ -786,10 +786,6 @@ fn test_cmc_cycles_create_with_settings() {
 
 #[test]
 fn test_cmc_automatically_refunds_when_memo_is_garbage() {
-    if !IS_AUTOMATIC_REFUND_ENABLED {
-        return;
-    }
-
     // Step 1: Prepare the world.
 
     // USER1 has some ICP (in their default subaccount).
@@ -926,36 +922,67 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     // Step 3.1: Verify that no canisters were created.
     assert_canister_statuses_fixed("end");
 
-    // Step 3.2: Inspect USER1's balance. This verifies that CMC sent 10 ICP
-    // back to USER1 (minus fee, ofc). Here, we also see that CMC refrained from
-    // refunding the same transfer more than once, even though multiple its
-    // notify_create_canister method was called a couple of times.
-    assert_balance(50, 3, "automatic refund issued");
+    // Step 3.2: Inspect USER1's balance.
+    if IS_AUTOMATIC_REFUND_ENABLED {
+        // Verify that CMC sent 10 ICP back to USER1 (minus fee, ofc). Here, we
+        // also see that CMC refrained from refunding the same transfer more
+        // than once, even though multiple its notify_create_canister method was
+        // called a couple of times.
+        assert_balance(50, 3, "end");
+    } else {
+        assert_balance(40, 2, "end");
+    }
 
     // Step 3.3: Verify that CMC returned Err.
     let err = original_result.as_ref().unwrap_err();
-    match err {
-        NotifyError::Refunded {
-            reason,
-            block_index: refund_block_index,
-        } => {
-            // There should be a block_index.
-            refund_block_index.as_ref().unwrap();
+    if IS_AUTOMATIC_REFUND_ENABLED {
+        match err {
+            NotifyError::Refunded {
+                reason,
+                block_index: refund_block_index,
+            } => {
+                // There should be a block_index.
+                refund_block_index.as_ref().unwrap();
 
-            // Inspect reason.
-            let lower_reason = reason.to_lowercase();
-            for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
-                assert!(
-                    lower_reason.contains(&key_word),
-                    r#""{}" not in {:?}"#,
-                    key_word,
-                    err
-                );
+                // Inspect reason.
+                let lower_reason = reason.to_lowercase();
+                for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
+                    assert!(
+                        lower_reason.contains(&key_word),
+                        r#""{}" not in {:?}"#,
+                        key_word,
+                        err
+                    );
+                }
             }
-        }
 
-        _ => panic!("{:?}", err),
-    };
+            _ => panic!("{:?}", err),
+        };
+    } else {
+        match err {
+            NotifyError::InvalidTransaction(reason) => {
+                // Inspect reason.
+                let lower_reason = reason.to_lowercase();
+                for key_word in [
+                    "memo",
+                    "3735928559", // 0xDEAD_BEEF
+                    "not match",
+                    "expected",
+                    "1095062083", // MEMO_CREATE_CANISTER
+                    "createcanister",
+                ] {
+                    assert!(
+                        lower_reason.contains(&key_word),
+                        r#""{}" not in {:?}"#,
+                        key_word,
+                        err
+                    );
+                }
+            }
+
+            _ => panic!("{:?}", err),
+        };
+    }
 
     // Step 3.4: Verify that subsequent calls get the same result.
     for extra_result in extra_results {
