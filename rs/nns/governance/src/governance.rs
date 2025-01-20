@@ -1057,7 +1057,7 @@ impl Proposal {
     fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     fn omit_large_fields(self) -> Self {

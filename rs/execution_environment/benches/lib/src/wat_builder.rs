@@ -1,6 +1,4 @@
-///
-/// The new WAT builder.
-//
+// The new WAT builder.
 
 /// Default number of loop iterations.
 pub const DEFAULT_LOOP_ITERATIONS: usize = 1_000;
