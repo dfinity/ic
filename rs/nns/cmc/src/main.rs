@@ -1870,20 +1870,16 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     }
 
     // Now, it is safe to call ledger to send the ICP back, so do it.
-    let refund_result = refund_icp(
+    let refund_block_index = refund_icp(
         incoming_to_subaccount,
         incoming_from,
         incoming_amount,
         Tokens::from_e8s(0), // extra_fee
     )
-    .await;
-    // Handle errors.
-    let refund_block_index = refund_result.map_err(|err| {
-        // Allow the user to retry.
+    .await
+    .inspect_err(|err| {
+        // This allows the user to retry.
         clear_block_processing_status(incoming_block_index);
-
-        // Do not actually change the err.
-        err
     })?;
 
     // Sending the ICP back succeeded. Therefore, update the block's status to
