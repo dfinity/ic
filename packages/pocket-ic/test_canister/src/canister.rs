@@ -1,6 +1,5 @@
 use candid::{define_function, CandidType, Principal};
 use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
-use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
@@ -9,6 +8,7 @@ use ic_cdk::api::management_canister::http_request::{
     http_request as canister_http_outcall, CanisterHttpRequestArgument, HttpMethod, HttpResponse,
     TransformArgs, TransformContext, TransformFunc,
 };
+use ic_cdk::api::{instruction_counter, set_global_timer};
 use ic_cdk::{inspect_message, query, trap, update};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -345,6 +345,19 @@ fn trap_query() {
 #[update]
 fn trap_update() {
     trap("trap in update method");
+}
+
+// global timer
+
+#[export_name = "canister_global_timer"]
+fn timer() {
+    ic_cdk::print("I'm running in a global timer!");
+}
+
+#[update]
+fn set_timer() {
+    let time = ic_cdk::api::time() + 10_000_000_000;
+    set_global_timer(time);
 }
 
 fn main() {}
