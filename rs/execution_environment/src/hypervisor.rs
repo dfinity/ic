@@ -308,7 +308,7 @@ impl Hypervisor {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         // TODO(EXC-1821): Create a temp dir in this directory for use in the
         // compilation cache.
-        _temp_dir: &Path,
+        temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -344,7 +344,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+            compilation_cache: Arc::new(CompilationCache::new(
+                MAX_COMPILATION_CACHE_SIZE,
+                tempfile::tempdir_in(temp_dir).unwrap(),
+            )),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -374,7 +377,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+            compilation_cache: Arc::new(CompilationCache::new(
+                MAX_COMPILATION_CACHE_SIZE,
+                tempfile::tempdir().unwrap(),
+            )),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,

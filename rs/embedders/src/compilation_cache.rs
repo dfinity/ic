@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use prometheus::core::Atomic;
 use tempfile::TempDir;
 
 use crate::{
@@ -55,9 +56,11 @@ impl MemoryDiskBytes for CompilationCache {
 }
 
 impl CompilationCache {
-    pub fn new(capacity: NumBytes) -> Self {
-        Self::Memory {
-            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(GB))),
+    pub fn new(capacity: NumBytes, dir: TempDir) -> Self {
+        Self::Disk {
+            dir,
+            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(100 * GB))),
+            counter: AtomicU64::new(0),
         }
     }
 
@@ -211,7 +214,10 @@ impl StoredCompilation {
 /// each other if they all try to insert in the cache at the same time.
 #[test]
 fn concurrent_insertions() {
-    let cache = CompilationCache::new(NumBytes::from(30 * 1024 * 1024));
+    let cache = CompilationCache::new(
+        NumBytes::from(30 * 1024 * 1024),
+        tempfile::tempdir().unwrap(),
+    );
     let wasm = wat::parse_str("(module)").unwrap();
     let canister_module = CanisterModule::new(wasm.clone());
     let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm.clone());
