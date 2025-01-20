@@ -5,7 +5,6 @@ EXTENDS TLC, Integers, FiniteSets, Sequences, Variants
 CONSTANTS
     Governance_Account_Ids,
     Account_Ids,
-    Neuron_Ids,
     Minting_Account_Id
 
 CONSTANTS
@@ -16,6 +15,11 @@ CONSTANTS
     MIN_STAKE,
     \* The transfer fee charged by the ledger canister
     TRANSACTION_FEE
+
+CONSTANT
+    \* Which argument to give as an amount; for Apalache, we can take Nat,
+    \* for TLC we want to limit this to some finite set
+    POSSIBLE_DISBURSE_AMOUNTS(_, _)
 
 \* Initial value used for uninitialized accounts
 DUMMY_ACCOUNT == ""
@@ -88,7 +92,7 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
             \* our model is well-formed.
             \* Note that the user can request to disburse an arbitrary amount. This will only fail once
             \* we send a message to the ledger.
-            with(nid \in DOMAIN(neuron) \ locks; amt \in Nat; account \in Account_Ids) {
+            with(nid \in DOMAIN(neuron) \ locks; amt \in POSSIBLE_DISBURSE_AMOUNTS(neuron, nid); account \in Account_Ids) {
                 neuron_id := nid;
                 disburse_amount := amt;
                 fees_amount := neuron[neuron_id].fees;
@@ -136,13 +140,13 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "49bb5804" /\ chksum(tla) = "fa8fb71a")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-          ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
+\* BEGIN TRANSLATION (chksum(pcal) = "10c9c7f7" /\ chksum(tla) = "a1672e89")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons, neuron_id, disburse_amount, 
           to_account, fees_amount
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
-           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount, 
            to_account, fees_amount >>
 
 ProcSet == (Disburse_Neuron_Process_Ids)
@@ -165,7 +169,7 @@ DisburseNeuron1(self) == /\ pc[self] = "DisburseNeuron1"
                          /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
                                /\ UNCHANGED <<neuron, locks, governance_to_ledger, neuron_id, disburse_amount, to_account, fees_amount>>
                             \/ /\ \E nid \in DOMAIN(neuron) \ locks:
-                                    \E amt \in Nat:
+                                    \E amt \in POSSIBLE_DISBURSE_AMOUNTS(neuron, nid):
                                       \E account \in Account_Ids:
                                         /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
                                         /\ disburse_amount' = [disburse_amount EXCEPT ![self] = amt]
@@ -181,8 +185,8 @@ DisburseNeuron1(self) == /\ pc[self] = "DisburseNeuron1"
                                                          ELSE /\ neuron' = [neuron EXCEPT ![neuron_id'[self]] = [@ EXCEPT !.cached_stake = 0, !.fees = 0]]
                                                    /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[neuron_id'[self]].account, to_account'[self], disburse_amount'[self], TRANSACTION_FEE))))
                                                    /\ pc' = [pc EXCEPT ![self] = "DisburseNeuron_Stake_WaitForTransfer"]
-                         /\ UNCHANGED << neuron_id_by_account,
-                                         ledger_to_governance,
+                         /\ UNCHANGED << neuron_id_by_account, 
+                                         ledger_to_governance, 
                                          spawning_neurons >>
 
 DisburseNeuron_Fee_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Fee_WaitForTransfer"
@@ -195,19 +199,19 @@ DisburseNeuron_Fee_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Fee_Wa
                                                             /\ to_account' = [to_account EXCEPT ![self] = DUMMY_ACCOUNT]
                                                             /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                                             /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                                            /\ UNCHANGED << neuron,
+                                                            /\ UNCHANGED << neuron, 
                                                                             governance_to_ledger >>
                                                        ELSE /\ IF neuron[neuron_id[self]].cached_stake > fees_amount[self]
                                                                   THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = @ - fees_amount[self], !.fees = 0]]
                                                                   ELSE /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = 0, !.fees = 0]]
                                                             /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[neuron_id[self]].account, to_account[self], disburse_amount[self], TRANSACTION_FEE))))
                                                             /\ pc' = [pc EXCEPT ![self] = "DisburseNeuron_Stake_WaitForTransfer"]
-                                                            /\ UNCHANGED << locks,
-                                                                            neuron_id,
-                                                                            disburse_amount,
-                                                                            to_account,
+                                                            /\ UNCHANGED << locks, 
+                                                                            neuron_id, 
+                                                                            disburse_amount, 
+                                                                            to_account, 
                                                                             fees_amount >>
-                                            /\ UNCHANGED << neuron_id_by_account,
+                                            /\ UNCHANGED << neuron_id_by_account, 
                                                             spawning_neurons >>
 
 DisburseNeuron_Stake_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Stake_WaitForTransfer"
@@ -224,8 +228,8 @@ DisburseNeuron_Stake_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Stak
                                               /\ to_account' = [to_account EXCEPT ![self] = DUMMY_ACCOUNT]
                                               /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                               /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                              /\ UNCHANGED << neuron_id_by_account,
-                                                              governance_to_ledger,
+                                              /\ UNCHANGED << neuron_id_by_account, 
+                                                              governance_to_ledger, 
                                                               spawning_neurons >>
 
 Disburse_Neuron(self) == DisburseNeuron1(self)
