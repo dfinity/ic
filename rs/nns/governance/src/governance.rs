@@ -1177,7 +1177,7 @@ impl ProposalData {
     pub fn is_manage_neuron(&self) -> bool {
         self.proposal
             .as_ref()
-            .map_or(false, Proposal::is_manage_neuron)
+            .is_some_and(Proposal::is_manage_neuron)
     }
 
     pub fn reward_status(
