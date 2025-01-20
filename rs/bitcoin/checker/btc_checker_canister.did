@@ -91,6 +91,11 @@ service : (CheckArg) -> {
     // Same as check_transaction, but taking the transaction id argument as a string.
     check_transaction_str: (CheckTransactionStrArgs) -> (CheckTransactionResponse);
 
+    // Same as check_transaction, but query method, hence it does not perform any HTTP
+    // outcalls to fetch the required information.
+    // IMPORTANT: this endpoint is meant as a debugging tool and is not guaranteed to be backwards-compatible.
+    check_transaction_query: (CheckTransactionArgs) -> (CheckTransactionResponse) query;
+
     // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
     check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;

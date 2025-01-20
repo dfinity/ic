@@ -105,8 +105,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// together with a text description.
 #[ic_cdk::update]
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
-    check_transaction_with(|| Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string()))
-        .await
+    check_transaction_with(|| check_transaction_txid(args)).await
 }
 
 #[ic_cdk::update]
@@ -114,6 +113,21 @@ async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactio
     use std::str::FromStr;
     check_transaction_with(|| Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string()))
         .await
+}
+
+/// Performs the same checks as the `check_transaction` method, but since no cycles are available,
+/// it only returns `Passed` if the transaction information is already available. If the transaction
+/// inputs need to be fetched, it will return `NotEnoughCycles`.
+#[ic_cdk::query]
+async fn check_transaction_query(args: CheckTransactionArgs) -> CheckTransactionResponse {
+    match check_transaction_txid(args) {
+        Ok(txid) => check_transaction_inputs(txid).await,
+        Err(err) => CheckTransactionIrrecoverableError::InvalidTransactionId(err).into(),
+    }
+}
+
+fn check_transaction_txid(args: CheckTransactionArgs) -> Result<Txid, String> {
+    Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string())
 }
 
 async fn check_transaction_with<F: FnOnce() -> Result<Txid, String>>(
