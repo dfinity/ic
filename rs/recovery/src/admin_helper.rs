@@ -122,9 +122,7 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            // TODO: Switch to the new command name:
-            // .add_positional_argument("propose-to-revise-elected-guestos-versions")
-            .add_positional_argument("propose-to-update-elected-replica-versions")
+            .add_positional_argument("propose-to-revise-elected-guestos-versions")
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
             .add_argument("release-package-sha256-hex", quote(sha256))
@@ -416,7 +414,7 @@ mod tests {
             result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-elected-replica-versions \
+            propose-to-revise-elected-guestos-versions \
             --replica-version-to-elect \"fake_replica_version\" \
             --release-package-urls \"https://fake_upgrade_url.com/\" \
             --release-package-sha256-hex \"fake_sha_256\" \
