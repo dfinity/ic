@@ -5308,6 +5308,7 @@ impl Governance {
     }
 
     fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+        #[allow(non_local_definitions)]
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)

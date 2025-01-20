@@ -509,6 +509,9 @@ impl NnsGovernanceCanister {
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
+        // TODO: Local implementations can become hard error in 2024.
+        // See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_lint/non_local_def/static.NON_LOCAL_DEFINITIONS.html
+        #[allow(non_local_definitions)]
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";

@@ -1,3 +1,7 @@
+// TODO: Static mutable refs will become a hard error in 2024 edition of rust.
+// https://doc.rust-lang.org/nightly/edition-guide/rust-2024/static-mut-references.html#disallow-references-to-static-mut
+#![allow(static_mut_refs)]
+
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};

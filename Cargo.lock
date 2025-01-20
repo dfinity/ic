@@ -17138,6 +17138,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmap"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+ "dfn_core",
+ "dfn_json",
+ "dfn_macro",
+ "ic-utils 0.9.0",
+]
+
+[[package]]
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [

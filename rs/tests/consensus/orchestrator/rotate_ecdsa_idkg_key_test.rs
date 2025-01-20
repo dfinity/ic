@@ -242,7 +242,7 @@ fn test(env: TestEnv) {
 
     assert!(last_rotation
         .duration_since(first_rotation)
-        .is_some_and(|d| d + gamma <= delta));
+        .is_ok_and(|d| d + gamma <= delta));
 
     // Ensure signing still works
     for (key_id, public_key) in public_keys {
