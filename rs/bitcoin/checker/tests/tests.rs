@@ -8,10 +8,13 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
@@ -19,7 +22,6 @@ use pocket_ic::{
     },
     query_candid, PocketIc, PocketIcBuilder, RejectResponse,
 };
-use regex::Regex;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
@@ -369,7 +371,7 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-        MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
         );
     };
@@ -414,7 +416,7 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -458,7 +460,7 @@ fn test_check_transaction_passed() {
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
-    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
         r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
@@ -746,7 +748,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    MetricsAssert::from_querying_metrics(&setup)
+    MetricsAssert::from_http_query(&setup)
         .assert_contains_metric_matching(
             r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
         )
@@ -790,7 +792,7 @@ fn should_query_logs_and_metrics() {
 
 fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     use candid::Decode;
-    let request = ic_canisters_http_types::HttpRequest {
+    let request = HttpRequest {
         method: "GET".to_string(),
         url: url.into(),
         headers: Default::default(),
@@ -807,7 +809,7 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
                 Encode!(&request).expect("failed to encode HTTP request"),
             )
             .expect("failed to query get_transactions on the ledger"),
-        ic_canisters_http_types::HttpResponse
+        HttpResponse
     )
     .unwrap();
 
@@ -815,37 +817,12 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     response.body.into_vec()
 }
 
-pub struct MetricsAssert {
-    metrics: Vec<String>,
-}
-
-impl MetricsAssert {
-    fn from_querying_metrics(setup: &Setup) -> Self {
-        let response = make_http_query(setup, "/metrics");
-        let metrics = String::from_utf8_lossy(&response)
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics }
+impl PocketIcHttpQuery for &Setup {
+    fn get_pocket_ic(&self) -> &PocketIc {
+        &self.env
     }
 
-    fn assert_contains_metric_matching(self, pattern: &str) -> Self {
-        assert!(
-            !self.find_metrics_matching(pattern).is_empty(),
-            "Expected to find metric matching '{}', but none matched in:\n{:?}",
-            pattern,
-            self.metrics
-        );
-        self
-    }
-
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
-        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
-        self.metrics
-            .iter()
-            .filter(|line| regex.is_match(line))
-            .cloned()
-            .collect()
+    fn get_canister_id(&self) -> CanisterId {
+        self.btc_checker_canister
     }
 }
