@@ -1,0 +1,7 @@
+service : {
+  create_array : () -> (variant { Ok : text; Err : text });
+  increment_array : () -> (variant { Ok : text; Err : text });
+  compute_sum : () -> (variant { Ok : nat32; Err : text }) query;
+  toggle_trap : () -> (variant { Ok : null; Err : text });
+  test : () -> (variant { Ok : text; Err : text }) query;
+}
