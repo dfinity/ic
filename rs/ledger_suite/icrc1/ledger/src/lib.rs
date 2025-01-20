@@ -582,12 +582,8 @@ pub struct Ledger {
     #[serde(default)]
     accounts_overflow_trim_quantity: usize,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
-}
-
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
