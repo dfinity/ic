@@ -2325,7 +2325,10 @@ mod tests {
                 canister_module,
                 PathBuf::new(),
                 canister_id,
-                Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+                Arc::new(CompilationCache::new(
+                    MAX_COMPILATION_CACHE_SIZE,
+                    tempfile::tempdir().unwrap(),
+                )),
             )
             .unwrap();
         let sandbox_pid = match controller
