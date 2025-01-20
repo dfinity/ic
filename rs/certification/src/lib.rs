@@ -276,7 +276,10 @@ fn verify_certificate_internal(
     use_signature_cache: bool,
 ) -> Result<Certificate, CertificateValidationError> {
     let certificate: Certificate = parse_certificate(certificate)?;
+    println!("certificate: {certificate:?}");
+    println!("*** no delegation ***");
     let key = if let Some(delegation) = &certificate.delegation {
+        println!("*** starting to verify delegation: {delegation:?} ***");
         let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
             .map(SubnetId::from)
             .map_err(|err| {
@@ -296,7 +299,11 @@ fn verify_certificate_internal(
         *root_pk
     };
 
+    println!("*** finished to verify delegation ***");
+
+    println!("*** starting to verify_certificate_signature ***");
     verify_certificate_signature(&certificate, &key, use_signature_cache)?;
+    println!("*** finished to verify_certificate_signature ***");
     Ok(certificate)
 }
 

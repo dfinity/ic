@@ -53,6 +53,13 @@ pub fn verify(
 ) -> CryptoResult<()> {
     let (canister_id, seed) = parse_pubkey_bytes(&pk)?;
     let parsed_sig = parse_signature_bytes(&sig)?;
+    {
+        let parsed_sig = parse_signature_bytes(&sig)?;
+        println!("signature: {parsed_sig:?}");
+        let canister_sig_tree = canister_sig_tree(parsed_sig, &sig)?;
+        println!("canister_sig_tree: {canister_sig_tree:?}");
+        println!("canister_id: {canister_id:?}");
+    }
     verify_certified_data(
         parsed_sig.certificate.as_ref(),
         &canister_id,
@@ -61,6 +68,7 @@ pub fn verify(
         &sig,
         &pk,
     )?;
+    println!("*** verified certified data");
     let canister_sig_tree = canister_sig_tree(parsed_sig, &sig)?;
     lookup_path_in_tree(&seed, msg, &canister_sig_tree, &pk, &sig)?;
     Ok(())
