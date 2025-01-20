@@ -1,5 +1,4 @@
-// TODO: Static mutable refs will become a hard error in 2024 edition of rust.
-// https://doc.rust-lang.org/nightly/edition-guide/rust-2024/static-mut-references.html#disallow-references-to-static-mut
+// TODO: EXC-1841
 #![allow(static_mut_refs)]
 
 use dfn_core::api::print;

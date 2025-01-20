@@ -798,6 +798,7 @@ mod random_ops {
             if libc::sigaction(
                 libc::SIGSEGV,
                 &handler,
+                // TODO: EXC-1841
                 #[allow(static_mut_refs)]
                 PREV_SIGSEGV.as_mut_ptr(),
             ) != 0
@@ -817,6 +818,7 @@ mod random_ops {
                 unsafe {
                     if libc::sigaction(
                         libc::SIGSEGV,
+                        // TODO: EXC-1841
                         #[allow(static_mut_refs)]
                         PREV_SIGSEGV.as_ptr(),
                         std::ptr::null_mut(),
@@ -856,6 +858,7 @@ mod random_ops {
 
             unsafe {
                 if !handled {
+                    // TODO: EXC-1841
                     #[allow(static_mut_refs)]
                     let previous = *PREV_SIGSEGV.as_ptr();
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {

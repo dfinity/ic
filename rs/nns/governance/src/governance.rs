@@ -5308,6 +5308,7 @@ impl Governance {
     }
 
     fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+        // TODO: Jira ticket NNS1-3555
         #[allow(non_local_definitions)]
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {

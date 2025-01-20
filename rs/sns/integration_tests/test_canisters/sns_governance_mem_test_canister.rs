@@ -1,5 +1,4 @@
-// TODO: Static mutable refs will become a hard error in 2024 edition of rust.
-// https://doc.rust-lang.org/nightly/edition-guide/rust-2024/static-mut-references.html#disallow-references-to-static-mut
+// TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
 
 //! This is a special-purpose canister to create a large Governance proto and
