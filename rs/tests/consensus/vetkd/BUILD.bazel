@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -19,13 +19,13 @@ system_test_nns(
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/utils",
         "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
         "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
         "@crate_index//:ic-agent",
+        "@crate_index//:slog",
     ],
 )
