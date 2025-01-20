@@ -32,7 +32,7 @@ PREFIX = '{https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/ex
 
 # Handlers for different blocklists.
 class BitcoinBlocklistHandler:
-    
+
     def preamble(self):
         return '''#[cfg(test)]
     mod tests;
@@ -55,10 +55,10 @@ class BitcoinBlocklistHandler:
 
     def format_address(self, address):
         return f'"{address}"'
-    
+
     def currency_symbol(self):
         return 'XBT'
-    
+
     def sort(self, addresses):
         return sorted(addresses)
 
@@ -90,10 +90,10 @@ class EthereumBlocklistHandler:
 
     def format_address(self, address):
         return f'ethereum_address!("{address[2:]}")'
-    
+
     def currency_symbol(self):
         return 'ETH'
-    
+
     def sort(self, addresses):
         return sorted(addresses, key=lambda x: int(x[2:], 16))
 
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', '-o', type=str, default=DEFAULT_BLOCKLIST_FILENAME, help='write the output to the provided path')
 
     args = parser.parse_args()
-    
+
     if args.currency == 'BTC':
         blocklist_handler = BitcoinBlocklistHandler()
     else:
