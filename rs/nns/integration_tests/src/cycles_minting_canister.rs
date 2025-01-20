@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
     CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
     NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
     SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    IS_AUTOMATIC_REFUND_ENABLED, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
+    MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -18,6 +19,7 @@ use ic_management_canister_types::{
     CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
+use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -25,7 +27,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
@@ -34,8 +36,9 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        cmc_set_default_authorized_subnetworks, set_up_universal_canister, setup_cycles_ledger,
-        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
+        self, cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
+        set_up_universal_canister, setup_cycles_ledger, setup_nns_canisters,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
@@ -47,8 +50,11 @@ use icp_ledger::{
     NotifyCanisterArgs, SendArgs, Subaccount, Tokens, TransferArgs, TransferError,
     DEFAULT_TRANSFER_FEE,
 };
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::{self, account::Account};
+use maplit::btreemap;
+use serde_bytes::ByteBuf;
 use std::time::Duration;
+use ic_test_utilities_metrics::fetch_int_gauge_vec;
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
@@ -776,6 +782,185 @@ fn test_cmc_cycles_create_with_settings() {
         .cycles(),
         "Penalty was not BAD_REQUEST_CYCLES_PENALTY"
     );
+}
+
+#[test]
+fn test_cmc_automatically_refunds_when_memo_is_garbage() {
+    if !IS_AUTOMATIC_REFUND_ENABLED {
+        return;
+    }
+
+    // Step 1: Prepare the world.
+
+    // USER1 has some ICP (in their default subaccount).
+    let account_identifier = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let initial_balance = Tokens::new(100, 0).unwrap();
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(account_identifier, initial_balance)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let assert_canister_statuses_fixed = |narrative_phase| {
+        assert_eq!(
+            btreemap! {
+                btreemap! { "status".to_string() => "running".to_string() } => 11,
+                btreemap! { "status".to_string() => "stopped".to_string() } => 0,
+                btreemap! { "status".to_string() => "stopping".to_string() } => 0,
+            },
+            fetch_int_gauge_vec(
+                state_machine.metrics_registry(),
+                "replicated_state_registered_canisters"
+            ),
+            "{}",
+            narrative_phase
+        );
+    };
+    // This will be called again later to verify that no canisters were added.
+    // Here, we just make sure that assert_canister_statuses_fixed has a correct
+    // understanding of how many canisters there are originally.
+    assert_canister_statuses_fixed("start");
+
+    let assert_balance = |nominal_amount_tokens: u64, fee_count: u64, narrative_phase: &str| {
+        let observed_balance = icrc1_balance(
+            &state_machine,
+            LEDGER_CANISTER_ID,
+            Account {
+                owner: Principal::from(TEST_USER1_PRINCIPAL.clone()),
+                subaccount: None,
+            },
+        );
+
+        let total_fees = Tokens::new(0, fee_count * 10_000).unwrap();
+        let expected_balance = Tokens::new(nominal_amount_tokens, 0)
+            .unwrap()
+            .checked_sub(&total_fees)
+            .unwrap();
+        assert_eq!(observed_balance, expected_balance, "{}", narrative_phase);
+    };
+    // This is more to gain confidence that assert_balance works; there is very
+    // little risk that USER1's balance is not 100.
+    assert_balance(100, 0, "start");
+
+    // Step 2: Run code under test.
+
+    // Step 2.1: Send ICP from USER1 to CMC, but use a garbage memo. There is no
+    // immediate explosion; "the bomb is only being planted" so to speak.
+
+    let garbage_memo = [0xEF, 0xBE, 0xAD, 0xDE, 0, 0, 0, 0]; // little endian 0x_DEAD_BEEF
+    assert!(!MEANINGFUL_MEMOS.contains(&Memo(u64::from_le_bytes(garbage_memo))));
+    let transfer_arg = icrc1::transfer::TransferArg {
+        to: icrc1::account::Account {
+            owner: Principal::from(CYCLES_MINTING_CANISTER_ID.get()),
+            subaccount: Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()).0),
+        },
+        amount: Nat::from(10 * E8),
+        fee: Some(Nat::from(10_000_u64)),
+
+        // Here, the "bomb is being planted".
+        memo: Some(icrc1::transfer::Memo(ByteBuf::from(garbage_memo))),
+
+        from_subaccount: None, // source from USER1's the default subaccount
+        created_at_time: None,
+    };
+    let create_canister_block_index = icrc1_transfer(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        *TEST_USER1_PRINCIPAL,
+        transfer_arg.clone(),
+    )
+    .expect("transfer failed");
+    assert_balance(90, 1, "ICP sent to CMC");
+
+    // This is to make it so that CMC has more ICP. That way, when we later try
+    // to duplicate the automatic refund, we can verify that CMC refrains from
+    // sending back more ICP.
+    let transfer_arg = icrc1::transfer::TransferArg {
+        amount: Nat::from(50 * E8),
+        ..transfer_arg
+    };
+    let _red_herring = icrc1_transfer(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        *TEST_USER1_PRINCIPAL,
+        transfer_arg,
+    )
+    .expect("transfer failed");
+    // Balance has gone down by 10 + 10 (plus fees). Later, we will see balance
+    // go back up, but only by 10 (minus fee).
+    assert_balance(40, 2, "additional red herring ICP sent to CMC");
+
+    // Step 2.2: Ask CMC to create a canister using the ICP that was just sent
+    // to it (from USER1). This is where it is noticed (by CMC) that USER1 did
+    // something wrong.
+
+    let notify_create_canister = || -> Result<CanisterId, NotifyError> {
+        #[allow(deprecated)]
+        let notify_create_canister = NotifyCreateCanister {
+            block_index: create_canister_block_index,
+            controller: *TEST_USER1_PRINCIPAL,
+
+            // Nothing fancy.
+            subnet_type: None,
+            subnet_selection: None,
+            settings: None,
+        };
+
+        state_test_helpers::notify_create_canister(
+            &state_machine,
+            *TEST_USER1_PRINCIPAL,
+            &notify_create_canister,
+        )
+    };
+
+    // Ideally, we'd be able to do a bunch of these concurrently, because we
+    // want to verify that journaling successfully prevents interleaving from
+    // causing problems, but I'm not sure how to do that...
+    let original_result = notify_create_canister();
+    // Duplicate calls. Later, we verify that CMC is not fooled by these. I.e.
+    // it only performs one refund transfer.
+    let extra_results = (0..3).map(|_i| notify_create_canister());
+
+    // Step 3: Verify results.
+
+    // Step 3.1: Verify that no canisters were created.
+    assert_canister_statuses_fixed("end");
+
+    // Step 3.2: Inspect USER1's balance. This verifies that CMC sent 10 ICP
+    // back to USER1 (minus fee, ofc). Here, we also see that CMC refrained from
+    // refunding the same transfer more than once, even though multiple its
+    // notify_create_canister method was called a couple of times.
+    assert_balance(50, 3, "automatic refund issued");
+
+    // Step 3.3: Verify that CMC returned Err.
+    let err = original_result.as_ref().unwrap_err();
+    match err {
+        NotifyError::Refunded {
+            reason,
+            block_index: refund_block_index,
+        } => {
+            // There should be a block_index.
+            refund_block_index.as_ref().unwrap();
+
+            // Inspect reason.
+            let lower_reason = reason.to_lowercase();
+            for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
+                assert!(
+                    lower_reason.contains(&key_word),
+                    r#""{}" not in {:?}"#,
+                    key_word,
+                    err
+                );
+            }
+        }
+
+        _ => panic!("{:?}", err),
+    };
+
+    // Step 3.4: Verify that subsequent calls get the same result.
+    for extra_result in extra_results {
+        assert_eq!(extra_result, original_result);
+    }
 }
 
 fn send_transfer(env: &StateMachine, arg: &TransferArgs) -> Result<BlockIndex, TransferError> {

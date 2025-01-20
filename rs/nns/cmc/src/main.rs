@@ -52,8 +52,6 @@ mod environment;
 mod exchange_rate_canister;
 mod limiter;
 
-const IS_AUTOMATIC_REFUND_ENABLED: bool = false;
-
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
 /// The ICP/XDR start-of-day conversion rate of the past 60 days is cached.
@@ -1841,7 +1839,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
 
     // Set block's status to Processing before calling ledger.
     let reason_for_refund = format!(
-        "Memo ({}) in the incoming ICP transfer does not correspond to \
+        "Memo ({:#08X}) in the incoming ICP transfer does not correspond to \
          any of the operations that the Cycles Minting canister offers.",
         memo.0,
     );

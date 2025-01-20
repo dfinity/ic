@@ -10550,6 +10550,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types",
  "ic-types-test-utils",
  "ic-xrc-types",
