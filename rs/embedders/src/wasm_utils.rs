@@ -133,6 +133,9 @@ impl Segments {
             // them into a map page_num -> page. Whenever we map a chunk into its page,
             // we simply copy its bytes to the right place inside the page.
             .fold(HashMap::new(), |mut acc, (offset, bytes)| {
+                if bytes.is_empty() {
+                    return acc;
+                }
                 let page_num = offset / PAGE_SIZE;
                 let list = acc
                     .entry(PageIndex::new(page_num as u64))

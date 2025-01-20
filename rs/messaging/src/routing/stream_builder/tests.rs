@@ -347,7 +347,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         // the implementation of stream builder will always allow one message if
         // the stream does not exist yet.
         let mut streams = provided_state.take_streams();
-        streams.get_mut_or_insert(REMOTE_SUBNET);
+        streams.entry(REMOTE_SUBNET).or_default();
         provided_state.put_streams(streams);
 
         // Set up the provided_canister_states.
