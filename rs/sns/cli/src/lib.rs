@@ -2,6 +2,7 @@ use crate::{
     deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
+    upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
@@ -38,6 +39,7 @@ pub mod prepare_canisters;
 pub mod propose;
 mod table;
 pub mod unit_helpers;
+pub mod upgrade_sns_controlled_canister;
 mod utils;
 
 #[cfg(test)]
@@ -80,6 +82,9 @@ pub enum SubCommand {
     List(list::ListArgs),
     /// Check SNSes for warnings and errors.
     Health(HealthArgs),
+    /// Uploads a given Wasm to a (newly deployed) store canister and submits a proposal to upgrade
+    /// using that Wasm.
+    UpgradeSnsControlledCanister(UpgradeSnsControlledCanisterArgs),
 }
 
 impl CliArgs {
