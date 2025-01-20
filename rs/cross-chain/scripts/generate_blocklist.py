@@ -1,4 +1,3 @@
-import sys
 import xml.etree.ElementTree as ET
 import argparse
 
@@ -37,7 +36,7 @@ class BitcoinBlocklistHandler:
     def preamble(self):
         return '''#[cfg(test)]
     mod tests;
-    
+
     use bitcoin::Address;
 
     /// The script to generate this file, including information about the source data, can be found here:
@@ -68,7 +67,7 @@ class EthereumBlocklistHandler:
     def preamble(self):
         return '''#[cfg(test)]
     mod tests;
-    
+
     use ic_ethereum_types::Address;
 
     macro_rules! ethereum_address {
