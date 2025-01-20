@@ -1594,7 +1594,7 @@ pub fn list_all_neurons_and_combine_responses(
     let pages_needed =
         (response.total_pages_available.unwrap()).div_ceil(request.page_size.unwrap_or(500));
 
-    for page in 1..pages_needed {
+    for page in 1..=pages_needed {
         let mut new_request = request.clone();
         new_request.page_number = Some(page);
         let mut new_response = list_neurons(state_machine, sender, new_request);
