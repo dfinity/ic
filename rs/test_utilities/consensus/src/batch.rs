@@ -1,10 +1,13 @@
 use ic_base_types::NumBytes;
 use ic_interfaces::{
-    batch_payload::{iterator_to_bytes, BatchPayloadBuilder, PastPayload, ProposalContext},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
     validation::ValidationResult,
 };
-use ic_types::{batch::ValidationContext, Height};
+use ic_types::{
+    batch::{iterator_to_bytes, ValidationContext},
+    Height,
+};
 use mockall::*;
 
 mock! {
