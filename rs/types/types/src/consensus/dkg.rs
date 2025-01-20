@@ -209,10 +209,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -238,20 +236,6 @@ impl Summary {
             .into_iter()
             .chain(self.next_transcripts)
             .map(|(_, t)| t)
-            .collect()
-    }
-
-    /// Return the set of next transcripts for all tags. If for some tag
-    /// the next transcript is not available, the current transcript is used.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| {
-                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
-                (tag, new_next_transcripts)
-            })
             .collect()
     }
 
