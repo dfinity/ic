@@ -101,7 +101,6 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 ///   ▼
 /// [end]
 ///```
-
 /// Contains fields of `ResponseHelper` that are necessary for resuming the
 /// response execution.
 #[derive(Debug)]
@@ -575,7 +574,7 @@ impl ResponseHelper {
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .is_some_and(|es| es.is_wasm64);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
