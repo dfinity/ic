@@ -104,7 +104,8 @@ pub struct BlockchainState {
     network: Network,
     metrics: BlockchainStateMetrics,
 
-    file: std::fs::File,
+    block_file: std::fs::File,
+    header_file: std::fs::File,
 }
 
 impl BlockchainState {
@@ -120,14 +121,24 @@ impl BlockchainState {
             work: genesis_block_header.work(),
         }];
 
-        let file_path = "debug.log";
+        let block_file_path = "block.log";
 
         // Open the file in append mode, or create it if it doesn't exist
-        let mut file = OpenOptions::new()
+        let block_file = OpenOptions::new()
             .create(true) // Create the file if it doesn't exist
             .write(true)  // Enable writing
             .append(true) // Append to the file instead of overwriting
-            .open(file_path)
+            .open(block_file_path)
+            .expect("Failed to open or create file");
+
+        let header_file_path = "header.log";
+
+            // Open the file in append mode, or create it if it doesn't exist
+        let header_file = OpenOptions::new()
+            .create(true) // Create the file if it doesn't exist
+            .write(true)  // Enable writing
+            .append(true) // Append to the file instead of overwriting
+            .open(header_file_path)
             .expect("Failed to open or create file");
 
         BlockchainState {
@@ -137,7 +148,8 @@ impl BlockchainState {
             tips,
             network: config.network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
-            file    
+            block_file,
+            header_file    
         }
     }
 
@@ -167,6 +179,7 @@ impl BlockchainState {
             .try_for_each(|header| match self.add_header(*header) {
                 Ok(AddHeaderResult::HeaderAdded(block_hash)) => {
                     block_hashes_of_added_headers.push(block_hash);
+
                     Ok(())
                 }
                 Ok(AddHeaderResult::HeaderAlreadyExists) => Ok(()),
@@ -241,6 +254,8 @@ impl BlockchainState {
         
         let difficulty = header.difficulty_float();
 
+        writeln!(self.header_file, "[{}, {}],", cached_header.height, difficulty).unwrap();
+
         self.header_cache.insert(block_hash, cached_header);
 
         self.metrics.header_cache_size.inc();
@@ -260,20 +275,28 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
+        let height = self.header_cache.get(&block_hash).unwrap().height;
 
-        println!("debuggg in add_block");
-
-        if block.header.difficulty_float() > 1.0 {
-            writeln!(self.file, "[{}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size()).unwrap();
-        }
+        writeln!(self.block_file, "[{}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size()).unwrap();
 
         self.block_cache.insert(block_hash, block);
+        self.prune_blocks_below_height(height);
+
+
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
         self.metrics
             .block_cache_elements
             .set(self.block_cache.len() as i64);
+        println!("{}, {}, {}", height, self.get_block_cache_size(), self.block_cache.len());
+        if false && self.block_cache.len() > 1 {
+            println!("found more blocks in cache:");
+            for (hash, _block) in self.block_cache.iter() {
+                let header = self.header_cache.get(hash).unwrap();
+                println!("[{}, {}],", header.height, hash);
+            }
+        }
         Ok(())
     }
 
