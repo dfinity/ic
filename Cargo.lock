@@ -6354,7 +6354,7 @@ dependencies = [
  "ic0 0.24.0-alpha.1",
  "serde",
  "serde_bytes",
- "thiserror 2.0.8",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -6437,7 +6437,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_tokenstream 0.2.2",
- "syn 2.0.90",
+ "syn 2.0.96",
 ]
 
 [[package]]
