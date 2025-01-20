@@ -1877,7 +1877,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         Tokens::from_e8s(0), // extra_fee
     )
     .await
-    .inspect_err(|err| {
+    .inspect_err(|_err| {
         // This allows the user to retry.
         clear_block_processing_status(incoming_block_index);
     })?;
