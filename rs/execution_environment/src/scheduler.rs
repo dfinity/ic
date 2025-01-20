@@ -1825,7 +1825,7 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
-            if instructions_used.is_some_and( |instructions| instructions.get() > 0) {
+            if instructions_used.is_some_and(|instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.
                 executed_canister_ids.insert(new_canister.canister_id());
             }
@@ -2319,7 +2319,7 @@ fn is_next_method_chosen(
         .system_state
         .task_queue
         .front()
-        .is_some_and( |task| task.is_hook())
+        .is_some_and(|task| task.is_hook())
     {
         return true;
     }
