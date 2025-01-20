@@ -4,11 +4,11 @@ use slog::Logger;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
-use std::str::FromStr;
 use std::process::Command;
+use std::str::FromStr;
 use url::Url;
 
-use anyhow::{bail,Result};
+use anyhow::{bail, Result};
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{
@@ -145,7 +145,10 @@ impl TNode {
             .expect("Failed to execute command");
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("Error building and pushing config container config image: {}", stderr);
+            bail!(
+                "Error building and pushing config container config image: {}",
+                stderr
+            );
         }
         Ok(())
     }

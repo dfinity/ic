@@ -343,9 +343,11 @@ impl BoundaryNodeWithVm {
         } else {
             let tnet = TNet::read_attribute(env);
             let tnet_node = tnet.nodes.last().expect("no nodes");
-            block_on(tnet_node.build_oci_config_image(
-                    &compressed_img_path, &tnet_node.name.clone().unwrap()))
-                .expect("deploying config image failed");
+            block_on(
+                tnet_node
+                    .build_oci_config_image(&compressed_img_path, &tnet_node.name.clone().unwrap()),
+            )
+            .expect("deploying config image failed");
             block_on(tnet_node.start()).expect("starting vm failed");
         }
 

@@ -284,8 +284,13 @@ pub fn setup_and_start_vms(
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
-                    block_on(tnet_node.build_oci_config_image(
-                            &conf_img_path, &tnet_node.name.clone().unwrap())).expect("asdf");
+                    block_on(
+                        tnet_node.build_oci_config_image(
+                            &conf_img_path,
+                            &tnet_node.name.clone().unwrap(),
+                        ),
+                    )
+                    .expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
