@@ -727,6 +727,11 @@ impl Ledger {
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
     }
+
+    pub fn clear_heap_approvals_and_balances(&mut self) {
+        self.approvals.allowances_data.clear_all();
+        self.balances.store.clear();
+    }
 }
 
 impl LedgerContext for Ledger {
@@ -1256,6 +1261,10 @@ impl AllowancesData for StableAllowancesData {
 
     fn clear_arrivals(&mut self) {
         panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
+    }
+
+    fn clear_all(&mut self) {
+        panic!("The method `clear_all` should not be called for StableAllowancesData")
     }
 }
 
