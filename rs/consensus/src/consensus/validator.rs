@@ -8,8 +8,9 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, idkg,
+    idkg,
 };
+use ic_consensus_dkg as dkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -23,7 +24,6 @@ use ic_interfaces::{
     consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
-    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -203,10 +203,10 @@ impl SignatureVerify for RandomTape {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?;
+            crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
         } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
         }
     }
 }
@@ -244,10 +244,10 @@ impl SignatureVerify for RandomBeacon {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?;
+            crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
         } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
         }
     }
 }
@@ -687,7 +687,6 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -705,7 +704,6 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
-        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -720,7 +718,6 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
-            ingress_selector,
         }
     }
 
@@ -1143,8 +1140,7 @@ impl Validator {
         for action in &change_set {
             if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
             {
-                self.metrics
-                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_data_payload(proposal);
                 self.metrics.observe_block(pool_reader, proposal);
             }
         }
@@ -1318,6 +1314,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &self.metrics.dkg_validator,
+            &self.log,
         )
         .map_err(|err| {
             err.map(
@@ -1903,7 +1900,7 @@ pub mod test {
         consensus::block_maker::get_block_maker_delay,
         idkg::test_utils::{
             add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
             fake_state_with_signature_requests,
         },
     };
@@ -1936,15 +1933,16 @@ pub mod test {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
-            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
-            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg::DkgDataPayload, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload,
+            EquivocationProof, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
+            NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
+    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -1996,7 +1994,6 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
-                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
@@ -2149,23 +2146,36 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_master_public_key_id();
+            let height = Height::from(0);
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(1, height),
+                    key_id.clone(),
+                    Some(pre_sig_id1),
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(2, height),
+                    key_id.clone(),
+                    None,
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(3, height),
+                    key_id.clone(),
+                    Some(pre_sig_id3),
+                ),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
                 .return_const(Ok(fake_state_with_signature_requests(
-                    Height::from(0),
+                    height,
                     contexts.clone(),
                 )
                 .get_labeled_state()));
@@ -3465,7 +3475,7 @@ pub mod test {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );
@@ -3479,7 +3489,7 @@ pub mod test {
                     ingress: IngressPayload::from(vec![]),
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );

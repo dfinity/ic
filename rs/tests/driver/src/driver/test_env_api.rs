@@ -881,10 +881,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 
@@ -917,6 +929,15 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
+        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -925,7 +946,7 @@ impl IcNodeSnapshot {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
-                .as_provisional_create_with_amount(None)
+                .as_provisional_create_with_amount(cycles_amount)
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
@@ -1107,14 +1128,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1122,106 +1141,104 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
+/// Helper function to figure out SHA256 from a CAS url
+pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
+    // Since this is a CAS url, we assume the last URL path part is the sha256.
+    let (_prefix, sha256) = url
+        .path()
+        .rsplit_once('/')
+        .ok_or(anyhow!("failed to extract sha256 from CAS url '{url}'"))?;
+    let sha256 = sha256.to_string();
+    bail_if_sha256_invalid(&sha256, img_name)?;
+    Ok(sha256.to_string())
+}
+
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_img_sha256", &get_ic_os_img_url()?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_img_sha256", &get_malicious_ic_os_img_url()?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_url()?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_test_url()?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "ic_os_update_img_sha256",
+        &get_malicious_ic_os_update_img_url()?,
+    )
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "ic_os_boudndary_guestos_img_sha256",
+        &get_boundary_node_img_url()?,
+    )
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "hostos_update_img_sha256",
+        &get_hostos_update_img_test_url()?,
+    )
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1376,6 +1393,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     Path::new(&runfiles).join(p)
 }
 
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
+}
+
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     let dep_path = get_dependency_path(p);
     if dep_path.exists() {
@@ -1444,9 +1472,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }
@@ -2034,7 +2064,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {

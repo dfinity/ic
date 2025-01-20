@@ -146,7 +146,7 @@ def test_store_findings():
 
 
 def test_filter_findings():
-    v1 = Vulnerability("v1id", "v1 name", "v1 desc", 10)
+    v1 = Vulnerability("v1id", "v1 name", "V1 desc", 10)
     # filtered because only f1 is affected and ic/proj1 ignores it
     v2 = Vulnerability("v2id", "v2 name", "v2 desc", 10)
     v3 = Vulnerability("v3id", "v3 name", "v3 desc", 10)
@@ -172,7 +172,7 @@ def test_filter_findings():
         ["ic/proj1", "ic/proj2"],
         [],
     )
-    ignore_list_by_project = {"ic/proj1": {"v1 des", "v2"}}
+    ignore_list_by_project = {"ic/proj1": {"v1 DES", "v2"}}
     vuln_by_vuln_id = {
         v1.id: VulnerabilityInfo(v1, {f1.id(): deepcopy(f1), f2.id(): deepcopy(f2)}),
         v2.id: VulnerabilityInfo(v2, {f1.id(): deepcopy(f1)}),
@@ -213,10 +213,15 @@ class MockSlackStore(SlackVulnerabilityStore):
             t = event.type
             if t == SlackVulnerabilityEventType.VULN_ADDED:
                 scan_result_by_channel[event.channel_id].new_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].unrated_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.VULN_REMOVED:
                 scan_result_by_channel[event.channel_id].fixed_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.VULN_CHANGED:
                 scan_result_by_channel[event.channel_id].changed_vulnerabilities += 1
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
+            elif t == SlackVulnerabilityEventType.VULN_UNCHANGED:
+                scan_result_by_channel[event.channel_id].total_vulnerabilities += 1
             elif t == SlackVulnerabilityEventType.DEP_ADDED:
                 if event.finding_id not in scan_result_by_channel[event.channel_id].added_dependencies:
                     scan_result_by_channel[event.channel_id].added_dependencies[event.finding_id] = set()

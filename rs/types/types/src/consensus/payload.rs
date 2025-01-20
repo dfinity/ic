@@ -17,7 +17,7 @@ use std::sync::Arc;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dealings: dkg::Dealings,
+    pub dkg: dkg::DkgDataPayload,
     pub idkg: idkg::Payload,
 }
 
@@ -67,10 +67,10 @@ impl BlockPayload {
     /// Return true if it is a normal block and empty
     pub fn is_empty(&self) -> bool {
         match self {
-            BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.idkg.is_none()
+            BlockPayload::Data(DataPayload { batch, dkg, idkg }) => {
+                batch.is_empty() && dkg.is_empty() && idkg.is_none()
             }
-            _ => false,
+            BlockPayload::Summary(_) => false,
         }
     }
 
@@ -133,7 +133,7 @@ impl BlockPayload {
     pub fn dkg_interval_start_height(&self) -> Height {
         match self {
             BlockPayload::Summary(summary) => summary.dkg.height,
-            BlockPayload::Data(data) => data.dealings.start_height,
+            BlockPayload::Data(data) => data.dkg.start_height,
         }
     }
 }
@@ -244,9 +244,9 @@ impl From<dkg::Payload> for BlockPayload {
                 dkg: summary,
                 idkg: None,
             }),
-            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings,
+                dkg,
                 idkg: idkg::Payload::default(),
             }),
         }

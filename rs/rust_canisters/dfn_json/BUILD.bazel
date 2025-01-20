@@ -5,7 +5,6 @@ package(default_visibility = [
     "//rs/nns/integration_tests:__pkg__",
     "//rs/nns/test_utils:__pkg__",
     "//rs/rust_canisters:__subpackages__",
-    "//rs/scenario_tests:__pkg__",
     "//rs/tests:__subpackages__",
 ])
 

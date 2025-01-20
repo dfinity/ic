@@ -662,7 +662,7 @@ impl From<&RandomBeacon> for pb::RandomBeacon {
             height: random_beacon.content.height.get(),
             parent: random_beacon.content.parent.clone().get().0,
             signature: random_beacon.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer)),
+            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer.clone())),
         }
     }
 }
@@ -757,7 +757,7 @@ impl From<&RandomTape> for pb::RandomTape {
             version: random_tape.content.version.to_string(),
             height: random_tape.content.height.get(),
             signature: random_tape.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_tape.signature.signer)),
+            signer: Some(pb::NiDkgId::from(random_tape.signature.signer.clone())),
         }
     }
 }
@@ -1309,7 +1309,7 @@ impl From<&Block> for pb::Block {
         } else {
             let batch = &payload.as_data().batch;
             (
-                pb::DkgPayload::from(&payload.as_data().dealings),
+                pb::DkgPayload::from(&payload.as_data().dkg),
                 Some(pb::XNetPayload::from(&batch.xnet)),
                 Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
@@ -1388,18 +1388,14 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
-            dkg::Payload::Dealings(dealings) => {
+            dkg::Payload::Data(dkg) => {
                 let idkg = block
                     .idkg_payload
                     .as_ref()
                     .map(|idkg| idkg.try_into())
                     .transpose()?;
 
-                BlockPayload::Data(DataPayload {
-                    batch,
-                    dealings,
-                    idkg,
-                })
+                BlockPayload::Data(DataPayload { batch, dkg, idkg })
             }
         };
         Ok(Block {

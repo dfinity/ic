@@ -27,11 +27,11 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -46,27 +46,14 @@ spec:
                 bus: virtio
           interfaces:
           - name: default
-            passt: {}
-            ports:
-            - port: 22
-            - port: 8100
-            - port: 8101
-            - port: 8102
-            - port: 8103
-            - port: 8104
-            - port: 8105
-            - port: 8106
-            - port: 8107
-            - port: 8108
-            - port: 8109
-            - port: 8110
-            - port: 8111
-            - port: 8332
-            - port: 18444
-            - port: 20443
+            binding:
+              name: passt
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -126,11 +113,11 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -146,27 +133,14 @@ spec:
               serial: "config"
           interfaces:
           - name: default
-            passt: {}
-            ports:
-              - port: 22
-              - port: 80
-              - port: 443
-              - port: 2497
-              - port: 4100
-                protocol: UDP
-              - port: 4444
-              - port: 7070
-              - port: 8080
-              - port: 8332
-              - port: 9090
-              - port: 9091
-              - port: 9100
-              - port: 18444
-              - port: 19100
-              - port: 19531
+            binding:
+              name: passt
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -174,8 +148,8 @@ spec:
         - dataVolume:
             name: "{name}-guestos"
           name: disk0
-        - dataVolume:
-            name: "{name}-config"
+        - containerDisk:
+            image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
           name: disk1
 "#;
 
@@ -184,6 +158,7 @@ pub async fn create_vm(
     name: &str,
     cpus: &str,
     memory: &str,
+    memory_request: &str,
     ipv4: Ipv4Addr,
     ipv6: Ipv6Addr,
     running: bool,
@@ -201,6 +176,7 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
+        .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
         .replace("{ipv4}", &ipv4.to_string())
         .replace("{ipv6}", &ipv6.to_string());

@@ -27,6 +27,7 @@ component_files = {
     Label("ic/ic-btc-adapter/ic-btc-testnet-adapter.socket"): "/etc/systemd/system/ic-btc-testnet-adapter.socket",
     Label("ic/setup-permissions/setup-permissions.sh"): "/opt/ic/bin/setup-permissions.sh",
     Label("ic/setup-permissions/setup-permissions.service"): "/etc/systemd/system/setup-permissions.service",
+    Label("ic/setup-permissions/erestorecon.sh"): "/opt/ic/bin/erestorecon.sh",
     Label("ic/share/ark.pem"): "/opt/ic/share/ark.pem",
     Label("ic/ic-crypto-csp/ic-crypto-csp.service"): "/etc/systemd/system/ic-crypto-csp.service",
     Label("ic/ic-crypto-csp/ic-crypto-csp.socket"): "/etc/systemd/system/ic-crypto-csp.socket",
@@ -34,8 +35,10 @@ component_files = {
     Label("ic/ic-https-outcalls-adapter/ic-https-outcalls-adapter.socket"): "/etc/systemd/system/ic-https-outcalls-adapter.socket",
     Label("ic/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("ic/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
-    Label("ic/generate-replica-config.sh"): "/opt/ic/bin/generate-replica-config.sh",
-    Label("ic/ic.json5.template"): "/opt/ic/share/ic.json5.template",
+    Label("ic/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
+    Label("ic/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
+    Label("ic/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
+    Label("ic/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
 
     # init
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
@@ -59,6 +62,9 @@ component_files = {
     Label("misc/guestos/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
+    Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
+    Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
+    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
@@ -100,8 +106,13 @@ component_files = {
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
     Label("networking/hosts"): "/etc/hosts",
     Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
+    Label("networking/socks-proxy/danted.service"): "/etc/systemd/system/danted.service",
+    Label("networking/socks-proxy/danted.conf"): "/etc/danted.conf",
 
     # SELinux
+    Label("selinux/dante/dante.fc"): "/prep/dante/dante.fc",
+    Label("selinux/dante/dante.if"): "/prep/dante/dante.if",
+    Label("selinux/dante/dante.te"): "/prep/dante/dante.te",
     Label("selinux/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
     Label("selinux/filebeat/filebeat.if"): "/prep/filebeat/filebeat.if",
     Label("selinux/filebeat/filebeat.te"): "/prep/filebeat/filebeat.te",
@@ -149,4 +160,10 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+
+    # fstrim
+    Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
+
+    # TODO(NODE-1518): delete update-config.service after switch to new icos config
+    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

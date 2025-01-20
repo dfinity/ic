@@ -3,7 +3,6 @@ use std::time::Duration;
 use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
@@ -13,10 +12,11 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
+use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_types::ingress::IngressStatus;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumInstructions, NumOsPages};
+use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_config::embedders::StableMemoryPageLimit;
@@ -351,7 +351,7 @@ fn dts_update_concurrent_cycles_change_fails() {
 }
 
 #[test]
-fn dirty_pages_are_free_on_system_subnet() {
+fn dirty_pages_cost_the_same_on_app_and_system_subnets() {
     fn instructions_to_write_stable_byte(mut test: ExecutionTest) -> NumInstructions {
         let initial_cycles = Cycles::new(1_000_000_000_000);
         let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
@@ -375,12 +375,7 @@ fn dirty_pages_are_free_on_system_subnet() {
         .build();
     let app_instructions = instructions_to_write_stable_byte(app_test);
 
-    // Can't check for equality because there are other charges that are omitted
-    // on system subnets.
-    assert!(
-        app_instructions
-            > system_instructions + SchedulerConfig::application_subnet().dirty_page_overhead
-    );
+    assert_eq!(app_instructions, system_instructions);
 }
 
 #[test]

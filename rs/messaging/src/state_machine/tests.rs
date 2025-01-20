@@ -34,7 +34,7 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+            chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
             idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
             replica_version: &ReplicaVersion,
             current_round: ExecutionRound,
@@ -91,7 +91,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.idkg_subnet_public_keys.clone()),
+            eq(provided_batch.chain_key_subnet_public_keys.clone()),
             eq(provided_batch.idkg_pre_signature_ids.clone()),
             eq(provided_batch.replica_version.clone()),
             eq(round),
@@ -117,7 +117,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             nodes: BTreeSet::new(),
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
-            idkg_keys_held: BTreeSet::new(),
+            chain_keys_held: BTreeSet::new(),
         },
     );
 
@@ -158,6 +158,7 @@ fn state_machine_populates_network_topology() {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -192,6 +193,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -292,6 +294,7 @@ fn test_batch_time_impl(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         );

@@ -25,7 +25,6 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::{
     idkg::{
         EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
@@ -34,6 +33,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -250,17 +250,36 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
+        object_pool.iter()
+    }
+
+    fn vetkd_key_shares_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
+        object_pool.iter_by_prefix(prefix)
+    }
+
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
-        let idkg_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
+        let ecdsa_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
+        let vetkd_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
         Box::new(
-            idkg_pool
+            ecdsa_pool
                 .iter()
                 .map(|(id, share)| (id, SigShare::Ecdsa(share)))
                 .chain(
                     schnorr_pool
                         .iter()
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                )
+                .chain(
+                    vetkd_pool
+                        .iter()
+                        .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),
         )
     }

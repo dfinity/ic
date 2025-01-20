@@ -668,6 +668,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for vet KD.
+    pub fn vetkd_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.vetkd_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -925,6 +930,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -1009,7 +1015,7 @@ impl CyclesAccountManager {
         canister_id: CanisterId,
         cycles_balance: &mut Cycles,
         amount_to_mint: Cycles,
-    ) -> Result<(), CyclesAccountManagerError> {
+    ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
                 "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
@@ -1017,8 +1023,10 @@ impl CyclesAccountManager {
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
+            let before_balance = *cycles_balance;
             *cycles_balance += amount_to_mint;
-            Ok(())
+            // equal to amount_to_mint, except when the addition saturated
+            Ok(*cycles_balance - before_balance)
         }
     }
 

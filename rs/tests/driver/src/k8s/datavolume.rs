@@ -117,7 +117,13 @@ pub async fn create_datavolume(
         .replace("{quantity}", quantity);
 
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
-    data.metadata.owner_references = vec![owner].into();
+    if !name.starts_with("image-guestos") {
+        data.metadata.owner_references = vec![owner].into();
+    }
+    if api.get_opt(name).await?.is_some() {
+        info!("Data volume already exists");
+        return Ok(());
+    }
     let response = api
         .patch(name, &PatchParams::apply("tnet"), &Patch::Apply(data))
         .await?;

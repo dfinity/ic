@@ -1,11 +1,10 @@
 //! Metrics for the idkg feature
 
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgPayload};
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 
@@ -226,7 +225,7 @@ impl IDkgPayloadMetrics {
         }
     }
 
-    pub(crate) fn payload_metrics_inc(&self, label: &str, key_id: Option<&MasterPublicKeyId>) {
+    pub(crate) fn payload_metrics_inc(&self, label: &str, key_id: Option<&IDkgMasterPublicKeyId>) {
         self.payload_metrics
             .with_label_values(&[label, &key_id_label(key_id)])
             .inc();
@@ -428,20 +427,20 @@ impl ThresholdSignatureMetrics {
     }
 }
 
-/// Returns the key id corresponding to the [`MasterPublicKeyId`]
-pub fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
+/// Returns the key id corresponding to the [`IDkgMasterPublicKeyId`]
+pub fn key_id_label(key_id: Option<&IDkgMasterPublicKeyId>) -> String {
     key_id.map(ToString::to_string).unwrap_or_default()
 }
 
-pub fn expected_keys(payload: &IDkgPayload) -> Vec<MasterPublicKeyId> {
+pub fn expected_keys(payload: &IDkgPayload) -> Vec<IDkgMasterPublicKeyId> {
     payload.key_transcripts.keys().cloned().collect()
 }
 
-pub type CounterPerMasterPublicKeyId = BTreeMap<MasterPublicKeyId, usize>;
+pub type CounterPerMasterPublicKeyId = BTreeMap<IDkgMasterPublicKeyId, usize>;
 
-pub fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
+pub fn count_by_master_public_key_id<T: HasIDkgMasterPublicKeyId>(
     collection: impl Iterator<Item = T>,
-    expected_keys: &[MasterPublicKeyId],
+    expected_keys: &[IDkgMasterPublicKeyId],
 ) -> CounterPerMasterPublicKeyId {
     let mut counter_per_key_id = CounterPerMasterPublicKeyId::new();
 
@@ -452,7 +451,7 @@ pub fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
     }
 
     for item in collection {
-        *counter_per_key_id.entry(item.key_id().clone()).or_default() += 1;
+        *counter_per_key_id.entry(item.key_id()).or_default() += 1;
     }
 
     counter_per_key_id

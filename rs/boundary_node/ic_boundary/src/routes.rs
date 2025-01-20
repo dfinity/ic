@@ -22,11 +22,11 @@ use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OP
 use ic_bn_lib::http::{
     body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
 };
+pub use ic_bn_lib::types::RequestType;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
 };
-
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -65,27 +65,6 @@ lazy_static! {
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 }
 
-// Type of IC request
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display, Default, Deserialize, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum RequestType {
-    #[default]
-    Unknown,
-    Status,
-    Query,
-    Call,
-    SyncCall,
-    ReadState,
-    ReadStateSubnet,
-}
-
-impl RequestType {
-    pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::SyncCall)
-    }
-}
-
 #[derive(Clone, Debug, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
@@ -94,8 +73,7 @@ pub enum RateLimitCause {
     Generic,
 }
 
-// Categorized possible causes for request processing failures
-// Not using Error as inner type since it's not cloneable
+/// Categorized possible causes for request processing failures
 #[derive(Clone, Debug, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ErrorCause {
@@ -105,8 +83,8 @@ pub enum ErrorCause {
     UnableToParseCBOR(String),
     UnableToParseHTTPArg(String),
     LoadShed,
+    Forbidden,
     MalformedRequest(String),
-    MalformedResponse(String),
     NoRoutingTable,
     SubnetNotFound,
     CanisterNotFound,
@@ -133,7 +111,6 @@ impl ErrorCause {
             Self::UnableToParseHTTPArg(x) => Some(x.clone()),
             Self::LoadShed => Some("Overloaded".into()),
             Self::MalformedRequest(x) => Some(x.clone()),
-            Self::MalformedResponse(x) => Some(x.clone()),
             Self::ReplicaErrorDNS(x) => Some(x.clone()),
             Self::ReplicaTLSErrorOther(x) => Some(x.clone()),
             Self::ReplicaTLSErrorCert(x) => Some(x.clone()),
@@ -143,7 +120,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
+        !matches!(self, Self::PayloadTooLarge(_))
     }
 
     pub fn to_client_facing_error(&self) -> ErrorClientFacing {
@@ -156,7 +133,6 @@ impl ErrorCause {
             Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
             Self::LoadShed => ErrorClientFacing::LoadShed,
             Self::MalformedRequest(x) => ErrorClientFacing::MalformedRequest(x.clone()),
-            Self::MalformedResponse(_) => ErrorClientFacing::ReplicaError,
             Self::NoRoutingTable => ErrorClientFacing::ServiceUnavailable,
             Self::SubnetNotFound => ErrorClientFacing::SubnetNotFound,
             Self::CanisterNotFound => ErrorClientFacing::CanisterNotFound,
@@ -167,6 +143,7 @@ impl ErrorCause {
             Self::ReplicaTLSErrorOther(_) => ErrorClientFacing::ReplicaError,
             Self::ReplicaTLSErrorCert(_) => ErrorClientFacing::ReplicaError,
             Self::ReplicaErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::Forbidden => ErrorClientFacing::Forbidden,
             Self::RateLimited(_) => ErrorClientFacing::RateLimited,
         }
     }
@@ -176,7 +153,9 @@ impl ErrorCause {
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
         let client_facing_error = self.to_client_facing_error();
-        client_facing_error.into_response()
+        let mut resp = client_facing_error.into_response();
+        resp.extensions_mut().insert(self);
+        resp
     }
 }
 
@@ -191,6 +170,7 @@ pub enum ErrorClientFacing {
     #[strum(serialize = "internal_server_error")]
     Other,
     PayloadTooLarge(usize),
+    Forbidden,
     RateLimited,
     ReplicaError,
     ServiceUnavailable,
@@ -209,6 +189,7 @@ impl ErrorClientFacing {
             Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
             Self::Other => StatusCode::INTERNAL_SERVER_ERROR,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::ReplicaError => StatusCode::SERVICE_UNAVAILABLE,
             Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -222,11 +203,12 @@ impl ErrorClientFacing {
         match self {
             Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
             Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
-            Self::LoadShed => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::LoadShed => "Temporarily unable to handle the request due to high load. Please try again later.".to_string(),
             Self::MalformedRequest(x) => x.clone(),
             Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
             Self::Other => "Internal Server Error".to_string(),
             Self::PayloadTooLarge(x) => format!("Payload is too large: maximum body size is {x} bytes."),
+            Self::Forbidden => "Request is forbidden according to currently active policy, it might work later.".to_string(),
             Self::RateLimited => "Rate limit exceeded. Please slow down requests and try again later.".to_string(),
             Self::ReplicaError => "An unexpected error occurred while communicating with the upstream replica node. Please try again later.".to_string(),
             Self::ServiceUnavailable => "The API boundary node is temporarily unable to process the request. Please try again later.".to_string(),
@@ -245,9 +227,7 @@ impl IntoResponse for ErrorClientFacing {
         let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
         let body = format!("error: {}\ndetails: {}", error_cause, self.details());
 
-        let mut resp = (self.status_code(), headers, body).into_response();
-        resp.extensions_mut().insert(self);
-        resp
+        (self.status_code(), headers, body).into_response()
     }
 }
 

@@ -18,7 +18,7 @@ MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
 COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
-if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
+if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion|mainnet-canister-revisions\.json)" <<<"$DIFF_FILES"; then
     echo "Changes detected in bazel files. Considering all targets." >&2
     echo ${BAZEL_TARGETS:-"//..."}
     exit 0
@@ -44,7 +44,10 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
 fi
 
 if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:protobuf-format-check)
+    files+=(
+        //pre-commit:protobuf-format-check
+        //pre-commit:buf-breaking
+    )
 fi
 
 if [ ${#files[@]} -eq 0 ]; then

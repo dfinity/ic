@@ -6,24 +6,16 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
-DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv4_address") ipv4_address="${value}" ;;
-            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
-            "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "domain") domain="${value}" ;;
-        esac
-    done <"${CONFIG}"
+function read_config_variables() {
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
+    domain_name=$(get_config_value '.network_settings.domain_name')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -109,11 +101,15 @@ function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
+    if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" &&
+        -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" &&
+        -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
-        echo "  Domain name : ${domain}"
+    fi
+    if [[ -n ${domain_name} && "${domain_name}" != "null" ]]; then
+        echo "  Domain name: ${domain_name}"
     fi
     echo " "
 
@@ -134,10 +130,10 @@ function validate_domain_name() {
     local domain_part
     local -a domain_parts
 
-    IFS='.' read -ra domain_parts <<<"${domain}"
+    IFS='.' read -ra domain_parts <<<"${domain_name}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain_name}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
@@ -184,17 +180,13 @@ function ping_ipv6_gateway() {
     echo " "
 }
 
-function assemble_nns_nodes_list() {
-    NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    IFS=',' read -r -a NNS_URL_LIST <<<"$NNS_URL_STRING"
-}
-
 function query_nns_nodes() {
     echo "* Querying NNS nodes..."
 
+    local nns_url_list=($(get_config_value '.icos_settings.nns_urls' | jq -r '.[]'))
     local success=false
-    # At least one of the provided URLs needs to work.
-    for url in "${NNS_URL_LIST[@]}"; do
+
+    for url in "${nns_url_list[@]}"; do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
@@ -217,19 +209,27 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    read_variables
-    get_network_settings
-    print_network_settings
+    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        read_config_variables
+        get_network_settings
+        print_network_settings
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
-        validate_domain_name
-        setup_ipv4_network
-        ping_ipv4_gateway
+        if [[ -n ${domain_name} && "${domain_name}" != "null" ]]; then
+            validate_domain_name
+        fi
+
+        if [[ -n ${ipv4_address} && "${ipv4_address}" != "null" &&
+            -n ${ipv4_prefix_length} && "${ipv4_prefix_length}" != "null" &&
+            -n ${ipv4_gateway} && "${ipv4_gateway}" != "null" ]]; then
+            setup_ipv4_network
+            ping_ipv4_gateway
+        fi
+
+        ping_ipv6_gateway
+        query_nns_nodes
+    else
+        echo "* Network checks skipped by request via kernel command line"
     fi
-
-    ping_ipv6_gateway
-    assemble_nns_nodes_list
-    query_nns_nodes
     log_end "$(basename $0)"
 }
 

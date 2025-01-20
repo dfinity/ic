@@ -20,8 +20,6 @@ concurrency:
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -32,13 +30,19 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
       group: zh1
       labels: dind-large
+    env:
+      AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
+      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+      RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +82,7 @@ jobs:
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
-          if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
+          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
@@ -87,17 +91,9 @@ jobs:
           fi
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
-        env:
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
@@ -130,11 +126,12 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     name: Bazel Build All Config Check
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -171,7 +168,10 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: ${{ github.ref_protected && github.repository == 'dfinity/ic' }}
+    # Allow running if CI_MACOS_INTEL label is used
+    if: |
+      (github.ref_protected && github.repository == 'dfinity/ic') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL'))
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,7 +216,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -225,11 +225,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
@@ -256,7 +251,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -265,11 +260,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
@@ -296,7 +286,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -313,7 +303,8 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cd ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
@@ -324,13 +315,15 @@ jobs:
           REPO_NAME: ${{ github.repository }}
   build-ic:
     name: Build IC
-    runs-on:
-      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
+    # keep options from dind-large-setup but run on dind-small-setup
+    runs-on:
+      group: ch1
+      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
@@ -347,6 +340,7 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
@@ -423,13 +417,11 @@ jobs:
           SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on:
-      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+    timeout-minutes: 30
+    runs-on:
+      group: ch1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -462,13 +454,11 @@ jobs:
               "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    runs-on:
-      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+    timeout-minutes: 30
+    runs-on:
+      group: ch1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -499,33 +489,3 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
-  # CI job is also executed in Schedule Hourly
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
-    if: |
-      github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Run Bazel Test Coverage
-        shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

@@ -10,13 +10,13 @@ pub enum LedgerSuiteType {
     ICRC,
 }
 
-pub fn assert_existence_of_index_total_memory_bytes_metric<T>(
+pub fn assert_existence_of_index_heap_memory_bytes_metric<T>(
     index_wasm: Vec<u8>,
     encode_init_args: fn(Principal) -> T,
 ) where
     T: CandidType,
 {
-    const METRIC: &str = "index_total_memory_bytes";
+    const METRIC: &str = "heap_memory_bytes";
 
     let env = StateMachine::new();
     let ledger_id = CanisterId::from_u64(100);
@@ -42,13 +42,13 @@ pub fn assert_existence_of_ledger_num_archives_metric<T>(
     assert_existence_of_metric(&env, canister_id, METRIC);
 }
 
-pub fn assert_existence_of_ledger_total_memory_bytes_metric<T>(
+pub fn assert_existence_of_heap_memory_bytes_metric<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
 {
-    const METRIC: &str = "ledger_total_memory_bytes";
+    const METRIC: &str = "heap_memory_bytes";
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
@@ -167,7 +167,7 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
     );
 }
 
-pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
+pub fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
     let metrics = retrieve_metrics(env, canister_id);
     for line in &metrics {
         let tokens: Vec<&str> = line.split(' ').collect();
@@ -187,7 +187,7 @@ pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: 
     panic!("metric '{}' not found in metrics: {:?}", metric, metrics);
 }
 
-fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
+pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),

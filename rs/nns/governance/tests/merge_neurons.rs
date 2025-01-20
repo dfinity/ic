@@ -4,21 +4,25 @@
 //! tests are run.
 
 use comparable::{Changed, U64Change};
-use fixtures::NNSStateChange;
-use fixtures::{NNSBuilder, NeuronBuilder};
+use fixtures::{NNSBuilder, NNSStateChange, NeuronBuilder};
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::{Environment, MAX_DISSOLVE_DELAY_SECONDS},
     pb::v1::{
         manage_neuron::{Command, Merge},
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
-        ManageNeuron, NetworkEconomics, Neuron,
+        ManageNeuron, NetworkEconomics,
     },
 };
 use proptest::prelude::{proptest, TestCaseError};
+
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::with_tla_trace_check;
 
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379
@@ -129,18 +133,24 @@ fn do_test_merge_neurons(
             let source_neuron_id = source_neuron.id.unwrap();
             let target_neuron_id = target_neuron.id.unwrap();
 
+            let now_seconds = nns.now();
+
             pretty_assertions::assert_eq!(
                 source_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&source_neuron_id, |n| Neuron::from(n.clone()))
+                    .with_neuron(&source_neuron_id, |n| n
+                        .clone()
+                        .into_proto(nns.governance.voting_power_economics(), now_seconds))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&target_neuron_id, |n| Neuron::from(n.clone()))
+                    .with_neuron(&target_neuron_id, |n| n
+                        .clone()
+                        .into_proto(nns.governance.voting_power_economics(), now_seconds))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
@@ -166,6 +176,7 @@ fn do_test_merge_neurons(
 proptest! {
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_merge_neurons_small(
     n1_stake in 0u64..50_000,
     n1_maturity in 0u64..500_000_000,

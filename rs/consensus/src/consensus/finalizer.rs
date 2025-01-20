@@ -26,6 +26,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
@@ -35,7 +36,9 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::{cell::RefCell, sync::Arc};
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,
@@ -47,6 +50,7 @@ pub struct Finalizer {
     pub(crate) log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
+    last_batch_delivered_at: RefCell<Option<Instant>>,
 }
 
 impl Finalizer {
@@ -71,6 +75,7 @@ impl Finalizer {
             log,
             metrics: FinalizerMetrics::new(metrics_registry),
             prev_finalized_height: RefCell::new(Height::from(0)),
+            last_batch_delivered_at: RefCell::new(None),
         }
     }
 
@@ -112,7 +117,7 @@ impl Finalizer {
             .collect()
     }
 
-    // Write logs, report metrics depending on the batch deliver result.
+    /// Write logs, report metrics depending on the batch deliver result.
     #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
@@ -122,7 +127,23 @@ impl Finalizer {
     ) {
         match result {
             Ok(()) => {
+                let now = Instant::now();
+                if let Some(last_batch_delivered_at) = *self.last_batch_delivered_at.borrow() {
+                    self.metrics
+                        .batch_delivery_interval
+                        .observe(now.duration_since(last_batch_delivered_at).as_secs_f64());
+                }
+                self.last_batch_delivered_at.borrow_mut().replace(now);
+                // Batch creation time is essentially wall time (on some replica), so the median
+                // duration across the subnet is meaningful.
+                self.metrics.batch_delivery_latency.observe(
+                    system_time_now()
+                        .saturating_duration_since(block_stats.block_time)
+                        .as_secs_f64(),
+                );
+
                 self.metrics.process(&block_stats, &batch_stats);
+
                 for ingress in batch_stats.ingress_ids.iter() {
                     debug!(
                         self.log,
@@ -479,7 +500,7 @@ mod tests {
                     payment: Cycles::zero(),
                     method_name: "".to_string(),
                     method_payload: vec![],
-                    metadata: None,
+                    metadata: Default::default(),
                     deadline: NO_DEADLINE,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),

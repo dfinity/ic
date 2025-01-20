@@ -68,7 +68,7 @@ use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
 };
 
-use super::SchedulerImpl;
+use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -113,8 +113,8 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // iDKG subnet public keys.
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    // Chain key subnet public keys.
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Pre-signature IDs.
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     // Version of the running replica, not the registry's Entry
@@ -312,7 +312,11 @@ impl SchedulerTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state.as_ref().unwrap().get_ingress_status(message_id)
+        self.state
+            .as_ref()
+            .unwrap()
+            .get_ingress_status(message_id)
+            .clone()
     }
 
     pub fn ingress_error(&self, message_id: &MessageId) -> UserError {
@@ -514,7 +518,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.idkg_subnet_public_keys.clone(),
+            self.chain_key_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
             &self.replica_version,
             self.round,
@@ -556,6 +560,7 @@ impl SchedulerTest {
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
+            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
@@ -656,13 +661,15 @@ pub(crate) struct SchedulerTestBuilder {
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
     subnet_message_memory: u64,
+    subnet_callback_soft_limit: usize,
+    canister_guaranteed_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
-    idkg_keys: Vec<MasterPublicKeyId>,
+    master_public_key_ids: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
@@ -681,13 +688,15 @@ impl Default for SchedulerTestBuilder {
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_message_memory: config.subnet_message_memory_capacity.get(),
+            subnet_callback_soft_limit: config.subnet_callback_soft_limit,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
             registry_settings: test_registry_settings(),
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: true,
             log: no_op_logger(),
-            idkg_keys: vec![],
+            master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
             replica_version: ReplicaVersion::default(),
@@ -716,6 +725,23 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_subnet_callback_soft_limit(self, subnet_callback_soft_limit: usize) -> Self {
+        Self {
+            subnet_callback_soft_limit,
+            ..self
+        }
+    }
+
+    pub fn with_canister_guaranteed_callback_quota(
+        self,
+        canister_guaranteed_callback_quota: usize,
+    ) -> Self {
+        Self {
+            canister_guaranteed_callback_quota,
+            ..self
+        }
+    }
+
     pub fn with_scheduler_config(self, scheduler_config: SchedulerConfig) -> Self {
         Self {
             scheduler_config,
@@ -737,15 +763,18 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_idkg_key(self, idkg_key: MasterPublicKeyId) -> Self {
+    pub fn with_chain_key(self, key_id: MasterPublicKeyId) -> Self {
         Self {
-            idkg_keys: vec![idkg_key],
+            master_public_key_ids: vec![key_id],
             ..self
         }
     }
 
-    pub fn with_idkg_keys(self, idkg_keys: Vec<MasterPublicKeyId>) -> Self {
-        Self { idkg_keys, ..self }
+    pub fn with_chain_keys(self, master_public_key_ids: Vec<MasterPublicKeyId>) -> Self {
+        Self {
+            master_public_key_ids,
+            ..self
+        }
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
@@ -790,31 +819,31 @@ impl SchedulerTestBuilder {
         state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
-        for idkg_key in &self.idkg_keys {
+        for key_id in &self.master_public_key_ids {
             state
                 .metadata
                 .network_topology
-                .idkg_signing_subnets
-                .insert(idkg_key.clone(), vec![self.own_subnet_id]);
+                .chain_key_enabled_subnets
+                .insert(key_id.clone(), vec![self.own_subnet_id]);
             state
                 .metadata
                 .network_topology
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
-                .insert(idkg_key.clone());
+                .chain_keys_held
+                .insert(key_id.clone());
 
             registry_settings.chain_key_settings.insert(
-                idkg_key.clone(),
+                key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
                     pre_signatures_to_create_in_advance: 5,
                 },
             );
         }
-        let idkg_subnet_public_keys: BTreeMap<_, _> = self
-            .idkg_keys
+        let chain_key_subnet_public_keys: BTreeMap<_, _> = self
+            .master_public_key_ids
             .into_iter()
             .map(|key_id| {
                 (
@@ -852,6 +881,8 @@ impl SchedulerTestBuilder {
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
+            subnet_callback_soft_limit: self.subnet_callback_soft_limit,
+            canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,
@@ -871,6 +902,7 @@ impl SchedulerTestBuilder {
             deterministic_time_slicing,
             config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            self.canister_guaranteed_callback_quota,
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
@@ -892,7 +924,7 @@ impl SchedulerTestBuilder {
             &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
@@ -927,7 +959,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_pre_signature_ids: BTreeMap::new(),
             replica_version: self.replica_version,
         }
@@ -1318,7 +1350,7 @@ impl TestWasmExecutorCore {
             payment: Cycles::zero(),
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
-            metadata: None,
+            metadata: Default::default(),
             deadline,
         };
         if let Err(req) = system_state.push_output_request(

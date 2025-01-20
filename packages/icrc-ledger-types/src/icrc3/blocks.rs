@@ -8,7 +8,7 @@ use serde_bytes::ByteBuf;
 
 use super::archive::QueryArchiveFn;
 
-/// Deprecated, use `ICRC3GenericBlock` instead
+/// Deprecated, use [`ICRC3GenericBlock`] instead
 pub type GenericBlock = Value;
 pub type ICRC3GenericBlock = ICRC3Value;
 
@@ -22,18 +22,23 @@ pub struct GetBlocksResponse {
     pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
 }
 
+/// A block with an ID. Returned as part of [`GetBlocksResult`].
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockWithId {
     pub id: Nat,
     pub block: ICRC3GenericBlock,
 }
 
+/// Information about where to find archived blocks. Returned as part of [`GetBlocksResult`].
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArchivedBlocks {
     pub args: Vec<GetBlocksRequest>,
     pub callback: QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>,
 }
 
+/// The result type for the
+/// [ICRC-3 `icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#icrc3_get_blocks)
+/// endpoint.
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GetBlocksResult {
     pub log_length: Nat,
@@ -41,12 +46,16 @@ pub struct GetBlocksResult {
     pub archived_blocks: Vec<ArchivedBlocks>,
 }
 
+/// The arguments for the
+/// [ICRC-3 `icrc3_get_blocks`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#icrc3_get_blocks)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
     pub length: Nat,
 }
 
+/// The return type for the deprecated `get_blocks` endpoint of the archive canister.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BlockRange {
     pub blocks: Vec<GenericBlock>,
@@ -75,18 +84,24 @@ impl GetBlocksRequest {
 }
 
 /// Deprecated, use `ICRC3DataCertificate` instead"
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Serialize, Deserialize, Eq, PartialEq)]
 pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub hash_tree: serde_bytes::ByteBuf,
 }
 
+/// The data certificate returned from the
+/// [ICRC-3 `icrc3_get_tip_certificate`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#icrc3_get_tip_certificate)
+/// endpoint.
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct ICRC3DataCertificate {
     pub certificate: serde_bytes::ByteBuf,
     pub hash_tree: serde_bytes::ByteBuf,
 }
 
+/// The return type of the
+/// [ICRC-3 `icrc3_supported_block_types`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#icrc3_supported_block_types)
+/// endpoint.
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct SupportedBlockType {
     pub block_type: String,

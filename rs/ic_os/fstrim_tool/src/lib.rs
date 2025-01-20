@@ -61,7 +61,12 @@ fn write_metrics_using_tmp_file(metrics: &FsTrimMetrics, metrics_filename: &str)
         .context("Failed to write metrics to file")
 }
 
-fn update_metrics(elapsed: Duration, is_success: bool, metrics_filename: &str) -> Result<()> {
+fn update_metrics(
+    elapsed: Duration,
+    is_success: bool,
+    metrics_filename: &str,
+    is_datadir: bool,
+) -> Result<()> {
     let mut metrics = parse_existing_metrics_from_file(metrics_filename)
         .unwrap_or_else(|e| {
             eprintln!("error parsing existing metrics: {}", e);
@@ -71,7 +76,13 @@ fn update_metrics(elapsed: Duration, is_success: bool, metrics_filename: &str) -
             eprintln!("no existing metrics found");
             FsTrimMetrics::default()
         });
-    metrics.update(is_success, elapsed)?;
+
+    if is_datadir {
+        metrics.update_datadir(is_success, elapsed)?;
+    } else {
+        metrics.update(is_success, elapsed)?;
+    }
+
     write_metrics_using_tmp_file(&metrics, metrics_filename)
 }
 
@@ -85,19 +96,33 @@ fn write_initialized_metrics_if_not_exist(metrics_filename: &str) -> Result<()> 
     write_metrics_using_tmp_file(&metrics, metrics_filename)
 }
 
+fn is_node_assigned() -> bool {
+    Path::new("/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb").exists()
+}
+
 pub fn fstrim_tool(
     command: &str,
     metrics_filename: String,
     target: String,
     init_only: bool,
+    datadir_target: String,
 ) -> Result<()> {
     let res = match init_only {
         false => {
             let start = std::time::Instant::now();
-            let res = run_command(command, &target);
-            let elapsed = start.elapsed();
-            update_metrics(elapsed, res.is_ok(), &metrics_filename)?;
-            res
+            let res_target = run_command(command, &target);
+            let elapsed_target = start.elapsed();
+            update_metrics(elapsed_target, res_target.is_ok(), &metrics_filename, false)?;
+
+            if !datadir_target.is_empty() && !is_node_assigned() {
+                let start = std::time::Instant::now();
+                let res_datadir = run_command(command, &datadir_target);
+                let elapsed = start.elapsed();
+                update_metrics(elapsed, res_datadir.is_ok(), &metrics_filename, true)?;
+                res_target.and(res_datadir)
+            } else {
+                res_target
+            }
         }
         true => write_initialized_metrics_if_not_exist(&metrics_filename),
     };

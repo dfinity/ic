@@ -15,8 +15,10 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CryptoHash, CryptoHashOf,
+    },
     messages::{Request, RequestOrResponse, Response},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,

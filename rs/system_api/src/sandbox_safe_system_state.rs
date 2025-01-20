@@ -16,7 +16,9 @@ use ic_management_canister_types::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::canister_state::system_state::{
+    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+};
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
 use ic_types::{
@@ -134,6 +136,11 @@ impl SystemStateChanges {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    /// Returns number of newly created callbacks (i.e. enqueued requests).
+    pub fn callbacks_created(&self) -> usize {
+        self.requests.len()
+    }
+
     fn error<S: ToString>(message: S) -> HypervisorError {
         HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
             message.to_string(),
@@ -182,7 +189,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
+        let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -244,8 +251,11 @@ impl SystemStateChanges {
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -255,6 +265,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetInfo)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
@@ -347,7 +358,7 @@ impl SystemStateChanges {
             metadata: self
                 .requests
                 .first()
-                .and_then(|request| request.metadata.clone()),
+                .map_or_else(Default::default, |request| request.metadata.clone()),
             count: self.requests.len() as u64,
         };
 
@@ -570,6 +581,9 @@ pub struct SandboxSafeSystemState {
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
     next_callback_id: Option<u64>,
+    /// The number of calls / callbacks that can still be made. This is the maximum
+    /// available in either the subnet shared pool or the canister quota.
+    available_callbacks: u64,
     available_request_slots: BTreeMap<CanisterId, usize>,
     ic00_available_request_slots: usize,
     ic00_aliases: BTreeSet<CanisterId>,
@@ -600,6 +614,7 @@ impl SandboxSafeSystemState {
         call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
+        available_callbacks: u64,
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
@@ -637,6 +652,7 @@ impl SandboxSafeSystemState {
             call_context_deadline,
             cycles_account_manager,
             next_callback_id,
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -655,6 +671,7 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
@@ -665,6 +682,7 @@ impl SandboxSafeSystemState {
             network_topology,
             dirty_page_overhead,
             compute_allocation,
+            available_callbacks,
             request_metadata,
             caller,
             call_context_id,
@@ -679,6 +697,7 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
@@ -744,6 +763,7 @@ impl SandboxSafeSystemState {
             system_state
                 .call_context_manager()
                 .map(|c| c.next_callback_id()),
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -863,7 +883,7 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
+    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
         let mut new_balance = self.cycles_balance();
         let result = self
             .cycles_account_manager
@@ -912,7 +932,7 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // available only for ApiType::{Update, ReplyCallback, RejectCallback} and all of
         // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
         // will never be `None`.
         debug_assert!(self
@@ -995,6 +1015,11 @@ impl SandboxSafeSystemState {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
     ) -> Result<(), Request> {
+        if self.available_callbacks == 0 {
+            return Err(msg);
+        }
+        self.available_callbacks -= 1;
+
         let mut new_balance = self.cycles_balance();
         let consumed_cycles = match self.cycles_account_manager.withdraw_request_cycles(
             self.canister_id,
@@ -1242,47 +1267,26 @@ impl SandboxSafeSystemState {
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
     /// 1. In the case of `memory_allocation`
-    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    ///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
     /// 2. Without memory allocation
-    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    ///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn check_on_low_wasm_memory_hook_condition(
+    pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
         memory_allocation: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        used_stable_memory: NumBytes,
-        used_wasm_memory: NumBytes,
+        memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
     ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit =
-            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = memory_allocation.map_or_else(
-            || wasm_memory_limit,
-            |memory_allocation| {
-                debug_assert!(
-                    used_stable_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
-                    used_stable_memory,
-                    memory_allocation
-                );
-                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-            },
+        let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
+            memory_usage,
+            wasm_memory_usage,
+            memory_allocation,
+            wasm_memory_limit,
+            self.wasm_memory_threshold,
         );
 
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity < used_wasm_memory + self.wasm_memory_threshold;
         self.system_state_changes
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
@@ -1345,7 +1349,7 @@ impl SandboxSafeSystemState {
 ///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     pub count: u64,
 }
 
@@ -1457,6 +1461,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1506,6 +1511,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1528,16 +1534,19 @@ mod tests {
         wasm_memory_threshold: u64,
         memory_allocation: Option<u64>,
         wasm_memory_limit: Option<u64>,
-        used_stable_memory: u64,
-        used_wasm_memory: u64,
+        memory_usage: u64,
+        wasm_memory_usage: u64,
     ) -> bool {
         let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
-
+        let memory_usage_without_wasm_memory = memory_usage - wasm_memory_usage;
         let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            std::cmp::min(
+                memory_allocation - memory_usage_without_wasm_memory,
+                wasm_memory_limit,
+            )
         });
 
-        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+        wasm_capacity < wasm_memory_usage + wasm_memory_threshold
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
@@ -1547,8 +1556,8 @@ mod tests {
                 for wasm_memory_limit in
                     [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
                 {
-                    for used_stable_memory in [0, GIB] {
-                        for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                    for memory_usage_without_wasm_memory in [0, GIB] {
+                        for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
                             let mut state =
                                 helper_create_state_for_hook_status(wasm_memory_threshold);
 
@@ -1559,11 +1568,13 @@ mod tests {
                                 None
                             );
 
-                            state.check_on_low_wasm_memory_hook_condition(
+                            let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
+
+                            state.update_status_of_low_wasm_memory_hook_condition(
                                 memory_allocation.map(|m| m.into()),
                                 wasm_memory_limit.map(|m| m.into()),
-                                used_stable_memory.into(),
-                                used_wasm_memory.into(),
+                                memory_usage.into(),
+                                wasm_memory_usage.into(),
                             );
 
                             assert_eq!(
@@ -1575,8 +1586,8 @@ mod tests {
                                     wasm_memory_threshold,
                                     memory_allocation,
                                     wasm_memory_limit,
-                                    used_stable_memory,
-                                    used_wasm_memory
+                                    memory_usage,
+                                    wasm_memory_usage
                                 )
                             );
                         }

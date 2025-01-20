@@ -36,6 +36,8 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
+    "//rs/nervous_system/linear_map",
+    "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
@@ -204,6 +206,11 @@ rust_library(
 rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
+    add_test = True,
+    # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
+    # We would like to figure out why and fix it, but for now, we are reducing the optimization
+    # level so that tests against the optimization level can be added.
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

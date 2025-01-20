@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "6.0.0"
+version = "7.0.0"
 edition = "2021"
 
 [dependencies]
@@ -27,6 +27,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
+ic-bn-lib = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
@@ -36,7 +37,8 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", tag = "0.1.0-b0" }
+ic-error-types = { path = "../types/error_types" }
+ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -64,9 +66,11 @@ ic-validator-ingress-message = { path = "../validator/ingress_message" }
 itertools = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 rand = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+slog = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
@@ -92,4 +96,3 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 spec-compliance = { path = "../tests/research/spec_compliance" }
-slog = { workspace = true }

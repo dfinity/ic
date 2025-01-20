@@ -1,5 +1,5 @@
 use crate::metrics::HttpHandlerMetrics;
-use ic_async_utils::JoinMap;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{
@@ -140,7 +140,6 @@ impl IngressWatcher {
         completed_execution_messages_rx: Receiver<(MessageId, Height)>,
         cancellation_token: CancellationToken,
     ) -> (IngressWatcherHandle, JoinHandle<()>) {
-        #[allow(clippy::disallowed_methods)]
         let (subscriber_registration_tx, subscriber_registration_rx) =
             channel::<IngressWatcherSubscription>(INGRESS_WATCHER_CHANNEL_SIZE);
 

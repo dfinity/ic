@@ -223,7 +223,12 @@ mod convert {
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
             (V::ExternRef(Some(l)), C(R::RefExtern(Some(r)))) => {
-                let l = l.data(store).unwrap().downcast_ref::<u32>().unwrap();
+                let l = l
+                    .data(store)
+                    .expect("reference to be rooted")
+                    .unwrap()
+                    .downcast_ref::<u32>()
+                    .unwrap();
                 l == r
             }
             (V::ExternRef(l), C(R::RefNull(_))) => l.is_none(),
@@ -803,13 +808,19 @@ fn error_to_string(e: anyhow::Error) -> String {
 #[test]
 fn spec_testsuite() {
     let test_files = parse_env_test_files("WASM_SPEC_BASE");
-    run_testsuite(test_files, &default_config(), false)
+    run_testsuite(test_files, default_config().wasm_memory64(false), false)
 }
 
 #[test]
 fn multi_memory_testsuite() {
     let test_files = parse_env_test_files("WASM_SPEC_MULTI_MEMORY");
-    run_testsuite(test_files, default_config().wasm_multi_memory(true), true)
+    run_testsuite(
+        test_files,
+        default_config()
+            .wasm_multi_memory(true)
+            .wasm_memory64(false),
+        true,
+    )
 }
 
 #[test]

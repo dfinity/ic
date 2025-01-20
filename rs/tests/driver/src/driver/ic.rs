@@ -249,7 +249,10 @@ impl InternetComputer {
 
         if InfraProvider::read_attribute(env) == InfraProvider::K8s {
             let image_url = res_request.primary_image.url.clone();
-            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
+            let image_sha = res_request.primary_image.sha256.clone();
+            let tnet = TNet::read_attribute(env)
+                .image_url(image_url.as_ref())
+                .image_sha(image_sha.as_ref());
             block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
             tnet.write_attribute(env);
         }

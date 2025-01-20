@@ -32,6 +32,7 @@ use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
+    node::assert_node_is_unassigned,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
         install_nns_and_check_progress, store_message,
@@ -51,6 +52,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
+    util::UploadMethod,
     NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
@@ -337,6 +339,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
+        use_local_binaries: false,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
@@ -374,7 +377,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
         download_node: None,
-        upload_node: Some(upload_node.get_ip_addr()),
+        upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
     };
@@ -699,37 +702,6 @@ fn assert_subnet_is_broken(
         "Writing messages still successful on: {}",
         node_url
     );
-}
-
-/// Assert that the given node has deleted its state within the next 5 minutes.
-fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
-    info!(
-        logger,
-        "Asserting that node {} has deleted its state.",
-        node.get_ip_addr()
-    );
-    // We need to exclude the page_deltas/ directory, which is not deleted on state deletion.
-    // That is because deleting it would break SELinux assumptions.
-    let check = r#"[ "$(ls -A /var/lib/ic/data/ic_state -I page_deltas)" ] && echo "assigned" || echo "unassigned""#;
-    let s = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
-
-    ic_system_test_driver::retry_with_msg!(
-        format!("check if node {} is unassigned", node.node_id),
-        logger.clone(),
-        secs(300),
-        secs(10),
-        || match execute_bash_command(&s, check.to_string()) {
-            Ok(s) if s.trim() == "unassigned" => Ok(()),
-            Ok(s) if s.trim() == "assigned" => {
-                bail!("Node {} is still assigned.", node.get_ip_addr())
-            }
-            Ok(s) => bail!("Received unexpected output: {}", s),
-            Err(e) => bail!("Failed to read directory: {}", e),
-        }
-    )
-    .expect("Failed to detect that node has deleted its state.");
 }
 
 /// Select a node with highest finalization height in the given subnet snapshot
