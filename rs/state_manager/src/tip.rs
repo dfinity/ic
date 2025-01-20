@@ -128,7 +128,7 @@ pub(crate) enum TipRequest {
     /// Crash if diverges.
     ValidateReplicatedState {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-        replicated_state: Arc<ReplicatedState>,
+        reference_state: Arc<ReplicatedState>,
         own_subnet_type: SubnetType,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
@@ -456,13 +456,13 @@ pub(crate) fn spawn_tip_thread(
 
                         TipRequest::ValidateReplicatedState {
                             checkpoint_layout,
-                            replicated_state,
+                            reference_state,
                             own_subnet_type,
                             fd_factory,
                         } => {
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
-                                Some(replicated_state.deref()),
+                                Some(reference_state.deref()),
                                 own_subnet_type,
                                 Arc::clone(&fd_factory),
                                 &metrics.checkpoint_metrics,

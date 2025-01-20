@@ -1239,49 +1239,46 @@ fn strip_page_map_deltas(
     }
 }
 
-/// Switches `tip` to the most recent checkpoint file provided by `src`.
+/// Switches `tip` to the most recent checkpoint file provided by `layout`.
 ///
 /// Preconditions:
-/// 1) `tip` and `src` mut have exactly the same set of canisters.
-/// 2) The page deltas must be empty in both states.
+/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 2) The page deltas must be empty in `tip`
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(
     tip: &mut ReplicatedState,
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
         let canister_layout = layout.canister(tip_id).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
             .page_map_mut()
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(canister_layout.wasm_chunk_store()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(canister_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
         if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
-            tip_execution.wasm_memory.page_map.switch_to_checkpoint(
-                &PageMap::open(
+            tip_execution
+                .wasm_memory
+                .page_map
+                .switch_to_checkpoint(&PageMap::open(
                     Box::new(canister_layout.vmemory_0()),
                     layout.height(),
                     Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
-            tip_execution.stable_memory.page_map.switch_to_checkpoint(
-                &PageMap::open(
+                )?);
+            tip_execution
+                .stable_memory
+                .page_map
+                .switch_to_checkpoint(&PageMap::open(
                     Box::new(canister_layout.stable_memory()),
                     layout.height(),
                     Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
+                )?);
         }
     }
 
@@ -1292,39 +1289,30 @@ fn switch_to_checkpoint(
         new_snapshot
             .chunk_store_mut()
             .page_map_mut()
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.wasm_chunk_store()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
         new_snapshot
             .execution_snapshot_mut()
             .wasm_memory
             .page_map
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.vmemory_0()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.vmemory_0()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
         new_snapshot
             .execution_snapshot_mut()
             .stable_memory
             .page_map
-            .switch_to_checkpoint(
-                &PageMap::open(
-                    Box::new(snapshot_layout.stable_memory()),
-                    layout.height(),
-                    Arc::clone(fd_factory),
-                )
-                .unwrap(),
-            );
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.stable_memory()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
     }
 
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
@@ -1337,8 +1325,7 @@ fn switch_to_checkpoint(
             let wasm_binary = WasmBinary::new(
                 canister_layout
                     .wasm()
-                    .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))
-                    .unwrap(),
+                    .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?,
             );
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
@@ -1357,6 +1344,7 @@ fn switch_to_checkpoint(
             tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
+    Ok(())
 }
 
 /// Persists metadata after releasing the write lock
@@ -2597,34 +2585,19 @@ impl StateManagerImpl {
                     height
                 );
 
-                let (cp_verified, _checkpointed_state) = self
+                let cp_layout = self
                     .state_layout
                     .checkpoint_in_verification(height)
-                    .map_err(CheckpointError::from)
-                    .and_then(|layout| {
-                        let _timer = self
-                            .metrics
-                            .checkpoint_op_duration
-                            .with_label_values(&["recover"])
-                            .start_timer();
-                        let state = checkpoint::load_checkpoint_and_validate_parallel(
-                            &layout,
-                            self.own_subnet_type,
-                            &self.metrics.checkpoint_metrics,
-                            self.get_fd_factory(),
-                        )?;
-                        Ok((layout, state))
-                    })
                     .unwrap_or_else(|err| {
                         fatal!(
                             self.log,
-                            "Failed to load existing checkpoint @{}: {}",
+                            "Failed to open checkpoint layout #{}: {}",
                             height,
                             err
-                        )
+                        );
                     });
                 (
-                    cp_verified,
+                    cp_layout,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
                 )
@@ -2655,13 +2628,22 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory());
+            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory()).unwrap_or_else(
+                |err| {
+                    fatal!(
+                        self.log,
+                        "Failed to switch to checkpoint for height #{}: {}",
+                        height,
+                        err
+                    );
+                },
+            );
         }
         let state = Arc::new(state);
         self.tip_channel
             .send(TipRequest::ValidateReplicatedState {
                 checkpoint_layout: cp_layout.clone(),
-                replicated_state: state.clone(),
+                reference_state: state.clone(),
                 own_subnet_type: self.own_subnet_type,
                 fd_factory: self.fd_factory.clone(),
             })

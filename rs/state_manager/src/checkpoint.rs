@@ -49,15 +49,11 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 }
 
 /// Creates a checkpoint of the node state using specified directory
-/// layout. Returns a new state that is equivalent to the given one
-/// and a result of the operation.
+/// layout. Returns a layout of the new state that is equivalent to the
+/// given one and a result of the operation.
 ///
 /// This function uses the provided thread-pool to parallelize expensive
 /// operations.
-///
-/// If the result is `Ok`, the returned state is "rebased" to use
-/// files from the newly created checkpoint. If the result is `Err`,
-/// the returned state is exactly the one that was passed as argument.
 pub(crate) fn make_unvalidated_checkpoint(
     state: &ReplicatedState,
     height: Height,
@@ -142,9 +138,6 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     )
     .into_iter()
     .try_for_each(identity)?;
-    checkpoint_layout
-        .remove_unverified_checkpoint_marker()
-        .map_err(CheckpointError::from)?;
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,
@@ -155,6 +148,9 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
             metrics,
         );
     }
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
     Ok(())
 }
 
@@ -306,7 +302,7 @@ impl CheckpointLoader {
             .checkpoint_layout
             .canister_ids()
             .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
-        let ref_canister_ids: Vec<_> = ref_state.canister_states.keys().map(|x| *x).collect();
+        let ref_canister_ids: Vec<_> = ref_state.canister_states.keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
         if on_disk_canister_ids != ref_canister_ids {
@@ -485,14 +481,14 @@ fn validate_eq_checkpoint_internal(
     checkpoint_loader.validate_eq_canister_states(&mut thread_pool, reference_state)?;
     checkpoint_loader
         .load_system_metadata()
-        .map_err(|err| format!("Failed to load system metadata: {}", err.to_string()))?
+        .map_err(|err| format!("Failed to load system metadata: {}", err))?
         .validate_eq(&reference_state.metadata)?;
     checkpoint_loader
         .load_subnet_queues()
         .unwrap()
         .validate_eq(reference_state.subnet_queues())?;
     if checkpoint_loader.load_query_stats().unwrap() != *reference_state.query_stats() {
-        return Err("query_stats".to_string());
+        return Err("query_stats has diverged.".to_string());
     }
     checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, reference_state)
 }
