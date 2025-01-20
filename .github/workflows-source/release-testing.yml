@@ -40,12 +40,13 @@ anchors:
     uses: actions/checkout@v4
     with:
       ref: ${{ github.event.workflow_run.head_branch }}
-  before-script: &before-script
-    name: Before script
-    id: before-script
+  docker-login: &docker-login
+    name: Login to Dockerhub
     shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+    run: ./ci/scripts/docker-login.sh
+    env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -72,7 +73,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -89,7 +90,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -107,7 +108,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - <<: *checkout
-      - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -134,7 +135,7 @@ jobs:
       REPO_NAME: ${{ github.repository }}
     steps:
       - <<: *checkout
-      - <<: *before-script
+      - <<: *docker-login
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -181,7 +182,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
+      - <<: *docker-login
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:

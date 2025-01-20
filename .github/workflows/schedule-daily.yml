@@ -25,11 +25,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
+      - name: Login to Dockerhub
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -79,11 +80,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
+      - name: Login to Dockerhub
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run FI Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -120,11 +122,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
+      - name: Login to Dockerhub
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -161,11 +164,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
+      - name: Login to Dockerhub
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set Benchmark Targets
         shell: bash
         run: |

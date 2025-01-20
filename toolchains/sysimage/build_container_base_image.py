@@ -79,6 +79,9 @@ def save_image(container_cmd: str, image_tag: str, output_file: str):
     log.info("Image saved successfully")
 
 
+# TODO def upload_to_docker_io()
+
+
 def main():
     parser = ArgumentParser()
     parser.add_arguments(Args, dest="fancy")
