@@ -1,5 +1,5 @@
 {
-  "checksum": "bc1f3a256bf2388f48d2cce47a7bfc9360d6397aee0a795ac068f90b1cd68ea4",
+  "checksum": "0f5103043e6989c6387ac9435bf654f8d897751690bb7f6f599e4012865e9e6e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10027,7 +10027,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -10122,7 +10122,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -10209,14 +10209,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.10": {
+    "candid 0.10.12": {
       "name": "candid",
-      "version": "0.10.10",
+      "version": "0.10.12",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.10/download",
-          "sha256": "6c30ee7f886f296b6422c0ff017e89dd4f831521dfdcc76f3f71aae1ce817222"
+          "url": "https://static.crates.io/crates/candid/0.10.12/download",
+          "sha256": "51e129c4051c57daf943586e01ef72faae48b04a8f692d5f646febf17a264c38"
         }
       },
       "targets": [
@@ -10323,7 +10323,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.10"
+        "version": "0.10.12"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10438,7 +10438,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -18333,7 +18333,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -23060,7 +23060,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -29811,7 +29811,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30282,7 +30282,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30386,7 +30386,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30473,7 +30473,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30536,7 +30536,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30604,7 +30604,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30672,7 +30672,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30716,7 +30716,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
           },
           "strip_prefix": "ic-cdk"
         }
@@ -30743,7 +30743,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30757,6 +30757,10 @@
             {
               "id": "serde_bytes 0.11.15",
               "target": "serde_bytes"
+            },
+            {
+              "id": "thiserror 2.0.3",
+              "target": "thiserror"
             }
           ],
           "selects": {}
@@ -30811,7 +30815,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30878,7 +30882,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30945,7 +30949,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31012,7 +31016,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31055,7 +31059,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
           },
           "strip_prefix": "ic-cdk-macros"
         }
@@ -31082,7 +31086,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31220,7 +31224,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31495,7 +31499,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31574,7 +31578,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31750,7 +31754,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31947,7 +31951,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32006,7 +32010,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32090,7 +32094,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32184,7 +32188,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32462,7 +32466,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32537,7 +32541,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32678,7 +32682,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
           },
           "strip_prefix": "ic0"
         }
@@ -32919,7 +32923,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32990,7 +32994,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -49383,7 +49387,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -87409,7 +87413,7 @@
     "cached 0.49.2",
     "canbench 0.1.8",
     "canbench-rs 0.1.8",
-    "candid 0.10.10",
+    "candid 0.10.12",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.0.83",

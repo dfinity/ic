@@ -13,7 +13,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{
-    ingress::{IngressState, IngressStatus},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
     Cycles,
 };
@@ -166,6 +166,8 @@ fn check_calls_conclude_with_migrating_canister(
         300, // shutdown_phase_max_rounds
         seed, config,
     ) {
+        //        unreachable!("{:?}\n\n{:?}", nfo.fixture.local_canisters, nfo.fixture.remote_canisters);
+        //        unreachable!("{:#?}", nfo.fixture.set_config(*nfo.fixture.local_canisters.first().unwrap(), CanisterConfig::default()));
         unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
     }
 }
@@ -213,7 +215,10 @@ fn check_calls_conclude_with_migrating_canister_impl(
         if canister != migrating_canister {
             // Make sure the canister doesn't make calls when it is
             // put into running state to read its records.
-            fixture.stop_chatter(canister);
+            let config = fixture.stop_chatter(canister);
+            //            assert!(false, "{:?}", migrating_canister);
+            //            let config = fixture.set_config(canister, config);
+            //            assert!(false, "{:#?}", config);
             fixture.stop_canister_non_blocking(canister);
         }
     }
@@ -517,10 +522,15 @@ impl Fixture {
     /// Calls the `stop_chatter()` function on `canister`.
     ///
     /// This stops the canister from making calls, downstream and from the heartbeat.
-    pub fn stop_chatter(&self, canister: CanisterId) {
-        self.get_env(&canister)
-            .execute_ingress(canister, "stop_chatter", candid::Encode!().unwrap())
-            .unwrap();
+    pub fn stop_chatter(&self, canister: CanisterId) -> CanisterConfig {
+        match self.get_env(&canister).execute_ingress(
+            canister,
+            "stop_chatter",
+            candid::Encode!().unwrap(),
+        ) {
+            Ok(WasmResult::Reply(reply)) => candid::Decode!(&reply, CanisterConfig).unwrap(),
+            _ => unreachable!(),
+        }
     }
 
     /// Queries the records from `canister`.

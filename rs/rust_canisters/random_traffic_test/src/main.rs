@@ -1,9 +1,11 @@
 use candid::CandidType;
-use candid::Encode;
 use futures::future::select_all;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::api::call::{Call, ConfigurableCall, SendableCall};
-use ic_cdk::{api, caller, id, setup};
+use ic_cdk::{
+    api,
+    call::{Call, CallError, CallResult, ConfigurableCall, SendableCall},
+    setup,
+};
 use ic_cdk_macros::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
@@ -88,11 +90,6 @@ fn next_call_tree_id() -> u32 {
     })
 }
 
-/// Returns `true` if `error_msg` corresponds to a synchronous rejection.
-fn is_synchronous_rejection(error_msg: &str) -> bool {
-    error_msg.contains("Couldn't send message")
-}
-
 /// Generates a random `u32` by sampling `min..=max`.
 fn sample((min, max): (u32, u32)) -> u32 {
     RNG.with_borrow_mut(|rng| rng.gen_range(min..=max))
@@ -124,7 +121,7 @@ fn receiver() -> CanisterId {
         RNG.with_borrow_mut(|rng| config.receivers.as_slice().choose(rng).cloned())
     }) {
         Some(receiver) => receiver,
-        None => CanisterId::try_from(id().as_slice()).unwrap(),
+        None => CanisterId::try_from(api::canister_self().as_slice()).unwrap(),
     }
 }
 
@@ -154,15 +151,15 @@ fn seed_rng(seed: u64) {
     RNG.with_borrow_mut(|rng| *rng = StdRng::seed_from_u64(seed));
 }
 
-/// Sets `CONFIG` such that the canister stops making calls altogether; returns the modified
-/// config.
+/// Sets `CONFIG` such that the canister stops making calls altogether; returns the config
+/// prior to modifying.
 #[update]
 fn stop_chatter() -> Config {
-    set_config(Config {
+    set_config(CONFIG.with_borrow(|config| Config {
         calls_per_heartbeat: 0,
         downstream_call_percentage: 0,
-        ..CONFIG.take()
-    })
+        ..config.clone()
+    }))
 }
 
 /// Returns the canister records.
@@ -200,15 +197,16 @@ fn should_make_best_effort_call() -> bool {
 fn setup_call(
     call_tree_id: u32,
     call_depth: u32,
-) -> (impl Future<Output = api::call::CallResult<Vec<u8>>>, u32) {
+) -> (impl Future<Output = CallResult<Message>>, u32) {
     let msg = Message::new(call_tree_id, call_depth, gen_call_bytes());
+    let sent_bytes = msg.count_bytes() as u32;
     let receiver = receiver();
-    let caller =
-        (call_depth > 0).then_some(CanisterId::unchecked_from_principal(PrincipalId(caller())));
+    let caller = (call_depth > 0).then_some(CanisterId::unchecked_from_principal(PrincipalId(
+        api::msg_caller(),
+    )));
     let timeout_secs = should_make_best_effort_call().then_some(gen_timeout_secs());
 
-    let call =
-        Call::new(receiver.into(), "handle_call").with_raw_args(candid::Encode!(&msg).unwrap());
+    let call = Call::new(receiver.into(), "handle_call").with_arg(msg);
     let call = match timeout_secs {
         Some(timeout_secs) => call.change_timeout(timeout_secs),
         None => call.with_guaranteed_response(),
@@ -226,7 +224,7 @@ fn setup_call(
                     caller,
                     call_tree_id,
                     call_depth,
-                    sent_bytes: msg.count_bytes() as u32,
+                    sent_bytes,
                     timeout_secs,
                     duration_and_response: None,
                 },
@@ -234,7 +232,7 @@ fn setup_call(
         )
     });
 
-    (call.call_raw(), index)
+    (call.call(), index)
 }
 
 /// Updates the record at `index` using the `result` of the corresponding call.
@@ -243,7 +241,7 @@ fn setup_call(
 /// subnet is at its limits. Note that since the call `index` is part of the records, removing
 /// the records for synchronous rejections will result in gaps in these numbers thus they are
 /// still included indirectly.
-fn update_record(result: &api::call::CallResult<Vec<u8>>, index: u32) {
+fn update_record(result: &CallResult<Message>, index: u32) {
     // Updates the `Response` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |response: Response| {
         RECORDS.with_borrow_mut(|records| {
@@ -263,7 +261,7 @@ fn update_record(result: &api::call::CallResult<Vec<u8>>, index: u32) {
         });
     };
     match result {
-        Err((_, msg)) if is_synchronous_rejection(msg) => {
+        Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
             RECORDS.with_borrow_mut(|records| {
@@ -275,12 +273,16 @@ fn update_record(result: &api::call::CallResult<Vec<u8>>, index: u32) {
                     .is_none())
             });
         }
-
-        Err((reject_code, msg)) => {
-            set_reply_in_call_record(Response::Reject(*reject_code as u32, msg.to_string()));
+        Err(CallError::CallRejected(rejection)) => {
+            set_reply_in_call_record(Response::Reject(
+                rejection.reject_code().into(),
+                rejection.reject_message().to_string(),
+            ));
         }
-        Ok(result) => {
-            set_reply_in_call_record(Response::Reply(result.len() as u32));
+        Err(CallError::CandidDecodeFailed(..)) => unreachable!(),
+
+        Ok(msg) => {
+            set_reply_in_call_record(Response::Reply(msg.count_bytes() as u32));
         }
     }
 }
@@ -292,7 +294,7 @@ async fn heartbeat() {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
     for _ in 0..CONFIG.with_borrow(|config| config.calls_per_heartbeat) {
         let (future, index) = setup_call(next_call_tree_id(), 0);
-        futures.push(future);
+        futures.push(Box::pin(future));
         record_indices.push(index);
     }
 
@@ -341,7 +343,7 @@ async fn handle_call(msg: Message) -> Vec<u8> {
 /// Initializes the `HASHER` by hashing our own canister ID.
 #[init]
 fn initialize_hasher() {
-    HASHER.with_borrow_mut(|hasher| hasher.write(id().as_slice()));
+    HASHER.with_borrow_mut(|hasher| hasher.write(api::canister_self().as_slice()));
 }
 
 fn main() {
