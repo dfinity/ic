@@ -3,7 +3,10 @@ use ic_base_types::NumBytes;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    types::v1::{self as pb, vet_kd_agreement::Agreement as VetKdAgreementProto},
+    types::v1::{
+        vet_kd_agreement::Agreement as VetKdInternalAgreementProto,
+        VetKdAgreement as VetKdAgreementProto, VetKdErrorCode as VetKdErrorCodeProto,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -50,24 +53,24 @@ impl VetKdPayload {
     }
 }
 
-impl From<VetKdAgreement> for VetKdAgreementProto {
+impl From<VetKdAgreement> for VetKdInternalAgreementProto {
     fn from(agreement: VetKdAgreement) -> Self {
         match agreement {
-            VetKdAgreement::Success(data) => VetKdAgreementProto::Data(data),
+            VetKdAgreement::Success(data) => VetKdInternalAgreementProto::Data(data),
             VetKdAgreement::Reject(error_code) => {
-                VetKdAgreementProto::Reject(pb::VetKdErrorCode::from(error_code).into())
+                VetKdInternalAgreementProto::Reject(VetKdErrorCodeProto::from(error_code).into())
             }
         }
     }
 }
 
-impl TryFrom<VetKdAgreementProto> for VetKdAgreement {
+impl TryFrom<VetKdInternalAgreementProto> for VetKdAgreement {
     type Error = ProxyDecodeError;
-    fn try_from(proto: VetKdAgreementProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: VetKdInternalAgreementProto) -> Result<Self, Self::Error> {
         let res = match proto {
-            VetKdAgreementProto::Data(data) => VetKdAgreement::Success(data),
-            VetKdAgreementProto::Reject(error_code) => VetKdAgreement::Reject(
-                VetKdErrorCode::try_from(pb::VetKdErrorCode::try_from(error_code).map_err(
+            VetKdInternalAgreementProto::Data(data) => VetKdAgreement::Success(data),
+            VetKdInternalAgreementProto::Reject(error_code) => VetKdAgreement::Reject(
+                VetKdErrorCode::try_from(VetKdErrorCodeProto::try_from(error_code).map_err(
                     |_| ProxyDecodeError::ValueOutOfRange {
                         typ: "VetKdErrorCode",
                         err: format!("Unexpected value for VetKd error code {}", error_code),
@@ -79,26 +82,26 @@ impl TryFrom<VetKdAgreementProto> for VetKdAgreement {
     }
 }
 
-impl From<VetKdErrorCode> for pb::VetKdErrorCode {
+impl From<VetKdErrorCode> for VetKdErrorCodeProto {
     fn from(value: VetKdErrorCode) -> Self {
         match value {
-            VetKdErrorCode::TimedOut => pb::VetKdErrorCode::TimedOut,
-            VetKdErrorCode::InvalidKey => pb::VetKdErrorCode::InvalidKey,
+            VetKdErrorCode::TimedOut => VetKdErrorCodeProto::TimedOut,
+            VetKdErrorCode::InvalidKey => VetKdErrorCodeProto::InvalidKey,
         }
     }
 }
 
-impl TryFrom<pb::VetKdErrorCode> for VetKdErrorCode {
+impl TryFrom<VetKdErrorCodeProto> for VetKdErrorCode {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb::VetKdErrorCode) -> Result<Self, Self::Error> {
+    fn try_from(value: VetKdErrorCodeProto) -> Result<Self, Self::Error> {
         match value {
-            pb::VetKdErrorCode::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+            VetKdErrorCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "VetKdErrorCode",
                 err: format!("Unexpected value for VetKd error code {:?}", value),
             }),
-            pb::VetKdErrorCode::TimedOut => Ok(VetKdErrorCode::TimedOut),
-            pb::VetKdErrorCode::InvalidKey => Ok(VetKdErrorCode::InvalidKey),
+            VetKdErrorCodeProto::TimedOut => Ok(VetKdErrorCode::TimedOut),
+            VetKdErrorCodeProto::InvalidKey => Ok(VetKdErrorCode::InvalidKey),
         }
     }
 }
@@ -107,7 +110,7 @@ pub fn vet_kd_payload_to_bytes(payload: VetKdPayload, max_size: NumBytes) -> Vec
     let message_iterator = payload
         .vet_kd_agreements
         .into_iter()
-        .map(|(callback_id, agreement)| pb::VetKdAgreement {
+        .map(|(callback_id, agreement)| VetKdAgreementProto {
             callback_id: callback_id.get(),
             agreement: Some(agreement.into()),
         });
@@ -116,7 +119,7 @@ pub fn vet_kd_payload_to_bytes(payload: VetKdPayload, max_size: NumBytes) -> Vec
 }
 
 pub fn bytes_to_vet_kd_payload(data: &[u8]) -> Result<VetKdPayload, ProxyDecodeError> {
-    let messages: Vec<pb::VetKdAgreement> =
+    let messages: Vec<VetKdAgreementProto> =
         slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
     let mut payload = VetKdPayload::default();
 
