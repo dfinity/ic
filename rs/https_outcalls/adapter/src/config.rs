@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;
-const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 /// The source of the unix domain socket to be used for inter-process
