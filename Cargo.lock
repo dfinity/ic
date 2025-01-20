@@ -5416,6 +5416,7 @@ dependencies = [
  "futures",
  "http-body-util",
  "ic-base-types",
+ "ic-canister-client-sender",
  "ic-consensus-manager",
  "ic-interfaces",
  "ic-logger",
