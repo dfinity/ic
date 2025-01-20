@@ -198,7 +198,7 @@ fn setup_and_run_ic_ref_test(
     );
 
     process.kill().unwrap();
-    process.wait();
+    process.wait().unwrap();
 }
 
 #[test]
