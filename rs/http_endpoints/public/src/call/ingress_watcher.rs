@@ -478,7 +478,6 @@ mod tests {
         assert_eq!(ingress_watcher.completed_execution_heights.len(), 0);
     }
 
-    /// TODO: Can be removed. We have integration test covering the sames scenario.
     #[rstest]
     fn test_handling_of_duplicate_requests(mut ingress_watcher: IngressWatcher) {
         let message = MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]);

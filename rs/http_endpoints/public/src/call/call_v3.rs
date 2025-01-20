@@ -224,13 +224,10 @@ async fn call_sync_v3(
         .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
-        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
-            // TODO: At this point we could return early without submitting the ingress message.
-            Err((
-                "Duplicate request. Message is already being tracked and executed.",
-                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-            ))
-        }
+        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => Err((
+            "Duplicate request. Message is already being tracked and executed.",
+            CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        )),
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
             // TODO: Send a warning or notification.
             // This probably means that the ingress watcher panicked.
