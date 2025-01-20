@@ -8,7 +8,7 @@ use crate::{
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use maplit::{btreemap, hashmap, hashset};
+use maplit::{btreemap, btreeset, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
 use pretty_assertions::assert_eq;
 use std::cell::Cell;
@@ -638,12 +638,12 @@ fn test_get_neuron_ids_readable_by_caller() {
     for i in 1..=3 {
         assert_eq!(
             neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(i)),
-            hashset! { NeuronId { id: 1 } }
+            btreeset! { NeuronId { id: 1 } }
         );
     }
     assert_eq!(
         neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(4)),
-        hashset! {}
+        btreeset! {}
     );
 }
 
@@ -883,33 +883,23 @@ fn test_get_non_empty_neuron_ids_readable_by_caller() {
         5 => neuron_with_staked_maturity,
     });
 
-    // Verify that the non-empty neurons readable by the controller and hot key are neurons 3, 4 and
-    // 5, while a principal that's not controller or hot key can't read any.
-    let neuron_id_vec_to_u64_hash_set = |neuron_ids: Vec<NeuronId>| -> HashSet<u64> {
-        neuron_ids
+    assert_eq!(
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller),
+        btreeset! { 3, 4, 5 }
             .into_iter()
-            .map(|neuron_id| neuron_id.id)
+            .map(NeuronId::from_u64)
             .collect()
-    };
-
-    assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store.get_non_empty_neuron_ids_readable_by_caller(controller)
-        ),
-        hashset! { 3, 4, 5 }
     );
     assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key)
-        ),
-        hashset! { 3, 4, 5 }
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(hot_key),
+        btreeset! { 3, 4, 5 }
+            .into_iter()
+            .map(NeuronId::from_u64)
+            .collect()
     );
     assert_eq!(
-        neuron_id_vec_to_u64_hash_set(
-            neuron_store
-                .get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3))
-        ),
-        hashset! {}
+        neuron_store.get_non_empty_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(3)),
+        btreeset! {}
     );
 }
 

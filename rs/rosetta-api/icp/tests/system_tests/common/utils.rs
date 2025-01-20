@@ -1,18 +1,13 @@
 use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
 use candid::{Decode, Encode};
-use ic_agent::identity::BasicIdentity;
-use ic_agent::Agent;
-use ic_agent::Identity;
+use ic_agent::{identity::BasicIdentity, Agent, Identity};
 use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::ListNeurons;
-use ic_nns_governance::pb::v1::ListNeuronsResponse;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
 use ic_nns_governance_api::pb::v1::GovernanceError;
 use ic_rosetta_api::convert::to_hash;
-use icp_ledger::GetBlocksArgs;
-use icp_ledger::QueryEncodedBlocksResponse;
+use icp_ledger::{GetBlocksArgs, QueryEncodedBlocksResponse};
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
 use url::Url;
@@ -180,6 +175,8 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
                     include_neurons_readable_by_caller: true,
                     include_empty_neurons_readable_by_caller: Some(true),
                     include_public_neurons_in_full_neurons: None,
+                    page_number: None,
+                    page_size: None,
                 })
                 .unwrap()
             )

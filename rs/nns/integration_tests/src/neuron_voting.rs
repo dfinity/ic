@@ -18,8 +18,9 @@ use ic_nns_test_utils::{
         get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
-        get_pending_proposals, list_neurons, nns_cast_vote, nns_governance_get_full_neuron,
-        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_pending_proposals, list_all_neurons_and_combine_responses, nns_cast_vote,
+        nns_governance_get_full_neuron, nns_governance_make_proposal, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -394,14 +395,16 @@ fn test_voting_can_span_multiple_rounds() {
 
     assert_matches!(response.command, Some(Command::MakeProposal(_)));
 
-    let listed_neurons = list_neurons(
+    let listed_neurons = list_all_neurons_and_combine_responses(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ListNeurons {
-            neuron_ids: (0..1000u64).collect(),
+            neuron_ids: (1..1000u64).collect(),
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
         },
     );
 
@@ -419,7 +422,7 @@ fn test_voting_can_span_multiple_rounds() {
         state_machine.tick();
     }
 
-    let listed_neurons = list_neurons(
+    let listed_neurons = list_all_neurons_and_combine_responses(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ListNeurons {
@@ -427,6 +430,8 @@ fn test_voting_can_span_multiple_rounds() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
         },
     );
 
