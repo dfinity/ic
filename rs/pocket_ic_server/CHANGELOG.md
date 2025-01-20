@@ -13,8 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
-  If an optional caller is provided and a corresponding read state request for the status of the same update call
-  signed by that specified caller was rejected because the update call was submitted by a different caller, then an error is returned.
+  If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
 
 ### Fixed
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
