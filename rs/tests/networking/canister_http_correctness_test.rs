@@ -89,8 +89,7 @@ impl<'a> Handlers<'a> {
             .env
             .topology_snapshot()
             .subnets()
-            .filter(|s| s.subnet_type() == SubnetType::Application)
-            .next()
+            .find(|s| s.subnet_type() == SubnetType::Application)
             .expect("there is an application subnet")
             .nodes()
             .next()
@@ -834,7 +833,7 @@ fn test_invalid_domain_name(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
-                url: format!("https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com"),
+                url: "https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com".to_string(),
                 headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -867,7 +866,7 @@ fn test_invalid_ip(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
-                url: format!("https://240.0.0.0"),
+                url: "https://240.0.0.0".to_string(),
                 headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1664,13 +1663,12 @@ fn assert_http_response(
         .iter()
         .find(|(name, _)| name.to_lowercase() == "content-length")
         .map(|(_, value)| value.parse::<usize>())
-        .expect(
-            format!(
+        .unwrap_or_else(|| {
+            panic!(
                 "HTTP response contains `content-length` header. Headers: {:?}",
                 http_response.headers
             )
-            .as_str(),
-        )
+        })
         .expect("content-length is a number");
 
     assert_eq!(
