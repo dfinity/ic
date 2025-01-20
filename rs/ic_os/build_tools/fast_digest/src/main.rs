@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     let hash = calculate_digest(&mut File::open(Path::new(path)).context("Could not open file")?)
         .context("Hash calculation failed")?;
 
-    println!("{}", hash);
+    println!("{:x}", hash);
 
     Ok(())
 }

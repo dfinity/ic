@@ -130,19 +130,6 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
          "bash"],
         input=commands.encode(), check=True)
 
-def prepare_tree_from_tar_commands(in_file, fs_basedir, dir_to_extract, extra_files):
-    if in_file:
-        commands = f"tar xf {in_file} --numeric-owner -C {fs_basedir} {dir_to_extract};\n"
-
-        for path_target in extra_files or []:
-            (path, target, mod) = path_target.split(":")
-            target_in_basedir = os.path.join(fs_basedir, target.lstrip("/"))
-            commands += f"cp {path} {target_in_basedir};\n"
-            commands += f"chmod {mod} {target_in_basedir};\n"
-
-        return commands
-    else:
-        return f"chown root:root {fs_basedir}"
 
 def make_argparser():
     parser = argparse.ArgumentParser()
@@ -216,7 +203,10 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
+    start = time.time()
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
+    elapsed = time.time() - start
+    print(f"PREPARE TOOK {elapsed}")
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     subprocess.run(["sync"], check=True)
 
