@@ -903,13 +903,14 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     .unwrap();
     let results = (0..100)
         .map(|_i| {
-            state_machine.send_ingress_safe(
-                *TEST_USER1_PRINCIPAL,
-                CYCLES_MINTING_CANISTER_ID,
-                "notify_create_canister",
-                notify_create_canister.clone(),
-            )
-            .unwrap()
+            state_machine
+                .send_ingress_safe(
+                    *TEST_USER1_PRINCIPAL,
+                    CYCLES_MINTING_CANISTER_ID,
+                    "notify_create_canister",
+                    notify_create_canister.clone(),
+                )
+                .unwrap()
         })
         // It might seem silly to call collect, and then immediately after that
         // call into_iter, but this is to ensure that await_ingress is not
@@ -949,12 +950,10 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     // Step 3.3.1: Filter out Err(Processing), and freak out if there are any Ok.
     let mut errs = results
         .into_iter()
-        .filter_map(|result| {
-            match result {
-                Err(NotifyError::Processing) => None,
-                Ok(_) => panic!("{:?}", result),
-                Err(err) => Some(err),
-            }
+        .filter_map(|result| match result {
+            Err(NotifyError::Processing) => None,
+            Ok(_) => panic!("{:?}", result),
+            Err(err) => Some(err),
         })
         .collect::<Vec<NotifyError>>();
 
@@ -963,12 +962,14 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     assert!(
         errs.iter().all(|other_err| other_err == &last_err),
         "{:?}\nvs.\n{:#?}",
-        last_err, errs,
+        last_err,
+        errs,
     );
     assert!(
         errs.len() >= 2, // If errs is empty, then the previous assert is trivial.
         "{}: {:#?}",
-        errs.len(), errs,
+        errs.len(),
+        errs,
     );
     // I tried cranking up the concurrent calls, but I could never get
     // Processing to occur. That is, this would always print concurrency - 1.
