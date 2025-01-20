@@ -16,7 +16,9 @@ use ic_consensus::{
     idkg,
 };
 use ic_consensus_dkg::DkgBouncer;
-use ic_consensus_manager::AbortableBroadcastChannelBuilder;
+use ic_consensus_manager::{
+    AbortableBroadcastChannelBuilder, AbortableBroadcastReceiver, AbortableBroadcastSender,
+};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
@@ -31,7 +33,11 @@ use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
+    p2p::{
+        artifact_manager::JoinGuard,
+        consensus::{ArtifactTransmit, UnvalidatedArtifact},
+        state_sync::StateSyncClient,
+    },
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -47,7 +53,7 @@ use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessage, HasHeight, dkg},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     replica_config::ReplicaConfig,
@@ -141,6 +147,18 @@ struct Bouncers {
     idkg: Arc<idkg::IDkgBouncer>,
     https_outcalls: Arc<CanisterHttpGossipImpl>,
 }
+
+struct InboundAndOutboundChannels {
+    ingress_outbound_tx: AbortableBroadcastSender<SignedIngress>,
+    ingress_inbound_rx: AbortableBroadcastReceiver<SignedIngress>,
+    consensus_outbound_tx: AbortableBroadcastSender<ConsensusMessage>,
+    consensus_inbound_rx: AbortableBroadcastReceiver<ConsensusMessage>,
+    certifier_outbound_tx: AbortableBroadcastSender<CertificationMessage>,
+    certifier_inbound_rx: AbortableBroadcastReceiver<CertificationMessage>,
+    dkg_outbound_tx: AbortableBroadcastSender<dkg::Message>,
+    dkg_inbound_rx: AbortableBroadcastReceiver<dkg::Message>,
+}
+
 
 impl Bouncers {
     fn new(
@@ -372,6 +390,87 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
+    let (consensus_outbound_tx, consensus_inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            consensus_pool.clone(),
+            artifact_pools.ingress_pool.clone(),
+            bouncers.consensus,
+            metrics_registry.clone(),
+            node_id,
+        );
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    } else {
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            consensus_pool.clone(),
+            bouncers.consensus,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    };
+
+    let (ingress_outbound_tx, ingress_inbound_rx) = {
+        #[allow(clippy::disallowed_methods)]
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.ingress_pool.clone(),
+            bouncers.ingress,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS)
+    };
+
+    let (certifier_outbound_tx, certifier_inbound_rx) = {
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.certification_pool.clone(),
+            bouncers.certifier,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    };
+
+    let (dkg_outbound_tx, dkg_inbound_rx) = {
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.dkg_pool.clone(),
+            bouncers.dkg,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    };
+
+    let (idkg_outbound_tx, idkg_inbound_rx) = {
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.idkg_pool.clone(),
+            bouncers.idkg,
+            metrics_registry.clone(),
+        );
+
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    };
+
+    let (https_outcalls_outbound_tx, https_outcalls_inbound_rx) = {
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.canister_http_pool.clone(),
+            bouncers.https_outcalls,
+            metrics_registry.clone(),
+        );
+
+        new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+    };
+
+    //
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let ingress_manager = Arc::new(IngressManager::new(
@@ -412,30 +511,6 @@ fn start_consensus(
     let mut join_handles = vec![];
 
     {
-        let consensus_pool = Arc::clone(&consensus_pool);
-
-        let (outbound_tx, inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
-            let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                consensus_pool.clone(),
-                artifact_pools.ingress_pool.clone(),
-                bouncers.consensus,
-                metrics_registry.clone(),
-                node_id,
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        } else {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                consensus_pool.clone(),
-                bouncers.consensus,
-                metrics_registry.clone(),
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-
         let consensus_impl = ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client),
@@ -459,32 +534,20 @@ fn start_consensus(
         );
         // Create the consensus client.
         join_handles.push(create_artifact_handler(
-            outbound_tx,
-            inbound_rx,
+            consensus_outbound_tx,
+            consensus_inbound_rx,
             consensus_impl,
             time_source.clone(),
-            consensus_pool,
+            consensus_pool.clone(),
             metrics_registry.clone(),
         ));
     };
-
     let user_ingress_tx = {
-        #[allow(clippy::disallowed_methods)]
-        let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            artifact_pools.ingress_pool.clone(),
-            bouncers.ingress,
-            metrics_registry.clone(),
-        );
-
-        let (outbound_tx, inbound_rx) =
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS);
         // Create the ingress client.
+        let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
         join_handles.push(create_ingress_handlers(
-            outbound_tx,
-            inbound_rx,
+            ingress_outbound_tx,
+            ingress_inbound_rx,
             user_ingress_rx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
@@ -495,16 +558,6 @@ fn start_consensus(
     };
 
     {
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            artifact_pools.certification_pool.clone(),
-            bouncers.certifier,
-            metrics_registry.clone(),
-        );
-
-        let (outbound_tx, inbound_rx) =
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the certification client.
         let certifier = CertifierImpl::new(
             replica_config,
@@ -517,8 +570,8 @@ fn start_consensus(
             max_certified_height_tx,
         );
         join_handles.push(create_artifact_handler(
-            outbound_tx,
-            inbound_rx,
+            certifier_outbound_tx,
+            certifier_inbound_rx,
             certifier,
             Arc::clone(&time_source) as Arc<_>,
             artifact_pools.certification_pool,
@@ -527,20 +580,10 @@ fn start_consensus(
     };
 
     {
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            artifact_pools.dkg_pool.clone(),
-            bouncers.dkg,
-            metrics_registry.clone(),
-        );
-
-        let (outbound_tx, inbound_rx) =
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the DKG client.
         join_handles.push(create_artifact_handler(
-            outbound_tx,
-            inbound_rx,
+            dkg_outbound_tx,
+            dkg_inbound_rx,
             ic_consensus_dkg::DkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_crypto),
@@ -555,17 +598,6 @@ fn start_consensus(
         ));
     };
     {
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            artifact_pools.idkg_pool.clone(),
-            bouncers.idkg,
-            metrics_registry.clone(),
-        );
-
-        let (outbound_tx, inbound_rx) =
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
-
         let finalized = consensus_pool_cache.finalized_block();
         let chain_key_config =
             registry_client.get_chain_key_config(subnet_id, registry_client.get_latest_version());
@@ -580,8 +612,8 @@ fn start_consensus(
             finalized.payload.as_ref().as_idkg().is_some(),
         );
         join_handles.push(create_artifact_handler(
-            outbound_tx,
-            inbound_rx,
+            idkg_outbound_tx,
+            idkg_inbound_rx,
             idkg::IDkgImpl::new(
                 node_id,
                 consensus_pool.read().unwrap().get_block_cache(),
@@ -598,20 +630,9 @@ fn start_consensus(
     };
 
     {
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            artifact_pools.canister_http_pool.clone(),
-            bouncers.https_outcalls,
-            metrics_registry.clone(),
-        );
-
-        let (outbound_tx, inbound_rx) =
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
-
         join_handles.push(create_artifact_handler(
-            outbound_tx,
-            inbound_rx,
+            https_outcalls_outbound_tx,
+            https_outcalls_inbound_rx,
             CanisterHttpPoolManagerImpl::new(
                 Arc::clone(&state_reader),
                 Arc::new(Mutex::new(canister_http_adapter_client)),
