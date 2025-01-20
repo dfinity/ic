@@ -1,5 +1,5 @@
 {
-  "checksum": "78e6ae0a6f656c3bc2e62f91681c90f7088a556e20471251f4b378d2f917e8f0",
+  "checksum": "1e65184579336e8e32f98c87ea66a02736faf39eb650f2d387c7c34b8d0cb58f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10027,7 +10027,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -10122,7 +10122,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -10209,14 +10209,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.10": {
+    "candid 0.10.12": {
       "name": "candid",
-      "version": "0.10.10",
+      "version": "0.10.12",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.10/download",
-          "sha256": "6c30ee7f886f296b6422c0ff017e89dd4f831521dfdcc76f3f71aae1ce817222"
+          "url": "https://static.crates.io/crates/candid/0.10.12/download",
+          "sha256": "51e129c4051c57daf943586e01ef72faae48b04a8f692d5f646febf17a264c38"
         }
       },
       "targets": [
@@ -10323,7 +10323,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.10"
+        "version": "0.10.12"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10438,7 +10438,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -18356,7 +18356,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -18618,6 +18618,11 @@
             {
               "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk 0.18.0-alpha.1",
+              "target": "ic_cdk",
+              "alias": "ic_cdk_next"
             },
             {
               "id": "ic-cdk-timers 0.11.0",
@@ -23086,7 +23091,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -29837,7 +29842,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30308,7 +30313,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30412,7 +30417,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30499,7 +30504,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30562,7 +30567,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30630,7 +30635,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30698,7 +30703,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30727,6 +30732,81 @@
           "selects": {}
         },
         "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk 0.18.0-alpha.1": {
+      "name": "ic-cdk",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic-cdk"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.12",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.24.0-alpha.1",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "thiserror 2.0.3",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.18.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -30766,7 +30846,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30833,7 +30913,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30900,7 +30980,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30967,7 +31047,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -30995,6 +31075,76 @@
         },
         "edition": "2021",
         "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.18.0-alpha.1": {
+      "name": "ic-cdk-macros",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic-cdk-macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.12",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.18.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -31105,7 +31255,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31380,7 +31530,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31459,7 +31609,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31635,7 +31785,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31832,7 +31982,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31891,7 +32041,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -31975,7 +32125,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32069,7 +32219,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32347,7 +32497,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32422,7 +32572,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32548,6 +32698,47 @@
         ],
         "edition": "2021",
         "version": "0.23.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 0.24.0-alpha.1": {
+      "name": "ic0",
+      "version": "0.24.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.24.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32763,7 +32954,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -32834,7 +33025,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -49227,7 +49418,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.10",
+              "id": "candid 0.10.12",
               "target": "candid"
             },
             {
@@ -87342,7 +87533,7 @@
     "cached 0.49.2",
     "canbench 0.1.8",
     "canbench-rs 0.1.8",
-    "candid 0.10.10",
+    "candid 0.10.12",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.1.37",
@@ -87409,6 +87600,7 @@
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.2",
     "ic-cdk 0.16.0",
+    "ic-cdk 0.18.0-alpha.1",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.2",
