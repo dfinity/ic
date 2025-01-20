@@ -28,6 +28,22 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
+pub struct AbortableBroadcastChannelManager(Vec<StartConsensusManagerFn>);
+
+impl AbortableBroadcastChannelManager {
+    pub fn start(
+        self,
+        transport: Arc<dyn Transport>,
+        topology_watcher: watch::Receiver<SubnetTopology>,
+    ) -> Vec<Shutdown> {
+        let mut ret = vec![];
+        for client in self.0 {
+            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
+        }
+        ret
+    }
+}
+
 /// Same order of magnitude as the number of active artifacts.
 const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
@@ -66,8 +82,6 @@ impl AbortableBroadcastChannelBuilder {
     ) -> (
         AbortableBroadcastSender<Artifact>,
         AbortableBroadcastReceiver<Artifact>,
-        // TODO: remove this by introducing a new channel from the http handler into the processor
-        UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
         // Making this channel bounded can be problematic since we don't have true multiplexing
@@ -88,7 +102,6 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
-        let inbound_tx_c = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
@@ -113,23 +126,14 @@ impl AbortableBroadcastChannelBuilder {
         );
 
         self.clients.push(Box::new(builder));
-        (outbound_tx, inbound_rx, inbound_tx_c)
+        (outbound_tx, inbound_rx)
     }
 
-    pub fn router(&mut self) -> Router {
-        self.router.take().unwrap_or_default()
-    }
-
-    pub fn run(
-        self,
-        transport: Arc<dyn Transport>,
-        topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> Vec<Shutdown> {
-        let mut ret = vec![];
-        for client in self.clients {
-            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
-        }
-        ret
+    pub fn build(self) -> (Router, AbortableBroadcastChannelManager) {
+        (
+            self.router.unwrap(),
+            AbortableBroadcastChannelManager(self.clients),
+        )
     }
 }
 
