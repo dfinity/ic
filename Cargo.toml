@@ -320,6 +320,7 @@ members = [
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
+    "rs/rust_canisters/pmap",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_reader",
@@ -610,7 +611,7 @@ minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.2.0"
 nftables = "0.4"
-nix = "0.24.3"
+nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
