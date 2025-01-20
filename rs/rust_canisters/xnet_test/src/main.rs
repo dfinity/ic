@@ -8,7 +8,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use futures::future::join_all;
 use ic_cdk::api::management_canister::provisional::CanisterId;
-use ic_cdk::api::{canister_self, msg_caller, time};
+use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallError, ConfigurableCall, SendableCall};
 use ic_cdk::setup;
 use ic_cdk_macros::{heartbeat, query, update};
@@ -265,20 +265,20 @@ fn handle_request(req: Request) -> Reply {
     }
 }
 
-// /// Deposits the cycles this canister has minus 1T at the given destination.
-// #[update]
-// async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
-//     let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
-//     let _ = call_with_payment::<(CanisterIdRecord,), ()>(
-//         Principal::from_str("aaaaa-aa").unwrap(),
-//         "deposit_cycles",
-//         (canister_id_record,),
-//         cycle_refund,
-//     )
-//     .await;
+/// Deposits the cycles this canister has minus 1T at the given destination.
+#[update]
+async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
+    let cycle_refund = canister_cycle_balance().saturating_sub(1_000_000_000_000);
+    Call::new(Principal::from_text("aaaaa-aa").unwrap(), "deposit_cycles")
+        .with_arg(canister_id_record)
+        .with_guaranteed_response()
+        .with_cycles(cycle_refund)
+        .call::<()>()
+        .await
+        .unwrap();
 
-//     "ok".to_string()
-// }
+    "ok".to_string()
+}
 
 /// Query call that serializes metrics as a candid message.
 #[query]
