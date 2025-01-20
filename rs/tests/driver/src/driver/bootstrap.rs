@@ -284,27 +284,8 @@ pub fn setup_and_start_vms(
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
-                    // https://kubevirt.io/user-guide/storage/disks_and_volumes/#containerdisk
-                    // build container disk that holds config fat disk for guestos
-                    // push it to local container registry
-                    let command = format!(
-                        "set -xe; \
-                        mkdir -p /var/sysimage/tnet; \
-                        ctr=$(sudo buildah --root /var/sysimage/tnet from scratch); \
-                        sudo buildah --root /var/sysimage/tnet copy --chown=107:107 $ctr {0} /disk/; \
-                        sudo buildah --root /var/sysimage/tnet commit $ctr harbor-core.harbor.svc.cluster.local/tnet/config:{1}; \
-                        sudo buildah --root /var/sysimage/tnet push --tls-verify=false --creds 'robot$tnet+tnet:TestingPOC1' harbor-core.harbor.svc.cluster.local/tnet/config:{1}",
-                        conf_img_path.display(), tnet_node.name.clone().unwrap()
-                    );
-                    let output = Command::new("bash")
-                        .arg("-c")
-                        .arg(command)
-                        .output()
-                        .expect("Failed to execute command");
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        bail!("Error building and pushing config container config image: {}", stderr);
-                    }
+                    block_on(tnet_node.build_oci_config_image(
+                            &conf_img_path, &tnet_node.name.clone().unwrap())).expect("asdf");
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
