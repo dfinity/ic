@@ -1,9 +1,14 @@
 use candid::{CandidType, Nat};
+use ic_stable_structures::{storable::Bound, Storable};
 use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
+
+#[cfg(test)]
+mod tests;
 
 /// Performs addition that returns `None` instead of wrapping around on
 /// overflow.
@@ -301,4 +306,21 @@ impl From<Tokens> for Nat {
     fn from(value: Tokens) -> Self {
         Nat::from(value.e8s)
     }
+}
+
+impl Storable for Tokens {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(self.e8s.to_le_bytes().to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self {
+            e8s: u64::from_le_bytes(bytes.into_owned().as_slice().try_into().unwrap()),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8,
+        is_fixed_size: true,
+    };
 }

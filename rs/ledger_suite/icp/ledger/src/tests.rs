@@ -1,4 +1,4 @@
-use crate::{AccountIdentifier, Ledger, StorableAllowance};
+use crate::{balances_len, AccountIdentifier, Ledger, StorableAllowance};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{
     archive::Archive,
@@ -7,14 +7,15 @@ use ic_ledger_canister_core::{
 };
 use ic_ledger_core::{
     approvals::Allowance,
+    balances::BalancesStore,
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
-    tokens::{CheckedAdd, CheckedSub, Tokens},
+    tokens::Tokens,
 };
 use ic_stable_structures::Storable;
 use icp_ledger::{
-    apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, DEFAULT_TRANSFER_FEE,
+    apply_operation, ArchiveOptions, Block, Memo, Operation, PaymentError, Transaction,
+    TransferError, DEFAULT_TRANSFER_FEE,
 };
 use proptest::prelude::{any, prop_assert_eq, proptest};
 use proptest::strategy::Strategy;
@@ -35,71 +36,6 @@ fn ts(n: u64) -> TimeStamp {
 }
 
 #[test]
-fn balances_overflow() {
-    let balances = LedgerBalances::new();
-    let mut state = Ledger {
-        balances,
-        maximum_number_of_accounts: 8,
-        accounts_overflow_trim_quantity: 2,
-        minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
-        ..Default::default()
-    };
-    assert_eq!(state.balances.token_pool, Tokens::MAX);
-    println!(
-        "minting canister initial balance: {}",
-        state.balances.token_pool
-    );
-    let mut credited = Tokens::ZERO;
-
-    // 11 accounts. The one with 0 will not be added
-    // The rest will be added and trigger a trim of 2 once
-    // the total number reaches 8 + 2
-    // the number of active accounts won't go below 8 after trimming
-    for i in 0..11 {
-        let amount = Tokens::new(i, 0).unwrap();
-        state
-            .add_payment(
-                Memo::default(),
-                Operation::Mint {
-                    to: PrincipalId::new_user_test_id(i).into(),
-                    amount,
-                },
-                None,
-            )
-            .unwrap();
-        credited = credited.checked_add(&amount).unwrap();
-    }
-    println!("amount credited to accounts: {}", credited);
-
-    println!("balances: {:?}", state.balances);
-
-    // The two accounts with lowest balances, 0 and 1 respectively, have been
-    // removed
-    assert_eq!(state.balances.store.len(), 8);
-    assert_eq!(
-        state
-            .balances
-            .account_balance(&PrincipalId::new_user_test_id(0).into()),
-        Tokens::ZERO
-    );
-    assert_eq!(
-        state
-            .balances
-            .account_balance(&PrincipalId::new_user_test_id(1).into()),
-        Tokens::ZERO
-    );
-    // We have credited 55 Tokens to various accounts but the three accounts
-    // with lowest balances, 0, 1 and 2, should have been removed and their
-    // balance returned to the minting canister
-    let expected_minting_canister_balance = Tokens::MAX
-        .checked_sub(&credited)
-        .unwrap()
-        .checked_add(&Tokens::new(1 + 2, 0).unwrap())
-        .unwrap();
-    assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
-}
-
-#[test]
 fn balances_remove_accounts_with_zero_balance() {
     let mut ctx = Ledger::default();
     let canister = CanisterId::from_u64(7).get().into();
@@ -116,8 +52,8 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
     // verify that an account entry exists for the `canister`
     assert_eq!(
-        ctx.balances().store.get(&canister),
-        Some(&Tokens::from_e8s(1000))
+        ctx.balances().store.get_balance(&canister),
+        Some(&Tokens::from_e8s(1000)).copied()
     );
     // make 2 transfers that empty the account
     for _ in 0..2 {
@@ -136,15 +72,15 @@ fn balances_remove_accounts_with_zero_balance() {
     }
     // target canister's balance adds up
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(800))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(&Tokens::from_e8s(800)).copied()
     );
     // source canister has been removed
-    assert_eq!(ctx.balances().store.get(&canister), None);
+    assert_eq!(ctx.balances().store.get_balance(&canister), None);
     assert_eq!(ctx.balances().account_balance(&canister), Tokens::ZERO);
 
     // one account left in the store
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
 
     apply_operation(
         &mut ctx,
@@ -159,11 +95,11 @@ fn balances_remove_accounts_with_zero_balance() {
     )
     .unwrap();
     // No new account should have been created
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
     // and the fee should have been taken from sender
     assert_eq!(
-        ctx.balances().store.get(&target_canister),
-        Some(&Tokens::from_e8s(700))
+        ctx.balances().store.get_balance(&target_canister),
+        Some(&Tokens::from_e8s(700)).copied()
     );
 
     apply_operation(
@@ -177,7 +113,7 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
 
     // No new account should have been created
-    assert_eq!(ctx.balances().store.len(), 1);
+    assert_eq!(balances_len(), 1);
 
     apply_operation(
         &mut ctx,
@@ -191,7 +127,7 @@ fn balances_remove_accounts_with_zero_balance() {
     .unwrap();
 
     // And burn should have exhausted the target_canister
-    assert_eq!(ctx.balances().store.len(), 0);
+    assert_eq!(balances_len(), 0);
 }
 
 #[test]
@@ -263,8 +199,6 @@ fn serialize() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
-        None,
-        None,
         None,
     );
 
@@ -604,8 +538,6 @@ fn get_blocks_returns_correct_blocks() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
-        None,
-        None,
     );
 
     for i in 0..10 {
@@ -668,8 +600,6 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
-        None,
-        None,
         None,
     );
     let little_later = genesis + Duration::from_millis(1);

@@ -101,8 +101,6 @@ pub struct InitArgs {
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
@@ -119,7 +117,6 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
@@ -894,8 +891,6 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             max_transactions_per_response: None,
         },
         feature_flags: Some(FeatureFlags { icrc2: true }),
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -1666,8 +1661,6 @@ pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
 
@@ -1696,8 +1689,6 @@ pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
 
@@ -1731,8 +1722,6 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
     let p100 = PrincipalId::new_user_test_id(100);
@@ -2767,7 +2756,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..30 {
+    for i in 2..40 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
@@ -3972,51 +3961,6 @@ where
     assert_eq!(block_index, 2);
     assert_eq!(balance_of(&env, canister_id, from.0), 60_000);
     assert_eq!(total_supply(&env, canister_id), 60_000);
-}
-
-pub fn test_balances_overflow<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
-    T: CandidType,
-{
-    let env = StateMachine::new();
-
-    let args = encode_init_args(InitArgs {
-        maximum_number_of_accounts: Some(8),
-        accounts_overflow_trim_quantity: Some(2),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
-
-    let minter = minting_account(&env, canister_id).unwrap();
-
-    let mut credited = 0;
-    for i in 0..11 {
-        transfer(
-            &env,
-            canister_id,
-            minter,
-            PrincipalId::new_user_test_id(i).0,
-            i,
-        )
-        .expect("failed to mint tokens");
-        credited += i;
-    }
-    assert_eq!(
-        balance_of(&env, canister_id, PrincipalId::new_user_test_id(1).0),
-        0
-    );
-    assert_eq!(
-        balance_of(&env, canister_id, PrincipalId::new_user_test_id(2).0),
-        0
-    );
-    for i in 3..11 {
-        assert_eq!(
-            balance_of(&env, canister_id, PrincipalId::new_user_test_id(i).0),
-            i
-        );
-    }
-    assert_eq!(total_supply(&env, canister_id), credited - 1 - 2);
 }
 
 pub fn test_icrc1_test_suite<T: candid::CandidType>(
