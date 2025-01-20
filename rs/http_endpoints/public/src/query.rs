@@ -234,7 +234,7 @@ pub(crate) async fn query(
         Err(user_error) => HttpQueryResponse::Rejected {
             error_code: user_error.code().to_string(),
             reject_code: user_error.reject_code() as u64,
-            reject_message: user_error.to_string(),
+            reject_message: user_error.description().to_string(),
         },
     };
 
