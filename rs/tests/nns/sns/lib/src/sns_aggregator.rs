@@ -143,9 +143,9 @@ impl AggregatorClient {
         format!("/{AGGREGATOR_CANISTER_VERSION}{AGGREGATOR_CANISTER_PATH}")
     }
 
-    async fn http_get_request<'agent>(
+    async fn http_get_request(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
         relative_url: String,
     ) -> Result<HttpResponse> {
         let (response,) = canister
@@ -171,9 +171,9 @@ impl AggregatorClient {
         }
     }
 
-    pub async fn http_get_favicon<'agent>(
+    pub async fn http_get_favicon(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
     ) -> Result<Vec<u8>> {
         let url = "/favicon.ico".to_string();
         Self::http_get_request(log, canister, url)

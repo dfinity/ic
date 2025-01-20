@@ -1688,7 +1688,7 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
 
     // TODO: This spawned process must be killed at some point
     // to avoid it becoming a zombie.
-    #[allow(clippy::clippy::zombie_processes)]
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 

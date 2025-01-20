@@ -85,8 +85,8 @@ pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, add
 
 /// Wait for the expected balance to be available at the given btc address.
 /// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
-pub async fn wait_for_bitcoin_balance<'a>(
-    canister: &UniversalCanister<'a>,
+pub async fn wait_for_bitcoin_balance(
+    canister: &UniversalCanister<'_>,
     logger: &Logger,
     expected_balance_in_satoshis: u64,
     btc_address: &Address,
@@ -107,7 +107,7 @@ pub async fn wait_for_bitcoin_balance<'a>(
 
 /// Wait for the expected balance to be available at the given account.
 /// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
-pub async fn wait_for_ledger_balance<'a>(
+pub async fn wait_for_ledger_balance(
     ledger_agent: &Icrc1Agent,
     logger: &Logger,
     expected_balance: Nat,
@@ -422,8 +422,8 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
     .unwrap()
 }
 
-pub async fn get_bitcoin_balance<'a>(
-    canister: &UniversalCanister<'a>,
+pub async fn get_bitcoin_balance(
+    canister: &UniversalCanister<'_>,
     btc_address: &Address,
 ) -> u64 {
     canister
