@@ -203,11 +203,12 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
             // Match on a substring of the error message. Due to a difference in instructions consumed on
             // Mac vs Linux, we cannot match on the exact number of cycles but we only need to verify it's
             // a non-zero amount.
-            assert!(err
-                .description()
-                .contains("due to insufficient cycles. At least 339_559_"),
+            assert!(
+                err.description()
+                    .contains("due to insufficient cycles. At least 339_559_"),
                 "Error message: {}",
-                err.description());
+                err.description()
+            );
         }
     }
 }
