@@ -79,8 +79,10 @@ fn do_copy_with_state_layouts(
         }
     }
 
-    let src_metadata = load_metadata_proto(&src_layout.states_metadata());
-    let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata());
+    let src_metadata = load_metadata_proto(&src_layout.states_metadata())
+        .map_err(|e| format!("Failed to read metadata: {}", e))?;
+    let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata())
+        .map_err(|e| format!("Failed to read metadata: {}", e))?;
 
     for (src_height, dst_height) in heights {
         dst_layout
@@ -94,7 +96,7 @@ fn do_copy_with_state_layouts(
                     .join(StateLayout::checkpoint_name(dst_height)),
                 None,
             )
-            .map_err(|e| format!("Failed to import checkpoint: {}", e))?;
+            .map_err(|e| format!("Failed to copy checkpoint. Not all states might have been copied and some metadata might be missing: {}", e))?;
 
         if let Some(src_metadata_entry) = src_metadata.by_height.get(&src_height.get()) {
             dst_metadata
@@ -103,22 +105,32 @@ fn do_copy_with_state_layouts(
         }
     }
 
-    let mut w = std::fs::File::create(dst_layout.states_metadata()).unwrap();
-    let mut buf = vec![];
-    dst_metadata.encode(&mut buf).unwrap();
-    w.write_all(&buf[..]).unwrap();
+    write_metadata_proto(&dst_layout.states_metadata(), &dst_metadata).map_err(|e| {
+        format!(
+            "Failed to write metadata. Metadata might be missing or corrupted in destination: {}",
+            e
+        )
+    })?;
 
     Ok(())
 }
 
-fn load_metadata_proto(path: &Path) -> pb::StatesMetadata {
+fn write_metadata_proto(path: &Path, metadata: &pb::StatesMetadata) -> Result<(), std::io::Error> {
+    let mut w = std::fs::File::create(path)?;
+    let mut buf = Vec::new();
+    metadata.encode(&mut buf)?;
+    w.write_all(&buf[..])?;
+    Ok(())
+}
+
+fn load_metadata_proto(path: &Path) -> Result<pb::StatesMetadata, std::io::Error> {
     if path.exists() {
-        let mut file = std::fs::File::open(path).unwrap();
+        let mut file = std::fs::File::open(path)?;
         let mut buf = Vec::new();
-        file.read_to_end(&mut buf).unwrap();
-        pb::StatesMetadata::decode(&buf[..]).unwrap_or_default()
+        file.read_to_end(&mut buf)?;
+        Ok(pb::StatesMetadata::decode(&buf[..]).unwrap_or_default())
     } else {
-        pb::StatesMetadata::default()
+        Ok(pb::StatesMetadata::default())
     }
 }
 
@@ -144,6 +156,7 @@ mod tests {
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
         assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
             .by_height
             .is_empty());
 
@@ -160,15 +173,16 @@ mod tests {
         );
         assert_eq!(
             load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
                 .by_height
                 .len(),
             1
         );
-        assert!(
-            load_metadata_proto(&dst_layout.states_metadata()).by_height[&1]
-                .manifest
-                .is_some()
-        );
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
+            .by_height[&1]
+            .manifest
+            .is_some());
 
         env.checkpointed_tick();
         env.checkpointed_tick();
@@ -207,6 +221,7 @@ mod tests {
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
         assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
             .by_height
             .is_empty());
 
@@ -226,20 +241,21 @@ mod tests {
         );
         assert_eq!(
             load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
                 .by_height
                 .len(),
             2
         );
-        assert!(
-            load_metadata_proto(&dst_layout.states_metadata()).by_height[&1]
-                .manifest
-                .is_some()
-        );
-        assert!(
-            load_metadata_proto(&dst_layout.states_metadata()).by_height[&3]
-                .manifest
-                .is_some()
-        );
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
+            .by_height[&1]
+            .manifest
+            .is_some());
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
+            .by_height[&3]
+            .manifest
+            .is_some());
     }
 
     #[test]
@@ -258,6 +274,7 @@ mod tests {
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
         assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
             .by_height
             .is_empty());
 
@@ -274,14 +291,15 @@ mod tests {
         );
         assert_eq!(
             load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
                 .by_height
                 .len(),
             1
         );
-        assert!(
-            load_metadata_proto(&dst_layout.states_metadata()).by_height[&4]
-                .manifest
-                .is_some()
-        );
+        assert!(load_metadata_proto(&dst_layout.states_metadata())
+            .unwrap()
+            .by_height[&4]
+            .manifest
+            .is_some());
     }
 }

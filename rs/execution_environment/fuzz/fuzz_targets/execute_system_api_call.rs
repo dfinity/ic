@@ -23,7 +23,10 @@ const HELLO_WORLD_WAT: &str = r#"
 // bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
 
 fn main() {
-    fuzzer_sandbox::fuzzer_main();
+    let features = fuzzer_sandbox::SandboxFeatures {
+        syscall_tracing: true,
+    };
+    fuzzer_sandbox::fuzzer_main(features);
 }
 
 fuzz_target!(|data: ICWasmModule| {

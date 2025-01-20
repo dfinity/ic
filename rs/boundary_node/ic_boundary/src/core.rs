@@ -299,6 +299,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             v.clone(),
             generic_limiter_opts,
             channel_snapshot_recv,
+            &metrics_registry,
         )))
     } else if let Some(v) = cli.rate_limiting.rate_limit_generic_canister_id {
         Some(Arc::new(generic::GenericLimiter::new_from_canister(
@@ -307,6 +308,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             generic_limiter_opts,
             cli.misc.crypto_config.is_some(),
             channel_snapshot_recv,
+            &metrics_registry,
         )))
     } else {
         None

@@ -418,10 +418,11 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
-    let (router, rx) = ic_state_sync_manager::build_axum_router(
-        state_sync.clone(),
-        log.clone(),
+    let (router, manager) = ic_state_sync_manager::build_state_sync_manager(
+        &log,
         &MetricsRegistry::default(),
+        rt,
+        state_sync.clone(),
     );
     let transport = transport_router.add_peer(
         NodeId::from(PrincipalId::new_node_test_id(node_num)),
@@ -429,14 +430,6 @@ pub fn create_node(
         link.0,
         link.1,
     );
-    let shutdown = ic_state_sync_manager::start_state_sync_manager(
-        &log,
-        &MetricsRegistry::default(),
-        rt,
-        Arc::new(transport),
-        state_sync.clone(),
-        rx,
-    );
-
+    let shutdown = manager.start(Arc::new(transport));
     (state_sync, shutdown)
 }

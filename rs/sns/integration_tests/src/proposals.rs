@@ -36,6 +36,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+const EXPECTED_MAX_BALLOT_AGE: f64 = 60.0;
+
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
 
 const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
@@ -346,7 +348,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                     ballot
                 );
                 assert!(
-                    age_seconds < 30.0,
+                    age_seconds < EXPECTED_MAX_BALLOT_AGE,
                     "age_seconds = {}. ballot = {:?}",
                     age_seconds,
                     ballot

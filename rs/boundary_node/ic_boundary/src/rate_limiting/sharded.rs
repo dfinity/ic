@@ -46,6 +46,11 @@ impl<K: Send + Sync + Hash + Eq + Clone + 'static> ShardedRatelimiter<K> {
 
         shard.limiter.try_wait().is_ok()
     }
+
+    pub fn shards_count(&self) -> u64 {
+        self.shards.run_pending_tasks();
+        self.shards.entry_count()
+    }
 }
 
 #[cfg(test)]

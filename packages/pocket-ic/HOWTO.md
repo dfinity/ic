@@ -585,9 +585,20 @@ To mine blocks with rewards credited to a given `bitcoin_address: String`, you c
     .unwrap();
 
     let mut n = 101; // must be more than 100 (Coinbase maturity rule)
-    btc_rpc
-        .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap())
-        .unwrap();
+    // retry generating blocks until the bitcoind is up and running
+    let start = std::time::Instant::now();
+    loop {
+        match btc_rpc.generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap()) {
+            Ok(_) => break,
+            Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
+                if start.elapsed() > std::time::Duration::from_secs(30) {
+                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {}", err),
+        }
+    }
 ```
 
 For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,

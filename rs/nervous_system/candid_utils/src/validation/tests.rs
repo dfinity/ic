@@ -2,6 +2,16 @@ use super::*;
 
 #[test]
 fn test_candid_service_arg_validation() {
+    let complex_service = r#"
+        type List = opt record { head: int; tail: List };
+        type byte = nat8;
+        service : (x : record { foo : opt record {} }, y : nat32) -> {
+            f : (byte, int, nat, int8) -> (List);
+            g : (List) -> (int) query;
+        }
+    "#;
+    let dummy_error_text = "dummy_error_text".to_string();
+
     for (label, candid_service, upgrade_arg, expected_result) in [
         (
             "Service without args",
@@ -14,80 +24,61 @@ fn test_candid_service_arg_validation() {
             Ok(()),
         ),
         (
-            "Invalid service",
+            "Invalid service (unbound type List)",
             r#"
-                service : (x : record { foo : opt record {} }, y : nat32) -> {
+                service : () -> {
                     f : (byte, int, nat, int8) -> (List);
                     g : (List) -> (int) query;
                 }
             "#,
             "()",
-            Err(()),
+            Err(CandidServiceArgValidationError::BadService(
+                dummy_error_text.clone(),
+            )),
         ),
         (
-            "Invalid arg",
+            "Arg is an empty string",
             r#"
                 type List = opt record { head: int; tail: List };
                 type byte = nat8;
                 service : (x : record { foo : opt record {} }, y : nat32) -> {
-                    f : (byte, int, nat, int8) -> (List);
-                    g : (List) -> (int) query;
+                    g : () -> (int) query;
                 }
             "#,
             "",
-            Err(()),
+            Err(CandidServiceArgValidationError::ArgsParseError(
+                dummy_error_text.clone(),
+            )),
         ),
         (
             "Complex service with two arguments (happy)",
-            r#"
-                type List = opt record { head: int; tail: List };
-                type byte = nat8;
-                service : (x : record { foo : opt record {} }, y : nat32) -> {
-                    f : (byte, int, nat, int8) -> (List);
-                    g : (List) -> (int) query;
-                }
-            "#,
+            complex_service,
             "(record {}, (11 : nat32))",
             Ok(()),
         ),
         (
             "Complex service with two arguments (missing 1st arg)",
-            r#"
-                type List = opt record { head: int; tail: List };
-                type byte = nat8;
-                service : (x : record { foo : opt record {} }, y : nat32) -> {
-                    f : (byte, int, nat, int8) -> (List);
-                    g : (List) -> (int) query;
-                }
-            "#,
+            complex_service,
             "((11 : nat32))",
-            Err(()),
+            Err(CandidServiceArgValidationError::WrongArgumentCount(
+                dummy_error_text.clone(),
+            )),
         ),
         (
             "Complex service with two arguments (missing 2nd arg)",
-            r#"
-                type List = opt record { head: int; tail: List };
-                type byte = nat8;
-                service : (x : record { foo : opt record {} }, y : nat32) -> {
-                    f : (byte, int, nat, int8) -> (List);
-                    g : (List) -> (int) query;
-                }
-            "#,
+            complex_service,
             "(record {})",
-            Err(()),
+            Err(CandidServiceArgValidationError::WrongArgumentCount(
+                dummy_error_text.clone(),
+            )),
         ),
         (
             "Complex service with two arguments (missing both args)",
-            r#"
-                type List = opt record { head: int; tail: List };
-                type byte = nat8;
-                service : (x : record { foo : opt record {} }, y : nat32) -> {
-                    f : (byte, int, nat, int8) -> (List);
-                    g : (List) -> (int) query;
-                }
-            "#,
+            complex_service,
             "()",
-            Err(()),
+            Err(CandidServiceArgValidationError::WrongArgumentCount(
+                dummy_error_text.clone(),
+            )),
         ),
         (
             "Trivial service with two arguments (wrong arg order)",
@@ -97,7 +88,9 @@ fn test_candid_service_arg_validation() {
                 }
             "#,
             "((11 : nat32), record {})",
-            Err(()),
+            Err(CandidServiceArgValidationError::SubtypingErrors(
+                dummy_error_text.clone(),
+            )),
         ),
         (
             "Trivial service with one record argument (subtyping holds)",
@@ -110,14 +103,16 @@ fn test_candid_service_arg_validation() {
             Ok(()),
         ),
         (
-            "Trivial service with one record argument (extra field breaks subtyping)",
+            "Trivial service with one record argument (missing required field)",
             r#"
-                service : (x : record { foo : opt nat; bar : nat }) -> {
+                service : (record { foo : nat; }) -> {
                     g : () -> (int) query;
                 }
             "#,
-            "(record { foobar = (1984 : nat); foo = opt (42 : nat) })",
-            Err(()),
+            "(record { bar = (1984 : nat) })",
+            Err(CandidServiceArgValidationError::SubtypingErrors(
+                dummy_error_text,
+            )),
         ),
     ] {
         let observed_result =
@@ -125,13 +120,28 @@ fn test_candid_service_arg_validation() {
 
         match (observed_result, expected_result) {
             (Ok(_), Ok(())) => (),
-            (Err(_), Err(())) => (),
-            (Err(err), Ok(())) => {
-                println!("{}", err);
-                panic!("Test `{label}` FAILED, although it is expected to succeed.");
+            (Err(observed_err), Err(expected_err)) => {
+                if observed_err != expected_err {
+                    panic!(
+                        "Test `{label}` failed unexpectedly. Expected {}, observed {}:\n{}",
+                        expected_err.kind(),
+                        observed_err.kind(),
+                        observed_err.message(),
+                    );
+                }
             }
-            (Ok(_), Err(())) => {
-                panic!("Test `{label}` SUCCEEDED, although it is expected to fail.");
+            (Err(observed_err), Ok(())) => {
+                println!("{}", observed_err.message());
+                panic!(
+                    "Test `{label}` FAILED with {}, although it is expected to succeed.",
+                    observed_err.kind()
+                );
+            }
+            (Ok(_), Err(expected_err)) => {
+                panic!(
+                    "Test `{label}` SUCCEEDED, although it is expected to fail with {}.",
+                    expected_err.kind()
+                );
             }
         }
     }

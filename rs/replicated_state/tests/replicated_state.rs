@@ -156,7 +156,7 @@ impl ReplicatedStateFixture {
     fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
-            streams.push(SUBNET_ID, msg);
+            streams.entry(SUBNET_ID).or_default().push(msg);
         }
         self.state.put_streams(streams);
     }
@@ -335,30 +335,6 @@ fn memory_taken_by_subnet_queues() {
         .push_subnet_output_response(response.clone().into());
 
     // Memory used by response only.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-}
-
-#[test]
-fn memory_taken_by_stream_responses() {
-    let mut fixture = ReplicatedStateFixture::new();
-
-    // Zero memory used initially.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(0, &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-
-    // Push a request and a response into a stream.
-    let response = response_to(OTHER_CANISTER_ID);
-    fixture.push_to_streams(vec![
-        request_to(OTHER_CANISTER_ID).into(),
-        response.clone().into(),
-    ]);
-
-    // Memory only used by response, not request.
     assert_execution_memory_taken(0, &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
     assert_canister_history_memory_taken(0, &fixture);

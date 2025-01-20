@@ -142,9 +142,8 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         max_funcs: embedder_config.max_functions,
         max_instructions: WASM_FUNCTION_SIZE_LIMIT,
 
-        // TODO: Ignore data segments for now
-        min_data_segments: 0,
-        max_data_segments: 0,
+        min_data_segments: 2,
+        max_data_segments: 10,
 
         allow_start_export: true,
         export_everything: true,

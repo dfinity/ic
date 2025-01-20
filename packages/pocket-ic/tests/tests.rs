@@ -1998,29 +1998,23 @@ fn ingress_status() {
         .submit_call(canister_id, caller, "whoami", encode_one(()).unwrap())
         .unwrap();
 
-    match pic.ingress_status(msg_id.clone(), None) {
-        IngressStatusResult::NotAvailable => (),
-        status => panic!("Unexpected ingress status: {:?}", status),
-    }
+    assert!(pic.ingress_status(msg_id.clone()).is_none());
 
     // since the ingress status is not available, any caller can attempt to retrieve it
-    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
+    match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::NotAvailable => (),
         status => panic!("Unexpected ingress status: {:?}", status),
     }
 
     pic.tick();
 
-    let reply = match pic.ingress_status(msg_id.clone(), None) {
-        IngressStatusResult::Success(result) => result.unwrap(),
-        status => panic!("Unexpected ingress status: {:?}", status),
-    };
+    let reply = pic.ingress_status(msg_id.clone()).unwrap().unwrap();
     let principal = Decode!(&reply, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
 
     // now that the ingress status is available, the caller must match
     let expected_err = "The user tries to access Request ID not signed by the caller.";
-    match pic.ingress_status(msg_id.clone(), Some(Principal::anonymous())) {
+    match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::Forbidden(msg) => assert_eq!(msg, expected_err,),
         status => panic!("Unexpected ingress status: {:?}", status),
     }
@@ -2175,10 +2169,7 @@ fn test_reject_response_type() {
                     (err, None)
                 };
                 if let Some(msg_id) = msg_id {
-                    let ingress_status_err = match pic.ingress_status(msg_id, None) {
-                        IngressStatusResult::Success(result) => result.unwrap_err(),
-                        status => panic!("Unexpected ingress status: {:?}", status),
-                    };
+                    let ingress_status_err = pic.ingress_status(msg_id).unwrap().unwrap_err();
                     assert_eq!(ingress_status_err, err);
                 }
                 if action == "reject" {

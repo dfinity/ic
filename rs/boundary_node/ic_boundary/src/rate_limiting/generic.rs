@@ -5,7 +5,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context as _, Error};
@@ -23,8 +23,13 @@ use ic_bn_lib::http::ConnInfo;
 use ic_canister_client::Agent;
 use ic_types::CanisterId;
 use ipnet::IpNet;
+use prometheus::{
+    register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
+    IntGauge, Registry,
+};
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
+use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::{watch, Mutex};
 use tracing::warn;
@@ -57,7 +62,7 @@ fn convert_request_type(rt: RequestType) -> RequestTypeRule {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, IntoStaticStr)]
 enum Decision {
     Pass,
     Block,
@@ -170,6 +175,65 @@ pub struct Options {
     pub autoscale: bool,
 }
 
+struct Metrics {
+    scale: IntGauge,
+    last_successful_fetch: IntGauge,
+    active_rules: IntGauge,
+    fetches: IntCounterVec,
+    decisions: IntCounterVec,
+    shards_count: IntGauge,
+}
+
+impl Metrics {
+    fn new(registry: &Registry) -> Self {
+        Self {
+            scale: register_int_gauge_with_registry!(
+                format!("generic_limiter_scale"),
+                format!("Current scale that's applied to the rules"),
+                registry,
+            )
+            .unwrap(),
+
+            last_successful_fetch: register_int_gauge_with_registry!(
+                format!("generic_limiter_last_successful_fetch"),
+                format!("How many seconds ago the last successful fetch happened"),
+                registry
+            )
+            .unwrap(),
+
+            active_rules: register_int_gauge_with_registry!(
+                format!("generic_limiter_rules"),
+                format!("Number of rules currently installed"),
+                registry
+            )
+            .unwrap(),
+
+            fetches: register_int_counter_vec_with_registry!(
+                format!("generic_limiter_fetches"),
+                format!("Count of rule fetches and their outcome"),
+                &["result"],
+                registry
+            )
+            .unwrap(),
+
+            decisions: register_int_counter_vec_with_registry!(
+                format!("generic_limiter_decisions"),
+                format!("Count of decisions made by the ratelimiter"),
+                &["decision"],
+                registry
+            )
+            .unwrap(),
+
+            shards_count: register_int_gauge_with_registry!(
+                format!("generic_limiter_shards_count"),
+                format!("Number of dynamic shards if the corresponding rules are used"),
+                registry,
+            )
+            .unwrap(),
+        }
+    }
+}
+
 pub struct GenericLimiter {
     fetcher: Arc<dyn FetchesRules>,
     buckets: ArcSwap<Vec<Bucket>>,
@@ -177,7 +241,10 @@ pub struct GenericLimiter {
     scale: AtomicU32,
     #[allow(clippy::disallowed_types)]
     channel_snapshot: Mutex<watch::Receiver<Option<Arc<RegistrySnapshot>>>>,
+    #[allow(clippy::disallowed_types)]
+    last_refresh: Mutex<Instant>,
     opts: Options,
+    metrics: Metrics,
 }
 
 impl GenericLimiter {
@@ -185,9 +252,10 @@ impl GenericLimiter {
         path: PathBuf,
         opts: Options,
         channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+        registry: &Registry,
     ) -> Self {
         let fetcher = Arc::new(FileFetcher(path));
-        Self::new_with_fetcher(fetcher, opts, channel_snapshot)
+        Self::new_with_fetcher(fetcher, opts, channel_snapshot, registry)
     }
 
     pub fn new_from_canister(
@@ -196,6 +264,7 @@ impl GenericLimiter {
         opts: Options,
         use_update_call: bool,
         channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+        registry: &Registry,
     ) -> Self {
         let config_fetcher: Arc<dyn FetchesConfig> = if use_update_call {
             Arc::new(CanisterConfigFetcherUpdate(agent, canister_id))
@@ -204,22 +273,26 @@ impl GenericLimiter {
         };
 
         let fetcher = Arc::new(CanisterFetcher(config_fetcher));
-        Self::new_with_fetcher(fetcher, opts, channel_snapshot)
+        Self::new_with_fetcher(fetcher, opts, channel_snapshot, registry)
     }
 
     fn new_with_fetcher(
         fetcher: Arc<dyn FetchesRules>,
         opts: Options,
         channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+        registry: &Registry,
     ) -> Self {
         Self {
             fetcher,
             buckets: ArcSwap::new(Arc::new(vec![])),
             active_rules: ArcSwap::new(Arc::new(vec![])),
             opts,
+            #[allow(clippy::disallowed_types)]
+            last_refresh: Mutex::new(Instant::now()),
             scale: AtomicU32::new(1),
             #[allow(clippy::disallowed_types)]
             channel_snapshot: Mutex::new(channel_snapshot),
+            metrics: Metrics::new(registry),
         }
     }
 
@@ -300,10 +373,13 @@ impl GenericLimiter {
             .await
             .context("unable to fetch rules")?;
 
+        self.metrics.active_rules.set(rules.len() as i64);
+
         self.apply_rules(rules.clone(), self.scale.load(Ordering::SeqCst));
 
         // Store the new copy of the rules as a golden copy for future recalculation
         self.active_rules.store(Arc::new(rules));
+        *self.last_refresh.lock().await = Instant::now();
 
         Ok(())
     }
@@ -323,6 +399,21 @@ impl GenericLimiter {
 
         // No rules / no match -> pass
         Decision::Pass
+    }
+
+    /// Count the number of shards in sharded limiters (if there are any)
+    fn shards_count(&self) -> u64 {
+        self.buckets
+            .load_full()
+            .iter()
+            .filter_map(|x| {
+                if let Some(Limiter::Sharded(v, _)) = &x.limiter {
+                    Some(v.shards_count())
+                } else {
+                    None
+                }
+            })
+            .sum()
     }
 }
 
@@ -345,7 +436,7 @@ impl Run for Arc<GenericLimiter> {
                         // Store the count of API BNs as a scale and make sure it's >= 1
                         let scale = v.api_bns.len().max(1) as u32;
                         self.scale.store(scale, Ordering::SeqCst);
-
+                        self.metrics.scale.set(scale as i64);
                         warn!("GenericLimiter: got a new registry snapshot, recalculating with scale {scale}");
 
                         // Recalculate the rules based on the potentially new scale
@@ -354,9 +445,15 @@ impl Run for Arc<GenericLimiter> {
                 }
 
                 _ = interval.tick() => {
-                    if let Err(e) = self.refresh().await {
+                    let r = self.refresh().await;
+                    self.metrics.fetches.with_label_values(&[if r.is_ok() { "success" } else {"failure"}]).inc();
+                    if let Err(e) = r {
                         warn!("GenericLimiter: unable to refresh: {e:#}");
                     }
+
+                    // Update the metrics
+                    self.metrics.last_successful_fetch.set(self.last_refresh.lock().await.elapsed().as_secs_f64() as i64);
+                    self.metrics.shards_count.set(self.shards_count() as i64);
                 }
             }
         }
@@ -380,7 +477,16 @@ pub async fn middleware(
         ip: conn_info.remote_addr.ip(),
     };
 
-    match state.evaluate(ctx) {
+    let decision = state.evaluate(ctx);
+
+    let decision_str: &'static str = decision.into();
+    state
+        .metrics
+        .decisions
+        .with_label_values(&[decision_str])
+        .inc();
+
+    match decision {
         Decision::Pass => Ok(next.run(request).await),
         Decision::Block => Err(ErrorCause::Forbidden),
         Decision::Limit => Err(ErrorCause::RateLimited(RateLimitCause::Generic)),
@@ -482,6 +588,7 @@ mod test {
             Arc::new(fetcher),
             opts.clone(),
             rx,
+            &Registry::new(),
         ));
         assert!(limiter.refresh().await.is_ok());
         assert_eq!(limiter.active_rules.load().len(), 7);
@@ -521,6 +628,7 @@ mod test {
             Arc::new(BrokenFetcher),
             opts,
             rx,
+            &Registry::new(),
         ));
 
         let mut runner = limiter.clone();

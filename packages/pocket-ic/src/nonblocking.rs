@@ -586,8 +586,36 @@ impl PocketIc {
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub async fn ingress_status(
+        &self,
+        raw_message_id: RawMessageId,
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
+        let status = self.ingress_status_as_caller(raw_message_id, None).await;
+        match status {
+            IngressStatusResult::NotAvailable => None,
+            IngressStatusResult::Success(status) => Some(status),
+            IngressStatusResult::Forbidden(err) => panic!(
+                "Retrieving ingress status was forbidden: {}. This is a bug!",
+                err
+            ),
+        }
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub async fn ingress_status_as(
+        &self,
+        raw_message_id: RawMessageId,
+        caller: Principal,
+    ) -> IngressStatusResult {
+        self.ingress_status_as_caller(raw_message_id, Some(caller))
+            .await
+    }
+
+    async fn ingress_status_as_caller(
         &self,
         raw_message_id: RawMessageId,
         caller: Option<Principal>,
@@ -603,15 +631,15 @@ impl PocketIc {
             Ok(None) => IngressStatusResult::NotAvailable,
             Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
-                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for PocketIc::ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
                 IngressStatusResult::Forbidden(message)
             }
         }
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
     pub async fn await_call_no_ticks(
         &self,
         message_id: RawMessageId,
@@ -622,9 +650,7 @@ impl PocketIc {
             .with_multiplier(2.0)
             .build();
         loop {
-            if let IngressStatusResult::Success(ingress_status) =
-                self.ingress_status(message_id.clone(), None).await
-            {
+            if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
                 break ingress_status;
             }
             tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;

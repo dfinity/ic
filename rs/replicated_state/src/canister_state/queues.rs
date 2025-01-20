@@ -1343,13 +1343,6 @@ impl CanisterQueues {
             .oversized_guaranteed_requests_extra_bytes
     }
 
-    /// Sets the (transient) size in bytes of guaranteed responses routed from
-    /// output queues into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queue_stats
-            .transient_stream_guaranteed_responses_size_bytes = size_bytes;
-    }
-
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1649,8 +1642,6 @@ impl CanisterQueues {
         let calculated_stats = Self::calculate_queue_stats(
             &self.canister_queues,
             self.queue_stats.guaranteed_response_memory_reservations,
-            self.queue_stats
-                .transient_stream_guaranteed_responses_size_bytes,
         );
         if self.queue_stats != calculated_stats {
             return Err(format!(
@@ -1677,13 +1668,13 @@ impl CanisterQueues {
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed. Same with the size of guaranteed responses in streams.
+    /// cannot be computed. Size of guaranteed responses in streams is ignored as it is
+    /// limited.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
         canister_queues: &BTreeMap<CanisterId, (Arc<InputQueue>, Arc<OutputQueue>)>,
         guaranteed_response_memory_reservations: usize,
-        transient_stream_guaranteed_responses_size_bytes: usize,
     ) -> QueueStats {
         let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
@@ -1695,7 +1686,6 @@ impl CanisterQueues {
             guaranteed_response_memory_reservations,
             input_queues_reserved_slots,
             output_queues_reserved_slots,
-            transient_stream_guaranteed_responses_size_bytes,
         }
     }
 }
@@ -1863,7 +1853,6 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
-            0,
         );
 
         let input_schedule = InputSchedule::try_from((
@@ -1902,9 +1891,8 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 }
 
 /// Tracks slot and guaranteed response memory reservations across input and
-/// output queues; and holds a (transient) byte size of responses already routed
-/// into streams (tracked separately, at the replicated state level, as messages
-/// are routed to and GC-ed from streams).
+/// output queues. Transient byte size of responses already routed into streams
+/// is ignored as the streams size is limited.
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
@@ -1931,22 +1919,12 @@ struct QueueStats {
     /// Count of slots reserved in output queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     output_queues_reserved_slots: usize,
-
-    /// Transient: size in bytes of guaranteed responses routed from `output_queues`
-    /// into streams and not yet garbage collected.
-    ///
-    /// This is updated by `ReplicatedState::put_streams()`, called by MR after
-    /// every streams mutation (induction, routing, GC). And is (re)populated during
-    /// checkpoint loading by `ReplicatedState::new_from_checkpoint()`.
-    transient_stream_guaranteed_responses_size_bytes: usize,
 }
 
 impl QueueStats {
-    /// Returns the memory usage of reservations for guaranteed responses plus
-    /// guaranteed responses in streans.
+    /// Returns the memory usage of reservations for guaranteed responses.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
-            + self.transient_stream_guaranteed_responses_size_bytes
     }
 
     /// Updates the stats to reflect the enqueueing of the given message in the given
