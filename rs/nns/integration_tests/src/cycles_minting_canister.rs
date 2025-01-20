@@ -822,7 +822,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             &state_machine,
             LEDGER_CANISTER_ID,
             Account {
-                owner: Principal::from(TEST_USER1_PRINCIPAL.clone()),
+                owner: Principal::from(*TEST_USER1_PRINCIPAL),
                 subaccount: None,
             },
         );
@@ -992,7 +992,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                 let lower_reason = reason.to_lowercase();
                 for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
                     assert!(
-                        lower_reason.contains(&key_word),
+                        lower_reason.contains(key_word),
                         r#""{}" not in {:?}"#,
                         key_word,
                         last_err
@@ -1016,7 +1016,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                     "createcanister",
                 ] {
                     assert!(
-                        lower_reason.contains(&key_word),
+                        lower_reason.contains(key_word),
                         r#""{}" not in {:?}"#,
                         key_word,
                         last_err
