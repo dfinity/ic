@@ -251,12 +251,12 @@ async fn install_nns_controlled_canister<'a>(
     canister
 }
 
-async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
+async fn upgrade_ledger_suite_orchestrator_by_nns_proposal(
     logger: &slog::Logger,
     governance_canister: &Canister<'_>,
     root_canister: &Canister<'_>,
     canister_wasm: CanisterModule,
-    orchestrator: &LedgerOrchestratorCanister<'a>,
+    orchestrator: &LedgerOrchestratorCanister<'_>,
     upgrade_arg: OrchestratorArg,
 ) {
     use ic_canister_client::Sender;
