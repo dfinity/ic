@@ -869,6 +869,7 @@ pub struct UploadCUPAndTar {
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
     pub work_dir: PathBuf,
+    pub method: UploadMethod,
 }
 
 impl UploadCUPAndTar {
@@ -906,7 +907,10 @@ impl Step for UploadCUPAndTar {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
+        let UploadMethod::Remote(ip) = self.method else {
+            panic!("Wrong upload method");
+        };
+        let ips = vec![ip];
 
         ips.into_iter()
             .map(|ip| {

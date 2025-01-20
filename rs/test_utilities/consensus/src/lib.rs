@@ -176,6 +176,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
             HashedRandomBeacon::new(crypto_hash, random_beacon),
             Id::from(CryptoHash(Vec::new())),
             None,
+            false,
         ),
         signature: ThresholdSignature {
             signer: high_dkg_id,

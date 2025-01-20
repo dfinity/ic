@@ -844,7 +844,11 @@ impl Recovery {
     }
 
     /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
+    pub fn get_upload_cup_and_tar_step(
+        &self,
+        subnet_id: SubnetId,
+        method: UploadMethod,
+    ) -> impl Step {
         UploadCUPAndTar {
             logger: self.logger.clone(),
             registry_helper: self.registry_helper.clone(),
@@ -852,6 +856,7 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            method,
         }
     }
 
