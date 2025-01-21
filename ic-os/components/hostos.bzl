@@ -89,8 +89,8 @@ component_files = {
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
-    Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.sh"): "/opt/ic/bin/deploy-updated-ssh-account-keys.sh",
-    Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.service"): "/etc/systemd/system/deploy-updated-ssh-account-keys.service",
+    Label("ssh/deploy-updated-ssh-user-keys/deploy-updated-ssh-user-keys.sh"): "/opt/ic/bin/deploy-updated-ssh-user-keys.sh",
+    Label("ssh/deploy-updated-ssh-user-keys/deploy-updated-ssh-user-keys.service"): "/etc/systemd/system/deploy-updated-ssh-user-keys.service",
 
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
