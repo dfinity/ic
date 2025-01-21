@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-
 ### Configuration
 RELEASE_TAG_PREFIX=ledger-suite-icrc
 
@@ -35,34 +34,33 @@ download_release() {
 ## was found in some predefined maximum number of pages. Note that the calls to the github API for
 ## listing the releases are rate-limited unless authenticated.
 find_and_download_release() {
-  PREVIOUS_RELEASE=""
-  PAGE=1
-  ITEMS_PER_PAGE=100
-  MAX_PAGES=10
-  while [ "${PREVIOUS_RELEASE}" == "" ]; do
-    ITEM=0
-    # Unauthenticated requests are rate limited (per IP address) to 60 requests/hr
-    # https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#primary-rate-limit-for-unauthenticated-users
-    REL_JSON=$(curl -L \
-      -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2022-11-28" \
-      https://api.github.com/repos/dfinity/ic/releases\?per_page\=${ITEMS_PER_PAGE}\&page\=${PAGE})
-    while [ ${ITEM} -lt ${ITEMS_PER_PAGE} ]
-    do
-      TAG=$(echo ${REL_JSON} | jq ".[${ITEM}].tag_name" | tr -d '"')
-      if [[ ${TAG} == ${RELEASE_TAG_PREFIX}* ]]; then
-        download_release "${TAG}"
-        break
-      else
-        ITEM=$(( ITEM + 1 ))
-      fi
+    PREVIOUS_RELEASE=""
+    PAGE=1
+    ITEMS_PER_PAGE=100
+    MAX_PAGES=10
+    while [ "${PREVIOUS_RELEASE}" == "" ]; do
+        ITEM=0
+        # Unauthenticated requests are rate limited (per IP address) to 60 requests/hr
+        # https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#primary-rate-limit-for-unauthenticated-users
+        REL_JSON=$(curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/dfinity/ic/releases\?per_page\=${ITEMS_PER_PAGE}\&page\=${PAGE})
+        while [ ${ITEM} -lt ${ITEMS_PER_PAGE} ]; do
+            TAG=$(echo ${REL_JSON} | jq ".[${ITEM}].tag_name" | tr -d '"')
+            if [[ ${TAG} == ${RELEASE_TAG_PREFIX}* ]]; then
+                download_release "${TAG}"
+                break
+            else
+                ITEM=$((ITEM + 1))
+            fi
+        done
+        PAGE=$((PAGE + 1))
+        if [ ${PAGE} -gt ${MAX_PAGES} ]; then
+            echo "No ${RELEASE_TAG_PREFIX} release found in the first ${MAX_PAGES} with ${ITEMS_PER_PAGE} items per page, aborting."
+            exit 1
+        fi
     done
-    PAGE=$(( PAGE + 1 ))
-    if [ ${PAGE} -gt ${MAX_PAGES} ]; then
-      echo "No ${RELEASE_TAG_PREFIX} release found in the first ${MAX_PAGES} with ${ITEMS_PER_PAGE} items per page, aborting."
-      exit 1
-    fi
-  done
 }
 
 find_and_download_release
