@@ -1238,6 +1238,8 @@ impl SandboxedExecutionController {
             let sandbox_processes = get_sandbox_process_stats(&backends);
             #[allow(unused_mut)] // for MacOS
             let mut sandbox_processes_rss = Vec::with_capacity(sandbox_processes.len());
+            let mut active_last_used = Vec::with_capacity(sandbox_processes.len());
+            let mut evicted_last_used = Vec::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
             {
@@ -1278,14 +1280,10 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
@@ -1313,17 +1311,23 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
+            }
+            for o in active_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_active_last_used
+                    .observe(o);
+            }
+            for o in evicted_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_evicted_last_used
+                    .observe(o);
             }
 
             {
