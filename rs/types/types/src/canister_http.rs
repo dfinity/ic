@@ -53,7 +53,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+    CanisterHttpRequestArgs, DataSize, HttpHeader, HttpMethod, TransformContext,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -475,7 +475,16 @@ pub struct CanisterHttpResponse {
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        size_of::<CallbackId>() + size_of::<Time>() + self.content.count_bytes()
+        let CanisterHttpResponse {
+            id,
+            timeout,
+            canister_id,
+            content,
+        } = &self;
+        size_of_val(id)
+            + size_of_val(timeout)
+            + canister_id.get_ref().data_size()
+            + content.count_bytes()
     }
 }
 
@@ -518,7 +527,11 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
-        size_of::<RejectCode>() + self.message.len()
+        let CanisterHttpReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -573,7 +586,8 @@ pub struct CanisterHttpResponseWithConsensus {
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        self.proof.count_bytes() + self.content.count_bytes()
+        let CanisterHttpResponseWithConsensus { content, proof } = &self;
+        proof.count_bytes() + content.count_bytes()
     }
 }
 
@@ -589,7 +603,8 @@ pub struct CanisterHttpResponseDivergence {
 
 impl CountBytes for CanisterHttpResponseDivergence {
     fn count_bytes(&self) -> usize {
-        self.shares.iter().map(|share| share.count_bytes()).sum()
+        let CanisterHttpResponseDivergence { shares } = &self;
+        shares.iter().map(|share| share.count_bytes()).sum()
     }
 }
 

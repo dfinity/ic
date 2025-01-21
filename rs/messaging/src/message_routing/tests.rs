@@ -275,7 +275,7 @@ struct SubnetRecord<'a> {
     max_number_of_canisters: u64,
 }
 
-impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
+impl From<SubnetRecord<'_>> for SubnetRecordProto {
     fn from(record: SubnetRecord) -> SubnetRecordProto {
         SubnetRecordBuilder::new()
             .with_membership(record.membership)

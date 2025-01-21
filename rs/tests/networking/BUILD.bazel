@@ -81,9 +81,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
-    tags = [
-        "k8s",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

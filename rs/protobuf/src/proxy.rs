@@ -132,7 +132,7 @@ impl ProxyDecodeError {
         T: Error + Eq + 'static,
     {
         self.source()
-            .map_or(false, |err| err.downcast_ref() == Some(&other_err))
+            .is_some_and(|err| err.downcast_ref() == Some(&other_err))
     }
 }
 

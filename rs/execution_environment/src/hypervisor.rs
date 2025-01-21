@@ -535,11 +535,11 @@ impl Hypervisor {
             if let Err(err) = &mut result.wasm_result {
                 let can_view = match &system_state.log_visibility {
                     LogVisibilityV2::Controllers => {
-                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                        caller.is_some_and(|c| system_state.controllers.contains(&c))
                     }
                     LogVisibilityV2::Public => true,
                     LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.map_or(false, |c| allowed.get().contains(&c))
+                        caller.is_some_and(|c| allowed.get().contains(&c))
                     }
                 };
                 if !can_view {

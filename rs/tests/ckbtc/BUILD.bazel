@@ -98,7 +98,6 @@ system_test_nns(
     },
     flaky = True,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -129,7 +128,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -160,7 +158,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -191,7 +188,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -222,7 +218,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
