@@ -134,6 +134,16 @@ pub trait LedgerAccess {
     fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R;
 }
 
+pub trait ArchivelessBlockchain {
+    fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<u64, String>;
+    fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock>;
+    fn get_block(&self, index: u64) -> Option<EncodedBlock>;
+    fn len(&self) -> u64;
+    fn is_empty(&self) -> bool;
+    fn remove_blocks(&mut self, num_blocks: u64) -> Vec<EncodedBlock>;
+    fn last_hash(&self) -> Option<HashOf<EncodedBlock>>;
+}
+
 pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
@@ -177,6 +187,9 @@ pub trait LedgerData: LedgerContext {
 
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
+
+    fn archiveless_blockchain(&self) -> &dyn ArchivelessBlockchain;
+    fn archiveless_blockchain_mut(&mut self) -> &mut dyn ArchivelessBlockchain;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
     fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
@@ -298,8 +311,18 @@ where
 
     let height = ledger
         .blockchain_mut()
-        .add_block(block)
+        .add_block(block.clone())
         .expect("failed to add block");
+    let last_hash = ledger.blockchain().last_hash.unwrap();
+
+    // let height = ledger.archiveless_blockchain().len();
+    // let _height_stable = ledger
+    //     .archiveless_blockchain_mut()
+    //     .add_block(height, block.encode())
+    //     .expect("failed to add block to stable blockchain");
+    // let last_hash = ledger.archiveless_blockchain().last_hash().unwrap();
+
+    // assert_eq!(height, height_stable);
     if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
         if fee_collector.block_index.is_none() {
             fee_collector.block_index = Some(height);
@@ -319,7 +342,7 @@ where
             });
     }
 
-    Ok((height, ledger.blockchain().last_hash.unwrap()))
+    Ok((height, last_hash))
 }
 
 /// Trim balances. Can be used e.g. if the ledger is low on heap memory.

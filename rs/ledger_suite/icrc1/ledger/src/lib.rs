@@ -10,6 +10,7 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
+use ic_cdk::api::instruction_counter;
 use ic_certification::{
     hash_tree::{empty, fork, label, leaf, Label},
     HashTree,
@@ -23,7 +24,8 @@ use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
     ledger::{
-        apply_transaction_no_trimming, block_locations, LedgerContext, LedgerData, TransactionInfo,
+        apply_transaction_no_trimming, block_locations, ArchivelessBlockchain, LedgerContext,
+        LedgerData, TransactionInfo,
     },
     range_utils,
 };
@@ -36,6 +38,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+// use ic_stable_structures::StableLog;
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -65,7 +68,7 @@ const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// The maximum number of transactions the ledger should return for a single
 /// get_transactions request.
 const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
-const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
+const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
@@ -496,6 +499,9 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+// const BLOCKS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(4);
+// const BLOCKS_DATA_MEMORY_ID: MemoryId = MemoryId::new(5);
+const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -521,6 +527,15 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<Account, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // // vector storing ledger blocks.
+    // pub static BLOCKS_MEMORY: RefCell<StableLog<EncodedBlock, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
+    //     MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCKS_INDEX_MEMORY_ID),
+    //     memory_manager.borrow().get(BLOCKS_DATA_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
+
+    // block_index -> block
+    pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, EncodedBlock, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -554,7 +569,9 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    pub blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    #[serde(default)]
+    pub stable_blockchain: StableBlockchain,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -641,6 +658,7 @@ impl Ledger {
             approvals: Default::default(),
             stable_approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
+            stable_blockchain: StableBlockchain::default(),
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
@@ -800,6 +818,14 @@ impl LedgerData for Ledger {
 
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &mut self.blockchain
+    }
+
+    fn archiveless_blockchain(&self) -> &dyn ArchivelessBlockchain {
+        &self.stable_blockchain
+    }
+
+    fn archiveless_blockchain_mut(&mut self) -> &mut dyn ArchivelessBlockchain {
+        &mut self.stable_blockchain
     }
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
@@ -997,6 +1023,22 @@ impl Ledger {
         (locations.local_blocks.start, local_blocks, archived_blocks)
     }
 
+    fn query_archiveless_blocks<B>(
+        &self,
+        start: BlockIndex,
+        length: usize,
+        decode: impl Fn(&EncodedBlock) -> B,
+    ) -> Vec<B> {
+        let range = range_utils::make_range(start, length);
+        let max_range = range_utils::take(&range, MAX_TRANSACTIONS_PER_REQUEST);
+
+        self.stable_blockchain
+            .get_blocks(max_range)
+            .iter()
+            .map(decode)
+            .collect()
+    }
+
     /// Returns transactions in the specified range.
     pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
         let (first_index, local_transactions, archived_transactions) = self.query_blocks(
@@ -1019,6 +1061,37 @@ impl Ledger {
     }
 
     /// Returns blocks in the specified range.
+    pub fn get_archiveless_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
+        let blocks = self.query_archiveless_blocks(start, length, encoded_block_to_generic_block);
+
+        GetBlocksResponse {
+            first_index: Nat::from(start),
+            chain_length: instruction_counter(),
+            certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
+            blocks,
+            archived_blocks: vec![],
+        }
+    }
+
+    pub fn bench_block_removal(&mut self) {
+        let mut curr_index = self.stable_blockchain.len();
+        let mut num_blocks = self.stable_blockchain.len();
+        let block = self.stable_blockchain.get_block(num_blocks - 1).unwrap();
+        for i in 1..1000 {
+            while num_blocks < 2000 {
+                let _ = self.stable_blockchain.add_block(curr_index, block.clone());
+                curr_index += 1;
+                num_blocks += 1;
+            }
+            let start = instruction_counter();
+            let _removed_blocks = self.stable_blockchain.remove_blocks(1000);
+            let diff = instruction_counter() - start;
+            ic_cdk::println!("iteration {}, instructions: {}", i, diff);
+            num_blocks -= 1000;
+        }
+    }
+
+    /// Returns blocks in the specified range.
     pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
         let (first_index, local_blocks, archived_blocks) = self.query_blocks(
             start,
@@ -1029,7 +1102,7 @@ impl Ledger {
 
         GetBlocksResponse {
             first_index: Nat::from(first_index),
-            chain_length: self.blockchain.chain_length(),
+            chain_length: instruction_counter(),
             certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
             blocks: local_blocks,
             archived_blocks,
@@ -1293,5 +1366,71 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBlockchain {
+    pub last_hash: Option<HashOf<EncodedBlock>>,
+}
+
+impl ArchivelessBlockchain for StableBlockchain {
+    fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<u64, String> {
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.insert(index, block.clone()));
+        self.last_hash = Some(
+            ic_icrc1::hash::hash_cbor(block.as_slice())
+                .map(HashOf::new)
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "bug: encoded block {} is not hashable cbor: {}",
+                        hex::encode(block.as_slice()),
+                        err
+                    )
+                }),
+        );
+        Ok(index)
+    }
+
+    fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock> {
+        let mut result = vec![];
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            let first_index = blocks
+                .first_key_value()
+                .unwrap_or((0u64, EncodedBlock::from(vec![])))
+                .0;
+            let available_range = range_utils::make_range(first_index, self.len() as usize);
+            let intersection = range_utils::intersect(&range, &available_range)
+                .unwrap_or_else(|_| range_utils::make_range(0, 0));
+            for block in blocks.range(intersection) {
+                result.push(block.1)
+            }
+        });
+        result
+    }
+
+    fn len(&self) -> u64 {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn remove_blocks(&mut self, num_blocks: u64) -> Vec<EncodedBlock> {
+        let mut result = vec![];
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+            while result.len() < num_blocks as usize && !blocks.is_empty() {
+                result.push(blocks.pop_first().unwrap().1);
+            }
+        });
+        result
+    }
+
+    fn get_block(&self, index: u64) -> Option<EncodedBlock> {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.get(&index))
+    }
+
+    fn last_hash(&self) -> Option<HashOf<EncodedBlock>> {
+        self.last_hash
     }
 }
