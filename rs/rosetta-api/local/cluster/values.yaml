@@ -1,0 +1,72 @@
+commonResources: &commonResources
+  limits:
+    memory: "256Mi"
+    cpu: "5"
+  requests:
+    memory: "128Mi"
+    cpu: "500m"
+
+icrcConfig: 
+  networkType: mainnet
+  ledgerId: vtrom-gqaaa-aaaaq-aabia-cai
+  storeFile: /data/db.sqlite
+  useLocallyBuilt: false
+
+icpConfig: 
+  storeLocation: /data
+  tokenSymbol: ICP
+  canisterId: xafvr-biaaa-aaaai-aql5q-cai
+  useLocallyBuilt: false
+
+baseService: &baseService
+  namespace: "rosetta-api"
+  containerPort: 3000
+  resources: *commonResources
+
+icrcRosettaServices:
+  - <<: *baseService
+    name: icrc-rosetta-latest
+    image: dfinity/ic-icrc-rosetta-api:latest
+    nodePort: 30085
+    isLocallyBuilt: false
+
+  - <<: *baseService
+    name: icrc-rosetta-local
+    image: icrc-rosetta:local
+    nodePort: 30086
+    isLocallyBuilt: true
+
+icpRosettaServices:
+  - <<: *baseService
+    name: icp-rosetta-latest
+    image: dfinity/rosetta-api:latest
+    nodePort: 30087
+    isLocallyBuilt: false
+
+  - <<: *baseService
+    name: icp-rosetta-local
+    image: icp-rosetta:local
+    nodePort: 30088
+    isLocallyBuilt: true
+
+cadvisor:
+  image:
+    repository: gcr.io/cadvisor/cadvisor
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    limits:
+      memory: "512Mi"
+      cpu: "1"
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
