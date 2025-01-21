@@ -5,9 +5,18 @@
 # Retrieves a value from the config.json file using a JSON path.
 # Arguments:
 #   $1 - JSON path to the desired value (e.g., '.icos_settings.nns_urls')
-# Note: If the key is not found, this function will return null.
+# Returns:
+#   If key is not found or value is "null", returns empty string.
+#   Otherwise, returns value.
 function get_config_value() {
     local CONFIG_FILE="/var/ic/config/config.json"
     local key=$1
-    jq -r "${key}" "${CONFIG_FILE}"
+
+    local value=$(jq -r "${key}" "${CONFIG_FILE}")
+
+    if [[ "${value}" == "null" ]]; then
+        echo ""
+    else
+        echo "${value}"
+    fi
 }
