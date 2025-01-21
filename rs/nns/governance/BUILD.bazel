@@ -6,9 +6,18 @@ load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 load(":feature_flags.bzl", "test_with_tla")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
-exports_files(["canister/governance.did"])
+DID_FILES = glob([
+    "**/*.did",
+])
+
+exports_files(
+    DID_FILES,
+    visibility = [
+        "//visibility:public",
+    ],
+)
 
 # Allows temporarily disabling TLA checks from the command line;
 # just pass `--define tla_disabled=true` to your Bazel command
@@ -184,6 +193,7 @@ rust_library(
 
 rust_library(
     name = "governance--canbench_feature",
+    visibility = ["//visibility:private"],
     srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["canbench-rs"],
@@ -220,6 +230,7 @@ rust_canbench(
 
 rust_canister(
     name = "governance-canister",
+    visibility = ["//visibility:public"],
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
@@ -234,6 +245,7 @@ rust_canister(
 
 rust_canister(
     name = "governance-canister-test",
+    visibility = ["//visibility:public"],
     srcs = [
         "canister/canister.rs",
         "canister/tla_ledger.rs",
