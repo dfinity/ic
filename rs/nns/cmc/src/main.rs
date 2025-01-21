@@ -1697,7 +1697,9 @@ fn get_u64_memo(transaction: &Transaction) -> Memo {
 /// too old (<= last_purged_notification), or it already has a status, no
 /// changes are made, and the block's current status is returned. (None
 /// indicates that the block is too old to have a status.)
-fn set_block_status_to_processing(block_index: BlockIndex) -> Result<(), Option<NotificationStatus>> {
+fn set_block_status_to_processing(
+    block_index: BlockIndex,
+) -> Result<(), Option<NotificationStatus>> {
     with_state_mut(|state| {
         if block_index <= state.last_purged_notification {
             return Err(None);
@@ -1853,9 +1855,9 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     if let Err(prior_block_status) = set_block_status_to_processing(incoming_block_index) {
         let Some(prior_block_status) = prior_block_status else {
             // Callers of fetch_transaction generally do this already.
-            return Err(NotifyError::TransactionTooOld(
-                with_state(|state| state.last_purged_notification + 1)
-            ));
+            return Err(NotifyError::TransactionTooOld(with_state(|state| {
+                state.last_purged_notification + 1
+            })));
         };
 
         // Do not proceed, because block is either being processed, or was
