@@ -143,9 +143,9 @@ impl AggregatorClient {
         format!("/{AGGREGATOR_CANISTER_VERSION}{AGGREGATOR_CANISTER_PATH}")
     }
 
-    async fn http_get_request<'agent>(
+    async fn http_get_request(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
         relative_url: String,
     ) -> Result<HttpResponse> {
         let (response,) = canister
@@ -171,9 +171,9 @@ impl AggregatorClient {
         }
     }
 
-    pub async fn http_get_favicon<'agent>(
+    pub async fn http_get_favicon(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
     ) -> Result<Vec<u8>> {
         let url = "/favicon.ico".to_string();
         Self::http_get_request(log, canister, url)
@@ -181,9 +181,9 @@ impl AggregatorClient {
             .map(|res| res.body)
     }
 
-    pub async fn http_get_asset<'agent>(
+    pub async fn http_get_asset(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
     ) -> Result<Vec<u8>> {
         let url = Self::aggregator_http_endpoint();
         Self::http_get_request(log, canister, url)
@@ -191,9 +191,9 @@ impl AggregatorClient {
             .map(|res| res.body)
     }
 
-    pub async fn extract_first_sns_sale_config<'agent>(
+    pub async fn extract_first_sns_sale_config(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
     ) -> Result<Value> {
         let asset_bytes = Self::http_get_asset(log, canister).await.unwrap();
         let asset: Value = serde_json::from_slice(asset_bytes.as_slice())?;
@@ -219,9 +219,9 @@ impl AggregatorClient {
         }
     }
 
-    async fn sub_asset<'agent, P>(
+    async fn sub_asset<P>(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
         extract_sub_asset: &P,
         timeout: Duration,
     ) -> RequestOutcome<Value, String>
@@ -263,9 +263,9 @@ impl AggregatorClient {
         )
     }
 
-    pub async fn first_sns_asset<'agent>(
+    pub async fn first_sns_asset(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
         timeout: Duration,
     ) -> RequestOutcome<Value, String> {
         let extract_sub_asset = move |asset| {
@@ -275,9 +275,9 @@ impl AggregatorClient {
         Self::sub_asset(log, canister, &extract_sub_asset, timeout).await
     }
 
-    pub async fn first_swap_params<'agent>(
+    pub async fn first_swap_params(
         log: &Logger,
-        canister: &HttpRequestCanister<'agent>,
+        canister: &HttpRequestCanister<'_>,
         timeout: Duration,
     ) -> RequestOutcome<Value, String> {
         let extract_sub_asset = move |asset| {

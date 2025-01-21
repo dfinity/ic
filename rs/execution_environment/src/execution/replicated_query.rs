@@ -48,7 +48,7 @@ pub fn execute_replicated_query(
     let is_wasm64_execution = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .is_some_and(|es| es.is_wasm64);
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,

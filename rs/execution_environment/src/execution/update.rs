@@ -63,7 +63,7 @@ pub fn execute_update(
                 let is_wasm64_execution = canister
                     .execution_state
                     .as_ref()
-                    .map_or(false, |es| es.is_wasm64);
+                    .is_some_and(|es| es.is_wasm64);
 
                 let prepaid_execution_cycles = match round
                     .cycles_account_manager
@@ -268,7 +268,7 @@ fn finish_err(
     let is_wasm64_execution = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .is_some_and(|es| es.is_wasm64);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -534,7 +534,7 @@ impl UpdateHelper {
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .is_some_and(|es| es.is_wasm64);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,

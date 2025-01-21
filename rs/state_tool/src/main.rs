@@ -28,6 +28,7 @@ enum Opt {
     },
 
     /// Imports replicated state from an external location.
+    /// Deprecated: use `copy` instead.
     #[clap(name = "import")]
     ImportState {
         /// Path to the state to import.

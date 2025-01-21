@@ -73,7 +73,6 @@ use std::sync::Arc;
 /// only during node key generation and rotation).
 ///
 /// [1]: https://medium.com/digitalfrontiers/rust-dynamic-dispatching-deep-dive-236a5896e49b
-
 pub struct LocalCspVault<
     R: Rng + CryptoRng,
     S: SecretKeyStore,
