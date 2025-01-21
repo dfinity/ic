@@ -1205,7 +1205,7 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "cycles_burn128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
-                charge_for_cpu(&mut caller, overhead::CALL_CYCLES_BURN128)?;
+                charge_for_cpu(&mut caller, overhead::CYCLES_BURN128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
