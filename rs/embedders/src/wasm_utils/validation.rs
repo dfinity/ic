@@ -1070,7 +1070,7 @@ fn validate_function_section(
 
 // Checks if the module has a Wasm64 memory.
 pub fn has_wasm64_memory(module: &Module) -> bool {
-    module.memories.first().map_or(false, |m| m.memory64)
+    module.memories.first().is_some_and(|m| m.memory64)
 }
 
 // Checks that the initial size of the wasm (heap) memory is not larger than
