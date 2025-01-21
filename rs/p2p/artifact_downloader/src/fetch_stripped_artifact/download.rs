@@ -68,6 +68,8 @@ impl Pools {
 
         // First check if the requested ingress message exists in the Ingress Pool.
         if let Some(ingress_message) = self.ingress_pool.read().unwrap().get(ingress_message_id) {
+            // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+            // uniquely identify ingress messages, we thus need to perform an extra check.
             if SignedIngressId::from(&ingress_message) == *signed_ingress_id {
                 self.metrics.ingress_messages_in_ingress_pool.inc();
                 return Ok(ingress_message.into());
@@ -96,6 +98,9 @@ impl Pools {
             .get_serialized_by_id(ingress_message_id)
         {
             Some(bytes)
+            // Make sure that this is the correct ingress message. [`IngressMessageId`]
+            // does _not_ uniquely identify ingress messages, we thus need to perform
+            // an extra check.
                 if SignedIngressId::new(ingress_message_id.clone(), bytes)
                     == *signed_ingress_id =>
             {
@@ -226,7 +231,7 @@ fn parse_response(
     };
 
     let Ok(ingress) = SignedIngress::try_from(response.serialized_ingress_message) else {
-        metrics.report_download_error("ingress_deserializedion_failed");
+        metrics.report_download_error("ingress_deserialization_failed");
         return None;
     };
 
@@ -321,7 +326,7 @@ mod tests {
         let pools = mock_pools(
             Some(ingress_message.clone()),
             None,
-            /*expect_consensus_pool_acces=*/ false,
+            /*expect_consensus_pool_access=*/ false,
         );
         let router = build_axum_router(pools);
 
@@ -348,7 +353,7 @@ mod tests {
         let pools = mock_pools(
             None,
             Some(block.clone()),
-            /*expect_consensus_pool_acces=*/ true,
+            /*expect_consensus_pool_access=*/ true,
         );
         let router = build_axum_router(pools);
 
@@ -372,7 +377,7 @@ mod tests {
     async fn rpc_get_not_found_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
-        let pools = mock_pools(None, None, /*expect_consensus_pool_acces=*/ true);
+        let pools = mock_pools(None, None, /*expect_consensus_pool_access=*/ true);
         let router = build_axum_router(pools);
 
         let response = send_request(
@@ -417,7 +422,7 @@ mod tests {
         let pools = mock_pools(
             Some(ingress_message_1.clone()),
             Some(block.clone()),
-            /*expect_consensus_pool_acces=*/ true,
+            /*expect_consensus_pool_access=*/ true,
         );
         let router = build_axum_router(pools);
 
@@ -440,7 +445,7 @@ mod tests {
         let pools = mock_pools(
             None,
             Some(block.clone()),
-            /*expect_consensus_pool_acces=*/ true,
+            /*expect_consensus_pool_access=*/ true,
         );
         let router = build_axum_router(pools);
 

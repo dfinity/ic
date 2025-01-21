@@ -172,12 +172,12 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        let missing_ingress_ids = assembler.missing_ingress_messages();
+        let stripped_ingress_ids = assembler.missing_ingress_messages();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
-        for missing_ingress_id in missing_ingress_ids {
+        for stripped_ingress_id in stripped_ingress_ids {
             join_set.spawn(get_or_fetch(
-                missing_ingress_id,
+                stripped_ingress_id,
                 self.ingress_pool.clone(),
                 self.transport.clone(),
                 id.as_ref().clone(),
@@ -265,6 +265,8 @@ async fn get_or_fetch<P: Peers>(
         .unwrap()
         .get(&signed_ingress_id.ingress_message_id)
     {
+        // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+        // uniquely identify ingress messages, we thus need to perform an extra check.
         if SignedIngressId::from(&ingress_message) == signed_ingress_id {
             return (ingress_message, node_id);
         }
@@ -309,7 +311,7 @@ impl BlockProposalAssembler {
                 .stripped_ingress_payload
                 .ingress_messages
                 .iter()
-                .map(|ingress_message| (ingress_message.clone(), None))
+                .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
                 .collect(),
             stripped_block_proposal,
         }
@@ -319,9 +321,9 @@ impl BlockProposalAssembler {
     pub(crate) fn missing_ingress_messages(&self) -> Vec<SignedIngressId> {
         self.ingress_messages
             .iter()
-            .filter_map(|(ingress_message_id, maybe_ingress)| {
+            .filter_map(|(signed_ingress_id, maybe_ingress)| {
                 if maybe_ingress.is_none() {
-                    Some(ingress_message_id)
+                    Some(signed_ingress_id)
                 } else {
                     None
                 }
