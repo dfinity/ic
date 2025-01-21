@@ -371,3 +371,22 @@ system_test_nns(
         "@crate_index//:slog",
     ],
 )
+
+system_test_nns(
+    name = "ssh_agent_forwarding_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)

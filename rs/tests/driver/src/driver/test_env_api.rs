@@ -1465,6 +1465,7 @@ pub trait SshSession {
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
+        channel.request_auth_agent_forwarding();
         channel.exec("bash").unwrap();
 
         channel.write_all(script.as_bytes())?;
