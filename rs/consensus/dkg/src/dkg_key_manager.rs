@@ -484,7 +484,7 @@ impl DkgKeyManager {
             .set(summary.registry_version.get() as i64);
 
         for tag in [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold].iter() {
-            let current_transcript = summary.current_transcript(tag);
+            let current_transcript = summary.current_transcript(tag).unwrap();
             let metric_label = &format!("{:?}", tag);
 
             self.metrics
