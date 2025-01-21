@@ -26,6 +26,10 @@ on:
         required: false
         default: '10'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 env:
   TARGETS: |
     ${{ github.event_name == 'schedule' && '//...' ||
