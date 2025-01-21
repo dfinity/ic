@@ -36,12 +36,14 @@ Grafana is an open-source platform for monitoring and observability. It provides
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Helm](https://helm.sh/docs/intro/install)
+The `deploy.sh` script eventually uses Docker, Minikube, Kubectl and Helm, but fear not, it will assist you in installing those if it detects they are absent.
+It was only tested on Ubuntu servers.
+
+WARNING: The script *doesn't* work when run from this repository's dev container (at `./ci/container/`).
 
 ## Deploying Prod Images
 
-To create and set-up the local cluster and install the production containers for ICP-Rosetta and ICRC1-Rosetta pointint at DFINITY's test ledgers, simply do:
+To create and set-up the local cluster and install the production containers for ICP-Rosetta and ICRC1-Rosetta pointing at DFINITY's test ledgers, simply do:
 ```bash
 ./deploy.sh [options]
 ```
@@ -59,7 +61,7 @@ ATTENTION: The first run might take a few minutes to finish as it'll create the 
 In order to build rosetta containers with local changes, you need to do it from inside the dev container:
 
 ```bash
-$ ./gitlab-ci/ci/container/container-run.sh
+$ ./ci/container/container-run.sh
 
 # Build the TAR file target
 $ bazel build //rs/rosetta-api/icp:rosetta_image.tar

@@ -70,12 +70,65 @@ done
 # Set default values for prod
 [[ "$ICP_LEDGER" == "prod" ]] && ICP_LEDGER="ryjl3-tyaaa-aaaaa-aaaba-cai" && ICP_SYMBOL="ICP"
 
+# Ensure Docker is installed
+command -v docker &>/dev/null || {
+    read -p "Docker not found, do you want to install Docker? (y/n): " install_docker
+    if [[ "$install_docker" == "y" ]]; then
+        echo "Installing Docker..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm get-docker.sh
+    else
+        echo "Docker is required. Exiting..."
+        exit 1
+    fi
+}
+
+# Ensure Docker is running
+docker info &>/dev/null || {
+    echo "Docker is not running. Please start Docker and try again."
+    echo "Usually that can be done with "sudo systemctl start docker" or "sudo service docker start""
+    exit 1
+}
+
+# Ensure kubectl is installed
+command -v kubectl &>/dev/null || {
+    read -p "kubectl not found, do you want to install kubectl? (y/n): " install_kubectl
+    if [[ "$install_kubectl" == "y" ]]; then
+        echo "Installing kubectl..."
+        curl -LO "https://dl.k8s.io/release/v1.31.5/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+    else
+        echo "kubectl is required. Exiting..."
+        exit 1
+    fi
+}
+
 # Ensure Minikube is installed
 command -v minikube &>/dev/null || {
-    echo "Minikube not found, installing Minikube..."
-    curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-    chmod +x minikube
-    sudo mv minikube /usr/local/bin/
+    read -p "Minikube not found, do you want to install Minikube? (y/n): " install_minikube
+    if [[ "$install_minikube" == "y" ]]; then
+        echo "Installing Minikube..."
+        curl -Lo minikube https://storage.googleapis.com/minikube/releases/v1.34.0/minikube-linux-amd64
+        chmod +x minikube
+        sudo mv minikube /usr/local/bin/
+    else
+        echo "Minikube is required. Exiting..."
+        exit 1
+    fi
+}
+
+# Ensure Helm is installed
+command -v helm &>/dev/null || {
+    read -p "Helm not found, do you want to install Helm? (y/n): " install_helm
+    if [[ "$install_helm" == "y" ]]; then
+        echo "Installing Helm..."
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    else
+        echo "Helm is required. Exiting..."
+        exit 1
+    fi
 }
 
 # Clean up Minikube cluster and Helm chart if --clean flag is set
@@ -89,12 +142,6 @@ command -v minikube &>/dev/null || {
 minikube status -p "$MINIKUBE_PROFILE" &>/dev/null || {
     echo "Starting Minikube with profile $MINIKUBE_PROFILE..."
     minikube start -p "$MINIKUBE_PROFILE"
-}
-
-# Ensure Helm is installed
-command -v helm &>/dev/null || {
-    echo "Helm not found, installing Helm..."
-    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 }
 
 # Add Helm repositories and update
@@ -116,7 +163,7 @@ port_forward() {
 # Install or upgrade Prometheus
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q prometheus || {
     echo "Installing Prometheus..."
-    helm install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE"
+    helm install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE" --values prometheus_values.yaml
 }
 
 # Wait for Prometheus server to be ready
@@ -178,6 +225,18 @@ kubectl wait --namespace monitoring --for=condition=Ready pod -l app=grafana --t
 # Forward Grafana port if not already forwarded
 port_forward monitoring grafana 3000:80
 
+# Function to check if a service exists and print its URL
+print_service_url() {
+    local namespace=$1
+    local service=$2
+    if kubectl get -n "$namespace" svc "$service" --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        local nodePort=$(kubectl get -n "$namespace" svc "$service" -o jsonpath='{.spec.ports[0].nodePort}' --context="$MINIKUBE_PROFILE")
+        echo "$service: http://localhost:$nodePort"
+    else
+        echo "$service is not present."
+    fi
+}
+
 # Wait for the rosetta services to be ready and forward the ports
 for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rosetta-latest; do
     if kubectl get -n rosetta-api svc "$service" --context="$MINIKUBE_PROFILE" &>/dev/null; then
@@ -193,3 +252,15 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
         port_forward rosetta-api "$service" "$nodePort:3000"
     fi
 done
+
+# Print the URLs
+echo ""
+echo "************************************"
+echo "Deployment complete. Access the services at the following URLs:"
+print_service_url rosetta-api icp-rosetta-local
+print_service_url rosetta-api icp-rosetta-latest
+print_service_url rosetta-api icrc-rosetta-local
+print_service_url rosetta-api icrc-rosetta-latest
+echo "Prometheus: http://localhost:9090"
+echo "Grafana: http://localhost:3000"
+echo "1************************************"
