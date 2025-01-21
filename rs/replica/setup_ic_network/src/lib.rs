@@ -33,11 +33,7 @@ use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::{
-        artifact_manager::JoinGuard,
-        consensus::{ArtifactTransmit, UnvalidatedArtifact},
-        state_sync::StateSyncClient,
-    },
+    p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -52,10 +48,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    canister_http::{
-        CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare,
-    },
+    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseShare},
     consensus::{
         certification::CertificationMessage, dkg, idkg::IDkgMessage, CatchUpPackage,
         ConsensusMessage, HasHeight,
@@ -154,169 +147,6 @@ struct Bouncers {
     https_outcalls: Arc<CanisterHttpGossipImpl>,
 }
 
-struct AbortableBroadcastChannels {
-    ingress_outbound_tx: AbortableBroadcastSender<SignedIngress>,
-    ingress_inbound_rx: AbortableBroadcastReceiver<SignedIngress>,
-    consensus_outbound_tx: AbortableBroadcastSender<ConsensusMessage>,
-    consensus_inbound_rx: AbortableBroadcastReceiver<ConsensusMessage>,
-    certifier_outbound_tx: AbortableBroadcastSender<CertificationMessage>,
-    certifier_inbound_rx: AbortableBroadcastReceiver<CertificationMessage>,
-    dkg_outbound_tx: AbortableBroadcastSender<dkg::Message>,
-    dkg_inbound_rx: AbortableBroadcastReceiver<dkg::Message>,
-    idkg_outbound_tx: AbortableBroadcastSender<IDkgMessage>,
-    idkg_inbound_rx: AbortableBroadcastReceiver<IDkgMessage>,
-    https_outcalls_outbound_tx: AbortableBroadcastSender<CanisterHttpResponseShare>,
-    https_outcalls_inbound_rx: AbortableBroadcastSender<CanisterHttpResponseShare>,
-}
-
-impl AbortableBroadcastChannels {
-    fn new(
-        log: &ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
-        rt_handle: &tokio::runtime::Handle,
-        node_id: NodeId,
-        subnet_id: SubnetId,
-        artifact_pool_config: ArtifactPoolConfig,
-        catch_up_package: &CatchUpPackage,
-        // ConsensusCrypto is an extension of the Crypto trait and we can
-        // not downcast traits.
-        consensus_crypto: Arc<dyn ConsensusCrypto>,
-        certifier_crypto: Arc<dyn CertificationCrypto>,
-        ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
-        registry_client: Arc<dyn RegistryClient>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        message_router: Arc<dyn MessageRouting>,
-        ingress_history_reader: Box<dyn IngressHistoryReader>,
-        consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
-    ) -> (Self, ArtifactPools) {
-
-        let artifact_pools = ArtifactPools::new(
-            log,
-            metrics_registry,
-            node_id,
-            artifact_pool_config,
-            catch_up_package,
-        );
-        let time_source = Arc::new(SysTimeSource::new());
-        let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
-        let bouncers = Bouncers::new(
-            log,
-            metrics_registry,
-            subnet_id,
-            time_source.clone(),
-            message_router.clone(),
-            consensus_pool_cache.clone(),
-            consensus_block_cache,
-            state_reader.clone(),
-        );
-    
-        let mut new_p2p_consensus: ic_consensus_manager::AbortableBroadcastChannelBuilder =
-            ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
-                log.clone(),
-                rt_handle.clone(),
-                metrics_registry.clone(),
-            );
-    
-        let (consensus_outbound_tx, consensus_inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
-            let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                consensus_pool.clone(),
-                artifact_pools.ingress_pool.clone(),
-                bouncers.consensus,
-                metrics_registry.clone(),
-                node_id,
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        } else {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                consensus_pool.clone(),
-                bouncers.consensus,
-                metrics_registry.clone(),
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-    
-        let (ingress_outbound_tx, ingress_inbound_rx) = {
-            #[allow(clippy::disallowed_methods)]
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                artifact_pools.ingress_pool.clone(),
-                bouncers.ingress,
-                metrics_registry.clone(),
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS)
-        };
-    
-        let (certifier_outbound_tx, certifier_inbound_rx) = {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                artifact_pools.certification_pool.clone(),
-                bouncers.certifier,
-                metrics_registry.clone(),
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-    
-        let (dkg_outbound_tx, dkg_inbound_rx) = {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                artifact_pools.dkg_pool.clone(),
-                bouncers.dkg,
-                metrics_registry.clone(),
-            );
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-    
-        let (idkg_outbound_tx, idkg_inbound_rx) = {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                artifact_pools.idkg_pool.clone(),
-                bouncers.idkg,
-                metrics_registry.clone(),
-            );
-    
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-    
-        let (https_outcalls_outbound_tx, https_outcalls_inbound_rx) = {
-            let assembler = ic_artifact_downloader::FetchArtifact::new(
-                log.clone(),
-                rt_handle.clone(),
-                artifact_pools.canister_http_pool.clone(),
-                bouncers.https_outcalls,
-                metrics_registry.clone(),
-            );
-    
-            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
-        };
-    
-        (Self {
-            ingress_outbound_tx,
-            ingress_inbound_rx,
-            consensus_outbound_tx,
-            consensus_inbound_rx,
-            certifier_outbound_tx,
-            certifier_inbound_rx,
-            dkg_outbound_tx,
-            dkg_inbound_rx,
-            idkg_outbound_tx,
-            idkg_inbound_rx,
-            https_outcalls_outbound_tx,
-            https_outcalls_inbound_rx,
-        
-        }, artifact_pools)
-    }
-}
-
 impl Bouncers {
     fn new(
         log: &ReplicaLogger,
@@ -356,6 +186,163 @@ impl Bouncers {
             certifier,
             https_outcalls,
         }
+    }
+}
+
+struct AbortableBroadcastChannels {
+    ingress_outbound_tx: AbortableBroadcastSender<SignedIngress>,
+    ingress_inbound_rx: AbortableBroadcastReceiver<SignedIngress>,
+    consensus_outbound_tx: AbortableBroadcastSender<ConsensusMessage>,
+    consensus_inbound_rx: AbortableBroadcastReceiver<ConsensusMessage>,
+    certifier_outbound_tx: AbortableBroadcastSender<CertificationMessage>,
+    certifier_inbound_rx: AbortableBroadcastReceiver<CertificationMessage>,
+    dkg_outbound_tx: AbortableBroadcastSender<dkg::Message>,
+    dkg_inbound_rx: AbortableBroadcastReceiver<dkg::Message>,
+    idkg_outbound_tx: AbortableBroadcastSender<IDkgMessage>,
+    idkg_inbound_rx: AbortableBroadcastReceiver<IDkgMessage>,
+    https_outcalls_outbound_tx: AbortableBroadcastSender<CanisterHttpResponseShare>,
+    https_outcalls_inbound_rx: AbortableBroadcastReceiver<CanisterHttpResponseShare>,
+}
+
+impl AbortableBroadcastChannels {
+    fn new(
+        log: &ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+        rt_handle: &tokio::runtime::Handle,
+        node_id: NodeId,
+        subnet_id: SubnetId,
+        artifact_pool_config: ArtifactPoolConfig,
+        catch_up_package: &CatchUpPackage,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        message_router: Arc<dyn MessageRouting>,
+        consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
+        time_source: Arc<dyn TimeSource>,
+    ) -> (Self, ArtifactPools, AbortableBroadcastChannelBuilder) {
+        let artifact_pools = ArtifactPools::new(
+            log,
+            metrics_registry,
+            node_id,
+            artifact_pool_config,
+            catch_up_package,
+        );
+        let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
+        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
+        let bouncers = Bouncers::new(
+            log,
+            metrics_registry,
+            subnet_id,
+            time_source.clone(),
+            message_router.clone(),
+            consensus_pool_cache.clone(),
+            consensus_block_cache,
+            state_reader.clone(),
+        );
+
+        let mut new_p2p_consensus: ic_consensus_manager::AbortableBroadcastChannelBuilder =
+            ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
+                log.clone(),
+                rt_handle.clone(),
+                metrics_registry.clone(),
+            );
+
+        let (consensus_outbound_tx, consensus_inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+            let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                consensus_pool.clone(),
+                artifact_pools.ingress_pool.clone(),
+                bouncers.consensus,
+                metrics_registry.clone(),
+                node_id,
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        } else {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                consensus_pool.clone(),
+                bouncers.consensus,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
+        let (ingress_outbound_tx, ingress_inbound_rx) = {
+            #[allow(clippy::disallowed_methods)]
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.ingress_pool.clone(),
+                bouncers.ingress,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS)
+        };
+
+        let (certifier_outbound_tx, certifier_inbound_rx) = {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.certification_pool.clone(),
+                bouncers.certifier,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
+        let (dkg_outbound_tx, dkg_inbound_rx) = {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.dkg_pool.clone(),
+                bouncers.dkg,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
+        let (idkg_outbound_tx, idkg_inbound_rx) = {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.idkg_pool.clone(),
+                bouncers.idkg,
+                metrics_registry.clone(),
+            );
+
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
+        let (https_outcalls_outbound_tx, https_outcalls_inbound_rx) = {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                artifact_pools.canister_http_pool.clone(),
+                bouncers.https_outcalls,
+                metrics_registry.clone(),
+            );
+
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
+        };
+
+        (
+            Self {
+                ingress_outbound_tx,
+                ingress_inbound_rx,
+                consensus_outbound_tx,
+                consensus_inbound_rx,
+                certifier_outbound_tx,
+                certifier_inbound_rx,
+                dkg_outbound_tx,
+                dkg_inbound_rx,
+                idkg_outbound_tx,
+                idkg_inbound_rx,
+                https_outcalls_outbound_tx,
+                https_outcalls_inbound_rx,
+            },
+            artifact_pools,
+            new_p2p_consensus,
+        )
     }
 }
 
@@ -403,8 +390,11 @@ pub fn setup_consensus_and_p2p(
     UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
+    let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-    let (abc, artifact_pools) = AbortableBroadcastChannels::new(
+
+    // Start the IO components (a.k.a. P2P)
+    let (channels, artifact_pools, p2p_builder) = AbortableBroadcastChannels::new(
         log,
         metrics_registry,
         rt_handle,
@@ -412,42 +402,10 @@ pub fn setup_consensus_and_p2p(
         subnet_id,
         artifact_pool_config,
         &catch_up_package,
-        Arc::clone(&consensus_crypto) as Arc<_>,
-        Arc::clone(&certifier_crypto) as Arc<_>,
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
-        Arc::clone(&registry_client),
-        state_manager,
-        state_reader,
-        message_router,
-        ingress_history_reader,
+        state_reader.clone(),
+        message_router.clone(),
         consensus_pool.clone(),
-    );
-    let (ingress_pool, ingress_sender, join_handles) = start_consensus(
-        log,
-        metrics_registry,
-        rt_handle,
-        node_id,
-        subnet_id,
-        &catch_up_package,
-        artifact_pools,
-        abc,
-        Arc::clone(&consensus_crypto) as Arc<_>,
-        Arc::clone(&certifier_crypto) as Arc<_>,
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
-        Arc::clone(&registry_client),
-        state_manager,
-        state_reader,
-        xnet_payload_builder,
-        self_validating_payload_builder,
-        query_stats_payload_builder,
-        message_router,
-        ingress_history_reader,
-        consensus_pool.clone(),
-        malicious_flags,
-        cycles_account_manager,
-        registry_poll_delay_duration_ms,
-        canister_http_adapter_client,
-        max_certified_height_tx,
+        time_source.clone(),
     );
 
     // StateSync receive side + handler definition
@@ -460,7 +418,7 @@ pub fn setup_consensus_and_p2p(
         );
 
     // Consensus receive side + handler definition
-    let (consensus_manager_router, consensus_manager_runner) = p2p_consensus.build();
+    let (consensus_manager_router, consensus_manager_runner) = p2p_builder.build();
 
     // Merge all receive side handlers => router
     let p2p_router = state_sync_manager_router
@@ -498,7 +456,32 @@ pub fn setup_consensus_and_p2p(
     let _state_sync_manager = state_sync_manager_runner.start(quic_transport.clone());
     let _cancellation_token = consensus_manager_runner.start(quic_transport, topology_watcher);
 
-    (ingress_pool, ingress_sender, join_handles)
+    start_consensus(
+        log,
+        metrics_registry,
+        node_id,
+        subnet_id,
+        artifact_pools,
+        channels,
+        Arc::clone(&consensus_crypto) as Arc<_>,
+        Arc::clone(&certifier_crypto) as Arc<_>,
+        Arc::clone(&ingress_sig_crypto) as Arc<_>,
+        Arc::clone(&registry_client),
+        state_manager,
+        state_reader,
+        xnet_payload_builder,
+        self_validating_payload_builder,
+        query_stats_payload_builder,
+        message_router,
+        ingress_history_reader,
+        consensus_pool.clone(),
+        malicious_flags,
+        cycles_account_manager,
+        registry_poll_delay_duration_ms,
+        canister_http_adapter_client,
+        max_certified_height_tx,
+        time_source,
+    )
 }
 
 /// The function creates the Consensus stack (including all Consensus clients)
@@ -507,13 +490,11 @@ pub fn setup_consensus_and_p2p(
 fn start_consensus(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
-    catch_up_package: &CatchUpPackage,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
-    artifact_pools: ArtifactPools, 
+    artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
@@ -532,6 +513,7 @@ fn start_consensus(
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     max_certified_height_tx: watch::Sender<Height>,
+    time_source: Arc<dyn TimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
@@ -718,9 +700,5 @@ fn start_consensus(
         ));
     };
 
-    (
-        artifact_pools.ingress_pool,
-        user_ingress_tx,
-        join_handles,
-    )
+    (artifact_pools.ingress_pool, user_ingress_tx, join_handles)
 }
