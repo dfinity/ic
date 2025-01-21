@@ -189,7 +189,9 @@ pub fn start_all_canisters(
             let input = StartArgs {
                 network_topology: topology.clone(),
                 canister_to_subnet_rate,
-                payload_size_bytes,
+                request_payload_size_bytes: payload_size_bytes,
+                request_timeout_seconds: 0,
+                response_payload_size_bytes: payload_size_bytes,
             };
             let _: String = canister
                 .update_("start", candid, (input,))
