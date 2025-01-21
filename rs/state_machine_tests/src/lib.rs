@@ -422,9 +422,13 @@ fn make_nodes_registry(
         .build();
 
     // Insert initial DKG transcripts
+    let mut high_threshold_transcript = ni_dkg_transcript.clone();
+    high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+    let mut low_threshold_transcript = ni_dkg_transcript;
+    low_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
     let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(ni_dkg_transcript.clone().into()),
-        initial_ni_dkg_transcript_low_threshold: Some(ni_dkg_transcript.into()),
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
         ..Default::default()
     };
     registry_data_provider
