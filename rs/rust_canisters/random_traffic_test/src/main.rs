@@ -1,9 +1,9 @@
-use candid::CandidType;
+use candid::{CandidType, Encode};
 use futures::future::select_all;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api,
-    call::{Call, CallError, CallResult, ConfigurableCall, SendableCall},
+    call::{Call, ConfigurableCall, SendableCall, SystemResult},
     setup,
 };
 use ic_cdk_macros::{heartbeat, init, query, update};
@@ -67,12 +67,11 @@ impl Message {
             padding: vec![0_u8; (bytes_count as usize).saturating_sub(std::mem::size_of::<Self>())],
         }
     }
-
-    /// Returns the number of bytes the message consists of.
-    fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.padding.len()
-    }
 }
+
+/// Wrapper around the reply from `handle_call()` such that `serde_bytes` can be used.
+#[derive(Serialize, Deserialize, CandidType)]
+struct Reply(#[serde(with = "serde_bytes")] Vec<u8>);
 
 /// Returns the next call index.
 fn next_call_index() -> u32 {
@@ -197,16 +196,17 @@ fn should_make_best_effort_call() -> bool {
 fn setup_call(
     call_tree_id: u32,
     call_depth: u32,
-) -> (impl Future<Output = CallResult<Message>>, u32) {
-    let msg = Message::new(call_tree_id, call_depth, gen_call_bytes());
-    let sent_bytes = msg.count_bytes() as u32;
+) -> (impl Future<Output = SystemResult<Vec<u8>>>, u32) {
+    let bytes = candid::Encode!(&Message::new(call_tree_id, call_depth, gen_call_bytes())).unwrap();
+    let sent_bytes = bytes.len() as u32;
     let receiver = receiver();
     let caller = (call_depth > 0).then_some(CanisterId::unchecked_from_principal(PrincipalId(
         api::msg_caller(),
     )));
     let timeout_secs = should_make_best_effort_call().then_some(gen_timeout_secs());
 
-    let call = Call::new(receiver.into(), "handle_call").with_arg(msg);
+    let call = Call::new(receiver.into(), "handle_call");
+    let call = call.with_raw_args(bytes);
     let call = match timeout_secs {
         Some(timeout_secs) => call.change_timeout(timeout_secs),
         None => call.with_guaranteed_response(),
@@ -232,7 +232,7 @@ fn setup_call(
         )
     });
 
-    (call.call(), index)
+    (call.call_raw(), index)
 }
 
 /// Updates the record at `index` using the `result` of the corresponding call.
@@ -241,7 +241,7 @@ fn setup_call(
 /// subnet is at its limits. Note that since the call `index` is part of the records, removing
 /// the records for synchronous rejections will result in gaps in these numbers thus they are
 /// still included indirectly.
-fn update_record(result: &CallResult<Message>, index: u32) {
+fn update_record(result: &SystemResult<Vec<u8>>, index: u32) {
     // Updates the `Response` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |response: Response| {
         RECORDS.with_borrow_mut(|records| {
@@ -260,8 +260,9 @@ fn update_record(result: &CallResult<Message>, index: u32) {
             record.duration_and_response = Some((call_duration, response));
         });
     };
+
     match result {
-        Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
+        Err(rejection) if rejection.is_sync() => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
             RECORDS.with_borrow_mut(|records| {
@@ -273,16 +274,15 @@ fn update_record(result: &CallResult<Message>, index: u32) {
                     .is_none())
             });
         }
-        Err(CallError::CallRejected(rejection)) => {
+        Err(rejection) => {
             set_reply_in_call_record(Response::Reject(
                 rejection.reject_code().into(),
                 rejection.reject_message().to_string(),
             ));
         }
-        Err(CallError::CandidDecodeFailed(..)) => unreachable!(),
 
-        Ok(msg) => {
-            set_reply_in_call_record(Response::Reply(msg.count_bytes() as u32));
+        Ok(bytes) => {
+            set_reply_in_call_record(Response::Reply(bytes.len() as u32));
         }
     }
 }
@@ -316,7 +316,7 @@ async fn heartbeat() {
 /// - flipping the coin tells us to do so.
 /// - if it tells us not to do so but the attempted downstream call fails for any reason.
 #[update]
-async fn handle_call(msg: Message) -> Vec<u8> {
+async fn handle_call(msg: Message) -> Reply {
     // Make downstream calls as long as flipping the coin tells us to do so.
     while should_make_downstream_call() {
         let (future, record_index) = setup_call(msg.call_tree_id, msg.call_depth + 1);
@@ -337,7 +337,7 @@ async fn handle_call(msg: Message) -> Vec<u8> {
     let counts = api::performance_counter(0) + gen_instructions_count() as u64;
     while counts > api::performance_counter(0) {}
 
-    vec![0_u8; payload_bytes as usize]
+    Reply(vec![0_u8; payload_bytes as usize])
 }
 
 /// Initializes the `HASHER` by hashing our own canister ID.

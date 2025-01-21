@@ -13,7 +13,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus},
     messages::{MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
     Cycles,
 };
@@ -166,8 +166,6 @@ fn check_calls_conclude_with_migrating_canister(
         300, // shutdown_phase_max_rounds
         seed, config,
     ) {
-        //        unreachable!("{:?}\n\n{:?}", nfo.fixture.local_canisters, nfo.fixture.remote_canisters);
-        //        unreachable!("{:#?}", nfo.fixture.set_config(*nfo.fixture.local_canisters.first().unwrap(), CanisterConfig::default()));
         unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
     }
 }
@@ -215,10 +213,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
         if canister != migrating_canister {
             // Make sure the canister doesn't make calls when it is
             // put into running state to read its records.
-            let config = fixture.stop_chatter(canister);
-            //            assert!(false, "{:?}", migrating_canister);
-            //            let config = fixture.set_config(canister, config);
-            //            assert!(false, "{:#?}", config);
+            fixture.stop_chatter(canister);
             fixture.stop_canister_non_blocking(canister);
         }
     }
@@ -472,7 +467,7 @@ impl Fixture {
     /// Helper function for update calls to `canister`; returns the current `T` as it was before
     /// this call.
     ///
-    /// Panics if `canister` is not installed in `Self`.
+    /// Panics if `canister` is not installed in `self`.
     fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> T
     where
         T: candid::CandidType + for<'a> candid::Deserialize<'a>,
@@ -487,14 +482,14 @@ impl Fixture {
 
     /// Sets the `CanisterConfig` in `canister`; returns the current config.
     ///
-    /// Panics if `canister` is not installed in `Self`.
+    /// Panics if `canister` is not installed in `self`.
     pub fn set_config(&self, canister: CanisterId, config: CanisterConfig) -> CanisterConfig {
         self.set_canister_state(canister, "set_config", config)
     }
 
     /// Seeds the `Rng` in `canister`.
     ///
-    /// Panics if `canister` is not installed in `Self`.
+    /// Panics if `canister` is not installed in `self`.
     pub fn seed_rng(&self, canister: CanisterId, seed: u64) {
         let msg = candid::Encode!(&seed).unwrap();
         self.get_env(&canister)
@@ -504,7 +499,7 @@ impl Fixture {
 
     /// Starts `canister`.
     ///
-    /// Panics if `canister` is not installed in `Self`.
+    /// Panics if `canister` is not installed in `self`.
     pub fn start_canister(&self, canister: CanisterId) {
         self.get_env(&canister).start_canister(canister).unwrap();
     }
@@ -514,7 +509,7 @@ impl Fixture {
     /// This function is asynchronous. It returns the ID of the ingress message
     /// that can be awaited later with [await_ingress].
     ///
-    /// Panics if `canister` is not installed in `Self`.
+    /// Panics if `canister` is not installed in `self`.
     pub fn stop_canister_non_blocking(&self, canister: CanisterId) -> MessageId {
         self.get_env(&canister).stop_canister_non_blocking(canister)
     }
@@ -523,42 +518,40 @@ impl Fixture {
     ///
     /// This stops the canister from making calls, downstream and from the heartbeat.
     pub fn stop_chatter(&self, canister: CanisterId) -> CanisterConfig {
-        match self.get_env(&canister).execute_ingress(
-            canister,
-            "stop_chatter",
-            candid::Encode!().unwrap(),
-        ) {
-            Ok(WasmResult::Reply(reply)) => candid::Decode!(&reply, CanisterConfig).unwrap(),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Queries the records from `canister`.
-    ///
-    /// Panics if `canister` is not installed in `Self`.
-    pub fn query_records(
-        &self,
-        canister: CanisterId,
-    ) -> Result<BTreeMap<u32, CanisterRecord>, UserError> {
-        let dummy_msg = candid::Encode!().unwrap();
         let reply = self
             .get_env(&canister)
-            .query(canister, "records", dummy_msg)?;
-        Ok(candid::Decode!(&reply.bytes(), BTreeMap<u32, CanisterRecord>).unwrap())
+            .execute_ingress(canister, "stop_chatter", candid::Encode!().unwrap())
+            .unwrap();
+        candid::Decode!(&reply.bytes(), CanisterConfig).unwrap()
     }
 
-    /// Force queries the records from `canister` by first attempting to query them; if it fails, start
-    /// the canister and try querying them again.
+    /// Queries `canister` for `method`.
     ///
-    /// Note: If the canister is configured to make calls, starting it will trigger calls before
-    ///       the records are returned.
+    /// Panics if `canister` is not installed in `self`.
+    pub fn query<T: candid::CandidType + for<'a> candid::Deserialize<'a>>(
+        &self,
+        canister: CanisterId,
+        method: &str,
+    ) -> Result<T, UserError> {
+        let reply = self
+            .get_env(&canister)
+            .query(canister, method, candid::Encode!().unwrap())?;
+        Ok(candid::Decode!(&reply.bytes(), T).unwrap())
+    }
+
+    /// Force queries `canister` for `method` by first attempting to a normal query; if it fails, start
+    /// the canister and try again.
     ///
-    /// Panics if `canister` is not installed in `Self`.
-    pub fn force_query_records(&self, canister: CanisterId) -> BTreeMap<u32, CanisterRecord> {
-        match self.query_records(canister) {
+    /// Panics if `canister` is not installed in `self`.
+    pub fn force_query<T: candid::CandidType + for<'a> candid::Deserialize<'a>>(
+        &self,
+        canister: CanisterId,
+        method: &str,
+    ) -> T {
+        match self.query::<T>(canister, method) {
             Err(_) => {
                 self.start_canister(canister);
-                self.query_records(canister).unwrap()
+                self.query::<T>(canister, method).unwrap()
             }
             Ok(records) => records,
         }
@@ -683,7 +676,7 @@ impl Fixture {
                 if self
                     .canisters()
                     .into_iter()
-                    .map(|canister| extract_metrics(&self.force_query_records(canister)))
+                    .map(|canister| extract_metrics(&self.force_query(canister, "records")))
                     .any(|metrics| metrics.pending_calls != 0)
                 {
                     return self.failed_with_reason(
@@ -757,7 +750,7 @@ impl Fixture {
                 records: self
                     .canisters()
                     .into_iter()
-                    .map(|canister| (canister, self.force_query_records(canister)))
+                    .map(|canister| (canister, self.force_query(canister, "records")))
                     .collect(),
                 fixture: self.clone(),
             },
