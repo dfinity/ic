@@ -25,7 +25,6 @@ def image_deps(mode):
             "//publish/binaries:canary-proxy": "/opt/ic/bin/canary-proxy:0755",
             "//publish/binaries:certificate-issuer": "/opt/ic/bin/certificate-issuer:0755",
             "//publish/binaries:systemd-journal-gatewayd-shim": "/opt/ic/bin/systemd-journal-gatewayd-shim:0755",
-            "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
         },
     }
 
