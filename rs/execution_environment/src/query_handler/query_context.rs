@@ -1089,7 +1089,7 @@ impl<'a> QueryContext<'a> {
         let is_wasm64_execution = canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .is_some_and(|es| es.is_wasm64);
 
         let max_canister_memory_size = if is_wasm64_execution {
             self.max_canister_memory_size_wasm64

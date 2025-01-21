@@ -1074,7 +1074,7 @@ impl SchedulerImpl {
             let canister_is_wasm64 = canister
                 .execution_state
                 .as_ref()
-                .map_or(false, |es| es.is_wasm64);
+                .is_some_and(|es| es.is_wasm64);
 
             if let Err(err) = canister
                 .check_invariants(self.exec_env.max_canister_memory_size(canister_is_wasm64))
