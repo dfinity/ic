@@ -200,7 +200,7 @@ fn test_storage_reservation_triggered_in_canister_snapshot_without_enough_cycles
         .expect_err("Expected an error, but got Ok(_)");
     err.assert_contains(
         ErrorCode::InsufficientCyclesInMemoryGrow,
-        "Canister cannot grow memory by 200068382 bytes due to insufficient cycles.",
+        "Canister cannot grow memory by",
     );
 
     // Match on a substring of the error message. Due to a difference in instructions consumed on
