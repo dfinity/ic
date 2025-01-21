@@ -53,7 +53,7 @@ Relevant information can be found in the guestos link:../../guestos/docs/Boot.ad
 
 == Set up ssh host keys
 
-Service: `setup-ssh-keys.service`, script: `/opt/ic/bin/setup-ssh-keys.sh`,
+Service: `generate-host-ssh-keys.service`, script: `/opt/ic/bin/generate-host-ssh-keys.sh`,
 depends on `/boot/config` mount.
 
 This checks if ssh host keys for the system exist in the `config` partition
