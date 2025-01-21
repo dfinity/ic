@@ -695,19 +695,31 @@ impl PocketIc {
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
-        caller: Option<Principal>,
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub fn ingress_status_as(
+        &self,
+        message_id: RawMessageId,
+        caller: Principal,
     ) -> IngressStatusResult {
         let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.ingress_status(message_id, caller).await })
+        runtime.block_on(async { self.pocket_ic.ingress_status_as(message_id, caller).await })
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
@@ -1673,6 +1685,9 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 

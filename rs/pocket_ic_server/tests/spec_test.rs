@@ -90,7 +90,8 @@ fn setup_and_run_ic_ref_test(
         cmd.arg("--key-file").arg(key_path);
     }
 
-    cmd.stdout(Stdio::inherit())
+    let mut process = cmd
+        .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
         .expect("httpbin binary crashed");
@@ -196,6 +197,9 @@ fn setup_and_run_ic_ref_test(
         included_tests,
         32,
     );
+
+    process.kill().unwrap();
+    process.wait().unwrap();
 }
 
 #[test]

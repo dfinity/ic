@@ -25,6 +25,13 @@ def _wasm_rust_transition_impl(_settings, attr):
             "-C",
             "lto",
             "-C",
+            # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
+            # because the combination is invalid.
+            # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
+            #
+            # embed-bitcode is disabled by default by rules_rust.
+            "embed-bitcode=yes",
+            "-C",
             "target-feature=+bulk-memory",
         ],
     }
