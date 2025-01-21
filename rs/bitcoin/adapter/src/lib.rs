@@ -208,9 +208,9 @@ pub fn start_server(
 
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
 
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(1000);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
-    let (transaction_manager_tx, transaction_manager_rx) = channel(100);
+    let (transaction_manager_tx, transaction_manager_rx) = channel(1000);
 
     start_grpc_server(
         config.clone(),

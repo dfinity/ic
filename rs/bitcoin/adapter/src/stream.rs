@@ -184,7 +184,7 @@ impl Stream {
                             )
                         }
                         None => {
-                            debug!(
+                            info!(
                                 logger,
                                 "No direct connectivity to bitcoin peer {} and no socks proxy available.",
                                 address

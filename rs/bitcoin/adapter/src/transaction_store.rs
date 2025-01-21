@@ -137,7 +137,7 @@ impl TransactionStore {
                 // If the inventory contains the maximum allowed number of transactions, we will send it
                 // and start building a new one.
                 if inventory.len() == MAXIMUM_TRANSACTION_PER_INV {
-                    debug!(
+                    info!(
                         self.logger,
                         "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
                     );
@@ -152,7 +152,7 @@ impl TransactionStore {
                 }
             }
             if !inventory.is_empty() {
-                debug!(
+                info!(
                     self.logger,
                     "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
                 );

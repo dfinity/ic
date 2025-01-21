@@ -543,7 +543,7 @@ impl BlockchainManager {
         let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
 
         if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
-            debug!(
+            info!(
                 self.logger,
                 "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
             );
