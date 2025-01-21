@@ -144,10 +144,10 @@ pub fn execute_replicated_query(
     );
 
     // As we are executing the query in the replicated mode, we do
-    // not want to commit updates, i.e. we must return the
-    // unmodified version of the canister. Hence, execute on clones
-    // of system and execution states so that we have the original
-    // versions.
+    // not want to commit updates in its execution state. Hence,
+    // execute on a clone of the execution state so that we have
+    // the original version. Note that the system state is also
+    // cloned since it's borrowed mutably later.
     let (mut output, _output_execution_state, output_system_state) = round.hypervisor.execute(
         api_type,
         time,
@@ -164,6 +164,7 @@ pub fn execute_replicated_query(
         time,
     );
 
+    // Persist changes in the canister's system state and logs.
     canister.system_state = output_system_state;
     canister.append_log(&mut output.canister_log);
 
