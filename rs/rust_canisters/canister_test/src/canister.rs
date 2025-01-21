@@ -532,7 +532,7 @@ pub struct Canister<'a> {
     wasm: Option<Wasm>,
 }
 
-impl<'a> Canister<'a> {
+impl Canister<'_> {
     pub fn is_runtime_local(&self) -> bool {
         match self.runtime {
             Runtime::Remote(_) => false,
@@ -542,7 +542,7 @@ impl<'a> Canister<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Canister<'a> {
+impl fmt::Debug for Canister<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "client-side view of canister {}", self.canister_id)
     }
@@ -891,7 +891,7 @@ pub struct Install<'a> {
     pub num_cycles: Option<u128>,
 }
 
-impl<'a> Query<'a> {
+impl Query<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {
@@ -972,7 +972,7 @@ impl<'a> Query<'a> {
     }
 }
 
-impl<'a> Update<'a> {
+impl Update<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {

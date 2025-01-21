@@ -862,7 +862,7 @@ fn merge_to_base(
         merge_candidate.is_some()
     });
 
-    return rewritten.iter().any(|b| *b);
+    rewritten.iter().any(|b| *b)
 }
 
 fn serialize_to_tip(

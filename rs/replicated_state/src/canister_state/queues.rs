@@ -984,7 +984,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
+                .is_some_and(|(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;

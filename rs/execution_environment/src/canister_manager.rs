@@ -912,7 +912,7 @@ impl CanisterManager {
                 return false;
             }
         };
-        module.memories.first().map_or(false, |m| m.memory64)
+        module.memories.first().is_some_and(|m| m.memory64)
     }
 
     /// Installs code to a canister.
@@ -2190,9 +2190,7 @@ impl CanisterManager {
             .certified_data
             .clone_from(snapshot.certified_data());
 
-        let is_wasm64_execution = new_execution_state
-            .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+        let is_wasm64_execution = new_execution_state.as_ref().is_some_and(|es| es.is_wasm64);
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);

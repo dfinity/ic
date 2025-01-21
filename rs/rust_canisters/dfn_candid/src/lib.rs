@@ -116,7 +116,7 @@ impl<A1: DeserializeOwned + CandidType + HasCandidDecoderConfig> FromWire
 /// this is a private mirror of the type in dfn_core::api which generates the
 /// serialization/deserialization for it without putting a dependency on candid
 /// in dfn_core
-
+///
 /// This is a bit of a weird type witness. Candid is multi arity in both inputs
 /// and outputs the outputs don't fit in well with rust. To make writing candid
 /// nicer we assume that every function is going to try and return one value, if
