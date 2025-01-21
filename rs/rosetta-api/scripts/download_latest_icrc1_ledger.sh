@@ -5,7 +5,8 @@ set -uo pipefail
 RELEASE_TAG_PREFIX=ledger-suite-icrc
 
 ### Download a specific release
-##
+## Download the ICRC ledger WASM and did files for a specific release. The files are downloaded
+## from the github release page for the given release.
 download_release() {
     RELEASE=$1
     STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --head \
@@ -28,17 +29,16 @@ download_release() {
     fi
 }
 
-### Find the previous release
+### Find and download the latest ICRC ledger WASM and did file
 ## List the releases from the repository, looking for the most recent release where the corresponding
 ## tag starts with the expected prefix. Retrieves releases one page at a time, stopping if no release
-## was found in some predefined maximum number of pages. Note that the calls to the github API for
-## listing the releases are rate-limited unless authenticated.
+## was found in some predefined maximum number of pages. Once a release is found, download the ledger
+## WASM and did files.
 find_and_download_release() {
-    PREVIOUS_RELEASE=""
     PAGE=1
     ITEMS_PER_PAGE=100
     MAX_PAGES=10
-    while [ "${PREVIOUS_RELEASE}" == "" ]; do
+    while true; do
         ITEM=0
         # Unauthenticated requests are rate limited (per IP address) to 60 requests/hr
         # https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#primary-rate-limit-for-unauthenticated-users
@@ -46,10 +46,18 @@ find_and_download_release() {
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/dfinity/ic/releases\?per_page\=${ITEMS_PER_PAGE}\&page\=${PAGE})
+        if [ "$?" -ne "0" ]; then
+            echo >&2 "Unable to fetch the releases from dfinity/ic."
+            exit 1
+        fi
         while [ ${ITEM} -lt ${ITEMS_PER_PAGE} ]; do
-            TAG=$(echo ${REL_JSON} | jq ".[${ITEM}].tag_name" | tr -d '"')
-            if [[ ${TAG} == ${RELEASE_TAG_PREFIX}* ]]; then
-                download_release "${TAG}"
+            RELEASE=$(echo ${REL_JSON} | jq ".[${ITEM}].tag_name" | tr -d '"')
+            if [ "$?" -ne "0" ]; then
+                echo >&2 "Error parsing release from response."
+                exit 1
+            fi
+            if [[ ${RELEASE} == ${RELEASE_TAG_PREFIX}* ]]; then
+                download_release "${RELEASE}"
                 break
             else
                 ITEM=$((ITEM + 1))
@@ -64,5 +72,3 @@ find_and_download_release() {
 }
 
 find_and_download_release
-echo "No commits with artifacts found"
-exit 4
