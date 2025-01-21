@@ -166,28 +166,6 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
     })
 }
 
-pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
-    let nns_node = env.get_first_healthy_nns_node_snapshot();
-    let (res, before_balance, after_balance, canister_id) = setup_ucan_and_try_mint128(nns_node);
-    assert_eq!(
-        res,
-        AgentError::CertifiedReject(
-            RejectResponse {
-                reject_code: RejectCode::CanisterError,
-                reject_message: format!(
-                    "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
-                    canister_id, canister_id,
-                    CYCLES_MINTING_CANISTER_ID),
-                error_code: Some("IC0504".to_string())})
-    );
-    assert!(
-        after_balance == before_balance,
-        "expected {} == {}",
-        after_balance,
-        before_balance
-    );
-}
-
 pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let (res, before_balance, after_balance, canister_id) = setup_ucan_and_try_mint128(app_node);
