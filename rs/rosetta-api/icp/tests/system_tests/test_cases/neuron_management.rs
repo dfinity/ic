@@ -15,8 +15,8 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::KnownNeuronData;
+use ic_nns_governance_api::pb::v1::neuron::DissolveState;
+use ic_nns_governance_api::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
@@ -388,7 +388,7 @@ fn test_start_and_stop_neuron_dissolve() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert!(
             matches!(
-                neuron.dissolve_state.unwrap(),
+                neuron.dissolve_state.clone().unwrap(),
                 DissolveState::WhenDissolvedTimestampSeconds(_)
             ),
             "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
@@ -613,7 +613,7 @@ fn test_disburse_neuron() {
         neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
         update_neuron(&agent, neuron.into()).await;
 
-        match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
+        match list_neurons(&agent).await.full_neurons[0].dissolve_state.clone().unwrap() {
             DissolveState::WhenDissolvedTimestampSeconds (d) => {
                 // The neuron should now be in DISSOLVED state
                 assert!(d<now);
