@@ -10,10 +10,11 @@ use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub use evm_rpc_types::{
-    Block, BlockTag, ConsensusStrategy, EthMainnetService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
-    GetTransactionCountArgs, Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError, JsonRpcError,
-    LogEntry, MultiRpcResult, Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult,
-    RpcService, RpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
+    Block, BlockTag, ConsensusStrategy, EthMainnetService, EthSepoliaService, FeeHistory,
+    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, Hex, Hex20, Hex256, Hex32, HexByte,
+    HttpOutcallError, JsonRpcError, LogEntry, MultiRpcResult, Nat256, ProviderError, RpcApi,
+    RpcConfig, RpcError, RpcResult, RpcService, RpcServices, SendRawTransactionStatus,
+    TransactionReceipt, ValidationError,
 };
 
 #[async_trait]
