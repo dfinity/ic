@@ -479,6 +479,7 @@ impl UpdateHelper {
                 round,
             );
         }
+        self.deallocation_sender.send(Box::new(clean_canister));
 
         apply_canister_state_changes(
             canister_state_changes,
