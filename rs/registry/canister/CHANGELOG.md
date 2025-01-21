@@ -1,13 +1,19 @@
-# How This File Is Used
+# Changelog
 
-In general, upcoming/unreleased behavior changes are described here. For details
-on the process that this file is part of, see
-`rs/nervous_system/changelog_process.md`.
+Proposals before 2025 are NOT listed in here, because this process was
+introduced later. (We could back fill those later though.)
+
+The process that populates this file is described in
+`rs/nervous_system/changelog_process.md`. In general though, the entries you see
+here were moved from the adjacent `unreleased_changelog.md` file.
 
 
-# Next Upgrade Proposal
+INSERT NEW RELEASES HERE
 
-## Added
+
+# 2025-01-20: Proposal 134904
+
+http://dashboard.internetcomputer.org/proposals/134904
 
 ## Changed
 
@@ -24,10 +30,5 @@ Such behavior is conservative and not strictly necessary since the subnet
 decentralization is not affected when the new node has all properties
 identical as the old node, which is the case if the IPv6 address is unchanged.
 
-## Deprecated
 
-## Removed
-
-## Fixed
-
-## Security
+END
