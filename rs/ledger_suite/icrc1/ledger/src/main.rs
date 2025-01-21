@@ -259,6 +259,10 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
+    } else {
+        Access::with_ledger_mut(|ledger| {
+            ledger.clear_heap_approvals_and_balances();
+        });
     }
 
     let end = ic_cdk::api::instruction_counter();

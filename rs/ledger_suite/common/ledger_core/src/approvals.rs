@@ -66,6 +66,8 @@ pub trait AllowancesData {
     fn len_expirations(&self) -> usize;
 
     fn clear_arrivals(&mut self);
+
+    fn clear_all(&mut self);
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -157,6 +159,12 @@ where
     }
 
     fn clear_arrivals(&mut self) {
+        self.arrival_queue.clear();
+    }
+
+    fn clear_all(&mut self) {
+        self.allowances.clear();
+        self.expiration_queue.clear();
         self.arrival_queue.clear();
     }
 }
