@@ -281,7 +281,7 @@ where
     };
 
     // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,

@@ -87,7 +87,7 @@ pub fn find_lowest_ranked_non_disqualified_proposals(
         .filter(|proposal| !disqualified.contains(&proposal.signature.signer))
     {
         let best_rank = best_proposals.first().map(HasRank::rank);
-        if !best_rank.is_some_and(|rank| rank <= proposal.rank()) {
+        if best_rank.is_none_or(|rank| rank > proposal.rank()) {
             best_proposals = vec![proposal];
         } else if Some(proposal.rank()) == best_rank {
             best_proposals.push(proposal);

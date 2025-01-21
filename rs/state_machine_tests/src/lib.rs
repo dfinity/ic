@@ -422,9 +422,13 @@ fn make_nodes_registry(
         .build();
 
     // Insert initial DKG transcripts
+    let mut high_threshold_transcript = ni_dkg_transcript.clone();
+    high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+    let mut low_threshold_transcript = ni_dkg_transcript;
+    low_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
     let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(ni_dkg_transcript.clone().into()),
-        initial_ni_dkg_transcript_low_threshold: Some(ni_dkg_transcript.into()),
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
         ..Default::default()
     };
     registry_data_provider
@@ -3591,7 +3595,7 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
-        let size = (data.len() + WASM_PAGE_SIZE_IN_BYTES - 1) / WASM_PAGE_SIZE_IN_BYTES;
+        let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state

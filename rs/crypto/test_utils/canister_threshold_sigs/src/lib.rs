@@ -821,7 +821,7 @@ pub mod node {
         pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
@@ -829,7 +829,7 @@ pub mod node {
         pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
@@ -838,7 +838,7 @@ pub mod node {
             &'a self,
             minimum_size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -853,7 +853,7 @@ pub mod node {
             &'a self,
             size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 size <= self.len(),
                 "Requested a random subset with {} elements but there are only {} elements",
@@ -867,7 +867,7 @@ pub mod node {
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
@@ -878,7 +878,7 @@ pub mod node {
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
@@ -889,7 +889,7 @@ pub mod node {
             &'a self,
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_dealers(params)
                 .choose(rng)
                 .expect("empty dealers")
