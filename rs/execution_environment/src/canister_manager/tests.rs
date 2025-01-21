@@ -4277,7 +4277,7 @@ fn canister_version_changes_are_visible() {
 
     let result = test.ingress(canister_id, "version", vec![]);
     let reply = get_reply(result);
-    assert_eq!(reply, vec![2]);
+    assert_eq!(reply, vec![3]);
 }
 
 // This test confirms that we can always create as many canisters as possible if

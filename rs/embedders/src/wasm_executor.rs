@@ -128,9 +128,9 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
     fn abort(self: Box<Self>);
 }
 
-/// Changes in the canister state after a successful Wasm execution.
+/// Changes in the canister's execution state after a successful Wasm execution.
 #[derive(Clone, Debug)]
-pub struct CanisterStateChanges {
+pub struct ExecutionStateChanges {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
 
@@ -139,6 +139,12 @@ pub struct CanisterStateChanges {
 
     /// The state of the stable memory after execution.
     pub stable_memory: Memory,
+}
+
+/// Changes in the canister state after a successful Wasm execution.
+#[derive(Clone, Debug, Default)]
+pub struct CanisterStateChanges {
+    pub execution_state_changes: Option<ExecutionStateChanges>,
 
     pub system_state_changes: SystemStateChanges,
 }
@@ -152,7 +158,7 @@ pub enum WasmExecutionResult {
     Finished(
         SliceExecutionOutput,
         WasmExecutionOutput,
-        Option<CanisterStateChanges>,
+        CanisterStateChanges,
     ),
     Paused(SliceExecutionOutput, Box<dyn PausedWasmExecution>),
 }
@@ -221,7 +227,7 @@ impl WasmExecutor for WasmExecutorImpl {
             instance_or_system_api,
         ) = process(
             func_ref,
-            api_type,
+            api_type.clone(),
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             execution_parameters,
@@ -242,29 +248,29 @@ impl WasmExecutor for WasmExecutorImpl {
             self.emit_state_hashes_for_debugging(&wasm_state_changes, &wasm_execution_output);
         }
 
-        let canister_state_changes = match wasm_state_changes {
-            Some(wasm_state_changes) => {
-                let system_api = match instance_or_system_api {
-                    Ok(instance) => instance.into_store_data().system_api.unwrap(),
-                    Err(system_api) => system_api,
-                };
-                let system_state_changes = system_api.into_system_state_changes();
-                Some(CanisterStateChanges {
-                    globals: wasm_state_changes.globals,
-                    wasm_memory,
-                    stable_memory,
-                    system_state_changes,
-                })
-            }
+        let execution_state_changes = match wasm_state_changes {
+            Some(wasm_state_changes) => Some(ExecutionStateChanges {
+                globals: wasm_state_changes.globals,
+                wasm_memory,
+                stable_memory,
+            }),
             None => None,
         };
+        let system_api = match instance_or_system_api {
+            Ok(instance) => instance.into_store_data().system_api.unwrap(),
+            Err(system_api) => system_api,
+        };
+        let system_state_changes = system_api.into_system_state_changes();
 
         (
             compilation_result,
             WasmExecutionResult::Finished(
                 slice_execution_output,
                 wasm_execution_output,
-                canister_state_changes,
+                CanisterStateChanges {
+                    execution_state_changes,
+                    system_state_changes,
+                },
             ),
         )
     }
@@ -489,7 +495,10 @@ pub fn wasm_execution_error(
             system_api_call_counters: SystemApiCallCounters::default(),
             canister_log: Default::default(),
         },
-        None,
+        CanisterStateChanges {
+            execution_state_changes: None,
+            system_state_changes: SystemStateChanges::default(),
+        },
     )
 }
 
