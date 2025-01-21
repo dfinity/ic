@@ -926,6 +926,84 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
     assert!(gov.should_refresh_cached_upgrade_steps());
 }
 
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_advances_target_version_automatically_is_required() {
+    let version_a = Version {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+    let mut version_b = version_a.clone();
+    version_b.root_wasm_hash = vec![9, 9, 9];
+
+    // Smoke test.
+    assert_ne!(version_a, version_b);
+
+    let make_gov = || -> Governance {
+        let mut env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        add_environment_mock_list_upgrade_steps_call(
+            &mut env,
+            vec![
+                SnsVersion::from(version_a.clone()),
+                SnsVersion::from(version_b.clone()),
+            ],
+        );
+        Governance::new(
+            GovernanceProto {
+                deployed_version: Some(version_a.clone()),
+                cached_upgrade_steps: None,
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        )
+    };
+
+    for (automatically_advance_target_version, expected_target_version) in [
+        (None, None),
+        (Some(false), None),
+        (Some(true), Some(version_b.clone())),
+    ] {
+        let mut gov = make_gov();
+
+        if let Some(parameters) = gov.proto.parameters.as_mut() {
+            parameters.automatically_advance_target_version = automatically_advance_target_version;
+        };
+
+        // Precondition
+        assert_eq!(gov.proto.cached_upgrade_steps, None);
+        assert_eq!(gov.proto.target_version, None);
+
+        // Run code under test and assert intermediate conditions.
+        let deployed_version = gov
+            .try_temporarily_lock_refresh_cached_upgrade_steps()
+            .unwrap();
+        gov.refresh_cached_upgrade_steps(deployed_version).await;
+
+        // Intermediate postcondition.
+        assert_eq!(
+            gov.proto
+                .cached_upgrade_steps
+                .clone()
+                .unwrap()
+                .upgrade_steps
+                .unwrap()
+                .versions,
+            vec![version_a.clone(), version_b.clone(),]
+        );
+
+        // Main postcondition.
+        assert_eq!(gov.proto.target_version, expected_target_version);
+    }
+}
+
 fn add_environment_mock_calls_for_initiate_upgrade(
     env: &mut NativeEnvironment,
     expected_wasm_hash_requested: Vec<u8>,

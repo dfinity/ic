@@ -495,6 +495,7 @@ type NervousSystemParameters = record {
   voting_rewards_parameters : opt VotingRewardsParameters;
   maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
+  automatically_advance_target_version : opt bool;
 };
 
 type Neuron = record {
@@ -798,6 +799,7 @@ type UpgradeStepsReset = record {
 type TargetVersionSet = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  is_advanced_automatically : opt bool;
 };
 
 type TargetVersionReset = record {

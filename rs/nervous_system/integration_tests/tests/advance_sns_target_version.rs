@@ -180,7 +180,8 @@ async fn test_get_upgrade_journal() {
 
     expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet::new(
         None,
-        Some(new_sns_version_2.clone()),
+        new_sns_version_2.clone(),
+        false,
     )));
 
     sns::governance::assert_upgrade_journal(
