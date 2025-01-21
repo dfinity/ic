@@ -115,13 +115,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-
       - name: Set KUBECONFIG
         shell: bash
         run: |
