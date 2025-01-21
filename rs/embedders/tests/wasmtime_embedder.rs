@@ -3032,7 +3032,7 @@ fn large_wasm64_stable_read_write_test() {
     config.feature_flags.wasm64 = FlagStatus::Enabled;
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
-    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+    config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
