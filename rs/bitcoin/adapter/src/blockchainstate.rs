@@ -243,7 +243,8 @@ impl BlockchainState {
         self.block_cache.insert(block_hash, block);
         self.metrics
             .block_cache_size
-            .set(self.get_block_cache_size() as i64);
+            .set(self.get_block_cache_size() as i64); 
+
         self.metrics
             .block_cache_elements
             .set(self.block_cache.len() as i64);

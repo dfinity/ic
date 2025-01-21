@@ -430,7 +430,7 @@ impl BlockchainManager {
         };
 
         let time_taken = request.sent_at.map(|i| i.elapsed()).unwrap_or_default();
-        trace!(
+        info!(
             self.logger,
             "Received block message from {} : Took {:?}sec. Block {:?}",
             addr,
@@ -439,7 +439,10 @@ impl BlockchainManager {
         );
 
         match self.blockchain.lock().unwrap().add_block(block.clone()) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                info!(self.logger, "Added block: {}", block_hash);
+                Ok(())
+            }
             Err(err) => {
                 warn!(
                     self.logger,
