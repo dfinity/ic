@@ -211,20 +211,12 @@ impl AbortableBroadcastChannels {
         rt_handle: &tokio::runtime::Handle,
         node_id: NodeId,
         subnet_id: SubnetId,
-        artifact_pool_config: ArtifactPoolConfig,
-        catch_up_package: &CatchUpPackage,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         message_router: Arc<dyn MessageRouting>,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         time_source: Arc<dyn TimeSource>,
-    ) -> (Self, ArtifactPools, AbortableBroadcastChannelBuilder) {
-        let artifact_pools = ArtifactPools::new(
-            log,
-            metrics_registry,
-            node_id,
-            artifact_pool_config,
-            catch_up_package,
-        );
+        artifact_pools: &ArtifactPools,
+    ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
         let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
         let bouncers = Bouncers::new(
@@ -340,7 +332,6 @@ impl AbortableBroadcastChannels {
                 https_outcalls_outbound_tx,
                 https_outcalls_inbound_rx,
             },
-            artifact_pools,
             new_p2p_consensus,
         )
     }
@@ -392,20 +383,26 @@ pub fn setup_consensus_and_p2p(
 ) {
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
+    let artifact_pools = ArtifactPools::new(
+        log,
+        metrics_registry,
+        node_id,
+        artifact_pool_config,
+        &catch_up_package,
+    );
 
     // Start the IO components (a.k.a. P2P)
-    let (channels, artifact_pools, p2p_builder) = AbortableBroadcastChannels::new(
+    let (channels, p2p_builder) = AbortableBroadcastChannels::new(
         log,
         metrics_registry,
         rt_handle,
         node_id,
         subnet_id,
-        artifact_pool_config,
-        &catch_up_package,
         state_reader.clone(),
         message_router.clone(),
         consensus_pool.clone(),
         time_source.clone(),
+        &artifact_pools,
     );
 
     // StateSync receive side + handler definition
