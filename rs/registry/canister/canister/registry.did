@@ -273,6 +273,11 @@ type RemoveNodeDirectlyPayload = record { node_id : principal };
 
 type RemoveNodeOperatorsPayload = record {
   node_operators_to_remove : vec blob;
+  node_operator_principals_to_remove : opt NodeOperatorPrincipals;
+};
+
+type NodeOperatorPrincipals = record {
+  principals : vec principal;
 };
 
 type RemoveNodesPayload = record { node_ids : vec principal };

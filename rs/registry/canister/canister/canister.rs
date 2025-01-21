@@ -10,7 +10,7 @@ use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
@@ -43,6 +43,7 @@ use registry_canister::{
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
+        do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
