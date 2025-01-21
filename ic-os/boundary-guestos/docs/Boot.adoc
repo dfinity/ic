@@ -85,7 +85,7 @@ files in the `config` partition as well as payload store are created.
 
 == Set up ssh account keys
 
-Service: `setup-ssh-account-keys.services`, script `/opt/ic/bin/setup-ssh-account-keys.sh`.
+Service: `setup-ssh-user-keys.services`, script `/opt/ic/bin/setup-ssh-user-keys.sh`.
 Depends on `bootstrap-ic-node.service`.
 
 The `authorized_keys` files for the role accounts are taken from the

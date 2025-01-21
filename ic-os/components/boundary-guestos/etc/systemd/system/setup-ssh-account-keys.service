@@ -9,7 +9,7 @@ WantedBy=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-ssh-account-keys.sh
+ExecStart=/opt/ic/bin/setup-ssh-user-keys.sh
 
 # All services that networking depends on log their outputs to the console 
 # and are piped to the host terminal if the verbose flag is enabled.
