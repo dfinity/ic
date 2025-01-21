@@ -1754,8 +1754,7 @@ fn clear_block_processing_status(block_index: BlockIndex) {
 /// Regardless of whether that ledger call succeeds, Err is returned, but the
 /// value in the Err depends on how the ledger call turns out.
 ///
-/// If the ledger call fails failed, the user can retry whatever they were
-/// trying to do.
+/// If the ledger call failed, the user can retry.
 ///
 /// Like the rest of this canister, uses blocks_notified for "journaling". More
 /// precisely, before calling ledger, there are two things:
@@ -1857,7 +1856,8 @@ async fn issue_automatic_refund_if_memo_not_offerred(
                 reason: reason_for_refund,
             }),
 
-            // This should not be possible, since we already verified that memo is in MEANINGFUL_MEMOS.
+            // There is no (known) way to reach this case, since we already
+            // verified that memo is in MEANINGFUL_MEMOS.
             NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
                 Err(NotifyError::InvalidTransaction(format!(
                     "Block has already been processed: {:?}",
