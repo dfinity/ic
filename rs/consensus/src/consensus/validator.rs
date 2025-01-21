@@ -1342,13 +1342,13 @@ impl Validator {
             .random_beacon()
             .get_by_height(last_beacon.content.height().increment())
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon is not correct".to_string(),
                     ))
                 } else {
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
@@ -1378,14 +1378,13 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
-                        "The parent hash of the beacon was not correct".to_string(),
+                        "The parent hash of the beacon share is not correct".to_string(),
                     ))
                 } else {
-                    self.metrics.validation_random_beacon_shares_count.add(1);
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
@@ -1490,7 +1489,6 @@ impl Validator {
                     // Remove if we already have a validated tape at this height
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
-                    self.metrics.validation_random_tape_shares_count.add(1);
                     let verification = self.verify_artifact(pool_reader, &tape);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
