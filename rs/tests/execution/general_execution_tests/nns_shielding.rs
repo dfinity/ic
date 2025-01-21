@@ -94,13 +94,20 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
     let agent = node.build_default_agent();
     let effective_canister_id = node.get_last_canister_id_in_allocation_ranges();
     block_on(async move {
-        let canister_id =
+        let mut canister_id =
             UniversalCanister::new_with_cycles(&agent, effective_canister_id, *INITIAL_CYCLES)
                 .await
                 .unwrap()
                 .canister_id();
-        // Check that 'canister_id' is not 'CYCLES_MINTING_CANISTER_ID'.
-        assert_ne!(canister_id, CYCLES_MINTING_CANISTER_ID.into());
+        // Make sure that 'canister_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+        if canister_id == CYCLES_MINTING_CANISTER_ID.into() {
+            let effective_canister_id = node.get_last_canister_id_in_allocation_ranges();
+            canister_id =
+                UniversalCanister::new_with_cycles(&agent, effective_canister_id, *INITIAL_CYCLES)
+                    .await
+                    .unwrap()
+                    .canister_id();
+        }
         let before_balance = get_balance(&canister_id, &agent).await;
         let res = agent
             .update(&canister_id, "update")
