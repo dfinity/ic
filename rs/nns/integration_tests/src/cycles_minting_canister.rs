@@ -903,6 +903,9 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     .unwrap();
     let results = (0..100)
         .map(|_i| {
+            // Launch (another) notify_create_canister call, but crucially, do
+            // NOT wait for it to complete. That takes place a little further
+            // down.
             state_machine
                 .send_ingress_safe(
                     *TEST_USER1_PRINCIPAL,
