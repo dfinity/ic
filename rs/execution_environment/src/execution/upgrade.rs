@@ -884,7 +884,7 @@ fn determine_main_memory_handling(
     let old_state_uses_orthogonal_persistence = || {
         old_state
             .as_ref()
-            .map_or(false, expects_enhanced_orthogonal_persistence)
+            .is_some_and(expects_enhanced_orthogonal_persistence)
     };
     let new_state_uses_classical_persistence = || {
         new_state_candidate.is_ok()

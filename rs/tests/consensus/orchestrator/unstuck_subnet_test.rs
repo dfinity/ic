@@ -205,7 +205,7 @@ fn test(test_env: TestEnv) {
 
 fn have_sha_errors(session: &Session) -> bool {
     let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
-    execute_bash_command(session, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
+    execute_bash_command(session, cmd).is_ok_and(|res| res.trim().parse::<i32>().unwrap() > 0)
 }
 
 fn main() -> Result<()> {

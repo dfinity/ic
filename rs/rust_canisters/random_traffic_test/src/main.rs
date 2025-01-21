@@ -316,8 +316,25 @@ async fn heartbeat() {
 /// - flipping the coin tells us to do so.
 /// - if it tells us not to do so but the attempted downstream call fails for any reason.
 #[update]
+<<<<<<< HEAD
 async fn handle_call(msg: Message) -> Reply {
     // Make downstream calls as long as flipping the coin tells us to do so.
+=======
+async fn handle_call(msg: Message) -> Vec<u8> {
+    // Samples a weighted binomial distribution to decide whether to make a downstream call (true)
+    // or reply (false). Defaults to `false` for bad weights (e.g. both 0).
+    fn should_make_downstream_call() -> bool {
+        RNG.with_borrow_mut(|rng| {
+            WeightedIndex::new([CALL_WEIGHT.get(), REPLY_WEIGHT.get()])
+                .is_ok_and(|dist| dist.sample(rng) == 0)
+        })
+    }
+
+    // Make downstream calls until
+    // - sampling the distribution tells us to stop.
+    // - setting up a call fails.
+    // - a downstream call is rejected for any reason.
+>>>>>>> 9e2784a0d668048a457f90c593269161e7cbb2a2
     while should_make_downstream_call() {
         let (future, record_index) = setup_call(msg.call_tree_id, msg.call_depth + 1);
 
