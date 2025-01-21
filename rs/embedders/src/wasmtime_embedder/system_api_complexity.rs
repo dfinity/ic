@@ -1,7 +1,6 @@
 ///
 /// System API Calls Complexity Module
 ///
-
 /// The Fixed System API Overhead (in Instructions)
 ///
 /// The cost of the System API calls is proportional to the work the call performs.

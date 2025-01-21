@@ -243,9 +243,7 @@ fn compile_inner(
 
     let is_wasm64 = module
         .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
-        .map_or(false, |export| {
-            export.memory().map_or(false, |mem| mem.is_64())
-        });
+        .is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
 
     let serialized_module = SerializedModule::new(
         &module,
