@@ -22,19 +22,19 @@ import xml.etree.ElementTree as ET
 
 
 # The ID type prefix for digital currencies.
-DIGITAL_CURRENCY_TYPE_PREFIX = 'Digital Currency Address - '
+DIGITAL_CURRENCY_TYPE_PREFIX = "Digital Currency Address - "
 
 # The blocked addresses are stored in this Rust file by default.
-DEFAULT_BLOCKLIST_FILENAME = 'blocklist.rs'
+DEFAULT_BLOCKLIST_FILENAME = "blocklist.rs"
 
 # This prefix is needed for each element in the XML tree.
-PREFIX = '{https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML}'
+PREFIX = "{https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML}"
+
 
 # Handlers for different blocklists.
 class BitcoinBlocklistHandler:
-
     def preamble(self):
-        return '''#[cfg(test)]
+        return """#[cfg(test)]
     mod tests;
 
     use bitcoin::Address;
@@ -44,28 +44,28 @@ class BitcoinBlocklistHandler:
 
     /// BTC is not accepted from nor sent to addresses on this list.
     /// NOTE: Keep it sorted!
-    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n'''
+    pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[\n"""
 
     def postamble(self):
-        return '''pub fn is_blocked(address: &Address) -> bool {
+        return """pub fn is_blocked(address: &Address) -> bool {
     BTC_ADDRESS_BLOCKLIST
         .binary_search(&address.to_string().as_ref())
         .is_ok()
-}'''
+}"""
 
     def format_address(self, address):
         return f'"{address}"'
 
     def currency_symbol(self):
-        return 'XBT'
+        return "XBT"
 
     def sort(self, addresses):
         return sorted(addresses)
 
-class EthereumBlocklistHandler:
 
+class EthereumBlocklistHandler:
     def preamble(self):
-        return '''#[cfg(test)]
+        return """#[cfg(test)]
     mod tests;
 
     use ic_ethereum_types::Address;
@@ -81,18 +81,18 @@ class EthereumBlocklistHandler:
 
     /// ETH is not accepted from nor sent to addresses on this list.
     /// NOTE: Keep it sorted!
-    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n'''
+    const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n"""
 
     def postamble(self):
-        return '''pub fn is_blocked(address: &Address) -> bool {
+        return """pub fn is_blocked(address: &Address) -> bool {
     ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
-}'''
+}"""
 
     def format_address(self, address):
         return f'ethereum_address!("{address[2:]}")'
 
     def currency_symbol(self):
-        return 'ETH'
+        return "ETH"
 
     def sort(self, addresses):
         return sorted(addresses, key=lambda x: int(x[2:], 16))
@@ -105,7 +105,7 @@ def extract_addresses(handler, xml_file_path):
     addresses = []
 
     # Iterate over all ID elements.
-    for id_item in root.findall(PREFIX + 'sdnEntry/' + PREFIX + 'idList' + '/' + PREFIX + 'id'):
+    for id_item in root.findall(PREFIX + "sdnEntry/" + PREFIX + "idList" + "/" + PREFIX + "id"):
         # Put the ID components into a dictionary for simpler handling.
         id_dict = {}
         for sub_item in id_item:
@@ -113,8 +113,8 @@ def extract_addresses(handler, xml_file_path):
                 id_dict[sub_item.tag] = sub_item.text
 
         # Read the address, if any.
-        if id_dict[PREFIX + 'idType'] == DIGITAL_CURRENCY_TYPE_PREFIX + handler.currency_symbol():
-            address = id_dict[PREFIX + 'idNumber']
+        if id_dict[PREFIX + "idType"] == DIGITAL_CURRENCY_TYPE_PREFIX + handler.currency_symbol():
+            address = id_dict[PREFIX + "idNumber"]
             addresses.append(address)
 
     # Remove duplicates.
@@ -123,31 +123,35 @@ def extract_addresses(handler, xml_file_path):
     addresses = handler.sort(addresses)
     return addresses
 
+
 def store_blocklist(blocklist_handler, addresses, filename):
-    blocklist_file = open(filename, 'w')
+    blocklist_file = open(filename, "w")
     blocklist_file.write(blocklist_handler.preamble())
     for address in addresses:
-        blocklist_file.write('    ' + blocklist_handler.format_address(address) + ',\n')
+        blocklist_file.write("    " + blocklist_handler.format_address(address) + ",\n")
         print(address)
-    blocklist_file.write('];\n\n')
+    blocklist_file.write("];\n\n")
     blocklist_file.write(blocklist_handler.postamble())
     blocklist_file.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--currency', '-c', type=str, required=True, choices=['BTC', 'ETH'], help='select the currency')
-    parser.add_argument('--input', '-i', type=str, required=True, help='read the provided SDN.XML file')
-    parser.add_argument('--output', '-o', type=str, default=DEFAULT_BLOCKLIST_FILENAME, help='write the output to the provided path')
+    parser.add_argument("--currency", "-c", type=str, required=True, choices=["BTC", "ETH"], help="select the currency")
+    parser.add_argument("--input", "-i", type=str, required=True, help="read the provided SDN.XML file")
+    parser.add_argument(
+        "--output", "-o", type=str, default=DEFAULT_BLOCKLIST_FILENAME, help="write the output to the provided path"
+    )
 
     args = parser.parse_args()
 
-    if args.currency == 'BTC':
+    if args.currency == "BTC":
         blocklist_handler = BitcoinBlocklistHandler()
     else:
         blocklist_handler = EthereumBlocklistHandler()
-    print('Extracting addresses from ' + args.input + '...')
+    print("Extracting addresses from " + args.input + "...")
     addresses = extract_addresses(blocklist_handler, args.input)
-    print('Done. Found ' + str(len(addresses)) + ' addresses.')
-    print('Storing the addresses in the file ' + args.output + '...')
+    print("Done. Found " + str(len(addresses)) + " addresses.")
+    print("Storing the addresses in the file " + args.output + "...")
     store_blocklist(blocklist_handler, addresses, args.output)
-    print('Done.')
+    print("Done.")
