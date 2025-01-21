@@ -5989,7 +5989,7 @@ struct GovernanceCanisterClient(NnsCanisterClient);
 struct RootCanisterClient(NnsCanisterClient);
 
 fn is_mainnet(url: &Url) -> bool {
-    url.domain().map_or(false, |domain| {
+    url.domain().is_some_and(|domain| {
         IC_DOMAINS
             .iter()
             .any(|&ic_domain| domain.contains(ic_domain))

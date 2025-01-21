@@ -1,4 +1,4 @@
-/// Common test function for a couple of catch up tests.
+//! Common test function for a couple of catch up tests.
 
 const DKG_INTERVAL: u64 = 150;
 const CATCH_UP_RETRIES: u64 = 40;
