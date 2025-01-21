@@ -3,18 +3,19 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
+    artifact::ConsensusMessageId,
     consensus::ConsensusMessageHash,
-    messages::{SignedIngress, SignedRequestBytes},
+    crypto::{CryptoHash, CryptoHashOf},
+    messages::SignedRequestBytes,
 };
 
-use bytes::Bytes;
+use super::SignedIngressId;
 
 /// Parameters for the `/block/ingress/` rpc requests.
 #[derive(Clone, Debug, PartialEq)]
 // FIXME(kpop): check that it's a block proposal indeed
 pub(crate) struct GetIngressMessageInBlockRequest {
-    pub(crate) ingress_message_id: IngressMessageId,
+    pub(crate) signed_ingress_id: SignedIngressId,
     pub(crate) block_proposal_id: ConsensusMessageId,
 }
 
@@ -30,6 +31,7 @@ impl TryFrom<pb::GetIngressMessageInBlockRequest> for GetIngressMessageInBlockRe
             value.block_proposal_id,
             "GetIngressMessageInBlockRequest::block_proposal_id",
         )?;
+        let ingress_bytes_hash = CryptoHashOf::from(CryptoHash(value.ingress_bytes_hash));
 
         match &consensus_message_id.hash {
             ConsensusMessageHash::BlockProposal(_) => {}
@@ -42,8 +44,11 @@ impl TryFrom<pb::GetIngressMessageInBlockRequest> for GetIngressMessageInBlockRe
         };
 
         Ok(Self {
-            ingress_message_id,
             block_proposal_id: consensus_message_id,
+            signed_ingress_id: SignedIngressId {
+                ingress_message_id,
+                ingress_bytes_hash,
+            },
         })
     }
 }
@@ -51,8 +56,9 @@ impl TryFrom<pb::GetIngressMessageInBlockRequest> for GetIngressMessageInBlockRe
 impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockRequest {
     fn from(value: GetIngressMessageInBlockRequest) -> Self {
         Self {
-            ingress_message_id: Some(value.ingress_message_id.into()),
+            ingress_message_id: Some(value.signed_ingress_id.ingress_message_id.into()),
             block_proposal_id: Some(value.block_proposal_id.into()),
+            ingress_bytes_hash: value.signed_ingress_id.ingress_bytes_hash.get().0,
         }
     }
 }
@@ -60,23 +66,23 @@ impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockReque
 /// `/block/ingress/` rpc response.
 #[derive(Debug, PartialEq)]
 pub(crate) struct GetIngressMessageInBlockResponse {
-    pub(crate) ingress_message: SignedIngress,
+    pub(crate) serialized_ingress_message: SignedRequestBytes,
 }
 
 impl TryFrom<pb::GetIngressMessageInBlockResponse> for GetIngressMessageInBlockResponse {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::GetIngressMessageInBlockResponse) -> Result<Self, Self::Error> {
-        let ingress_message = SignedIngress::try_from(Bytes::from(value.ingress_message))?;
-
-        Ok(Self { ingress_message })
+        Ok(Self {
+            serialized_ingress_message: SignedRequestBytes::from(value.ingress_message),
+        })
     }
 }
 
 impl From<GetIngressMessageInBlockResponse> for pb::GetIngressMessageInBlockResponse {
     fn from(value: GetIngressMessageInBlockResponse) -> Self {
         pb::GetIngressMessageInBlockResponse {
-            ingress_message: SignedRequestBytes::from(value.ingress_message).into(),
+            ingress_message: value.serialized_ingress_message.into(),
         }
     }
 }
@@ -84,6 +90,7 @@ impl From<GetIngressMessageInBlockResponse> for pb::GetIngressMessageInBlockResp
 #[cfg(test)]
 mod tests {
     use ic_types::{
+        artifact::IngressMessageId,
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
         Height,
@@ -95,7 +102,10 @@ mod tests {
     #[test]
     fn get_ingress_message_in_block_request_serialization_test() {
         let request = GetIngressMessageInBlockRequest {
-            ingress_message_id: IngressMessageId::new(UNIX_EPOCH, message_test_id(42)),
+            signed_ingress_id: SignedIngressId {
+                ingress_message_id: IngressMessageId::new(UNIX_EPOCH, message_test_id(42)),
+                ingress_bytes_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            },
             block_proposal_id: ConsensusMessageId {
                 hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::from(CryptoHash(
                     Vec::new(),

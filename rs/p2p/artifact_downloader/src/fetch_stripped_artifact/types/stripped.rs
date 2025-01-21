@@ -3,14 +3,16 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
+    artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
     consensus::ConsensusMessage,
 };
+
+use super::SignedIngressId;
 
 /// Stripped version of the [`IngressPayload`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct StrippedIngressPayload {
-    pub(crate) ingress_messages: Vec<IngressMessageId>,
+    pub(crate) ingress_messages: Vec<SignedIngressId>,
 }
 
 /// Stripped version of the [`BlockProposal`].
@@ -76,12 +78,7 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 ingress_messages: value
                     .ingress_messages
                     .into_iter()
-                    .map(|stripped_ingress| {
-                        try_from_option_field(
-                            stripped_ingress.stripped,
-                            "StrippedIngressMessage::stripped",
-                        )
-                    })
+                    .map(SignedIngressId::try_from)
                     .collect::<Result<Vec<_>, _>>()?,
             },
             unstripped_consensus_message_id: try_from_option_field(
@@ -102,8 +99,9 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 .stripped_ingress_payload
                 .ingress_messages
                 .into_iter()
-                .map(|ingress_id| pb::StrippedIngressMessage {
-                    stripped: Some(ingress_id.into()),
+                .map(|signed_ingress_id| pb::StrippedIngressMessage {
+                    stripped: Some(signed_ingress_id.ingress_message_id.into()),
+                    ingress_bytes_hash: signed_ingress_id.ingress_bytes_hash.get().0,
                 })
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),

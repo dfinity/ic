@@ -1548,6 +1548,8 @@ pub struct GetIngressMessageInBlockRequest {
     pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
     pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetIngressMessageInBlockResponse {
@@ -1567,6 +1569,8 @@ pub struct StrippedBlockProposal {
 pub struct StrippedIngressMessage {
     #[prost(message, optional, tag = "1")]
     pub stripped: ::core::option::Option<IngressMessageId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]

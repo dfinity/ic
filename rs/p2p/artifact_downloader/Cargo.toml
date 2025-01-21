@@ -13,6 +13,7 @@ axum = { workspace = true }
 backoff = { workspace = true }
 bytes = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-consensus-manager = { path = "../consensus_manager" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
