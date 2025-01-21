@@ -573,7 +573,7 @@ async fn execute_transfer(
     memo: Option<Memo>,
     created_at_time: Option<u64>,
 ) -> Result<Nat, CoreTransferError<Tokens>> {
-    let block_idx = execute_transfer_not_async(
+    let _block_idx = execute_transfer_not_async(
         from_account,
         to,
         spender,
@@ -588,7 +588,7 @@ async fn execute_transfer(
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
-    Ok(Nat::from(block_idx))
+    Ok(Nat::from(instruction_counter()))
 }
 
 fn execute_transfer_not_async(

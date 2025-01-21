@@ -13,10 +13,10 @@ use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
-    TOKEN_SYMBOL,
+    send_approval, send_transfer, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD,
+    BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER,
+    NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
+    TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -1538,6 +1538,21 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
 
 use std::time::Instant;
 
+fn max_length_principal(index: u32) -> [u8; 29] {
+    const MAX_PRINCIPAL: [u8; 29] = [1_u8; 29];
+    let bytes: [u8; 4] = index.to_be_bytes();
+    let mut principal = MAX_PRINCIPAL;
+    principal[0] = bytes[0];
+    principal[1] = bytes[1];
+    principal[2] = bytes[2];
+    principal[3] = bytes[3];
+    principal
+}
+
+const MEMO: [u8; 15] = [
+    0x82_u8, 0x00, 0x83, 0x54, 0x04, 0xc5, 0x63, 0x84, 0x17, 0x78, 0xc9, 0x3f, 0x41, 0xdc, 0x1a,
+];
+
 #[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_tx_perf() {
@@ -1593,17 +1608,37 @@ fn test_tx_perf() {
         let res = Decode!(&assert_reply(result), Result<u64, String>).unwrap();
         match res {
             Ok(x) => {
-                if (start + num) % 100_000 == 0 {
-                    println!(
-                        "{}, {}, {}",
-                        start + num,
-                        after.duration_since(before).as_millis(),
-                        x
-                    );
-                }
-                return x;
+                // if (start + num) % 100_000 == 0 {
+                //     println!(
+                //         "{}, {}, {}",
+                //         start + num,
+                //         after.duration_since(before).as_millis(),
+                //         x
+                //     );
+                // }
             }
             Err(e) => panic!("failed with {e}"),
+        }
+
+        let now = ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(
+            system_time_to_nanos(env.time()),
+        )
+        .as_nanos_since_unix_epoch();
+        let to = Account {
+            owner: Principal::from_slice(max_length_principal(666).as_slice()),
+            subaccount: Some([11_u8; 32]),
+        };
+        let args = TransferArg {
+            from_subaccount: Some([11_u8; 32]),
+            to,
+            fee: Some(Nat::from(1u64)),
+            amount: Nat::from(1u64),
+            memo: Some(MEMO.to_vec().into()),
+            created_at_time: Some(now),
+        };
+        let instructions_tx = send_transfer(&env, canister_id, from.owner, &args).unwrap();
+        if (start + num) % 60_000 == 0 {
+            println!("{}, {instructions_tx}", start + num);
         }
     };
 
@@ -1613,10 +1648,10 @@ fn test_tx_perf() {
         }
     };
 
-    let _balances_count = send_all(100_000, 20_000, "add_accounts");
+    let _balances_count = send_all(100_000_000, 10_000, "add_accounts");
 
     env.upgrade_canister(canister_id, ledger_wasm(), Encode!().unwrap())
-        .expect("Unable to upgrade ledger");    
+        .expect("Unable to upgrade ledger");
 }
 
 #[cfg(not(feature = "u256-tokens"))]

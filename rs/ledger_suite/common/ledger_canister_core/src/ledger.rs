@@ -309,18 +309,18 @@ where
     );
     let block_timestamp = block.timestamp();
 
-    let height = ledger
-        .blockchain_mut()
-        .add_block(block.clone())
-        .expect("failed to add block");
-    let last_hash = ledger.blockchain().last_hash.unwrap();
+    // let height = ledger
+    //     .blockchain_mut()
+    //     .add_block(block.clone())
+    //     .expect("failed to add block");
+    // let last_hash = ledger.blockchain().last_hash.unwrap();
 
-    // let height = ledger.archiveless_blockchain().len();
-    // let _height_stable = ledger
-    //     .archiveless_blockchain_mut()
-    //     .add_block(height, block.encode())
-    //     .expect("failed to add block to stable blockchain");
-    // let last_hash = ledger.archiveless_blockchain().last_hash().unwrap();
+    let height = ledger.archiveless_blockchain().len();
+    let _height_stable = ledger
+        .archiveless_blockchain_mut()
+        .add_block(height, block.encode())
+        .expect("failed to add block to stable blockchain");
+    let last_hash = ledger.archiveless_blockchain().last_hash().unwrap();
 
     // assert_eq!(height, height_stable);
     if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
