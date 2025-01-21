@@ -309,7 +309,7 @@ pub fn active_high_threshold_committee(
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            let transcript = transcript.expect("No active high treshold transcript available");
+            let transcript = transcript.expect("No active high threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),

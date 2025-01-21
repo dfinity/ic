@@ -276,7 +276,7 @@ fn as_next_transcripts(
 
     for (tag, transcript) in summary.current_transcripts().iter() {
         if !next_transcripts.contains_key(tag) {
-            warn!(logger, "Resusing current transcript for tag {:?}", tag);
+            warn!(logger, "Reusing current transcript for tag {:?}", tag);
             next_transcripts.insert(tag.clone(), transcript.clone());
         }
     }
