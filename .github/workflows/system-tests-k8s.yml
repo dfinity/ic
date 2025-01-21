@@ -110,7 +110,7 @@ jobs:
     timeout-minutes: 150
     needs: [system-tests-k8s]
     # always run after 'system-tests-k8s' job but on schedule event only
-    if: ${{ always() && github.event_name == 'schedule' }}
+    # if: ${{ always() && github.event_name == 'schedule' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
