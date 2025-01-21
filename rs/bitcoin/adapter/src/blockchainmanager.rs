@@ -5,13 +5,10 @@ use crate::{
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
-    block::Header as BlockHeader,
-    hashes::Hash as _,
-    p2p::{
+    bip152::HeaderAndShortIds, block::Header as BlockHeader, hashes::Hash as _, p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
-    },
-    Block, BlockHash,
+    }, Block, BlockHash
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -338,7 +335,7 @@ impl BlockchainManager {
                 return Ok(());
             }
         };
-
+        let mut success = false;
         let maybe_locators = {
             let mut blockchain_state = self.blockchain.lock().unwrap();
             let prev_tip_height = blockchain_state.get_active_chain_tip().height;
@@ -385,6 +382,7 @@ impl BlockchainManager {
                     Some((blockchain_state.locator_hashes(), stop_hash))
                 }
                 None => {
+                    success = true;
                     if let Some(last) = maybe_last_header {
                         // If the headers length is less than the max headers size (2000), it is likely that the end
                         // of the chain has been reached.
@@ -404,6 +402,10 @@ impl BlockchainManager {
             self.send_getheaders(channel, addr, locators);
         } else {
             self.getheaders_requests.remove(addr);
+        }
+
+        if success {
+            self.enqueue_new_blocks_to_download(headers.to_vec());
         }
 
         Ok(())
@@ -534,13 +536,11 @@ impl BlockchainManager {
                 }
             }
         }
-        println!("before if");
 
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
         }
-        println!("after if");
 
         let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
 
@@ -568,7 +568,6 @@ impl BlockchainManager {
             requests_sent_to_a.cmp(requests_sent_to_b)
         });
 
-        println!("entering loop");
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
         for peer in peer_info {
@@ -602,9 +601,6 @@ impl BlockchainManager {
                 peer.socket,
                 selected_inventory
             );
-
-
-            println!("get data sent");
 
             //Send 'getdata' request for the inventory to the peer.
             channel

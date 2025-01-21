@@ -217,8 +217,6 @@ impl BlockchainState {
             .get_mut(&header.prev_blockhash)
             .ok_or(AddHeaderError::PrevHeaderNotCached(header.prev_blockhash))?;
 
-        
-
         // header is fully  valid. 
 
         let cached_header = HeaderNode {
