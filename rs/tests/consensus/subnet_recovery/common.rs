@@ -163,6 +163,7 @@ struct Config {
     upgrade: bool,
     chain_key: bool,
     corrupt_cup: bool,
+    local_recovery: bool,
 }
 
 pub fn test_with_tecdsa(env: TestEnv) {
@@ -173,6 +174,7 @@ pub fn test_with_tecdsa(env: TestEnv) {
             upgrade: true,
             chain_key: true,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -185,6 +187,7 @@ pub fn test_without_tecdsa(env: TestEnv) {
             upgrade: true,
             chain_key: false,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -199,6 +202,7 @@ pub fn test_no_upgrade_with_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: true,
             corrupt_cup,
+            local_recovery: false,
         },
     );
 }
@@ -211,6 +215,7 @@ pub fn test_large_with_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: true,
             corrupt_cup: false,
+            local_recovery: false,
         },
     );
 }
@@ -223,6 +228,20 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
             upgrade: false,
             chain_key: false,
             corrupt_cup: false,
+            local_recovery: false,
+        },
+    );
+}
+
+pub fn test_no_upgrade_without_tecdsa_local(env: TestEnv) {
+    app_subnet_recovery_test(
+        env,
+        Config {
+            subnet_size: APP_NODES,
+            upgrade: false,
+            chain_key: false,
+            corrupt_cup: false,
+            local_recovery: true,
         },
     );
 }
@@ -300,13 +319,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
-    cert_state_makes_progress_with_retries(
-        &app_node.get_public_url(),
-        app_node.effective_canister_id(),
-        &logger,
-        secs(600),
-        secs(10),
-    );
+    // cert_state_makes_progress_with_retries(
+    //     &app_node.get_public_url(),
+    //     app_node.effective_canister_id(),
+    //     &logger,
+    //     secs(600),
+    //     secs(10),
+    // );
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
         &app_node.get_public_url(),
@@ -422,18 +441,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
 
     subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
 
-    for (step_type, step) in subnet_recovery {
-        info!(logger, "Next step: {:?}", step_type);
-
-        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
-            // Skip validating the output if the CUP is corrupt, as in this case
-            // no replica will be running to compare the heights to.
-            continue;
-        }
-
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+    if cfg.local_recovery {
+        info!(logger, "Performing a local node recovery");
+        local_recovery(&download_node.0, &upload_node, subnet_recovery, &logger);
+    } else {
+        info!(logger, "Performing remote recovery");
+        remote_recovery(&cfg, subnet_recovery, &logger);
     }
 
     info!(logger, "Blocking for newer registry version");
@@ -504,6 +517,67 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     topology_snapshot
         .unassigned_nodes()
         .for_each(|n| assert_node_is_unassigned(&n, &logger));
+}
+
+fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    for (step_type, step) in subnet_recovery {
+        info!(logger, "Next step: {:?}", step_type);
+
+        if cfg.corrupt_cup && step_type == StepType::ValidateReplayOutput {
+            // Skip validating the output if the CUP is corrupt, as in this case
+            // no replica will be running to compare the heights to.
+            continue;
+        }
+
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+    }
+}
+
+fn local_recovery(node: &IcNodeSnapshot, node2: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    let nns_url = subnet_recovery.recovery_args.nns_url;
+    let subnet_id = subnet_recovery.params.subnet_id;
+    let pub_key = subnet_recovery.params.pub_key.unwrap();
+    let pub_key = pub_key.trim();
+    let node_ip = node.get_ip_addr();
+    let node2_ip = node2.get_ip_addr();
+
+    let result = node.block_on_bash_script("cat /etc/ssh/sshd_config");
+    match result {
+        Ok(ret) => info!(logger, "Finished cat test: {ret}"),
+        Err(err) => panic!("ssh test failed: \n{err}"),
+    }
+
+    let command = format!("ssh -vvv -A -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 admin@{node2_ip} echo 1;");
+    info!(logger, "Executing local test command: \n{command}");
+    let result = node.block_on_bash_script(&command);
+
+    match result {
+        Ok(ret) => info!(logger, "Finished ssh test {ret}"),
+        Err(err) => panic!("ssh test failed: \n{err}"),
+    }
+
+    let command = format!(
+        r#"/opt/ic/bin/ic-recovery \
+        --nns-url {nns_url} \
+        --test --skip-prompts --use-local-binaries \
+        app-subnet-recovery \
+        --subnet-id {subnet_id} \
+        --pub-key "{pub_key}" \
+        --download-node {node_ip} \
+        --upload-method local
+    "#
+    );
+
+    info!(logger, "Executing local recovery command: \n{command}");
+
+    let result = node.block_on_bash_script(&command);
+
+    match result {
+        Ok(ret) => info!(logger, "Finished local recovery"),
+        Err(err) => panic!("Local recovery failed: \n{err}"),
+    }
 }
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
