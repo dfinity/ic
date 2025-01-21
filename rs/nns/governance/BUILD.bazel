@@ -13,6 +13,9 @@ DID_FILES = glob([
 ])
 
 exports_files(
+    # Notice that governance.proto is NOT included. This is very intentional. We
+    # only use that for storing things to stable memory, not for communication
+    # with clients.
     DID_FILES,
     visibility = [
         "//visibility:public",
