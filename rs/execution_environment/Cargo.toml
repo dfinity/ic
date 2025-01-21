@@ -83,6 +83,7 @@ itertools = { workspace = true }
 libflate = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
+regex = { workspace = true }
 test-strategy = "0.3.1"
 wasmparser = { workspace = true }
 wat = { workspace = true }
