@@ -29,7 +29,6 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
 };
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{AccumulatedPriority, CanisterId, NumBytes, NumInstructions};
@@ -1579,10 +1578,7 @@ impl SandboxedExecutionController {
     ) -> CanisterStateChanges {
         // If the execution has failed, then we don't apply any changes.
         if exec_output.wasm.wasm_result.is_err() {
-            return CanisterStateChanges {
-                execution_state_changes: None,
-                system_state_changes: SystemStateChanges::default(),
-            };
+            return CanisterStateChanges::default();
         }
 
         let StateModifications {

@@ -469,6 +469,7 @@ impl UpdateHelper {
                 clean_canister.canister_id(),
                 err,
             );
+            self.deallocation_sender.send(Box::new(clean_canister));
             // Perf counter: no need to update the call context, as it won't be saved.
             return finish_err(
                 clean_canister,
@@ -478,7 +479,6 @@ impl UpdateHelper {
                 round,
             );
         }
-        self.deallocation_sender.send(Box::new(clean_canister));
 
         apply_canister_state_changes(
             canister_state_changes,

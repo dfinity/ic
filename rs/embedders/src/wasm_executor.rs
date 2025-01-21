@@ -142,7 +142,7 @@ pub struct ExecutionStateChanges {
 }
 
 /// Changes in the canister state after a successful Wasm execution.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CanisterStateChanges {
     pub execution_state_changes: Option<ExecutionStateChanges>,
 

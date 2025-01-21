@@ -129,7 +129,7 @@ pub fn execute_replicated_query(
 
     let request_metadata = match &req {
         CanisterCall::Request(request) => request.metadata.for_downstream_call(),
-        _ => RequestMetadata::for_new_call_tree(time),
+        CanisterCall::Ingress(_) => RequestMetadata::for_new_call_tree(time),
     };
     let call_context_id = canister
         .system_state
