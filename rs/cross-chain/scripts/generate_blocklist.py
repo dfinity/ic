@@ -1,5 +1,5 @@
-import xml.etree.ElementTree as ET
 import argparse
+import xml.etree.ElementTree as ET
 
 # The following steps need to be carried out to update the blocklist for BTC or ETH.
 #
