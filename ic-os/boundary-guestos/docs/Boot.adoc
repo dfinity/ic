@@ -20,7 +20,7 @@ service are started in the IC-OS boot sequence:
 
 - Config injection
 
-- Set up ssh account keys
+- Set up ssh user keys
 
 - Generate network configuration
 
@@ -83,7 +83,7 @@ USB stick" attached to the VM that contains a tar file with initial configuratio
 for parts of the system (see link:ConfigStore{outfilesuffix}[config store] for a description). Required
 files in the `config` partition as well as payload store are created.
 
-== Set up ssh account keys
+== Set up ssh user keys
 
 Service: `setup-ssh-user-keys.services`, script `/opt/ic/bin/setup-ssh-user-keys.sh`.
 Depends on `bootstrap-ic-node.service`.

@@ -1,5 +1,5 @@
 [Unit]
-Description=Set up ssh account keys
+Description=Set up ssh user keys
 Before=ssh.service
 # bootstrap-ic-node.service (if it exists) lists this service as a reverse dependency
 
