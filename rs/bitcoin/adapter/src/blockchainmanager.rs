@@ -47,7 +47,7 @@ const ONE_MB: usize = 1_024 * 1_024;
 /// The limit at which we should stop making additional requests for new blocks as the block cache
 /// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
 /// not be created.
-const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 100 * ONE_MB;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
