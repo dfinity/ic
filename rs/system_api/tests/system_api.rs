@@ -2069,3 +2069,40 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     assert_eq!(log.records().len(), initial_records_number + 1);
     assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }
+
+#[test]
+fn in_replicated_execution_works_correctly() {
+    // The following should execute in replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_update_api(),
+        ApiTypeBuilder::build_system_task_api(),
+        ApiTypeBuilder::build_start_api(),
+        ApiTypeBuilder::build_init_api(),
+        ApiTypeBuilder::build_pre_upgrade_api(),
+        ApiTypeBuilder::build_replicated_query_api(),
+        ApiTypeBuilder::build_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error")),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(1));
+    }
+
+    // The following should execute in non-replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_non_replicated_query_api(),
+        ApiTypeBuilder::build_composite_query_api(),
+        ApiTypeBuilder::build_composite_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_composite_reject_api(RejectContext::new(
+            RejectCode::CanisterReject,
+            "error",
+        )),
+        ApiTypeBuilder::build_inspect_message_api(),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(0));
+    }
+}
