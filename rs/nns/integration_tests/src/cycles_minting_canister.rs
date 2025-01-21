@@ -901,13 +901,13 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         settings: None,
     })
     .unwrap();
-    let results = (0..2)
+    let results = (0..100)
         .map(|_i| {
             // Launch (another) notify_create_canister call, but crucially, do
             // NOT wait for it to complete. That takes place a little further
             // down.
             state_machine
-                .submit_ingress_as(
+                .send_ingress_safe(
                     *TEST_USER1_PRINCIPAL,
                     CYCLES_MINTING_CANISTER_ID,
                     "notify_create_canister",
@@ -921,7 +921,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         .collect::<Vec<_>>()
         .into_iter()
         .map(|message_id| {
-            let result = state_machine.await_ingress(message_id, 5000).unwrap();
+            let result = state_machine.await_ingress(message_id, 500).unwrap();
 
             let result = match result {
                 WasmResult::Reply(ok) => ok,
