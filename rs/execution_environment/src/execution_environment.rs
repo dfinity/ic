@@ -402,7 +402,8 @@ impl ExecutionEnvironment {
             own_subnet_type,
             config.max_controllers,
             compute_capacity,
-            config.max_canister_memory_size,
+            config.max_canister_memory_size_wasm32,
+            config.max_canister_memory_size_wasm64,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.rate_limiting_of_heap_delta,
@@ -1805,8 +1806,12 @@ impl ExecutionEnvironment {
 
     /// Returns the maximum amount of memory that can be utilized by a single
     /// canister.
-    pub fn max_canister_memory_size(&self) -> NumBytes {
-        self.config.max_canister_memory_size
+    pub fn max_canister_memory_size(&self, is_wasm64: bool) -> NumBytes {
+        if is_wasm64 {
+            self.config.max_canister_memory_size_wasm64
+        } else {
+            self.config.max_canister_memory_size_wasm32
+        }
     }
 
     /// Returns the subnet memory capacity.
@@ -1823,9 +1828,17 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
+        let is_wasm64_execution = match &canister.execution_state {
+            // The canister is not already installed, so we do not know what kind of canister it is.
+            // Therefore we can assume it is Wasm64 because Wasm64 can have a larger memory limit.
+            None => true,
+            Some(execution_state) => execution_state.is_wasm64,
+        };
+        let max_memory_size = self.max_canister_memory_size(is_wasm64_execution);
+
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
+            canister_memory_limit: canister.memory_limit(max_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.config.canister_guaranteed_callback_quota

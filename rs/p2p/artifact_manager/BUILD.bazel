@@ -7,8 +7,10 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/monitoring/metrics",
     "//rs/types/types",
+    "@crate_index//:futures",
     "@crate_index//:prometheus",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-stream",
     "@crate_index//:tracing",
 ]
 

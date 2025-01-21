@@ -162,6 +162,6 @@ fn ic_request_domain_variable_is_sound_and_consistent_with_the_enum_variant() {
     );
     assert_eq!(
         DOMAIN_IC_REQUEST[0] as usize,
-        DomainSeparator::IcRequest.as_str().as_bytes().len()
+        DomainSeparator::IcRequest.as_str().len()
     );
 }

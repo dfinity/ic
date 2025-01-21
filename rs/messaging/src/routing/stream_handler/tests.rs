@@ -230,7 +230,6 @@ fn legacy_induct_loopback_stream_reject_response() {
                 RejectReason::CanisterNotFound,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a loopback stream with begin advanced and a reject response.
@@ -252,16 +251,13 @@ fn legacy_induct_loopback_stream_reject_response() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response generated.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[(
@@ -311,7 +307,6 @@ fn induct_loopback_stream_reroute_response() {
             // the request @23 is expected to trigger a reject response which is inducted
             // successfully.
             let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22);
-            let inducted_response_count_bytes = inducted_response.count_bytes();
             push_inputs(
                 &mut expected_state,
                 [
@@ -349,10 +344,8 @@ fn induct_loopback_stream_reroute_response() {
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-            // `available_guaranteed_response_memory` does not keep track of gc'ing
-            // the response @22 in the loopback stream after inducting it.
             assert_eq!(
-                available_guaranteed_response_memory + inducted_response_count_bytes as i64,
+                available_guaranteed_response_memory,
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
             );
 
@@ -416,7 +409,6 @@ fn legacy_induct_loopback_stream_reroute_response() {
                 RejectReason::CanisterMigrating,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 25,
                 messages: vec![reject_response],
@@ -448,22 +440,18 @@ fn legacy_induct_loopback_stream_reroute_response() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One request inducted, one response inducted and one reject response produced.
+            // One request inducted and one response inducted.
             assert_eq!(
                 initial_available_guaranteed_response_memory
                     // Inducting a request triggers a new reservation in the output queue.
                     - MAX_RESPONSE_COUNT_BYTES as i64
                     // Inducting a response uses memory for the response, but also frees a reservation.
-                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64)
-                    // The reject response is in the loopback stream, i.e. no reservation is freed.
-                    - reject_response_count_bytes as i64,
+                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64),
                 available_guaranteed_response_memory,
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister no longer hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -502,7 +490,6 @@ fn induct_loopback_stream_success() {
                 &mut expected_state,
                 messages_in_stream(loopback_stream, 21..=22),
             );
-            let response_count_bytes = response_in_stream(loopback_stream, 22).count_bytes();
 
             // The loopback stream should be empty with `begin` and `signals_end` advanced.
             let loopback_stream = stream_from_config(StreamConfig {
@@ -518,11 +505,9 @@ fn induct_loopback_stream_success() {
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-            // `available_guaranteed_response_memory` is a lower bound as it doesn't include garbage
-            // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&inducted_state),
-                available_guaranteed_response_memory + response_count_bytes as i64,
+                available_guaranteed_response_memory,
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -592,7 +577,9 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
 fn system_subnet_induct_loopback_stream_ignores_canister_memory_limit() {
     // A stream handler with a canister memory limit that only allows up to 3 reservations.
     induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        max_canister_memory_size_wasm32: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        // For consistency reasons in case this test is run against Wasm64 canisters.
+        max_canister_memory_size_wasm64: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
         ..Default::default()
     });
 }
@@ -858,7 +845,7 @@ fn garbage_collect_messages_success() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             let rejected_messages = stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -927,7 +914,7 @@ fn garbage_collect_messages_with_reject_signals_success() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             let rejected_messages = stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -984,7 +971,7 @@ fn garbage_collect_signals_success() {
             });
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1029,7 +1016,7 @@ fn garbage_collect_signals_in_wrong_order() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1071,7 +1058,7 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1109,7 +1096,7 @@ fn garbage_collect_signals_with_invalid_empty_slice() {
             let mut streams = state.take_streams();
 
             stream_handler.garbage_collect_signals(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slices.get(&REMOTE_SUBNET).unwrap(),
             );
@@ -1151,7 +1138,7 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -1193,7 +1180,7 @@ fn assert_garbage_collect_messages_last_signal_after_last_message() {
 
             let slice = slices.get(&REMOTE_SUBNET).unwrap();
             stream_handler.garbage_collect_messages(
-                &mut streams.get_mut(&REMOTE_SUBNET).unwrap(),
+                streams.get_mut(&REMOTE_SUBNET).unwrap(),
                 REMOTE_SUBNET,
                 slice.header().signals_end(),
                 slice.header().reject_signals(),
@@ -1286,7 +1273,6 @@ fn garbage_collect_local_state_success() {
             let mut expected_state = state.clone();
             // The expected stream has the first two messages gc'ed and the stream flags set.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
-            let response_count_bytes = response_in_stream(outgoing_stream, 32).count_bytes();
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 33,
                 messages: vec![message_in_stream(outgoing_stream, 33).clone()],
@@ -1304,11 +1290,9 @@ fn garbage_collect_local_state_success() {
                 stream_handler.garbage_collect_local_state(state, &mut (i64::MAX / 2), &slices);
 
             assert_eq!(pruned_state, expected_state);
-            // `available_guaranteed_response_memory` is a lower bound as it doesn't include garbage
-            // collecting responses from streams, therefore it is off by `response_count_bytes`.
             assert_eq!(
                 stream_handler.available_guaranteed_response_memory(&pruned_state),
-                initial_available_guaranteed_response_memory + response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
             );
 
             assert_eq!(
@@ -1422,7 +1406,7 @@ fn garbage_collect_local_state_with_illegal_reject_signal_for_response_success()
     );
 }
 
-/// Tests tha tan incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
+/// Tests that an incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
 /// `REMOTE_SUBNET` triggers locally generating and successfully inducting a corresponding
 /// reject response.
 #[test]
@@ -2349,11 +2333,9 @@ fn induct_stream_slices_partial_success() {
                     - response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -2440,7 +2422,6 @@ fn legacy_induct_stream_slices_partial_success() {
                 RejectReason::CanisterNotFound,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 46),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             // The expected stream has...
             let expected_stream = stream_from_config(StreamConfig {
@@ -2471,19 +2452,16 @@ fn legacy_induct_stream_slices_partial_success() {
             );
 
             assert_eq!(expected_state, inducted_state);
-            // 2 requests and one response inducted (consuming 2 - 1 reservations); one reject response enqueued.
+            // 2 requests and one response inducted (consuming 2 - 1 reservations).
             assert_eq!(
                 initial_available_guaranteed_response_memory
                     - MAX_RESPONSE_COUNT_BYTES as i64
-                    - response_count_bytes as i64
-                    - reject_response_count_bytes as i64,
+                    - response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
@@ -2742,7 +2720,6 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2781,16 +2758,13 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response enqueued.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister not yet hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
@@ -2926,7 +2900,6 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
                 RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2965,16 +2938,13 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // One reject response enqueued.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                initial_available_guaranteed_response_memory,
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister no longer hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
             );
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
@@ -4245,19 +4215,6 @@ fn request_in_slice(
             .and_then(|msgs| msgs.get(stream_index.into()))
     }) {
         Some(RequestOrResponse::Request(request)) => request,
-        _ => unreachable!(),
-    }
-}
-
-/// Returns a reference to a response in a stream at `stream_index`.
-///
-/// Panics if no such response exists.
-fn response_in_stream(
-    opt_stream: Option<&Stream>,
-    stream_index: u64,
-) -> &ic_types::messages::Response {
-    match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
-        Some(RequestOrResponse::Response(response)) => response,
         _ => unreachable!(),
     }
 }
