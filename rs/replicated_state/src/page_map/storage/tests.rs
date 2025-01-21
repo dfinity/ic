@@ -9,7 +9,7 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        verify, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
+        validate, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
         PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
         PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
@@ -1388,7 +1388,7 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(verify(&ShardedTestStorageLayout {
+    assert!(validate(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1399,7 +1399,7 @@ fn overlapping_shards_is_an_error() {
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(verify(&ShardedTestStorageLayout {
+    assert!(validate(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1425,7 +1425,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match verify(&base_only_storage_layout(heap_file.to_path_buf())) {
+    match validate(&base_only_storage_layout(heap_file.to_path_buf())) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",
