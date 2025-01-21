@@ -35,12 +35,6 @@ impl RandomOracle {
         xof.read(output);
     }
 
-    pub(crate) fn finalize_to_vec(self, output_len: usize) -> Vec<u8> {
-        let mut output = vec![0u8; output_len];
-        self.finalize(&mut output);
-        output
-    }
-
     pub(crate) fn finalize_to_scalar(self) -> Scalar {
         let mut output = [0u8; 2 * Scalar::BYTES];
         self.finalize(&mut output);
