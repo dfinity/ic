@@ -193,13 +193,13 @@ rust_library(
 
 rust_library(
     name = "governance--canbench_feature",
-    visibility = ["//visibility:private"],
     srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = ["//visibility:private"],
     deps = DEPENDENCIES + [
         "@crate_index//:canbench-rs",
     ],
@@ -230,12 +230,12 @@ rust_canbench(
 
 rust_canister(
     name = "governance-canister",
-    visibility = ["//visibility:public"],
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
@@ -245,7 +245,6 @@ rust_canister(
 
 rust_canister(
     name = "governance-canister-test",
-    visibility = ["//visibility:public"],
     srcs = [
         "canister/canister.rs",
         "canister/tla_ledger.rs",
@@ -256,6 +255,7 @@ rust_canister(
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
