@@ -1693,15 +1693,23 @@ fn get_u64_memo(transaction: &Transaction) -> Memo {
     Memo(u64::from_le_bytes(icrc1_memo))
 }
 
-/// If the block has no status in blocks_notified, set it to Processing.
-/// Otherwise, makes no changes, and returns the block's current status.
-fn set_block_status_to_processing(block_index: BlockIndex) -> Result<(), NotificationStatus> {
-    with_state_mut(|state| match state.blocks_notified.entry(block_index) {
-        Entry::Occupied(entry) => Err(entry.get().clone()),
+/// "Normally", sets the block's status to Processing. However, if the block is
+/// too old (<= last_purged_notification), or it already has a status, no
+/// changes are made, and the block's current status is returned. (None
+/// indicates that the block is too old to have a status.)
+fn set_block_status_to_processing(block_index: BlockIndex) -> Result<(), Option<NotificationStatus>> {
+    with_state_mut(|state| {
+        if block_index <= state.last_purged_notification {
+            return Err(None);
+        }
 
-        Entry::Vacant(entry) => {
-            entry.insert(NotificationStatus::Processing);
-            Ok(())
+        match state.blocks_notified.entry(block_index) {
+            Entry::Occupied(entry) => Err(Some(entry.get().clone())),
+
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                Ok(())
+            }
         }
     })
 }
@@ -1843,6 +1851,13 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         memo.0,
     );
     if let Err(prior_block_status) = set_block_status_to_processing(incoming_block_index) {
+        let Some(prior_block_status) = prior_block_status else {
+            // Callers of fetch_transaction generally do this already.
+            return Err(NotifyError::TransactionTooOld(
+                with_state(|state| state.last_purged_notification + 1)
+            ));
+        };
+
         // Do not proceed, because block is either being processed, or was
         // finished being processed earlier.
         use NotificationStatus::{
@@ -3675,7 +3690,32 @@ mod tests {
 
         let result = set_block_status_to_processing(target_block_index);
 
-        assert_eq!(result, Err(NotificationStatus::Processing));
+        assert_eq!(result, Err(Some(NotificationStatus::Processing)));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_too_old() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                // We only know the status of blocks that are newer than this.
+                last_purged_notification: 42,
+                ..Default::default()
+            }))
+        });
+
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Err(None));
         assert_eq!(
             with_state(|state| state.blocks_notified.clone()),
             original_blocks_notified,
