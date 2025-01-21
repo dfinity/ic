@@ -534,6 +534,7 @@ pub enum LedgerField {
 pub enum LedgerState {
     Migrating(LedgerField),
     Ready,
+    ReadyReadOnly,
 }
 
 impl Default for LedgerState {
@@ -673,14 +674,13 @@ impl Ledger {
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
-            apply_transaction_no_trimming(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(
-                |err| {
+            apply_transaction_no_trimming(&mut ledger, mint, now, Tokens::ZERO, None)
+                .unwrap_or_else(|err| {
                     panic!(
                         "failed to mint {} tokens to {}: {:?}",
                         balance, account, err
                     )
-                },
-            );
+                });
         }
 
         ledger
@@ -742,6 +742,7 @@ impl LedgerContext for Ledger {
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
         panic_if_not_ready();
+        panic_if_read_only();
         &mut self.stable_balances
     }
 
@@ -752,6 +753,7 @@ impl LedgerContext for Ledger {
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         panic_if_not_ready();
+        panic_if_read_only();
         &mut self.stable_approvals
     }
 
@@ -971,11 +973,14 @@ impl Ledger {
         length: usize,
         decode: impl Fn(&EncodedBlock) -> B,
         make_callback: impl Fn(Principal) -> ArchiveFn,
+        max_transactions: Option<usize>,
     ) -> (u64, Vec<B>, Vec<ArchivedRange<ArchiveFn>>) {
         let locations = block_locations(self, start, length);
 
-        let local_blocks_range =
-            range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);
+        let local_blocks_range = range_utils::take(
+            &locations.local_blocks,
+            max_transactions.unwrap_or(MAX_TRANSACTIONS_PER_REQUEST),
+        );
 
         let local_blocks: Vec<B> = self
             .blockchain
@@ -1008,6 +1013,7 @@ impl Ledger {
                 decoded_block.into()
             },
             |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+            None,
         );
 
         GetTransactionsResponse {
@@ -1018,6 +1024,23 @@ impl Ledger {
         }
     }
 
+    /// Returns local ledger blocks.
+    pub fn get_ledger_blocks(&self, start: BlockIndex, length: usize) -> Vec<Block<Tokens>> {
+        let (first_index, local_blocks, archived_transactions) = self.query_blocks(
+            start,
+            length,
+            |enc_block| -> Block<Tokens> {
+                Block::decode(enc_block.clone()).expect("bug: failed to decode encoded block")
+            },
+            |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+            Some(1_000_000usize),
+        );
+        assert_eq!(first_index, 0);
+        assert!(archived_transactions.is_empty());
+
+        local_blocks
+    }
+
     /// Returns blocks in the specified range.
     pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
         let (first_index, local_blocks, archived_blocks) = self.query_blocks(
@@ -1025,6 +1048,7 @@ impl Ledger {
             length,
             encoded_block_to_generic_block,
             |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+            None,
         );
 
         GetBlocksResponse {
@@ -1088,6 +1112,7 @@ impl Ledger {
                         "icrc3_get_blocks",
                     )
                 },
+                None,
             );
             for (id, block) in (first_index..).zip(local_blocks) {
                 blocks.push(icrc_ledger_types::icrc3::blocks::BlockWithId {
@@ -1124,12 +1149,25 @@ impl Ledger {
 }
 
 pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
+    LEDGER_STATE.with(|s| {
+        matches!(*s.borrow(), LedgerState::Ready)
+            || matches!(*s.borrow(), LedgerState::ReadyReadOnly)
+    })
+}
+
+pub fn is_read_only() -> bool {
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::ReadyReadOnly))
 }
 
 pub fn panic_if_not_ready() {
     if !is_ready() {
         ic_cdk::trap("The Ledger is not ready");
+    }
+}
+
+pub fn panic_if_read_only() {
+    if is_read_only() {
+        ic_cdk::trap("The Ledger is read only");
     }
 }
 

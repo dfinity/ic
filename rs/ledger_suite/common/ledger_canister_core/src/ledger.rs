@@ -219,7 +219,7 @@ where
     L: LedgerData,
     L::BalancesStore: InspectableBalancesStore,
 {
-    let result = apply_transaction_no_trimming(ledger, transaction, now, effective_fee);
+    let result = apply_transaction_no_trimming(ledger, transaction, now, effective_fee, None);
     trim_balances(ledger, now);
     result
 }
@@ -231,6 +231,7 @@ pub fn apply_transaction_no_trimming<L>(
     transaction: L::Transaction,
     now: TimeStamp,
     effective_fee: L::Tokens,
+    block_index: Option<u64>,
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
 where
     L: LedgerData,
@@ -249,22 +250,24 @@ where
         .created_at_time()
         .map(|created_at_time| (created_at_time, transaction.hash()));
 
-    if let Some((created_at_time, tx_hash)) = maybe_time_and_hash {
-        // The caller requested deduplication.
-        if created_at_time + ledger.transaction_window() < now {
-            return Err(TransferError::TxTooOld {
-                allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
-            });
-        }
+    if block_index.is_none() {
+        if let Some((created_at_time, tx_hash)) = maybe_time_and_hash {
+            // The caller requested deduplication.
+            if created_at_time + ledger.transaction_window() < now {
+                return Err(TransferError::TxTooOld {
+                    allowed_window_nanos: ledger.transaction_window().as_nanos() as u64,
+                });
+            }
 
-        if created_at_time > now + ic_limits::PERMITTED_DRIFT {
-            return Err(TransferError::TxCreatedInFuture { ledger_time: now });
-        }
+            if created_at_time > now + ic_limits::PERMITTED_DRIFT {
+                return Err(TransferError::TxCreatedInFuture { ledger_time: now });
+            }
 
-        if let Some(block_height) = ledger.transactions_by_hash().get(&tx_hash) {
-            return Err(TransferError::TxDuplicate {
-                duplicate_of: *block_height,
-            });
+            if let Some(block_height) = ledger.transactions_by_hash().get(&tx_hash) {
+                return Err(TransferError::TxDuplicate {
+                    duplicate_of: *block_height,
+                });
+            }
         }
     }
 
@@ -296,10 +299,15 @@ where
     );
     let block_timestamp = block.timestamp();
 
-    let height = ledger
-        .blockchain_mut()
-        .add_block(block)
-        .expect("failed to add block");
+    let height = if let Some(block_index) = block_index {
+        block_index
+    } else {
+        ledger
+            .blockchain_mut()
+            .add_block(block)
+            .expect("failed to add block")
+    };
+
     if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
         if fee_collector.block_index.is_none() {
             fee_collector.block_index = Some(height);
