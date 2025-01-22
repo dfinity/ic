@@ -202,7 +202,7 @@ async fn fanout() {
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
-            let call = Call::new(canister, "handle_request").with_args((payload,));
+            let call = Call::new(canister, "handle_request").with_arg(payload);
             let call = if timeout_seconds == 0 {
                 call.with_guaranteed_response()
             } else {
