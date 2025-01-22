@@ -81,8 +81,8 @@ const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = false;
 const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
 const SLOT_TABLE_NO_LIMIT: usize = usize::MAX;
 
-/// The collection of all artifact pools.
-struct ArtifactPools {
+/// Artifact pools that are not persisted on disks.
+struct UnpersistedArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
@@ -90,7 +90,7 @@ struct ArtifactPools {
     https_outcalls_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
-impl ArtifactPools {
+impl UnpersistedArtifactPools {
     fn new(
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -215,7 +215,7 @@ impl AbortableBroadcastChannels {
         message_router: Arc<dyn MessageRouting>,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         time_source: Arc<dyn TimeSource>,
-        artifact_pools: &ArtifactPools,
+        artifact_pools: &UnpersistedArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
         let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
@@ -383,7 +383,7 @@ pub fn setup_consensus_and_p2p(
 ) {
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-    let artifact_pools = ArtifactPools::new(
+    let artifact_pools = UnpersistedArtifactPools::new(
         log,
         metrics_registry,
         node_id,
@@ -492,7 +492,7 @@ fn start_consensus(
     subnet_id: SubnetId,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
-    artifact_pools: ArtifactPools,
+    artifact_pools: UnpersistedArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
