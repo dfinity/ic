@@ -31,7 +31,7 @@ fn test(env: TestEnv) {
     info!(logger, "Running remote test");
     let result = node1
         .block_on_bash_script(&format!(
-            "ssh -A -o StrictHostKeyChecking=no admin@{} echo test2",
+            "ssh -vvv -A -o StrictHostKeyChecking=no admin@{} echo test2",
             node2.get_ip_addr()
         ))
         .unwrap();

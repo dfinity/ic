@@ -205,6 +205,7 @@ use std::{
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
+    process::Command,
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
@@ -1934,8 +1935,33 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
-    sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
-    Ok(sess)
+
+    let mut cmd = Command::new("ssh-add");
+    cmd.arg(priv_key_path.clone());
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+
+    // Authenticate using the SSH agent
+    let mut agent = sess.agent()?;
+    agent.connect()?;
+    agent.list_identities()?;
+    let identities = agent.identities()?;
+    for identity in identities {
+        println!("Using identity: {}", identity.comment());
+        if agent.userauth(SSH_USERNAME, &identity).is_ok() {
+            println!(
+                "Authenticated successfully with identity: {}",
+                identity.comment()
+            );
+            break;
+        }
+    }
+
+    if sess.authenticated() {
+        Ok(sess)
+    } else {
+        Err(anyhow!("Authentication failed"))
+    }
 }
 
 impl SshSession for IcNodeSnapshot {
