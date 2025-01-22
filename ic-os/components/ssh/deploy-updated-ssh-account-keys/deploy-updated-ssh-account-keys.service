@@ -1,11 +1,11 @@
 [Unit]
-Description=Update ssh user keys
+Description=Update ssh account keys
 Before=setup-ssh-user-keys.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/deploy-updated-ssh-user-keys.sh
+ExecStart=/opt/ic/bin/deploy-updated-ssh-account-keys.sh
 
 [Install]
 RequiredBy=setup-ssh-user-keys.service
