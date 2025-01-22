@@ -26,39 +26,55 @@ MINIKUBE_PROFILE="local-rosetta"
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --icp-ledger)
-            ICP_LEDGER="$2"
-            shift
-            ;;
-        --icp-symbol)
-            ICP_SYMBOL="$2"
-            shift
-            ;;
-        --icrc1-ledger)
-            ICRC1_LEDGER="$2"
-            shift
-            ;;
-        --local-icp-image-tar)
-            LOCAL_ICP_IMAGE_TAR="$2"
-            shift
-            ;;
-        --local-icrc1-image-tar)
-            LOCAL_ICRC1_IMAGE_TAR="$2"
-            shift
-            ;;
-        --clean) CLEAN=true ;;
-        --stop) STOP=true ;;
-        --help)
-            sed -n '5,14p' "$0"
-            exit 0
-            ;;
-        *)
-            echo "Unknown parameter passed: $1"
-            exit 1
-            ;;
+    --icp-ledger)
+        ICP_LEDGER="$2"
+        shift
+        ;;
+    --icp-symbol)
+        ICP_SYMBOL="$2"
+        shift
+        ;;
+    --icrc1-ledger)
+        ICRC1_LEDGER="$2"
+        shift
+        ;;
+    --local-icp-image-tar)
+        LOCAL_ICP_IMAGE_TAR="$2"
+        shift
+        ;;
+    --local-icrc1-image-tar)
+        LOCAL_ICRC1_IMAGE_TAR="$2"
+        shift
+        ;;
+    --clean) CLEAN=true ;;
+    --stop) STOP=true ;;
+    --help)
+        sed -n '5,14p' "$0"
+        exit 0
+        ;;
+    *)
+        echo "Unknown parameter passed: $1"
+        exit 1
+        ;;
     esac
     shift
 done
+
+# Function that waits for a resource to be ready
+wait_for_ready() {
+    local resource_type="$1"  # The type of the resource (e.g., pod, deployment)
+    local resource_label="$2" # The label of the resource
+    local namespace="$3"      # The namespace of the resource (optional, defaults to 'default')
+    local timeout=$4          # Timeout in seconds
+
+    # Default namespace if not provided
+    namespace="${namespace:-default}"
+
+    # wait 2 seconds
+    sleep 2
+
+    kubectl wait --namespace $namespace --for=condition=Ready $resource_type -l $resource_label --timeout=${timeout}s --context="$MINIKUBE_PROFILE"
+}
 
 # Stop Minikube cluster if --stop flag is set
 [[ "$STOP" == true ]] && {
@@ -134,8 +150,8 @@ command -v helm &>/dev/null || {
 # Clean up Minikube cluster and Helm chart if --clean flag is set
 [[ "$CLEAN" == true ]] && {
     echo "Cleaning up Minikube cluster and Helm chart..."
+    helm uninstall local-rosetta || true
     minikube delete -p "$MINIKUBE_PROFILE"
-    helm uninstall local-rosetta --namespace rosetta-api --kube-context="$MINIKUBE_PROFILE" || true
 }
 
 # Start Minikube with the specified profile if not already running
@@ -168,7 +184,7 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q prometheus 
 
 # Wait for Prometheus server to be ready
 echo "Waiting for Prometheus server to be ready..."
-kubectl wait --namespace monitoring --for=condition=Ready pod -l app.kubernetes.io/instance=prometheus --timeout=300s --context="$MINIKUBE_PROFILE"
+wait_for_ready pod app.kubernetes.io/instance=prometheus monitoring 300
 
 # Forward Prometheus port if not already forwarded
 port_forward monitoring prometheus-server 9090:80
@@ -181,7 +197,7 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor ||
 
 # Wait for cAdvisor server to be ready
 echo "Waiting for cAdvisor server to be ready..."
-kubectl wait --namespace monitoring --for=condition=Ready pod -l app=cadvisor --timeout=300s --context="$MINIKUBE_PROFILE"
+wait_for_ready pod app=cadvisor monitoring 300
 
 # Install or upgrade kube-prometheus
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-prometheus || {
@@ -220,7 +236,7 @@ helm upgrade --install local-rosetta . \
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
-kubectl wait --namespace monitoring --for=condition=Ready pod -l app=grafana --timeout=300s --context="$MINIKUBE_PROFILE"
+wait_for_ready pod app=grafana monitoring 300
 
 # Forward Grafana port if not already forwarded
 port_forward monitoring grafana 3000:80
@@ -241,7 +257,7 @@ print_service_url() {
 for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rosetta-latest; do
     if kubectl get -n rosetta-api svc "$service" --context="$MINIKUBE_PROFILE" &>/dev/null; then
         echo "Waiting for $service server to be ready..."
-        kubectl wait -n rosetta-api --for=condition=Ready pod -l app="$service" --timeout=300s --context="$MINIKUBE_PROFILE"
+        wait_for_ready pod app="$service" rosetta-api 300
 
         # Find the nodeport for the service
         nodePort=$(kubectl get -n rosetta-api svc "$service" -o jsonpath='{.spec.ports[0].nodePort}' --context="$MINIKUBE_PROFILE")
@@ -263,4 +279,4 @@ print_service_url rosetta-api icrc-rosetta-local
 print_service_url rosetta-api icrc-rosetta-latest
 echo "Prometheus: http://localhost:9090"
 echo "Grafana: http://localhost:3000"
-echo "1************************************"
+echo "************************************"
