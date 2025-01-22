@@ -212,7 +212,7 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
     // Current transcripts come from next transcripts of the last_summary.
-    let current_transcripts = last_summary.clone().into_next_transcripts();
+    let current_transcripts = as_next_transcripts(last_summary, &logger);
 
     // If the config for the currently computed DKG intervals requires a transcript
     // resharing (currently for high-threshold DKG only), we are going to re-share
@@ -264,6 +264,24 @@ fn create_transcript(
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
+}
+
+/// Return the set of next transcripts for all tags. If for some tag
+/// the next transcript is not available, the current transcript is used.
+fn as_next_transcripts(
+    summary: &Summary,
+    logger: &ReplicaLogger,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    let mut next_transcripts = summary.next_transcripts().clone();
+
+    for (tag, transcript) in summary.current_transcripts().iter() {
+        if !next_transcripts.contains_key(tag) {
+            warn!(logger, "Reusing current transcript for tag {:?}", tag);
+            next_transcripts.insert(tag.clone(), transcript.clone());
+        }
+    }
+
+    next_transcripts
 }
 
 #[allow(clippy::type_complexity)]
@@ -1135,7 +1153,8 @@ mod tests {
                     assert_eq!(
                         next_summary
                             .clone()
-                            .current_transcript(&NiDkgTag::HighThreshold),
+                            .current_transcript(&NiDkgTag::HighThreshold)
+                            .unwrap(),
                         &conf.resharing_transcript().clone().unwrap()
                     )
                 }

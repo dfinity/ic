@@ -53,10 +53,10 @@ use crate::{
         swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
         CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-        InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo,
-        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo, NeuronState,
+        NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
@@ -94,7 +94,11 @@ use ic_nns_constants::{
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem, proposal_validation,
+    pb::v1::{
+        self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+        ListNeuronsResponse,
+    },
+    proposal_validation,
     subnet_rental::SubnetRentalRequest,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
@@ -147,8 +151,8 @@ use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
-    MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC,
+    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -1057,7 +1061,7 @@ impl Proposal {
     fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     fn omit_large_fields(self) -> Self {
@@ -1177,7 +1181,7 @@ impl ProposalData {
     pub fn is_manage_neuron(&self) -> bool {
         self.proposal
             .as_ref()
-            .map_or(false, Proposal::is_manage_neuron)
+            .is_some_and(Proposal::is_manage_neuron)
     }
 
     pub fn reward_status(
@@ -2470,7 +2474,14 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(&neuron_id, |neuron| {
                 // Populate neuron_infos.
-                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(self.voting_power_economics(), now, caller));
+                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
+
+                // We will be able to get rid of this conversion once we delete
+                // NeuronInfo from governance.proto. That should be possible,
+                // since we do not store NeuronInfo in stable memory.
+                let neuron_info = api::NeuronInfo::from(neuron_info);
+
+                neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
                 let let_caller_read_full_neuron =
@@ -2489,7 +2500,7 @@ impl Governance {
                     // we need to do a larger refactoring to use the correct API types instead of the internal
                     // governance proto at this level.
                     proto.recent_ballots = neuron.sorted_recent_ballots();
-                    full_neurons.push(proto);
+                    full_neurons.push(api::Neuron::from(proto));
                 }
             });
         }
@@ -3541,6 +3552,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(DISBURSE_TO_NEURON_DESC.clone()))]
     pub async fn disburse_to_neuron(
         &mut self,
         id: &NeuronId,
@@ -3706,6 +3718,13 @@ impl Governance {
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
         let memo = created_timestamp_seconds;
+
+        tla_log_locals! {
+            parent_neuron_id: parent_nid.id,
+            disburse_amount: disburse_to_neuron.amount_e8s,
+            child_neuron_id: child_nid.id,
+            child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount))
+        };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -5300,6 +5319,8 @@ impl Governance {
     }
 
     fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+        // TODO: Jira ticket NNS1-3555
+        #[allow(non_local_definitions)]
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)
@@ -7079,67 +7100,6 @@ impl Governance {
 
         // Release the global spawning lock
         self.heap_data.spawning_neurons = Some(false);
-    }
-
-    // TODO(NNS1-3526): Remove this method once it is released.
-    pub async fn fix_locked_spawn_neuron(&mut self) -> Result<(), GovernanceError> {
-        // ID of neuron that was locked when trying to spawn it due to ledger upgrade.
-        // Neuron's state was updated, but the ledger transaction did not finish.
-        const TARGETED_LOCK_TIMESTAMP: u64 = 1728911670;
-
-        let id = 17912780790050115461;
-        let neuron_id = NeuronId { id };
-
-        let now_seconds = self.env.now();
-
-        match self.heap_data.in_flight_commands.get(&id) {
-            None => {
-                return Ok(());
-            }
-            Some(existing_lock) => {
-                let NeuronInFlightCommand {
-                    timestamp,
-                    command: _,
-                } = existing_lock;
-
-                // We check the exact timestamp so that new locks couldn't trigger this condition
-                // which would allow that neuron to repeatedly mint under the right conditions.
-                if *timestamp != TARGETED_LOCK_TIMESTAMP {
-                    return Ok(());
-                }
-            }
-        };
-
-        let (neuron_stake, subaccount) = self.with_neuron(&neuron_id, |neuron| {
-            let neuron_stake = neuron.cached_neuron_stake_e8s;
-            let subaccount = neuron.subaccount();
-            (neuron_stake, subaccount)
-        })?;
-
-        // Mint the ICP
-        match self
-            .ledger
-            .transfer_funds(
-                neuron_stake,
-                0, // Minting transfer don't pay a fee.
-                None,
-                neuron_subaccount(subaccount),
-                now_seconds,
-            )
-            .await
-        {
-            Ok(_) => {
-                self.heap_data.in_flight_commands.remove(&id);
-                Ok(())
-            }
-            Err(error) => Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                format!(
-                    "Error fixing locked neuron: {:?}. Ledger update failed with err: {:?}.",
-                    neuron_id, error
-                ),
-            )),
-        }
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise

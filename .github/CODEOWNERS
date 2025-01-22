@@ -50,6 +50,7 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-ledger-hash-of/         @dfinity/finint
 /packages/pocket-ic/                 @dfinity/pocket-ic
 /packages/ic-ethereum-types/         @dfinity/cross-chain-team
+/packages/ic-metrics-assert/         @dfinity/cross-chain-team
 /packages/ic-sha3/                   @dfinity/crypto-team
 /packages/ic-signature-verification/ @dfinity/crypto-team
 /packages/ic-vetkd-utils/            @dfinity/crypto-team
@@ -149,6 +150,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
+/rs/interfaces/src/vetkd.rs                            @dfinity/consensus
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners

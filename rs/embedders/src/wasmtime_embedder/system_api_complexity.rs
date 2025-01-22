@@ -1,7 +1,6 @@
 ///
 /// System API Calls Complexity Module
 ///
-
 /// The Fixed System API Overhead (in Instructions)
 ///
 /// The cost of the System API calls is proportional to the work the call performs.
@@ -26,6 +25,7 @@ pub mod overhead {
     pub const CALL_ON_CLEANUP: NumInstructions = NumInstructions::new(500);
     pub const CALL_PERFORM: NumInstructions = NumInstructions::new(5_000);
     pub const CALL_WITH_BEST_EFFORT_RESPONSE: NumInstructions = NumInstructions::new(500);
+    pub const CYCLES_BURN128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_COPY: NumInstructions = NumInstructions::new(500);
