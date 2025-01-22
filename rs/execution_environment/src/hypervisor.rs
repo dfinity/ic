@@ -415,8 +415,8 @@ impl Hypervisor {
             network_topology,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
-                (slice, output, system_state_changes)
+            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
+                (slice, output, system_state_modifications)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");

@@ -812,7 +812,7 @@ fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
-    governance().list_neurons(&(req.into()), caller()).into()
+    governance().list_neurons(&req, caller())
 }
 
 #[query]
