@@ -1936,14 +1936,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
 
+    println!("Adding SSH key");
     let mut cmd = Command::new("ssh-add");
     cmd.arg(priv_key_path.clone());
     let output = cmd.output()?;
     std::io::stdout().write_all(&output.stdout)?;
 
     // Authenticate using the SSH agent
+    println!("Creating agent");
     let mut agent = sess.agent()?;
+    println!("Connecting agent");
     agent.connect()?;
+    println!("Listing Identities");
     agent.list_identities()?;
     let identities = agent.identities()?;
     for identity in identities {
