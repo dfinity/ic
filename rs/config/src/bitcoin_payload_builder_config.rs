@@ -10,7 +10,7 @@ pub struct Config {
 }
 
 fn adapter_timeout_default() -> Duration {
-    Duration::from_millis(50)
+    Duration::from_millis(200)
 }
 
 impl Default for Config {

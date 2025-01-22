@@ -592,14 +592,12 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                break;
+                continue;
             }
 
-            trace!(
+            info!(
                 self.logger,
-                "Sending getdata to {} : Inventory {:?}",
-                peer.socket,
-                selected_inventory
+                "Sending getdata to {} : Inventory {:?}", peer.socket, selected_inventory
             );
 
             //Send 'getdata' request for the inventory to the peer.
