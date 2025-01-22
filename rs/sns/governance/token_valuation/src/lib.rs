@@ -444,7 +444,7 @@ fn new_standard_xdrs_per_icp_client<MyRuntime: Runtime + Send + Sync>() -> impl 
             let (response,): (IcpXdrConversionRateCertifiedResponse,) =
                 MyRuntime::call_with_cleanup(
                     CYCLES_MINTING_CANISTER_ID,
-                    // This is not in the node-metrics-collector.did file (yet).
+                    // This is not in the cmc.did file (yet).
                     "get_average_icp_xdr_conversion_rate",
                     ((),),
                 )
