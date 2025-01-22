@@ -16,8 +16,6 @@ async fn test_node_metrics_collector() {
         .build_async()
         .await;
 
-    // Step 0: Install the (master) NNS canisters.
-
     // Step 3: Deploy the node-metrics-collector canister
     let metrics_collector_wasm = build_mainnet_metrics_collector_wasm();
     let metrics_collector_id = Principal::from(CanisterId::from_u64(20));
@@ -25,6 +23,7 @@ async fn test_node_metrics_collector() {
         .create_canister_with_id(None, None, metrics_collector_id)
         .await
         .expect("Unable to create the canister in which the Ledger would be installed");
+
     pocket_ic
         .install_canister(
             canister_id,

@@ -6,20 +6,19 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/protobuf",
     "//rs/nns/common",
+    "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-macros",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:serde",
-    "@crate_index//:futures",
-    "@crate_index//:anyhow",
-    "@crate_index//:candid",
-    
 ]
 
 BUILD_DEPENDENCIES = [
