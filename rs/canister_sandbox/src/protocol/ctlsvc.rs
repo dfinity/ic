@@ -67,7 +67,7 @@ mod tests {
         InstanceStats, SystemApiCallCounters, WasmExecutionOutput,
     };
     use ic_replicated_state::{Global, NumWasmPages, PageMap};
-    use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
+    use ic_system_api::sandbox_safe_system_state::SystemStateModifications;
     use ic_types::{ingress::WasmResult, CanisterLog, NumBytes, NumInstructions};
 
     use crate::protocol::{
@@ -125,7 +125,7 @@ mod tests {
                         size: NumWasmPages::new(42),
                     },
                 }),
-                system_state_changes: SystemStateChanges::default(),
+                system_state_modifications: SystemStateModifications::default(),
             },
             execute_total_duration: Duration::from_secs(10),
             execute_run_duration: Duration::from_secs(1),

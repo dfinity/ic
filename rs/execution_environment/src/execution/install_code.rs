@@ -743,10 +743,10 @@ impl InstallCodeHelper {
 
         let CanisterStateChanges {
             execution_state_changes,
-            system_state_changes,
+            system_state_modifications,
         } = canister_state_changes;
 
-        if let Err(err) = system_state_changes.apply_changes(
+        if let Err(err) = system_state_modifications.apply_changes(
             original.time,
             &mut self.canister.system_state,
             round.network_topology,

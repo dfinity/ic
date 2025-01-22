@@ -18,7 +18,7 @@ use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
+use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateModifications};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
@@ -410,7 +410,7 @@ pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutio
 /// subnet available memory. In case of an error, the partially applied changes
 /// are not undone.
 fn try_apply_canister_state_changes(
-    system_state_changes: SystemStateChanges,
+    system_state_modifications: SystemStateModifications,
     output: &WasmExecutionOutput,
     system_state: &mut SystemState,
     subnet_available_memory: &mut SubnetAvailableMemory,
@@ -427,7 +427,7 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
+    system_state_modifications.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -457,17 +457,17 @@ pub fn apply_canister_state_changes(
 ) {
     let CanisterStateChanges {
         execution_state_changes,
-        system_state_changes,
+        system_state_modifications,
     } = canister_state_changes;
 
     let clean_system_state = system_state.clone();
     let clean_subnet_available_memory = round_limits.subnet_available_memory;
-    let callbacks_created = system_state_changes.callbacks_created();
+    let callbacks_created = system_state_modifications.callbacks_created();
     if output.wasm_result.is_ok() {
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(
-            system_state_changes,
+            system_state_modifications,
             output,
             system_state,
             &mut round_limits.subnet_available_memory,

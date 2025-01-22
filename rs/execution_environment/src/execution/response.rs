@@ -374,7 +374,9 @@ impl ResponseHelper {
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
         let old_balance = self.canister.system_state.balance();
-        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         // Note that we ignore the freezing threshold as required by the spec.
         if old_balance < requested {
             let reveal_top_up = self
@@ -462,7 +464,9 @@ impl ResponseHelper {
         // like releasing locks or undoing other state changes.
         let ingress_induction_cycles_debit =
             self.canister.system_state.ingress_induction_cycles_debit();
-        let removed_cycles = canister_state_changes.system_state_changes.removed_cycles();
+        let removed_cycles = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
             self.canister
                 .system_state
