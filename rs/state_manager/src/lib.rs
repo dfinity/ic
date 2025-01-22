@@ -2565,6 +2565,11 @@ impl StateManagerImpl {
             strip_page_map_deltas(&mut state, self.get_fd_factory());
         }
         let result = {
+            info!(
+                self.log,
+                "start to make checkpoint @{}",
+                height
+            );
             checkpoint::make_checkpoint(
                 &state,
                 height,

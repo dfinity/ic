@@ -310,6 +310,10 @@ fn build_chunk_table_parallel(
     chunk_actions: Vec<ChunkAction>,
     version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    info!(
+        log,
+        "compute_manifest build_chunk_table_parallel. Build a chunk table and file table filled with blank hashes",
+    );
     // Build a chunk table and file table filled with blank hashes.
     let mut chunk_table: Vec<ChunkInfo> = {
         let mut chunks = Vec::with_capacity(chunk_actions.len());
@@ -348,7 +352,10 @@ fn build_chunk_table_parallel(
     // low (it doesn't exceed the number of the threads).
     let file_cache: Arc<Mutex<HashMap<u32, Weak<ScopedMmap>>>> =
         Arc::new(Mutex::new(HashMap::new()));
-
+    info!(
+        log,
+        "compute_manifest build_chunk_table_parallel. thread_pool",
+    );
     // Compute real chunk hashes in parallel.
     // NB. We must populate hashes of all the chunks in a file before we compute
     // file hashes.
@@ -372,6 +379,12 @@ fn build_chunk_table_parallel(
                                         .unwrap_or_else(|e| fatal!(log, "failed to mmap file {}: {}", file_path.display(), e)),
                                 );
                                 cache.insert(chunk_info.file_index, Arc::downgrade(&mmap));
+                                info!(
+                                    log,
+                                    "mmap file {} with file size {}",
+                                    file_path.display(),
+                                    file_size
+                                );
                                 mmap
                             }
                         }
@@ -422,7 +435,10 @@ fn build_chunk_table_parallel(
             });
         }
     });
-
+    info!(
+        log,
+        "compute_manifest build_chunk_table_parallel. compute file hashes",
+    );
     // After we computed all the chunk hashes, we can finally compute file hashes.
     for (file_index, file_info) in file_table.iter_mut().enumerate() {
         let mut hasher = file_hasher();
@@ -438,7 +454,6 @@ fn build_chunk_table_parallel(
 }
 
 /// Build a chunk table from the file table.
-#[cfg(debug_assertions)]
 fn build_chunk_table_sequential(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
@@ -941,7 +956,10 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
-    #[cfg(debug_assertions)]
+    info!(
+        log,
+        "compute_manifest build_chunk_table_sequential",
+    );
     let (seq_file_table, seq_chunk_table) = {
         let metrics_registry = ic_metrics::MetricsRegistry::new();
         let metrics = ManifestMetrics::new(&metrics_registry);
