@@ -595,12 +595,12 @@ impl BlockchainManager {
                 continue;
             }
 
-            trace!(
-                self.logger,
-                "Sending getdata to {} : Inventory {:?}",
-                peer.socket,
-                selected_inventory
-            );
+            // trace!(
+            //     self.logger,
+            //     "Sending getdata to {} : Inventory {:?}",
+            //     peer.socket,
+            //     selected_inventory
+            // );
 
             //Send 'getdata' request for the inventory to the peer.
             channel
