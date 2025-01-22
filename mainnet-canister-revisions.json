@@ -4,16 +4,16 @@
     "sha256": "92622a35dc03651a046ef02d48c3d3c3383a25307d719e4a7657601486fa9f4f"
   },
   "ck_btc_archive": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "f94cf1db965b7042197e5894fef54f5f413bb2ebc607ff0fb59c9d4dfd3babea"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "2b0970a84976bc2eb9591b68d44501566937994fa5594972f8aac9c8b058672f"
   },
   "ck_btc_index": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "2adc74fe5667f26ea4c4006309d99b1dfa71787aa43a5c168cb08ec725677996"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "e155db9d06b6147ece4f9defe599844f132a7db21693265671aa6ac60912935f"
   },
   "ck_btc_ledger": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822"
   },
   "ck_btc_ledger_v1": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
@@ -27,17 +27,21 @@
     "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
     "sha256": "67cfcbabb79e683b6fc855450d9972c9efaa7a1cd28c6387965616fbead191ea"
   },
-  "ck_eth_archive": {
+  "ck_btc_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
+  },
+  "ck_eth_archive": {
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
     "sha256": "2d25f7831894100d48aa9043c65e87c293487523f0958c15760027d004fbbda9"
   },
   "ck_eth_index": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
     "sha256": "d615ea66e7ec7e39a3912889ffabfabb9b6f200584b9656789c3578fae1afac7"
   },
   "ck_eth_ledger": {
-    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
-    "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
+    "rev": "c741e349451edf0c9792149ad439bb32a0161371",
+    "sha256": "8b2e3e596a147780b0e99ce36d0b8f1f3ba41a98b819b42980a7c08c309b44c1"
   },
   "ck_eth_ledger_v1": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
@@ -50,6 +54,10 @@
   "ck_eth_ledger_v2_noledgerversion": {
     "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
     "sha256": "73d0c5f057aaf33004218ce588780e1b454c717c702b1cf47532f32c23515f1e"
+  },
+  "ck_eth_ledger_v3": {
+    "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
+    "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
