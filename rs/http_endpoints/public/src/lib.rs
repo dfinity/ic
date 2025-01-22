@@ -915,7 +915,6 @@ async fn try_fetch_delegation_from_nns(
         .connect(
             irrelevant_domain
                 .try_into()
-                // TODO: ideally the expect should run at compile time
                 .expect("failed to create domain"),
             tcp_stream,
         )
