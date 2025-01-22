@@ -21,8 +21,8 @@ use ic_replicated_state::{
 use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, CanisterMessage,
-    CanisterMessageOrTask, MessageId, Payload, RejectContext, Response,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
+    Response,
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
@@ -588,20 +588,6 @@ pub(crate) fn finish_call_with_error(
         instructions_used,
         heap_delta: NumBytes::from(0),
         call_duration: Some(Duration::from_secs(0)),
-    }
-}
-
-pub(crate) fn into_message_or_task(call_or_task: CanisterCallOrTask) -> CanisterMessageOrTask {
-    match call_or_task {
-        CanisterCallOrTask::Update(CanisterCall::Request(r))
-        | CanisterCallOrTask::Query(CanisterCall::Request(r)) => {
-            CanisterMessageOrTask::Message(CanisterMessage::Request(r))
-        }
-        CanisterCallOrTask::Update(CanisterCall::Ingress(i))
-        | CanisterCallOrTask::Query(CanisterCall::Ingress(i)) => {
-            CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
-        }
-        CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
     }
 }
 

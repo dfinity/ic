@@ -3,8 +3,8 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, into_message_or_task, update_round_limits,
-    validate_message, wasm_result_to_query_response,
+    ingress_status_with_processing_state, update_round_limits, validate_message,
+    wasm_result_to_query_response,
 };
 use crate::execution_environment::{
     log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
@@ -22,8 +22,8 @@ use ic_management_canister_types::IC_00;
 use ic_replicated_state::{num_bytes_try_from, CallContextAction, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
-    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessageOrTask, CanisterTask,
-    RequestMetadata,
+    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
+    CanisterTask, RequestMetadata,
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
@@ -793,5 +793,19 @@ impl PausedExecution for PausedCallOrTaskExecution {
 
     fn input(&self) -> CanisterMessageOrTask {
         into_message_or_task(self.original.call_or_task.clone())
+    }
+}
+
+fn into_message_or_task(call_or_task: CanisterCallOrTask) -> CanisterMessageOrTask {
+    match call_or_task {
+        CanisterCallOrTask::Update(CanisterCall::Request(r))
+        | CanisterCallOrTask::Query(CanisterCall::Request(r)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Request(r))
+        }
+        CanisterCallOrTask::Update(CanisterCall::Ingress(i))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(i)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
+        }
+        CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
     }
 }
