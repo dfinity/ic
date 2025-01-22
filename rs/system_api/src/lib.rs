@@ -31,11 +31,13 @@ use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, Syst
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
+    collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
 };
 
 pub mod cycles_balance_change;
+use cycles_balance_change::CyclesBalanceChange;
 mod request_in_prep;
 mod routing;
 pub mod sandbox_safe_system_state;
@@ -1492,39 +1494,72 @@ impl SystemApiImpl {
 
     pub fn into_system_state_changes(self) -> SystemStateChanges {
         match self.api_type {
-            ApiType::InspectMessage { .. } => SystemStateChanges::default(),
+            // List all fields of `SystemStateChanges` so that
+            // there's an explicit decision that needs to be made
+            // for each context when a new field is added.
+            ApiType::InspectMessage { .. } => SystemStateChanges {
+                new_certified_data: None,
+                callback_updates: vec![],
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+            },
             ApiType::NonReplicatedQuery { .. } => SystemStateChanges {
+                new_certified_data: None,
                 callback_updates: self
                     .sandbox_safe_system_state
                     .system_state_changes
                     .callback_updates
+                    .clone(),
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .request_slots_used
                     .clone(),
                 requests: self
                     .sandbox_safe_system_state
                     .system_state_changes
                     .requests
                     .clone(),
-                ..SystemStateChanges::default()
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
             },
             ApiType::ReplicatedQuery { .. } => SystemStateChanges {
-                consumed_cycles_by_use_case: self
-                    .sandbox_safe_system_state
-                    .system_state_changes
-                    .consumed_cycles_by_use_case,
+                new_certified_data: None,
+                callback_updates: vec![],
                 cycles_balance_change: self
                     .sandbox_safe_system_state
                     .system_state_changes
                     .cycles_balance_change,
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .consumed_cycles_by_use_case,
                 call_context_balance_taken: self
                     .sandbox_safe_system_state
                     .system_state_changes
                     .call_context_balance_taken,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
                 canister_log: self
                     .sandbox_safe_system_state
                     .system_state_changes
                     .canister_log
                     .clone(),
-                ..SystemStateChanges::default()
+                on_low_wasm_memory_hook_condition_check_result: None,
             },
             ApiType::Start { .. }
             | ApiType::Init { .. }
