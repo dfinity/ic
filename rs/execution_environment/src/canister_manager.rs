@@ -121,7 +121,8 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
-    pub(crate) max_canister_memory_size: NumBytes,
+    pub(crate) max_canister_memory_size_wasm32: NumBytes,
+    pub(crate) max_canister_memory_size_wasm64: NumBytes,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
@@ -141,7 +142,8 @@ impl CanisterMgrConfig {
         own_subnet_type: SubnetType,
         max_controllers: usize,
         compute_capacity: usize,
-        max_canister_memory_size: NumBytes,
+        max_canister_memory_size_wasm32: NumBytes,
+        max_canister_memory_size_wasm64: NumBytes,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
         rate_limiting_of_heap_delta: FlagStatus,
@@ -160,7 +162,8 @@ impl CanisterMgrConfig {
             max_controllers,
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
-            max_canister_memory_size,
+            max_canister_memory_size_wasm32,
+            max_canister_memory_size_wasm64,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
@@ -2195,7 +2198,10 @@ impl CanisterManager {
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
-        let memory_allocation_given = canister.memory_limit(self.config.max_canister_memory_size);
+
+        let memory_allocation_given =
+            canister.memory_limit(self.get_max_canister_memory_size(is_wasm64_execution));
+
         if new_memory_usage > memory_allocation_given {
             return (
                 Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
@@ -2335,6 +2341,16 @@ impl CanisterManager {
             NumBytes::from(0),
         );
         Ok(())
+    }
+
+    /// Depending on the canister architecture (Wasm32 or Wasm64), returns the
+    /// maximum memory size that can be allocated by a canister.
+    pub(crate) fn get_max_canister_memory_size(&self, is_wasm64_execution: bool) -> NumBytes {
+        if is_wasm64_execution {
+            self.config.max_canister_memory_size_wasm64
+        } else {
+            self.config.max_canister_memory_size_wasm32
+        }
     }
 }
 

@@ -306,6 +306,7 @@ fn canister_manager_config(
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
         MAX_CANISTER_MEMORY_SIZE,
+        MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,

@@ -3483,15 +3483,18 @@ impl SystemApi for SystemApiImpl {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplicatedQuery { .. } => Ok(1),
-            ApiType::NonReplicatedQuery { .. } => Ok(0),
+            ApiType::ReplyCallback { .. } | ApiType::RejectCallback { .. } => {
+                match self.execution_parameters.execution_mode {
+                    ExecutionMode::NonReplicated => Ok(0),
+                    ExecutionMode::Replicated => Ok(1),
+                }
+            }
+            ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => Ok(0),
         };
         trace_syscall!(self, ic0_in_replicated_execution, result);
         result
