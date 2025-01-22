@@ -252,7 +252,7 @@ impl CheckpointLoader {
         .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
     }
 
-    fn load_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
+    fn load_epoch_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
         let stats = self.checkpoint_layout.stats().deserialize()?;
         if let Some(query_stats) = stats.query_stats {
             Ok(RawQueryStats::try_from(query_stats)
@@ -428,7 +428,7 @@ pub fn load_checkpoint(
         checkpoint_loader.load_canister_states(&mut thread_pool)?,
         checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
-        checkpoint_loader.load_query_stats()?,
+        checkpoint_loader.load_epoch_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
 }
@@ -493,7 +493,7 @@ fn validate_eq_checkpoint_internal(
         .load_subnet_queues()
         .unwrap()
         .validate_eq(subnet_queues)?;
-    if checkpoint_loader.load_query_stats().unwrap() != *epoch_query_stats {
+    if checkpoint_loader.load_epoch_query_stats().unwrap() != *epoch_query_stats {
         return Err("query_stats has diverged.".to_string());
     }
     if !consensus_queue.is_empty() {
