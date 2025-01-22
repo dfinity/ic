@@ -249,7 +249,6 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = 
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
-  putStrLn $ "Spec version claimed: " ++ T.unpack (status_api_version s)
 
   return
     AgentConfig
@@ -991,9 +990,7 @@ runGet a b = case Get.runGetOrFail (a <* done) b of
 -- * Status endpoint parsing
 
 data StatusResponse = StatusResponse
-  { status_api_version :: T.Text,
-    status_root_key :: Blob
-  }
+  { status_root_key :: Blob }
 
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
