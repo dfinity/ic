@@ -509,6 +509,8 @@ impl NnsGovernanceCanister {
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
+        // TODO: Jira ticket NNS1-3555
+        #[allow(non_local_definitions)]
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
@@ -599,13 +601,13 @@ enum RunCommandError<'a> {
     },
 }
 
-impl<'a> Display for RunCommandError<'a> {
+impl Display for RunCommandError<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "{}", self.new_report())
     }
 }
 
-impl<'a> RunCommandError<'a> {
+impl RunCommandError<'_> {
     fn new_report(&self) -> String {
         match self {
             RunCommandError::UnableToRunCommand { command, error } => {

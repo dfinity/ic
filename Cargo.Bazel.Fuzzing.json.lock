@@ -1,5 +1,5 @@
 {
-  "checksum": "47779dd70947956334194045d833b520303bd12424c6ae738db137a5ede73532",
+  "checksum": "e2f0c9fb8047d4200e8e14e235a3d28792aef48b70952cf21a1f849ff9ea495d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11272,16 +11272,6 @@
               }
             ],
             "wasm32-unknown-unknown": [
-              {
-                "id": "serde-wasm-bindgen 0.5.0",
-                "target": "serde_wasm_bindgen"
-              },
-              {
-                "id": "wasm-bindgen 0.2.95",
-                "target": "wasm_bindgen"
-              }
-            ],
-            "wasm32-wasi": [
               {
                 "id": "serde-wasm-bindgen 0.5.0",
                 "target": "serde_wasm_bindgen"
@@ -58417,12 +58407,6 @@
                 "target": "wasm_streams"
               }
             ],
-            "wasm32-wasi": [
-              {
-                "id": "wasm-streams 0.4.0",
-                "target": "wasm_streams"
-              }
-            ],
             "wasm32-wasip1": [
               {
                 "id": "wasm-streams 0.4.0",
@@ -60978,11 +60962,6 @@
               "termios",
               "use-libc-auxv"
             ],
-            "wasm32-wasi": [
-              "default",
-              "termios",
-              "use-libc-auxv"
-            ],
             "wasm32-wasip1": [
               "default",
               "termios",
@@ -61308,17 +61287,6 @@
               }
             ],
             "wasm32-unknown-unknown": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "wasm32-wasi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -86443,7 +86411,6 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -86474,7 +86441,6 @@
       "wasm32-unknown-unknown"
     ],
     "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\"))": [
-      "wasm32-wasi",
       "wasm32-wasip1"
     ],
     "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
@@ -86757,7 +86723,6 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -86884,7 +86849,6 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -86947,7 +86911,6 @@
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -86982,7 +86945,6 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -87071,7 +87033,6 @@
       "s390x-unknown-linux-gnu",
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -87173,7 +87134,6 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -87209,7 +87169,6 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
@@ -87235,7 +87194,6 @@
     ],
     "cfg(target_arch = \"wasm32\")": [
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
       "wasm32-wasip1"
     ],
     "cfg(target_arch = \"x86\")": [
@@ -87300,7 +87258,6 @@
     ],
     "cfg(target_os = \"redox\")": [],
     "cfg(target_os = \"wasi\")": [
-      "wasm32-wasi",
       "wasm32-wasip1"
     ],
     "cfg(target_os = \"windows\")": [
@@ -87379,9 +87336,6 @@
     ],
     "wasm32-unknown-unknown": [
       "wasm32-unknown-unknown"
-    ],
-    "wasm32-wasi": [
-      "wasm32-wasi"
     ],
     "wasm32-wasip1": [
       "wasm32-wasip1"
@@ -87758,5 +87712,6 @@
     "zeroize 1.8.1",
     "zstd 0.13.2"
   ],
-  "direct_dev_deps": []
+  "direct_dev_deps": [],
+  "unused_patches": []
 }

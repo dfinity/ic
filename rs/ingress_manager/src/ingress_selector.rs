@@ -627,7 +627,7 @@ impl<'a, T: IngressSetQuery> IngressSetChain<'a, T> {
     }
 }
 
-impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
+impl<T: IngressSetQuery> IngressSetQuery for IngressSetChain<'_, T> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         if self.first.contains(msg_id) {
             true

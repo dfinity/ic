@@ -70,9 +70,11 @@ fn test(env: TestEnv) {
         .expect("Could not install NNS canisters.");
 
     // TODO(CON-1420): Install message canister to fetch keys
+    // TODO: Since installing these canisters takes some time, we should actually
+    // take the hight at this moment as the base for the test and then wait relative to that.
 
     // Wait one DKG
-    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL), log.clone());
+    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL + 1), log.clone());
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
@@ -95,11 +97,11 @@ fn test(env: TestEnv) {
     });
 
     // Wait two DKGs
-    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL * 2), log.clone());
+    await_node_certified_height(&nns_node, Height::from((DKG_INTERVAL + 1) * 3), log.clone());
     // TODO(CON-1420): Fetch public key from subnet
 
     // Wait two more DKGs
-    await_node_certified_height(&nns_node, Height::from(DKG_INTERVAL * 2), log.clone());
+    await_node_certified_height(&nns_node, Height::from((DKG_INTERVAL + 1) * 5), log.clone());
 }
 
 fn main() -> Result<()> {

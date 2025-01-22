@@ -87,7 +87,7 @@ pub fn find_lowest_ranked_non_disqualified_proposals(
         .filter(|proposal| !disqualified.contains(&proposal.signature.signer))
     {
         let best_rank = best_proposals.first().map(HasRank::rank);
-        if !best_rank.is_some_and(|rank| rank <= proposal.rank()) {
+        if best_rank.is_none_or(|rank| rank > proposal.rank()) {
             best_proposals = vec![proposal];
         } else if Some(proposal.rank()) == best_rank {
             best_proposals.push(proposal);
@@ -293,7 +293,7 @@ pub fn active_low_threshold_committee(
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
-            let transcript = transcript.expect("No active low treshold transcript available");
+            let transcript = transcript.expect("No active low threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),
@@ -309,7 +309,7 @@ pub fn active_high_threshold_committee(
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            let transcript = transcript.expect("No active high treshold transcript available");
+            let transcript = transcript.expect("No active high threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),
