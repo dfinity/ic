@@ -592,7 +592,7 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                break;
+                continue;
             }
 
             trace!(
