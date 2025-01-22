@@ -39,7 +39,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     ApiType, ExecutionParameters,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
@@ -1209,7 +1209,7 @@ impl TestWasmExecutorCore {
                 output,
                 CanisterStateChanges {
                     execution_state_changes: None,
-                    system_state_changes: SystemStateChanges::default(),
+                    system_state_modifications: SystemStateModifications::default(),
                 },
             );
         }
@@ -1218,7 +1218,7 @@ impl TestWasmExecutorCore {
         let instructions_left = message_limit - paused.instructions_executed;
 
         // Generate all the outgoing calls.
-        let system_state_changes = self.perform_calls(
+        let system_state_modifications = self.perform_calls(
             paused.sandbox_safe_system_state,
             message.calls,
             paused.call_context_id,
@@ -1257,7 +1257,7 @@ impl TestWasmExecutorCore {
             output,
             CanisterStateChanges {
                 execution_state_changes: Some(execution_state_changes),
-                system_state_changes,
+                system_state_modifications,
             },
         )
     }
@@ -1303,7 +1303,7 @@ impl TestWasmExecutorCore {
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
-    ) -> SystemStateChanges {
+    ) -> SystemStateModifications {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
                 &mut system_state,
