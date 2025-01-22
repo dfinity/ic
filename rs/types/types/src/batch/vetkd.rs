@@ -44,12 +44,12 @@ impl CountBytes for VetKdAgreement {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct VetKdPayload {
-    pub vet_kd_agreements: BTreeMap<CallbackId, VetKdAgreement>,
+    pub vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>,
 }
 
 impl VetKdPayload {
     pub fn is_empty(&self) -> bool {
-        self.vet_kd_agreements.is_empty()
+        self.vetkd_agreements.is_empty()
     }
 }
 
@@ -106,9 +106,9 @@ impl TryFrom<VetKdErrorCodeProto> for VetKdErrorCode {
     }
 }
 
-pub fn vet_kd_payload_to_bytes(payload: VetKdPayload, max_size: NumBytes) -> Vec<u8> {
+pub fn vetkd_payload_to_bytes(payload: VetKdPayload, max_size: NumBytes) -> Vec<u8> {
     let message_iterator = payload
-        .vet_kd_agreements
+        .vetkd_agreements
         .into_iter()
         .map(|(callback_id, agreement)| VetKdAgreementProto {
             callback_id: callback_id.get(),
@@ -118,7 +118,7 @@ pub fn vet_kd_payload_to_bytes(payload: VetKdPayload, max_size: NumBytes) -> Vec
     iterator_to_bytes(message_iterator, max_size)
 }
 
-pub fn bytes_to_vet_kd_payload(data: &[u8]) -> Result<VetKdPayload, ProxyDecodeError> {
+pub fn bytes_to_vetkd_payload(data: &[u8]) -> Result<VetKdPayload, ProxyDecodeError> {
     let messages: Vec<VetKdAgreementProto> =
         slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
     let mut payload = VetKdPayload::default();
@@ -126,7 +126,7 @@ pub fn bytes_to_vet_kd_payload(data: &[u8]) -> Result<VetKdPayload, ProxyDecodeE
     for message in messages {
         let callback_id = CallbackId::from(message.callback_id);
         let response = try_from_option_field(message.agreement, "VetKdAgreement::agreement")?;
-        payload.vet_kd_agreements.insert(callback_id, response);
+        payload.vetkd_agreements.insert(callback_id, response);
     }
 
     Ok(payload)
@@ -142,14 +142,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vet_kd_payload_conversion() {
+    fn test_vetkd_payload_conversion() {
         let set = VetKdPayload::exhaustive_set(&mut reproducible_rng());
         println!("Number of VetKdPayload variants: {}", set.len());
         let max_size = NumBytes::new(2 * 1024 * 1024);
         for element in set {
             // serialize -> deserialize round-trip
-            let bytes = vet_kd_payload_to_bytes(element.clone(), max_size);
-            let new_element = bytes_to_vet_kd_payload(&bytes).unwrap();
+            let bytes = vetkd_payload_to_bytes(element.clone(), max_size);
+            let new_element = bytes_to_vetkd_payload(&bytes).unwrap();
 
             assert_eq!(
                 element, new_element,
@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn test_large_vet_kd_payload_conversion() {
+    fn test_large_vetkd_payload_conversion() {
         let mut rng = reproducible_rng();
         // Max size is 10_000 bytes
         let max_size = NumBytes::new(10 * 1000);
@@ -173,14 +173,14 @@ mod tests {
 
         // 8 Agreements should still fit in the payload
         let payload_fits = VetKdPayload {
-            vet_kd_agreements: (0..9)
+            vetkd_agreements: (0..9)
                 .map(|i| (CallbackId::new(i), make_agreement()))
                 .collect(),
         };
 
-        let bytes = vet_kd_payload_to_bytes(payload_fits.clone(), max_size);
+        let bytes = vetkd_payload_to_bytes(payload_fits.clone(), max_size);
         assert!(bytes.len() as u64 <= max_size.get());
-        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+        let new_payload = bytes_to_vetkd_payload(&bytes).unwrap();
 
         assert_eq!(
             new_payload, payload_fits,
@@ -190,12 +190,12 @@ mod tests {
         // The 9th agreement should be truncated
         let mut payload_too_large = payload_fits.clone();
         payload_too_large
-            .vet_kd_agreements
+            .vetkd_agreements
             .insert(CallbackId::new(9), make_agreement());
 
-        let bytes = vet_kd_payload_to_bytes(payload_too_large, max_size);
+        let bytes = vetkd_payload_to_bytes(payload_too_large, max_size);
         assert!(bytes.len() as u64 <= max_size.get());
-        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+        let new_payload = bytes_to_vetkd_payload(&bytes).unwrap();
 
         assert_eq!(
             new_payload, payload_fits,
@@ -204,14 +204,14 @@ mod tests {
 
         // But there should still be space for a reject
         let mut payload_reject = payload_fits.clone();
-        payload_reject.vet_kd_agreements.insert(
+        payload_reject.vetkd_agreements.insert(
             CallbackId::new(9),
             VetKdAgreement::Reject(VetKdErrorCode::TimedOut),
         );
 
-        let bytes = vet_kd_payload_to_bytes(payload_reject.clone(), max_size);
+        let bytes = vetkd_payload_to_bytes(payload_reject.clone(), max_size);
         assert!(bytes.len() as u64 <= max_size.get());
-        let new_payload = bytes_to_vet_kd_payload(&bytes).unwrap();
+        let new_payload = bytes_to_vetkd_payload(&bytes).unwrap();
 
         assert_eq!(
             new_payload, payload_reject,

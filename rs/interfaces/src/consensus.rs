@@ -15,7 +15,7 @@ use crate::{
         SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
-    vet_kd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
+    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{

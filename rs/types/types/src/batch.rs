@@ -5,7 +5,7 @@ mod canister_http;
 mod execution_environment;
 mod ingress;
 mod self_validating;
-mod vet_kd;
+mod vetkd;
 mod xnet;
 
 pub use self::{
@@ -16,8 +16,8 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
-    vet_kd::{
-        bytes_to_vet_kd_payload, vet_kd_payload_to_bytes, VetKdAgreement, VetKdErrorCode,
+    vetkd::{
+        bytes_to_vetkd_payload, vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode,
         VetKdPayload,
     },
     xnet::XNetPayload,

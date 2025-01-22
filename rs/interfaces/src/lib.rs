@@ -19,7 +19,7 @@ pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;
 pub mod validation;
-pub mod vet_kd;
+pub mod vetkd;
 
 // Note [Associated Types in Interfaces]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
