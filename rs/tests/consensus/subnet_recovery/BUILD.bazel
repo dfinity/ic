@@ -193,7 +193,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    env_inherit = ["SSH_AUTH_SOCK"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,

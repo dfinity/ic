@@ -202,7 +202,7 @@ use std::{
     ffi::OsStr,
     fs,
     future::Future,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
@@ -1455,142 +1455,61 @@ pub trait SshSession {
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session>;
 
-    /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session2(&self) -> Result<(Session, ssh2::Agent)> {
-        Err(anyhow!("oh no"))
-    }
-
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
     fn block_on_ssh_session(&self) -> Result<Session>;
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session2(&self) -> Result<(Session, ssh2::Agent)> {
-        Err(anyhow!("oh no"))
-    }
-
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
-        self.block_on_bash_script_from_session3(&session, script)
-    }
-
-    fn block_on_bash_script2(&self, script: &str) -> Result<String> {
-        let (session, agent) = self.block_on_ssh_session2()?;
-        self.block_on_bash_script_from_session2(&session, &agent, script)
+        self.block_on_bash_script_from_session(&session, script)
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
-        channel.request_auth_agent_forwarding().unwrap();
         channel.exec("bash").unwrap();
 
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
         channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
+        
+        let stdout = BufReader::new(channel.stream(0));
+        let stderr = BufReader::new(channel.stderr());
+
+        let stdout_thread = std::thread::spawn(move || {
+            let mut stdout_lines = Vec::new();
+            for line in stdout.lines() {
+                match line {
+                    Ok(line) => {
+                        println!("stdout: {}", line);
+                        stdout_lines.push(line);
+                    }
+                    Err(e) => println!("Error reading stdout: {}", e),
+                }
+            }
+            stdout_lines.join("\n")
+        });
+
+        let stderr_thread = std::thread::spawn(move || {
+            let mut stderr_lines = Vec::new();
+            for line in stderr.lines() {
+                match line {
+                    Ok(line) => {
+                        println!("stderr: {}", line);
+                        stderr_lines.push(line);
+                    }
+                    Err(e) => println!("Error reading stderr: {}", e),
+                }
+            }
+            stderr_lines.join("\n")
+        });
+
+        let out = stdout_thread.join().expect("Failed to join stdout thread");
+        let err = stderr_thread.join().expect("Failed to join stderr thread");
+
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
-    }
-
-    fn block_on_bash_script_from_session3(&self, session: &Session, script: &str) -> Result<String> {
-        println!("session");
-        let mut channel = session.channel_session()?;
-        println!("forward");
-        channel.request_auth_agent_forwarding().unwrap();
-        println!("exec");
-        channel.exec("bash").unwrap();
-
-        println!("start reading");
-
-        use anyhow::{bail, Result};
-        use ssh2::Session;
-        use std::io::{BufRead, BufReader, Write};
-        let stdout = channel.stream(0); // Stream 0 is stdout
-        let stderr = channel.stderr(); // Separate stream for stderr
-
-        // Wrap stdout and stderr in BufReader for line-by-line reading
-        let mut stdout_reader = BufReader::new(stdout);
-        let mut stderr_reader = BufReader::new(stderr);
-
-        let mut stdout_line = String::new();
-        let mut stderr_line = String::new();
-
-        // Read stdout in real time
-        while {stdout_reader.read_line(&mut stdout_line)? > 0} {
-            println!("STDOUT: {}", stdout_line.trim_end());
-            stdout_line.clear();
-        }
-
-        // Read stderr in real time
-        while { stderr_reader.read_line(&mut stderr_line)? > 0} {
-            println!("STDERR: {}", stderr_line.trim_end());
-            stderr_line.clear();
-        }
-        
-        // Read stdout in real time
-        while {stdout_reader.read_line(&mut stdout_line)? > 0} {
-            println!("STDOUT: {}", stdout_line.trim_end());
-            stdout_line.clear();
-        }
-
-        
-
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status}. See STDERR for details.");
-        }
-
-        Ok("done".into())
-    }
-
-    fn block_on_bash_script_from_session2(&self, session: &Session, agent: &ssh2::Agent, script: &str) -> Result<String> {
-        use anyhow::{bail, Result};
-        use ssh2::Session;
-        use std::io::{BufRead, BufReader, Write};
-
-        let mut channel = session.channel_session()?;
-        channel.request_auth_agent_forwarding().unwrap();
-        channel.exec(script).unwrap();
-
-        // channel.write_all(script.as_bytes())?;
-        // channel.flush()?;
-        // channel.send_eof()?;
-
-        let stdout = channel.stream(0); // Stream 0 is stdout
-        let stderr = channel.stderr(); // Separate stream for stderr
-
-        // Wrap stdout and stderr in BufReader for line-by-line reading
-        let mut stdout_reader = BufReader::new(stdout);
-        let mut stderr_reader = BufReader::new(stderr);
-
-        let mut stdout_line = String::new();
-        let mut stderr_line = String::new();
-
-        // Read stderr in real time
-        while { stderr_reader.read_line(&mut stderr_line)? > 0} {
-            println!("STDERR: {}", stderr_line.trim_end());
-            stderr_line.clear();
-        }
-        
-        // Read stdout in real time
-        while {stdout_reader.read_line(&mut stdout_line)? > 0} {
-            println!("STDOUT: {}", stdout_line.trim_end());
-            stdout_line.clear();
-        }
-
-        
-
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status}. See STDERR for details.");
-        }
-
-        Ok("done".into())
     }
 }
 
@@ -2049,53 +1968,12 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     Ok(sess)
 }
 
-pub fn get_ssh_session_from_env2(env: &TestEnv, ip: IpAddr) -> Result<(Session, ssh2::Agent)> {
-    let tcp = TcpStream::connect((ip, 22))?;
-    let mut sess = Session::new()?;
-    
-    sess.set_tcp_stream(tcp);
-    sess.handshake()?;
-    let priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(SSH_USERNAME);
-    sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
-    println!("setting ssh auth sock");
-    std::env::set_var("SSH_AUTH_SOCK", "/ssh-agent");
-    println!("calling agent()");
-    let mut agent = sess.agent()?;
-    // agent.add
-    println!("connecting");
-    agent.connect()?;
-    println!("litsting");
-    agent.list_identities()?;
-    
-    // Ensure that the agent forwarding is properly requested
-    let identities = agent.identities()?;
-    for identity in identities {
-        println!("aaaaaa");
-        agent.userauth("admin", &identity)?;
-        if sess.authenticated() {
-            println!("Authenticatedddd");
-            break;
-        }
-    }
-    
-    Ok((sess, agent))
-}
-
 impl SshSession for IcNodeSnapshot {
     fn get_ssh_session(&self) -> Result<Session> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();
         let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
         get_ssh_session_from_env(&self.env, ip_addr)
-    }
-
-    fn get_ssh_session2(&self) -> Result<(Session, ssh2::Agent)> {
-        let node_record = self.raw_node_record();
-        let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        get_ssh_session_from_env2(&self.env, ip_addr)
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
@@ -2108,19 +1986,6 @@ impl SshSession for IcNodeSnapshot {
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
-        )
-    }
-
-    fn block_on_ssh_session2(&self) -> Result<(Session, ssh2::Agent)> {
-        let node_record = self.raw_node_record();
-        let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        retry_with_msg!(
-            format!("get_ssh_session2 to {}", ip_addr.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session2() }
         )
     }
 }

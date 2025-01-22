@@ -319,13 +319,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
     info!(logger, "app node URL: {}", app_node.get_public_url());
 
     info!(logger, "Ensure app subnet is functional");
-    // cert_state_makes_progress_with_retries(
-    //     &app_node.get_public_url(),
-    //     app_node.effective_canister_id(),
-    //     &logger,
-    //     secs(600),
-    //     secs(10),
-    // );
+    cert_state_makes_progress_with_retries(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
         &app_node.get_public_url(),
@@ -399,6 +399,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
+        skip: None,
     };
 
     info!(
@@ -443,7 +444,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
-        local_recovery(&download_node.0, &upload_node, subnet_recovery, &logger);
+        local_recovery(&download_node.0, subnet_recovery, &logger);
     } else {
         info!(logger, "Performing remote recovery");
         remote_recovery(&cfg, subnet_recovery, &logger);
@@ -535,27 +536,21 @@ fn remote_recovery(cfg: &Config, subnet_recovery: AppSubnetRecovery, logger: &Lo
     }
 }
 
-fn local_recovery(node: &IcNodeSnapshot, node2: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
     let node_ip = node.get_ip_addr();
-    let node2_ip = node2.get_ip_addr();
 
-    let result = node.block_on_bash_script("cat /etc/ssh/sshd_config");
-    match result {
-        Ok(ret) => info!(logger, "Finished cat test: {ret}"),
-        Err(err) => panic!("ssh test failed: \n{err}"),
-    }
-
-    let command = format!("ssh -vvv -A -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 admin@{node2_ip} echo 1;");
+    let command = "echo test";
     info!(logger, "Executing local test command: \n{command}");
+
     let result = node.block_on_bash_script(&command);
 
     match result {
-        Ok(ret) => info!(logger, "Finished ssh test {ret}"),
-        Err(err) => panic!("ssh test failed: \n{err}"),
+        Ok(ret) => info!(logger, "Finished local test: \n{ret}"),
+        Err(err) => panic!("Local test failed: \n{err}"),
     }
 
     let command = format!(
@@ -566,16 +561,19 @@ fn local_recovery(node: &IcNodeSnapshot, node2: &IcNodeSnapshot, subnet_recovery
         --subnet-id {subnet_id} \
         --pub-key "{pub_key}" \
         --download-node {node_ip} \
-        --upload-method local
+        --upload-method local \
+        --skip DownloadCertifications \
+        --skip MergeCertificationPools
     "#
     );
+    // .arg("ValidateReplayOutput");
 
     info!(logger, "Executing local recovery command: \n{command}");
 
     let result = node.block_on_bash_script(&command);
 
     match result {
-        Ok(ret) => info!(logger, "Finished local recovery"),
+        Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
 }
