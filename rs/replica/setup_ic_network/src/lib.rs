@@ -87,7 +87,7 @@ struct ArtifactPools {
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
-    canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    https_outcalls_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
 impl ArtifactPools {
@@ -124,7 +124,7 @@ impl ArtifactPools {
             metrics_registry.clone(),
             log.clone(),
         )));
-        let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+        let https_outcalls_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
             metrics_registry.clone(),
             log.clone(),
         )));
@@ -133,7 +133,7 @@ impl ArtifactPools {
             certification_pool,
             dkg_pool,
             idkg_pool,
-            canister_http_pool,
+            https_outcalls_pool,
         }
     }
 }
@@ -309,7 +309,7 @@ impl AbortableBroadcastChannels {
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
-                artifact_pools.canister_http_pool.clone(),
+                artifact_pools.https_outcalls_pool.clone(),
                 bouncers.https_outcalls,
                 metrics_registry.clone(),
             );
@@ -454,14 +454,12 @@ pub fn setup_consensus_and_p2p(
         abortable_broadcast_manager_runner.start(quic_transport.clone(), topology_watcher);
     let _state_sync_manager = state_sync_manager_runner.start(quic_transport.clone());
 
-    // The driver of consensus, certification, etc is written in sans-io style.
-    // https://www.firezone.dev/blog/sans-io
     start_consensus(
         log,
         metrics_registry,
         node_id,
         subnet_id,
-        artifact_pools,
+        &artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
@@ -484,8 +482,8 @@ pub fn setup_consensus_and_p2p(
     )
 }
 
-/// The function creates the Consensus stack (including all Consensus clients)
-/// and starts the artifact manager event loop for each client.
+/// The function creates the consensus protocols and the event loops that drive them forward.
+/// The event loops are written in SANS-IO style (https://www.firezone.dev/blog/sans-io, )
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn start_consensus(
     log: &ReplicaLogger,
@@ -494,7 +492,7 @@ fn start_consensus(
     subnet_id: SubnetId,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
-    artifact_pools: ArtifactPools,
+    artifact_pools: &ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
@@ -521,7 +519,7 @@ fn start_consensus(
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
-    let replica_config = ReplicaConfig { node_id, subnet_id };
+    // --------------- PAYLOAD BUILDERS WITH ARTIFACT POOLS FOLLOW ---------------------------------
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
         consensus_time,
@@ -539,8 +537,8 @@ fn start_consensus(
         RandomStateKind::Random,
     ));
 
-    let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
-        artifact_pools.canister_http_pool.clone(),
+    let https_outcalls_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
+        artifact_pools.https_outcalls_pool.clone(),
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
@@ -549,7 +547,9 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
+    // --------------- PAYLOAD BUILDERS FOLLOW ---------------------------------
 
+    let replica_config = ReplicaConfig { node_id, subnet_id };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
         Arc::clone(&consensus_crypto),
@@ -567,7 +567,7 @@ fn start_consensus(
         Arc::clone(&ingress_manager) as Arc<_>,
         xnet_payload_builder,
         self_validating_payload_builder,
-        canister_http_payload_builder,
+        https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
@@ -679,7 +679,7 @@ fn start_consensus(
             log.clone(),
         ),
         Arc::clone(&time_source) as Arc<_>,
-        artifact_pools.canister_http_pool,
+        artifact_pools.https_outcalls_pool,
         metrics_registry.clone(),
     ));
 
