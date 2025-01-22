@@ -16106,7 +16106,6 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-keys",
  "ic-stable-structures",
- "pocket-ic",
  "serde",
 ]
 

@@ -27,6 +27,3 @@ path = "src/main.rs"
 
 [build-dependencies]
 build-info-build = { workspace = true }
-
-[dev-dependencies]
-pocket-ic = { path = "../../../packages/pocket-ic" }

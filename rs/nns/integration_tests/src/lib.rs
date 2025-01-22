@@ -143,3 +143,6 @@ mod stop_or_start_canister;
 
 #[cfg(test)]
 mod api_boundary_node_queries;
+
+#[cfg(test)]
+mod metrics_collector;
