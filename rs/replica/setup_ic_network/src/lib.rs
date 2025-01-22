@@ -459,7 +459,7 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
         node_id,
         subnet_id,
-        &artifact_pools,
+        artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
@@ -492,7 +492,7 @@ fn start_consensus(
     subnet_id: SubnetId,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
-    artifact_pools: &ArtifactPools,
+    artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
