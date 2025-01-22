@@ -1716,7 +1716,6 @@ impl ExecutionEnvironment {
                     // Effectively disable subnet memory resource reservation for queries.
                     ResourceSaturation::default(),
                 );
-                let request_cycles = req.cycles();
                 let result = execute_replicated_query(
                     canister,
                     req,
@@ -1730,16 +1729,13 @@ impl ExecutionEnvironment {
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
-                    response: ExecutionResponse::Request(response),
+                    response: ExecutionResponse::Request(_),
                     instructions_used: _,
                     heap_delta: _,
-                    call_duration,
+                    call_duration: Some(duration),
                 } = &result
                 {
-                    if let Some(duration) = call_duration {
-                        self.metrics.call_durations.observe(duration.as_secs_f64());
-                    }
-                    debug_assert_eq!(request_cycles, response.refund);
+                    self.metrics.call_durations.observe(duration.as_secs_f64());
                 }
                 result
             }

@@ -4,7 +4,9 @@
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
+use ic_embedders::wasm_executor::{
+    CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
@@ -439,7 +441,7 @@ fn try_apply_canister_state_changes(
 /// - An escape from the Wasm sandbox that corrupts the execution output.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     execution_state: &mut ExecutionState,
     system_state: &mut SystemState,
     output: &mut WasmExecutionOutput,
@@ -453,16 +455,15 @@ pub fn apply_canister_state_changes(
     call_context_creation_time: Time,
     deallocate: &dyn Fn(SystemState),
 ) {
-    if let Some(CanisterStateChanges {
-        globals,
-        wasm_memory,
-        stable_memory,
+    let CanisterStateChanges {
+        execution_state_changes,
         system_state_changes,
-    }) = canister_state_changes
-    {
-        let clean_system_state = system_state.clone();
-        let clean_subnet_available_memory = round_limits.subnet_available_memory;
-        let callbacks_created = system_state_changes.callbacks_created();
+    } = canister_state_changes;
+
+    let clean_system_state = system_state.clone();
+    let clean_subnet_available_memory = round_limits.subnet_available_memory;
+    let callbacks_created = system_state_changes.callbacks_created();
+    if output.wasm_result.is_ok() {
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(
@@ -476,9 +477,16 @@ pub fn apply_canister_state_changes(
             log,
         ) {
             Ok(request_stats) => {
-                execution_state.wasm_memory = wasm_memory;
-                execution_state.stable_memory = stable_memory;
-                execution_state.exported_globals = globals;
+                if let Some(ExecutionStateChanges {
+                    globals,
+                    wasm_memory,
+                    stable_memory,
+                }) = execution_state_changes
+                {
+                    execution_state.wasm_memory = wasm_memory;
+                    execution_state.stable_memory = stable_memory;
+                    execution_state.exported_globals = globals;
+                }
                 // We increment the canister version here, as all the message execution
                 // functions (except messages executed during `install_code`,
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
@@ -506,7 +514,8 @@ pub fn apply_canister_state_changes(
                         state_changes_error.inc();
                         error!(
                             log,
-                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
+                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}",
+                            err
                         )
                     }
                 }
