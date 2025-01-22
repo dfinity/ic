@@ -23,7 +23,7 @@ use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{error, fatal, info, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
@@ -873,6 +873,14 @@ pub fn compute_manifest(
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
+    info!(
+        log,
+        "Starting compute_manifest",
+    );
+    info!(
+        log,
+        "compute_manifest files_with_sizes",
+    );
     let mut files = {
         let mut files = Vec::new();
         files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
@@ -903,6 +911,10 @@ pub fn compute_manifest(
             // new chunk size), but the manifest might be computed incorrectly
             // on the mainnet.
             if uses_chunk_size(&manifest_delta.base_manifest, max_chunk_size) {
+                info!(
+                    log,
+                    "compute_manifest dirty_pages_to_dirty_chunks",
+                );
                 let dirty_file_chunks = dirty_pages_to_dirty_chunks(
                     log,
                     &manifest_delta,
@@ -910,6 +922,10 @@ pub fn compute_manifest(
                     &files,
                     max_chunk_size,
                 )?;
+                info!(
+                    log,
+                    "compute_manifest hash_plan",
+                );
                 hash_plan(
                     &manifest_delta.base_manifest,
                     &files,
@@ -940,6 +956,10 @@ pub fn compute_manifest(
         )
     };
 
+    info!(
+        log,
+        "compute_manifest build_chunk_table_parallel",
+    );
     let (file_table, chunk_table) = build_chunk_table_parallel(
         thread_pool,
         metrics,
@@ -984,7 +1004,10 @@ pub fn compute_manifest(
 
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
-
+    info!(
+        log,
+        "finish compute_manifest",
+    );
     Ok(manifest)
 }
 

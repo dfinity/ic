@@ -708,6 +708,10 @@ fn merge(
     //   1) Shard forms a pyramid (hence overhead < 2.0)
     //   and
     //   2) number of files is <= MAX_NUMBER_OF_FILES
+    info!(
+        log,
+        "Starting merge",
+    );
     let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
         tip_handler,
         pagemaptypes,
@@ -815,6 +819,10 @@ fn merge(
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
         m.apply(&metrics.storage_metrics)
     });
+    info!(
+        log,
+        "Finish merge",
+    );
 }
 
 /// Merge all the overlays (if any) into bases.
