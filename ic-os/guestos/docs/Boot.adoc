@@ -170,10 +170,10 @@ USB stick" attached to the VM that contains a tar file with initial configuratio
 for parts of the system. Required files in the +config+ partition as well as 
 payload store are created.
 
-== Deploy updated ssh user keys
+== Deploy updated ssh account keys
 
-Service: +deploy-updated-ssh-user-keys.service+, +deploy-updated-ssh-user-keys.sh+.
-Depends on +bootstrap-ic-node.service+, runs before +setup-ssh-user-keys.service+.
+Service: +deploy-updated-ssh-account-keys.service+, +deploy-updated-ssh-account-keys.sh+.
+Depends on +bootstrap-ic-node.service+, runs before +setup-ssh-account-keys.service+.
 
 Changes the keys held in the +config+ partition for the +backup+ and +readonly+ user. This
 is a work-around due to not having a key management solution that updated keys are
