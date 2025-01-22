@@ -570,7 +570,9 @@ impl BlockchainManager {
         });
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
+        info!(self.logger, "sync_blocks: retry queue size: {}, sync queue {}:", retry_queue.len(), self.block_sync_queue.len());
         for peer in peer_info {
+            info!(self.logger, "trying from peer: {}, requests: {}", peer.socket, requests_per_peer.get(&peer.socket).unwrap_or(&0));
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
