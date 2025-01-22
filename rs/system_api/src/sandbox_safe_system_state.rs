@@ -63,17 +63,17 @@ pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     // pub for testing
     pub callback_updates: Vec<CallbackUpdate>,
-    cycles_balance_change: CyclesBalanceChange,
+    pub(super) cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
     // `CyclesBalanceChange::Removed(reserved_cycles)`.
-    reserved_cycles: Cycles,
-    consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
-    call_context_balance_taken: Option<(CallContextId, Cycles)>,
-    request_slots_used: BTreeMap<CanisterId, usize>,
-    requests: Vec<Request>,
+    pub(super) reserved_cycles: Cycles,
+    pub(super) consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
+    pub(super) call_context_balance_taken: Option<(CallContextId, Cycles)>,
+    pub(super) request_slots_used: BTreeMap<CanisterId, usize>,
+    pub(super) requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
-    canister_log: CanisterLog,
+    pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
 }
 
@@ -932,9 +932,9 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only for ApiType::{Update, ReplyCallback, RejectCallback} and all of
-        // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
-        // will never be `None`.
+        // available only forApiType::{Update, ReplicatedQuery, ReplyCallback,
+        // RejectCallBack} and all of them have CallContextId, hence
+        // SystemStateChanges::call_context_balance_taken will never be `None`.
         debug_assert!(self
             .system_state_changes
             .call_context_balance_taken
