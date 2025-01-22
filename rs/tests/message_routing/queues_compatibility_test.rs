@@ -262,17 +262,17 @@ fn test(env: TestEnv) {
                 "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
             ),
-            // TODO(MR-638): Enabke this test case once a version including
-            // `best_effort_test` was deployed to mainnet.
-            //
-            // TestCase::new(
-            //     TestType::Bidirectional {
-            //         published_binary: "replicated-state-test".to_string(),
-            //         mainnet_version: v.clone(),
-            //     },
-            //     "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-            //     "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
-            // ),
+            TestCase::new(
+                // TODO(MR-638): Switch this to a bi-directional test once a version including
+                // `best_effort_test` has been deployed to mainnet.
+                TestType::SelfTestOnly,
+                // TestType::Bidirectional {
+                //     published_binary: "replicated-state-test".to_string(),
+                //     mainnet_version: v.clone(),
+                // },
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
+            ),
             TestCase::new(
                 TestType::Bidirectional {
                     published_binary: "replicated-state-test".to_string(),
