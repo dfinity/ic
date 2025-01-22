@@ -116,28 +116,28 @@ impl CanisterHttp {
         }
     }
 
-    fn maybe_add_socks_client_for_address(&self, cache: &mut Cache, address: &str) {
+    //TODO(mihailjianu): add a name for this.
+    fn create_socks_proxy_client(
+        &self,
+        proxy_addr: Uri,
+    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, Full<Bytes>> {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        if let Ok(proxy_addr) = address.parse() {
-            let client = Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
-                HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .expect("Failed to set native roots")
-                    .https_only()
-                    .enable_all_versions()
-                    .wrap_connector(SocksConnector {
-                        proxy_addr,
-                        auth: None,
-                        connector: http_connector,
-                    }),
-            );
-            cache.insert(address.to_string(), client);
-            self.metrics.socks_cache_size.set(cache.len() as i64);
-        }
+        Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
+            HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .expect("Failed to set native roots")
+                .https_only()
+                .enable_all_versions()
+                .wrap_connector(SocksConnector {
+                    proxy_addr,
+                    auth: None,
+                    connector: http_connector,
+                }),
+        )
     }
 
     fn compare_results(
@@ -181,7 +181,18 @@ impl CanisterHttp {
         } else {
             let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
             self.metrics.socks_cache_misses.inc();
-            self.maybe_add_socks_client_for_address(&mut cache_guard, address);
+
+            match address.parse() {
+                Ok(proxy_addr) => {
+                    let client = self.create_socks_proxy_client(proxy_addr);
+                    cache_guard.insert(address.to_string(), client);
+                    self.metrics.socks_cache_size.set(cache_guard.len() as i64);
+                }
+                Err(e) => {
+                    debug!(self.logger, "Failed to parse SOCKS proxy address: {}", e);
+                }
+            }
+
             match cache_guard.get(address) {
                 Some(client) => Some(client.clone()),
                 None => {
@@ -195,9 +206,9 @@ impl CanisterHttp {
         }
     }
 
-    async fn https_outcall_socks_proxy(
+    async fn do_https_outcall_socks_proxy(
         &self,
-        socks_proxy_addrs: &[String],
+        socks_proxy_addrs: Vec<String>,
         request: http::Request<Full<Bytes>>,
     ) -> Result<http::Response<Incoming>, String> {
         let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
@@ -213,9 +224,8 @@ impl CanisterHttp {
             if tries > MAX_SOCKS_PROXY_RETRIES {
                 break;
             }
-            let next_socks_proxy_addr = socks_proxy_addr.clone();
 
-            let socks_client = self.get_socks_client(&next_socks_proxy_addr);
+            let socks_client = self.get_socks_client(socks_proxy_addr);
 
             if let Some(socks_client) = socks_client {
                 match socks_client.request(request.clone()).await {
@@ -234,7 +244,7 @@ impl CanisterHttp {
                         debug!(
                             self.logger,
                             "Failed to connect through SOCKS with address {}: {}",
-                            next_socks_proxy_addr,
+                            socks_proxy_addr,
                             socks_err
                         );
                         last_error = Some(socks_err);
@@ -352,7 +362,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
                     //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
                     if !req.socks_proxy_addrs.is_empty() {
-                        let dl_result = self.https_outcall_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
+                        let dl_result = self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone).await;
 
                         self.compare_results(&result, &dl_result);
                     }
