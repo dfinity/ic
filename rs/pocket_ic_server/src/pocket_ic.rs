@@ -872,9 +872,6 @@ impl PocketIc {
         for subnet in subnets.get_all() {
             max_time = max(max_time, subnet.state_machine.get_state_time());
         }
-        // Since calling `StateMachine::set_time` with the maximum time might make the `StateMachine` believe
-        // that time already progressed, we add one nanosecond to make time strictly monotone on all subnets.
-        max_time += Duration::from_nanos(1);
         for subnet in subnets.get_all() {
             subnet.state_machine.set_time(max_time.into());
         }
@@ -1178,10 +1175,9 @@ impl Operation for SetTime {
             ))),
             std::cmp::Ordering::Equal => OpOut::NoOutput,
             std::cmp::Ordering::Less => {
-                // Sets the time and execute a round to certify that time on all subnets.
+                // Sets the time on all subnets.
                 for subnet in pic.subnets.get_all() {
                     subnet.state_machine.set_time(set_time);
-                    subnet.state_machine.execute_round();
                 }
                 OpOut::NoOutput
             }

@@ -830,13 +830,7 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
-    // the time used to derive the time of the next round that is:
-    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
-    //  - equal to `time`       otherwise.
     time: AtomicU64,
-    // the time of the last round
-    // (equal to `time` when this `StateMachine` is initialized)
-    time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
@@ -1813,7 +1807,6 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
-            time_of_last_round: RwLock::new(time),
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
@@ -2379,12 +2372,7 @@ impl StateMachine {
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
 
-        let current_time = self.get_time();
-        let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
-            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
-        } else {
-            current_time
-        };
+        let time_of_next_round = self.get_time() + Self::EXECUTE_ROUND_TIME_INCREMENT;
 
         let batch = Batch {
             batch_number,
@@ -2426,8 +2414,7 @@ impl StateMachine {
 
         self.check_critical_errors();
 
-        self.set_time(time_of_next_round.into());
-        *self.time_of_last_round.write().unwrap() = time_of_next_round;
+        self.set_time_without_certification(time_of_next_round);
 
         batch_number
     }
@@ -2498,6 +2485,15 @@ impl StateMachine {
         replicated_state.metadata.batch_time
     }
 
+    fn set_time_without_certification(&self, time: Time) {
+        self.consensus_time.set(time);
+        self.time
+            .store(time.as_nanos_since_unix_epoch(), Ordering::Relaxed);
+        self.time_source
+            .set_time(time)
+            .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
+    }
+
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
@@ -2506,11 +2502,15 @@ impl StateMachine {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
-        self.consensus_time.set(time);
-        self.time.store(t, Ordering::Relaxed);
-        self.time_source
-            .set_time(time)
-            .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        replicated_state.metadata.batch_time = time;
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+        self.set_time_without_certification(time);
     }
 
     /// Returns the current state machine time.
