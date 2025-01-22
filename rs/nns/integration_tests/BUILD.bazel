@@ -153,6 +153,7 @@ DEV_DATA = [
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/node-metrics-collector:node-metrics-collector-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
