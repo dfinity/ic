@@ -6364,13 +6364,14 @@ dependencies = [
 [[package]]
 name = "ic-cdk"
 version = "0.18.0-alpha.1"
-source = "git+https://github.com/dfinity/cdk-rs?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 dependencies = [
  "candid",
  "ic-cdk-macros 0.18.0-alpha.1",
  "ic0 0.24.0-alpha.1",
  "serde",
  "serde_bytes",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -6446,7 +6447,7 @@ dependencies = [
 [[package]]
 name = "ic-cdk-macros"
 version = "0.18.0-alpha.1"
-source = "git+https://github.com/dfinity/cdk-rs?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -13760,7 +13761,7 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 [[package]]
 name = "ic0"
 version = "0.24.0-alpha.1"
-source = "git+https://github.com/dfinity/cdk-rs?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 
 [[package]]
 name = "ic_bls12_381"
