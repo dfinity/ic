@@ -25,20 +25,15 @@ mod metrics;
 mod receiver;
 mod sender;
 
-type StartConsensusManagerFn =
-    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
+type StartConsensusManagerFn = Box<dyn FnOnce(Arc<dyn Transport>) -> Vec<Shutdown>>;
 
 pub struct AbortableBroadcastChannelManager(Vec<StartConsensusManagerFn>);
 
 impl AbortableBroadcastChannelManager {
-    pub fn start(
-        self,
-        transport: Arc<dyn Transport>,
-        topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> Vec<Shutdown> {
+    pub fn start(self, transport: Arc<dyn Transport>) -> Vec<Shutdown> {
         let mut ret = vec![];
         for client in self.0 {
-            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
+            ret.append(&mut client(transport.clone()));
         }
         ret
     }
@@ -77,6 +72,7 @@ impl AbortableBroadcastChannelBuilder {
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
+        topology_watcher: watch::Receiver<SubnetTopology>,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> (
@@ -102,7 +98,7 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
-        let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
+        let builder = move |transport: Arc<dyn Transport>| {
             start_consensus_manager(
                 log,
                 &metrics_registry,

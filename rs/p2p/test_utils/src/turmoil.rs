@@ -381,8 +381,11 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx) =
-                    consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let (outbound_tx, inbound_tx) = consensus_builder.abortable_broadcast_channel(
+                    topology_watcher_clone.clone(),
+                    downloader,
+                    usize::MAX,
+                );
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,
@@ -412,7 +415,7 @@ pub fn add_transport_to_sim<F>(
             ));
 
             if let Some((_, con_manager)) = con {
-                con_manager.start(transport.clone(), topology_watcher_clone.clone());
+                con_manager.start(transport.clone());
             }
 
             if let Some(state_sync_manager) = state_sync_manager {

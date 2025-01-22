@@ -447,6 +447,7 @@ pub fn start_consensus_manager(
     log: ReplicaLogger,
     rt_handle: Handle,
     processor: TestConsensus<U64Artifact>,
+    topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
 ) -> (
     Box<dyn JoinGuard>,
     ic_consensus_manager::AbortableBroadcastChannelBuilder,
@@ -467,7 +468,8 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let (outbound_tx, inbound_rx) = cm1.abortable_broadcast_channel(downloader, usize::MAX);
+    let (outbound_tx, inbound_rx) =
+        cm1.abortable_broadcast_channel(topology_watcher, downloader, usize::MAX);
 
     let artifact_processor_jh = start_test_processor(
         outbound_tx,

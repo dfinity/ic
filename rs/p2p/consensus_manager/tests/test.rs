@@ -342,21 +342,25 @@ fn load_test(
     let mut jhs = vec![];
     let mut nodes = vec![];
     let mut cms = vec![];
+    let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);
     for i in 0..num_peers {
         let node = node_test_id(i);
         let processor = TestConsensus::new(log.clone(), node, 256 * (i as usize + 1), i % 2 == 0);
-        let (jh, cm) =
-            start_consensus_manager(no_op_logger(), rt.handle().clone(), processor.clone());
+        let (jh, cm) = start_consensus_manager(
+            no_op_logger(),
+            rt.handle().clone(),
+            processor.clone(),
+            topology_watcher.clone(),
+        );
         jhs.push(jh);
         let (r, m) = cm.build();
         nodes.push((node, r));
         cms.push((node, m));
         node_advert_map.insert(node, processor);
     }
-    let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);
     for ((node1, transport), (node2, cm)) in nodes.into_iter().zip(cms.into_iter()) {
         assert!(node1 == node2);
-        cm.start(transport, topology_watcher.clone());
+        cm.start(transport);
     }
 
     rt.block_on(async move {
