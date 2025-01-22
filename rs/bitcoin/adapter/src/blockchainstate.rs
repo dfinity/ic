@@ -338,10 +338,6 @@ impl HeaderStore for BlockchainState {
             .map(|cached| (cached.header, cached.height))
     }
 
-    fn get_height(&self) -> BlockHeight {
-        self.get_active_chain_tip().height
-    }
-
     fn get_initial_hash(&self) -> BlockHash {
         self.genesis().block_hash()
     }
