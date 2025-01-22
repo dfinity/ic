@@ -142,7 +142,7 @@ def icos_build(
     # Note that we defer injecting the files from images_deps["rootfs"]. These are mostly slower to build.
 
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
-    # there are only two in our build.
+    # these only occur in firmware that we do not use.
     PARTITION_ROOT_STRIP_PATHS = [
         "/run",
         "/boot",
