@@ -356,20 +356,24 @@ fn test_get_and_set_and_advance_time() {
 
     let unix_time_secs = 1630328630;
     let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+
     pic.set_time(set_time);
     assert_eq!(pic.get_time(), set_time);
+
     pic.tick();
-    assert_eq!(pic.get_time(), set_time);
+    let current_time = pic.get_time();
+    assert_eq!(current_time, set_time + std::time::Duration::from_nanos(1));
 
     pic.advance_time(std::time::Duration::from_secs(420));
     assert_eq!(
         pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
+        current_time + std::time::Duration::from_secs(420),
     );
+
     pic.tick();
     assert_eq!(
         pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
+        current_time + std::time::Duration::from_secs(420) + std::time::Duration::from_nanos(1)
     );
 }
 
@@ -413,12 +417,10 @@ fn query_call_after_advance_time() {
     query_and_check_time(&pic, canister);
 
     pic.advance_time(std::time::Duration::from_secs(420));
-    pic.tick();
 
     query_and_check_time(&pic, canister);
 
     pic.advance_time(std::time::Duration::from_secs(0));
-    pic.tick();
 
     query_and_check_time(&pic, canister);
 }

@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The response type `RawSubmitIngressResult` is replaced by `Result<RawMessageId, RejectResponse>`.
 - The response types `RawWasmResult` and `UserError` in `RawCanisterResult` are replaced by `Vec<u8>` and `RejectResponse`.
+- The endpoint `/instances/<instance_id>/update/set_time` executes a round after setting time so that
+  a state with that time becomes certified and, e.g., query calls are evaluated on a state with the specified time.
 
 ### Removed
 - The endpoint `/instances/<instance_id>/update/execute_ingress_message`:

@@ -1178,9 +1178,10 @@ impl Operation for SetTime {
             ))),
             std::cmp::Ordering::Equal => OpOut::NoOutput,
             std::cmp::Ordering::Less => {
-                // Sets the time on all subnets.
+                // Sets the time and execute a round to certify that time on all subnets.
                 for subnet in pic.subnets.get_all() {
                     subnet.state_machine.set_time(set_time);
+                    subnet.state_machine.execute_round();
                 }
                 OpOut::NoOutput
             }
