@@ -53,6 +53,15 @@ fn mmap_mprotect_read_write(file: &File) {
     }
 }
 
+fn mmap_read_write(file: &File) {
+    // Calls `mmap` with `PROT_READ | PROT_WRITE` and `MAP_PRIVATE`.
+    let mut mm = unsafe { MmapOptions::new().map_copy(file).unwrap() };
+    // Reads then makes 64 KiB copies on write.
+    for i in 0..64 / 4 {
+        mm[4096 * i] = mm[1 + 4096 * i];
+    }
+}
+
 fn bench(c: &mut Criterion, group_name: &str, routine: fn(&File)) {
     let mut group = c.benchmark_group(group_name);
 
@@ -116,6 +125,10 @@ fn mmap_mprotect_read_write_bench(c: &mut Criterion) {
     bench(c, "mmap_mprotect_read_write", mmap_mprotect_read_write);
 }
 
+fn mmap_read_write_bench(c: &mut Criterion) {
+    bench(c, "mmap_read_write", mmap_read_write);
+}
+
 criterion_group!(
     benches,
     mmap_bench,
@@ -123,5 +136,6 @@ criterion_group!(
     mmap_mprotect_read_bench,
     mmap_mprotect_write_bench,
     mmap_mprotect_read_write_bench,
+    mmap_read_write_bench,
 );
 criterion_main!(benches);
