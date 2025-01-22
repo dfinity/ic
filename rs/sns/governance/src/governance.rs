@@ -68,7 +68,7 @@ use crate::{
     },
     types::{
         function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock,
+        HeapGrowthPotential, LedgerUpdateLock, Wasm,
     },
 };
 use candid::{Decode, Encode};
@@ -2517,9 +2517,12 @@ impl Governance {
 
         let mode = upgrade.mode_or_upgrade() as i32;
 
+        let wasm = Wasm::try_from(&upgrade)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
         self.upgrade_non_root_canister(
             target_canister_id,
-            upgrade.new_canister_wasm,
+            wasm,
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
@@ -2531,7 +2534,7 @@ impl Governance {
     async fn upgrade_non_root_canister(
         &mut self,
         target_canister_id: CanisterId,
-        wasm: Vec<u8>,
+        wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
     ) -> Result<(), GovernanceError> {
@@ -2545,11 +2548,27 @@ impl Governance {
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
 
-            let change_canister_arg =
+            let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
-                    .with_wasm(wasm)
                     .with_arg(arg)
                     .with_mode(mode);
+
+            match wasm {
+                Wasm::Bytes(bytes) => {
+                    change_canister_arg = change_canister_arg.with_wasm(bytes);
+                }
+                Wasm::Chunked {
+                    wasm_module_hash,
+                    store_canister_id,
+                    chunk_hashes_list,
+                } => {
+                    change_canister_arg = change_canister_arg.with_chunked_wasm(
+                        wasm_module_hash,
+                        store_canister_id,
+                        chunk_hashes_list,
+                    );
+                }
+            };
 
             Encode!(&change_canister_arg).unwrap()
         };
@@ -2700,7 +2719,7 @@ impl Governance {
             for target_canister_id in canister_ids_to_upgrade {
                 self.upgrade_non_root_canister(
                     target_canister_id,
-                    target_wasm.clone(),
+                    Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
                 )
@@ -2767,7 +2786,7 @@ impl Governance {
             for target_canister_id in canister_ids_to_upgrade {
                 self.upgrade_non_root_canister(
                     target_canister_id,
-                    target_wasm.clone(),
+                    Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
                 )
@@ -2964,7 +2983,7 @@ impl Governance {
 
         self.upgrade_non_root_canister(
             ledger_canister_id,
-            ledger_wasm,
+            Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
         )

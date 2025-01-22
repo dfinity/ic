@@ -63,7 +63,7 @@ pub fn execute_update(
                 let is_wasm64_execution = canister
                     .execution_state
                     .as_ref()
-                    .map_or(false, |es| es.is_wasm64);
+                    .is_some_and(|es| es.is_wasm64);
 
                 let prepaid_execution_cycles = match round
                     .cycles_account_manager
@@ -268,7 +268,7 @@ fn finish_err(
     let is_wasm64_execution = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .is_some_and(|es| es.is_wasm64);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -430,7 +430,7 @@ impl UpdateHelper {
         mut self,
         mut output: WasmExecutionOutput,
         clean_canister: CanisterState,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -447,39 +447,39 @@ impl UpdateHelper {
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            let reveal_top_up = self
-                .canister
-                .controllers()
-                .contains(&original.call_origin.get_principal());
-            if old_balance < requested + original.freezing_threshold {
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                    reveal_top_up,
-                };
-                let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-                info!(
-                    round.log,
-                    "[DTS] Failed {:?} execution of canister {} due to concurrent cycle change: {:?}.",
-                    original.method,
-                    clean_canister.canister_id(),
-                    err,
-                );
-                self.deallocation_sender.send(Box::new(self.canister));
-                // Perf counter: no need to update the call context, as it won't be saved.
-                return finish_err(
-                    clean_canister,
-                    output.num_instructions_left,
-                    err,
-                    original,
-                    round,
-                );
-            }
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        let reveal_top_up = self
+            .canister
+            .controllers()
+            .contains(&original.call_origin.get_principal());
+        if old_balance < requested + original.freezing_threshold {
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+            info!(
+                round.log,
+                "[DTS] Failed {:?} execution of canister {} due to concurrent cycle change: {:?}.",
+                original.method,
+                clean_canister.canister_id(),
+                err,
+            );
+            self.deallocation_sender.send(Box::new(self.canister));
+            // Perf counter: no need to update the call context, as it won't be saved.
+            return finish_err(
+                clean_canister,
+                output.num_instructions_left,
+                err,
+                original,
+                round,
+            );
         }
         self.deallocation_sender.send(Box::new(clean_canister));
 
@@ -537,7 +537,7 @@ impl UpdateHelper {
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .is_some_and(|es| es.is_wasm64);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,

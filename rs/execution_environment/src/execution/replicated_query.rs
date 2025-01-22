@@ -12,11 +12,11 @@ use crate::execution::common::{
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use crate::metrics::CallTreeMetricsNoOp;
 use ic_error_types::{ErrorCode, UserError};
-use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{
-    messages::{CanisterCall, CanisterCallOrTask},
+    messages::{CanisterCall, CanisterCallOrTask, RequestMetadata},
     NumBytes, NumInstructions, Time,
 };
 use prometheus::IntCounter;
@@ -48,7 +48,7 @@ pub fn execute_replicated_query(
     let is_wasm64_execution = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .is_some_and(|es| es.is_wasm64);
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
@@ -127,14 +127,28 @@ pub fn execute_replicated_query(
     let memory_usage = canister.memory_usage();
     let message_memory_usage = canister.message_memory_usage();
 
-    let api_type = ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender());
+    let request_metadata = match &req {
+        CanisterCall::Request(request) => request.metadata.for_downstream_call(),
+        CanisterCall::Ingress(_) => RequestMetadata::for_new_call_tree(time),
+    };
+    let call_context_id = canister
+        .system_state
+        .new_call_context(call_origin.clone(), req.cycles(), time, request_metadata)
+        .unwrap();
+
+    let api_type = ApiType::replicated_query(
+        time,
+        req.method_payload().to_vec(),
+        *req.sender(),
+        call_context_id,
+    );
 
     // As we are executing the query in the replicated mode, we do
-    // not want to commit updates, i.e. we must return the
-    // unmodified version of the canister. Hence, execute on clones
-    // of system and execution states so that we have the original
-    // versions.
-    let (mut output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
+    // not want to commit updates in its execution state. Hence,
+    // execute on a clone of the execution state so that we have
+    // the original version. Note that the system state is also
+    // cloned since it's borrowed mutably later.
+    let (mut output, _output_execution_state, output_system_state) = round.hypervisor.execute(
         api_type,
         time,
         canister.system_state.clone(),
@@ -150,12 +164,9 @@ pub fn execute_replicated_query(
         time,
     );
 
+    // Persist changes in the canister's system state and logs.
+    canister.system_state = output_system_state;
     canister.append_log(&mut output.canister_log);
-    let result = output.wasm_result;
-    let log = round.log;
-    let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
-    let response =
-        wasm_result_to_query_response(result, &canister, time, call_origin, log, req.take_cycles());
 
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
@@ -173,6 +184,30 @@ pub fn execute_replicated_query(
             .get()
             .saturating_sub(output.num_instructions_left.get()),
     );
+
+    let (action, _) = canister
+        .system_state
+        .on_canister_result(
+            call_context_id,
+            None,
+            output.wasm_result.clone(),
+            instructions_used,
+        )
+        .unwrap();
+
+    let result = output.wasm_result;
+    let log = round.log;
+    let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
+    let refund = match action {
+        CallContextAction::Reply { refund, .. }
+        | CallContextAction::Reject { refund, .. }
+        | CallContextAction::NoResponse { refund, .. }
+        | CallContextAction::Fail { refund, .. } => refund,
+        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
+            req.take_cycles()
+        }
+    };
+    let response = wasm_result_to_query_response(result, &canister, time, call_origin, log, refund);
 
     ExecuteMessageResult::Finished {
         canister,
