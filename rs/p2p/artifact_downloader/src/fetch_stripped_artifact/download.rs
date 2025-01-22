@@ -177,6 +177,7 @@ pub(crate) async fn download_ingress<P: Peers>(
                             metrics.active_ingress_message_downloads.dec();
                             return (response.ingress_message, peer);
                         } else {
+                            metrics.total_wrong_artifact_received_for_advert.inc();
                             warn!(
                                 log,
                                 "Peer {} responded with wrong artifact for advert", peer

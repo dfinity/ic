@@ -10,6 +10,7 @@ pub(crate) struct FetchArtifactMetrics {
     pub download_task_stashed_total: IntCounter,
     pub download_task_artifact_download_duration: Histogram,
     pub download_task_artifact_download_errors_total: IntCounter,
+    pub total_wrong_artifact_received_for_advert: IntCounter,
 }
 
 impl FetchArtifactMetrics {
@@ -42,6 +43,10 @@ impl FetchArtifactMetrics {
                     const_labels.clone(),
                 ))
                 .unwrap(),
+            ),
+            total_wrong_artifact_received_for_advert: metrics_registry.int_counter(
+                "ic_artifact_downloader_consensus_total_wrong_artifact_received_for_advert",
+                "Number of times a wrong artifact was received when requesting it for an advert",
             ),
         }
     }

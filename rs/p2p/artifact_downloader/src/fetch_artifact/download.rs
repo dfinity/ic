@@ -245,6 +245,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                                     if message.id() == id {
                                         break Ok((message, peer));
                                     } else {
+                                        metrics.total_wrong_artifact_received_for_advert.inc();
                                         warn!(
                                             log,
                                             "Peer {} responded with wrong artifact for advert",

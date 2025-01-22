@@ -11,6 +11,7 @@ pub(super) struct FetchStrippedConsensusArtifactMetrics {
     pub(super) total_block_assembly_duration: Histogram,
     pub(super) active_ingress_message_downloads: IntGauge,
     pub(super) total_ingress_message_download_errors: IntCounter,
+    pub(super) total_wrong_artifact_received_for_advert: IntCounter,
 }
 
 #[derive(Copy, Clone)]
@@ -62,6 +63,10 @@ impl FetchStrippedConsensusArtifactMetrics {
                     "ic_stripped_consensus_artifact_total_ingress_message_download_errors",
                     "The total number of errors occurred while downloading \
                     missing ingress messages",
+            ),
+            total_wrong_artifact_received_for_advert: metrics_registry.int_counter(
+                "ic_stripped_consensus_artifact_total_wrong_artifact_received_for_advert",
+                "Number of times a wrong artifact was received when requesting it for an advert",
             ),
         }
     }
