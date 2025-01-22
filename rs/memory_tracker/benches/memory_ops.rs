@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, os::unix::fs::FileExt};
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use memmap2::MmapOptions;
@@ -59,6 +59,15 @@ fn mmap_read_write(file: &File) {
     // Reads then makes 64 KiB copies on write.
     for i in 0..64 / 4 {
         mm[4096 * i] = mm[1 + 4096 * i];
+    }
+}
+
+fn file_read_write(file: &File) {
+    const PAGE_SIZE: usize = 64 * 1024;
+    let mut buf = [0u8; PAGE_SIZE];
+    file.read_exact_at(&mut buf, 0).unwrap();
+    for i in 0..64 / 4 {
+        buf[4096 * i] = buf[1 + 4096 * i];
     }
 }
 
@@ -129,6 +138,10 @@ fn mmap_read_write_bench(c: &mut Criterion) {
     bench(c, "mmap_read_write", mmap_read_write);
 }
 
+fn file_read_write_bench(c: &mut Criterion) {
+    bench(c, "file_read_write", file_read_write);
+}
+
 criterion_group!(
     benches,
     mmap_bench,
@@ -137,5 +150,6 @@ criterion_group!(
     mmap_mprotect_write_bench,
     mmap_mprotect_read_write_bench,
     mmap_read_write_bench,
+    file_read_write_bench,
 );
 criterion_main!(benches);
