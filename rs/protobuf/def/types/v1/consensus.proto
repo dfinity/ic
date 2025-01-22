@@ -219,6 +219,7 @@ message IngressPayload {
 message GetIngressMessageInBlockRequest {
   IngressMessageId ingress_message_id = 1;
   ConsensusMessageId block_proposal_id = 2;
+  bytes ingress_bytes_hash = 3;
 }
 
 message GetIngressMessageInBlockResponse {
@@ -233,6 +234,7 @@ message StrippedBlockProposal {
 
 message StrippedIngressMessage {
   IngressMessageId stripped = 1;
+  bytes ingress_bytes_hash = 2;
 }
 
 message StrippedConsensusMessage {
