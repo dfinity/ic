@@ -547,7 +547,7 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
-    // --------------- PAYLOAD BUILDERS FOLLOW ---------------------------------
+    // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
