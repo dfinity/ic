@@ -1707,7 +1707,6 @@ impl ExecutionEnvironment {
                     max_instructions_per_message_without_dts,
                     instruction_limits.slice(),
                 );
-                println!("instruction_limits: {:?}", instruction_limits);
                 let execution_parameters = self.execution_parameters(
                     &canister,
                     instruction_limits,

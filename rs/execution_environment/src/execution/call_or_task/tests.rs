@@ -247,8 +247,8 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     // 1. Canister A starts running the query method.
     // 2. While canister A is paused, we emulate a postponed charge
     //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
-    // 3. The update method resumes and burns 1000 cycles.
-    // 4. The update method succeeds because there are enough cycles
+    // 3. The query method resumes and burns 1000 cycles.
+    // 4. The query method succeeds because there are enough cycles
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
@@ -442,8 +442,8 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     // 1. Canister A starts running the query method.
     // 2. While canister A is paused, we emulate a postponed charge
     //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
-    // 3. The update method resumes and burns 1000 cycles.
-    // 4. The update method succeeds because there are enough cycles
+    // 3. The query method resumes and burns 1000 cycles.
+    // 4. The query method succeeds because there are enough cycles
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()

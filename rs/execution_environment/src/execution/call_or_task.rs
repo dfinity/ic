@@ -230,7 +230,7 @@ pub fn execute_call_or_task(
                     ingress_status_with_processing_state(call, original.time)
                 }
             };
-            let paused_execution = Box::new(PausedCallExecution {
+            let paused_execution = Box::new(PausedCallOrTaskExecution {
                 paused_wasm_execution,
                 paused_helper: helper.pause(),
                 original,
@@ -434,12 +434,32 @@ impl UpdateHelper {
     ) -> Result<Self, UserError> {
         let helper = Self::new(clean_canister, original, deallocation_sender)?;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
-            let msg = "Mismatch in cycles balance when resuming an update call".to_string();
+            let msg = match original.call_or_task {
+                CanisterCallOrTask::Update(_) => {
+                    "Mismatch in cycles balance when resuming an update call".to_string()
+                }
+                CanisterCallOrTask::Query(_) => {
+                    "Mismatch in cycles balance when resuming a replicated query".to_string()
+                }
+                CanisterCallOrTask::Task(_) => {
+                    "Mismatch in cycles balance when resuming a canister task".to_string()
+                }
+            };
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
         }
         if helper.call_context_id != paused.call_context_id {
-            let msg = "Mismatch in call context id when resuming an update call".to_string();
+            let msg = match original.call_or_task {
+                CanisterCallOrTask::Update(_) => {
+                    "Mismatch in call context id when resuming an update call".to_string()
+                }
+                CanisterCallOrTask::Query(_) => {
+                    "Mismatch in call context id when resuming a replicated query".to_string()
+                }
+                CanisterCallOrTask::Task(_) => {
+                    "Mismatch in call context id when resuming a canister task".to_string()
+                }
+            };
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
             return Err(err.into_user_error(&clean_canister.canister_id()));
         }
@@ -527,24 +547,28 @@ impl UpdateHelper {
                     NumBytes::from(0)
                 }
             }
-            // Query methods do not persist changes to the canister's state.
+            // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                if let Err(err) = canister_state_changes.system_state_changes.apply_changes(
-                    round.time,
-                    &mut self.canister.system_state,
-                    round.network_topology,
-                    round.hypervisor.subnet_id(),
-                    round.log,
-                ) {
-                    return finish_err(
-                        clean_canister,
-                        output.num_instructions_left,
-                        err.into_user_error(&original.canister_id),
-                        original,
-                        round,
-                    );
+                if output.wasm_result.is_ok() {
+                    match canister_state_changes.system_state_changes.apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
+                    ) {
+                        Ok(_) => self.canister.system_state.canister_version += 1,
+                        Err(err) => {
+                            return finish_err(
+                                clean_canister,
+                                output.num_instructions_left,
+                                err.into_user_error(&original.canister_id),
+                                original,
+                                round,
+                            );
+                        }
+                    }
                 }
-                self.canister.system_state.canister_version += 1;
                 NumBytes::from(0)
             }
         };
@@ -650,13 +674,13 @@ impl UpdateHelper {
 }
 
 #[derive(Debug)]
-struct PausedCallExecution {
+struct PausedCallOrTaskExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
     paused_helper: PausedUpdateHelper,
     original: OriginalContext,
 }
 
-impl PausedExecution for PausedCallExecution {
+impl PausedExecution for PausedCallOrTaskExecution {
     fn resume(
         self: Box<Self>,
         clean_canister: CanisterState,
@@ -713,7 +737,7 @@ impl PausedExecution for PausedCallExecution {
                     slice.executed_instructions,
                 );
                 update_round_limits(round_limits, &slice);
-                let paused_execution = Box::new(PausedCallExecution {
+                let paused_execution = Box::new(PausedCallOrTaskExecution {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
                     original: self.original,
