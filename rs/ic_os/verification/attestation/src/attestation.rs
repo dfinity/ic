@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use std::error::Error;
 
 #[derive(der::Sequence)]
-pub struct FetchAttestationTokenCustomData<'a> {
+pub struct GenerateAttestationTokenCustomData<'a> {
     pub nonce: OctetStringRef<'a>,
     pub tls_public_key: OctetStringRef<'a>,
 }
 
-impl FetchAttestationTokenCustomData<'_> {
+impl GenerateAttestationTokenCustomData<'_> {
     pub fn to_bytes(&self) -> Result<[u8; 64], Box<dyn Error>> {
         let mut encoded = vec![];
         self.encode_to_vec(&mut encoded)?;

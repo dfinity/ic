@@ -4,8 +4,8 @@ use std::error::Error;
 
 #[non_exhaustive]
 #[derive(candid::CandidType, candid::Deserialize)]
-struct GenerateAttestationTokenChallenge {
-    nonce: Vec<u8>,
+pub struct GenerateAttestationTokenChallenge {
+    pub nonce: Vec<u8>,
 }
 
 #[derive(candid::CandidType)]

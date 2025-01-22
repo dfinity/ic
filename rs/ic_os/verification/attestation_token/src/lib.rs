@@ -14,6 +14,8 @@ const VERIFICATION_CANISTER_ID: [u8; 12] = [0; 12];
 #[cfg(not(test))]
 const NNS_PUBLIC_KEY: [u8; 32] = [0; 32];
 
+pub const ATTESTATION_TOKENS_LABEL: &[u8] = b"attestation_tokens";
+
 #[cfg(test)]
 const NNS_PUBLIC_KEY: [u8; 32] = [0; 32];
 

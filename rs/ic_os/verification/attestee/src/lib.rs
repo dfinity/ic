@@ -1,15 +1,16 @@
 use crate::sev_firmware::SevFirmware;
 use anyhow::Result;
-use attestation::attestation::{FetchAttestationTokenCustomData, SevAttestationReport};
+use attestation::attestation::{GenerateAttestationTokenCustomData, SevAttestationReport};
 use der::Encode;
 use sha2::{Digest, Sha512};
 
 mod attestation_token_fetcher;
 mod sev_firmware;
+mod verification_canister;
 
 fn generate_attestation_report_for_attestation_token(
     firmware: &mut dyn SevFirmware,
-    custom_data: &FetchAttestationTokenCustomData,
+    custom_data: &GenerateAttestationTokenCustomData,
 ) -> Result<SevAttestationReport> {
     let mut encoded_custom_data = vec![];
     custom_data.encode(&mut encoded_custom_data)?;

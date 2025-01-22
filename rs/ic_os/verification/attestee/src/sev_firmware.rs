@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use attestation::attestation::{FetchAttestationTokenCustomData, SevAttestationReport};
+use attestation::attestation::{GenerateAttestationTokenCustomData, SevAttestationReport};
 use der::Encode;
 use sev::firmware::guest::Firmware;
 use sha2::{Digest, Sha512};

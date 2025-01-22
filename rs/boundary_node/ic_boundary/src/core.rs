@@ -73,7 +73,7 @@ use tracing::{debug, error, warn};
 use x509_parser::pem;
 
 use ic_crypto_test_utils_tls::x509_certificates::{
-    AttestationToken, AttestationTokenExtension, CertWithPrivateKey, KeyPair,
+    AttestationTokenExtension, CertWithPrivateKey, KeyPair,
 };
 #[cfg(feature = "tls")]
 use {crate::cli, rustls::server::ResolvesServerCert};
@@ -548,11 +548,7 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     //     .ok_or(anyhow!("TLS key not specified"))?;
 
     let mut builder = CertWithPrivateKey::builder();
-    builder.add_attestation_token_extension(AttestationTokenExtension(AttestationToken {
-        node_id: OctetString::new(vec![1, 2, 3]).unwrap(),
-        hash_tree: OctetString::new(vec![4, 5, 6]).unwrap(),
-        certificate: OctetString::new(vec![7, 8, 9]).unwrap(),
-    }));
+    builder.add_attestation_token_extension(AttestationTokenExtension());
 
     let cert_with_private_key = builder.build_ed25519(&mut rand::thread_rng());
 

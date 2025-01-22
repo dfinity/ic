@@ -1,4 +1,4 @@
-use crate::attestation::{FetchAttestationTokenCustomData, SevAttestationReport};
+use crate::attestation::{GenerateAttestationTokenCustomData, SevAttestationReport};
 use crate::protocol::{GenerateAttestationTokenError, GenerateAttestationTokenRequest};
 use der::asn1::{OctetString, OctetStringRef};
 use sev::firmware::guest::AttestationReport;
@@ -13,7 +13,7 @@ pub fn verify_generate_attestation_token_request(
         return Err(GenerateAttestationTokenError::InvalidNonce);
     }
 
-    let expected_custom_data = FetchAttestationTokenCustomData {
+    let expected_custom_data = GenerateAttestationTokenCustomData {
         nonce: OctetStringRef::new(&request.nonce)?,
         tls_public_key: OctetStringRef::new(&request.tls_public_key)?,
     }
