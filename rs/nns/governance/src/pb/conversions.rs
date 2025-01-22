@@ -1,4 +1,5 @@
 use crate::pb::v1 as pb;
+use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
@@ -2541,22 +2542,12 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
 
 impl From<pb::InstallCode> for pb_api::InstallCode {
     fn from(item: pb::InstallCode) -> Self {
-        let wasm_module_hash = item
-            .wasm_module
-            .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
-        let arg = item.arg.unwrap_or_default();
-        let arg_hash = if arg.is_empty() {
-            Some(vec![])
-        } else {
-            Some(super::calculate_hash(&arg).to_vec())
-        };
-
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
-            wasm_module_hash,
-            arg_hash,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
         }
     }
 }
@@ -2570,17 +2561,39 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
             // canister_init.
             wasm_module: None,
             arg: None,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
         }
     }
 }
 impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
     fn from(item: pb_api::InstallCodeRequest) -> Self {
+        let wasm_module_hash = item
+            .wasm_module
+            .as_ref()
+            .map(|wasm_module| Sha256::hash(wasm_module).to_vec());
+        let arg_hash = match item.arg.as_ref() {
+            Some(arg) => {
+                // We could calculate the hash of an empty arg, but it would be confusing for the
+                // proposal reviewers, since the arg_hash is the only thing they can see, and it would
+                // not be obvious that the arg is empty.
+                if arg.is_empty() {
+                    Some(vec![])
+                } else {
+                    Some(Sha256::hash(arg).to_vec())
+                }
+            }
+            None => Some(vec![]),
+        };
+
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
             wasm_module: item.wasm_module,
             arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            wasm_module_hash,
+            arg_hash,
         }
     }
 }

@@ -74,6 +74,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -1901,7 +1902,7 @@ impl Governance {
             env.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1913,7 +1914,10 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
-        }
+        };
+        // TODO: Remove after the backfill has been run once.
+        governance.backfill_install_code_hashes();
+        governance
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -6103,6 +6107,38 @@ impl Governance {
         carry_on: impl FnMut() -> bool,
     ) -> std::ops::Bound<NeuronId> {
         backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
+    }
+
+    pub fn backfill_install_code_hashes(&mut self) {
+        for proposal in self.heap_data.proposals.values_mut() {
+            let Some(proposal) = proposal.proposal.as_mut() else {
+                continue;
+            };
+            let Some(Action::InstallCode(install_code)) = proposal.action.as_mut() else {
+                continue;
+            };
+            if install_code.wasm_module_hash.is_none() {
+                if let Some(wasm_module) = install_code.wasm_module.as_ref() {
+                    install_code.wasm_module_hash = Some(Sha256::hash(wasm_module).to_vec());
+                }
+            }
+            if install_code.arg_hash.is_none() {
+                let arg_hash = match install_code.arg.as_ref() {
+                    Some(arg) => {
+                        // We could calculate the hash of an empty arg, but it would be confusing for the
+                        // proposal reviewers, since the arg_hash is the only thing they can see, and it would
+                        // not be obvious that the arg is empty.
+                        if arg.is_empty() {
+                            Some(vec![])
+                        } else {
+                            Some(Sha256::hash(arg).to_vec())
+                        }
+                    }
+                    None => Some(vec![]),
+                };
+                install_code.arg_hash = arg_hash;
+            }
+        }
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
