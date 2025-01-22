@@ -62,7 +62,7 @@ use ic_nns_governance::{
         add_or_remove_node_provider::Change,
         governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
         governance_error::ErrorType::{
-            self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
         install_code::CanisterInstallMode,
         manage_neuron::{
@@ -75,7 +75,6 @@ use ic_nns_governance::{
             MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
             StartDissolving,
         },
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         neuron::{self, DissolveState, Followees},
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action, ActionDesc},
@@ -85,10 +84,9 @@ use ic_nns_governance::{
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
         KnownNeuron, KnownNeuronData, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron,
-        NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
-        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
-        ProposalDataChange,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
+        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
+        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -102,8 +100,10 @@ use ic_nns_governance::{
 };
 use ic_nns_governance_api::{
     pb::v1::{
-        self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse,
+        self as api,
+        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
+        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+        ListNeuronsResponse, ManageNeuronResponse,
     },
     proposal_validation::validate_proposal_title,
 };
@@ -2217,8 +2217,8 @@ async fn test_no_voting_after_deadline() {
         result,
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Error(
-                GovernanceError::new_with_message(
-                    PreconditionFailed,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::PreconditionFailed,
                     "Proposal deadline has passed.",
                 )
             ))
@@ -4531,7 +4531,7 @@ fn claim_or_refresh_neuron_by_memo(
         .now_or_never()
         .unwrap();
     match manage_neuron_response.command.unwrap() {
-        CommandResponse::Error(error) => Err(error),
+        CommandResponse::Error(error) => Err(GovernanceError::from(error)),
         CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
             Ok(claim_or_refresh_response.refreshed_neuron_id.unwrap())
         }
@@ -5410,8 +5410,8 @@ fn test_rate_limiting_neuron_creation() {
         Some(CommandResponse::Error(e)) => {
             assert_eq!(
                 e,
-                GovernanceError::new_with_message(
-                    ErrorType::Unavailable,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::Unavailable,
                     "Reached maximum number of neurons that can be created in this hour. \
                         Please wait and try again later."
                 )
@@ -7063,7 +7063,7 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
     assert!(result.is_err());
     assert_eq!(
         result.clone().err().unwrap().error_type(),
-        ErrorType::NotAuthorized
+        api::governance_error::ErrorType::NotAuthorized
     );
     assert_eq!(
         result.err().unwrap().error_message,
@@ -9594,11 +9594,13 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
     assert_eq!(
         response,
         ManageNeuronResponse {
-            command: Some(CommandResponse::Error(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "The command MergeMaturity is no longer available, as this functionality was \
+            command: Some(CommandResponse::Error(
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::InvalidCommand,
+                    "The command MergeMaturity is no longer available, as this functionality was \
                 superseded by StakeMaturity. Use StakeMaturity instead."
-            ))),
+                )
+            )),
         }
     );
 }
@@ -10156,7 +10158,10 @@ fn test_join_neurons_fund() {
             )
             .now_or_never()
             .unwrap();
-        assert_eq!(ErrorType::NotAuthorized, result.err().unwrap().error_type());
+        assert_eq!(
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotAuthorized,
+        );
     }
     // Join the Neurons' Fund for neuron 3.
     {
@@ -10263,8 +10268,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::AlreadyJoinedCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::AlreadyJoinedCommunityFund,
         );
     }
     // Principal B leaves the Neurons' Fund for Neuron 3
@@ -10309,8 +10314,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::NotInTheCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotInTheCommunityFund,
         );
     }
     // Run periodic tasks to populate metrics. Need to call it twice
@@ -10415,7 +10420,7 @@ where
 
     match result {
         CommandResponse::Configure(ok) => Ok(ok),
-        CommandResponse::Error(err) => Err(err),
+        CommandResponse::Error(err) => Err(GovernanceError::from(err)),
         _ => panic!("{:#?}", result),
     }
 }
@@ -10917,7 +10922,7 @@ async fn test_refresh_voting_power() {
     );
     match err {
         manage_neuron_response::Command::Error(error) => {
-            let GovernanceError {
+            let api::GovernanceError {
                 error_type,
                 error_message,
             } = &error;
@@ -11064,8 +11069,8 @@ fn wait_for_quiet_test_helper(
             };
             let deadline_passed_response = ManageNeuronResponse {
                 command: Some(manage_neuron_response::Command::Error(
-                    GovernanceError::new_with_message(
-                        PreconditionFailed,
+                    api::GovernanceError::new_with_message(
+                        api::governance_error::ErrorType::PreconditionFailed,
                         "Proposal deadline has passed.",
                     ),
                 )),

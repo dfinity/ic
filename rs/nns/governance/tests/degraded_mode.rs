@@ -19,11 +19,12 @@ use ic_nns_governance::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
         },
-        manage_neuron_response::Command as CommandResponse,
         neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        InstallCode, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
-        Proposal,
+        InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
     },
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use maplit::btreemap;
