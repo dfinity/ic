@@ -296,13 +296,13 @@ impl CheckpointLoader {
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_state: &ReplicatedState,
+        ref_canister_states: &BTreeMap<CanisterId, CanisterState>,
     ) -> Result<(), String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
             .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
-        let ref_canister_ids: Vec<_> = ref_state.canister_states.keys().copied().collect();
+        let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
         if on_disk_canister_ids != ref_canister_ids {
@@ -323,8 +323,7 @@ impl CheckpointLoader {
             })?
             .0
             .validate_eq(
-                ref_state
-                    .canister_states
+                ref_canister_states
                     .get(canister_id)
                     .expect("Failed to get canister from canister_states"),
             )
@@ -369,7 +368,7 @@ impl CheckpointLoader {
     fn validate_eq_canister_snapshots(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_state: &ReplicatedState,
+        ref_canister_snapshots: &CanisterSnapshots,
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
             format!(
@@ -377,14 +376,13 @@ impl CheckpointLoader {
                 err
             )
         })?;
-        let mut ref_snapshot_ids: Vec<_> =
-            ref_state.canister_snapshots.iter().map(|x| *x.0).collect();
+        let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
         on_disk_snapshot_ids.sort();
         ref_snapshot_ids.sort();
         if on_disk_snapshot_ids != ref_snapshot_ids {
             return Err("Snapshot ids mismatch".to_string());
         }
-        if !ref_state.canister_snapshots.is_unflushed_changes_empty() {
+        if !ref_canister_snapshots.is_unflushed_changes_empty() {
             return Err("Snapshots have unflushed changes after checkpoint".to_string());
         }
         maybe_parallel_map(thread_pool, ref_snapshot_ids.iter(), |snapshot_id| {
@@ -401,8 +399,7 @@ impl CheckpointLoader {
             })?
             .0
             .validate_eq(
-                ref_state
-                    .canister_snapshots
+                ref_canister_snapshots
                     .get(**snapshot_id)
                     .expect("Failed to lookup snapshot in ref state"),
             )
@@ -471,6 +468,15 @@ fn validate_eq_checkpoint_internal(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
+    let (
+        canister_states,
+        metadata,
+        subnet_queues,
+        consensus_queue,
+        epoch_query_stats,
+        canister_snapshots,
+    ) = reference_state.component_refs();
+
     let checkpoint_loader = CheckpointLoader {
         checkpoint_layout: checkpoint_layout.clone(),
         own_subnet_type,
@@ -478,19 +484,22 @@ fn validate_eq_checkpoint_internal(
         fd_factory,
     };
 
-    checkpoint_loader.validate_eq_canister_states(&mut thread_pool, reference_state)?;
+    checkpoint_loader.validate_eq_canister_states(&mut thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
         .map_err(|err| format!("Failed to load system metadata: {}", err))?
-        .validate_eq(&reference_state.metadata)?;
+        .validate_eq(metadata)?;
     checkpoint_loader
         .load_subnet_queues()
         .unwrap()
-        .validate_eq(reference_state.subnet_queues())?;
-    if checkpoint_loader.load_query_stats().unwrap() != *reference_state.query_stats() {
+        .validate_eq(subnet_queues)?;
+    if checkpoint_loader.load_query_stats().unwrap() != *epoch_query_stats {
         return Err("query_stats has diverged.".to_string());
     }
-    checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, reference_state)
+    if !consensus_queue.is_empty() {
+        return Err("consensus_queue is not empty".to_string());
+    }
+    checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, canister_snapshots)
 }
 
 #[derive(Default)]
