@@ -45,6 +45,8 @@ lazy_static! {
     pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 }
 
+const EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS: u64 = 60;
+
 // Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
 
 fn setup_sns(
@@ -445,16 +447,16 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 action
             ),
         };
-        fn age_s(t: u64) -> f64 {
+        fn age_s(t: u64) -> u64 {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs_f64()
-                - (t as f64)
+                .as_secs()
+                .saturating_sub(t)
         }
         let decision_age_s = age_s(proposal.decided_timestamp_seconds);
         assert!(
-            decision_age_s < 30.0,
+            decision_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "decision_age_s: {}, proposal: {:?}",
             decision_age_s,
             proposal
@@ -466,7 +468,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
         );
         let failure_age_s = age_s(proposal.failed_timestamp_seconds);
         assert!(
-            failure_age_s < 30.0,
+            failure_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "failure_age_s: {}, proposal: {:?}",
             failure_age_s,
             proposal

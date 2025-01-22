@@ -43,6 +43,9 @@ the neuron. More precisely,
 
 ## Changed
 
+* `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
+  listing proposal. Hashes for existing proposals are backfilled.
+
 ## Deprecated
 
 ## Removed
