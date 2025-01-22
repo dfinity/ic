@@ -460,6 +460,7 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
+                            let _timer = request_timer(&metrics, "validate_replicated_state")
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
                                 Some(reference_state.deref()),
