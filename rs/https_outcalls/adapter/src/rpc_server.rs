@@ -116,7 +116,6 @@ impl CanisterHttp {
         }
     }
 
-    //TODO(mihailjianu): add a name for this.
     fn create_socks_proxy_client(
         &self,
         proxy_addr: Uri,
