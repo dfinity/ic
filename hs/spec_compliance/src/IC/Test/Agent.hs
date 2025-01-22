@@ -998,13 +998,12 @@ data StatusResponse = StatusResponse
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
   asExceptT . record do
-    v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"
     _ <- optionalField text "impl_version"
     _ <- optionalField text "impl_revision"
     pk <- field blob "root_key"
     swallowAllFields -- More fields are explicitly allowed
-    return StatusResponse {status_api_version = v, status_root_key = pk}
+    return StatusResponse { status_root_key = pk}
 
 -- * Interacting with aaaaa-aa (via HTTP)
 
