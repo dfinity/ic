@@ -202,10 +202,10 @@ use std::{
     ffi::OsStr,
     fs,
     future::Future,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
@@ -1465,21 +1465,57 @@ pub trait SshSession {
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
+        println!("Opening channel");
         let mut channel = session.channel_session()?;
+        println!("Requesting agent forwarding");
         channel.request_auth_agent_forwarding().unwrap();
+        println!("Executing command");
         channel.exec("bash").unwrap();
-
+        println!("Sending script: {}", script);
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
         channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
+        println!("Reading response");
+
+        let stdout = BufReader::new(channel.stream(0));
+        let stderr = BufReader::new(channel.stream(1));
+
+        let stdout_thread = std::thread::spawn(move || {
+            let mut stdout_lines = Vec::new();
+            for line in stdout.lines() {
+                match line {
+                    Ok(line) => {
+                        println!("stdout: {}", line);
+                        stdout_lines.push(line);
+                    }
+                    Err(e) => eprintln!("Error reading stdout: {}", e),
+                }
+            }
+            stdout_lines.join("\n")
+        });
+
+        let stderr_thread = std::thread::spawn(move || {
+            let mut stderr_lines = Vec::new();
+            for line in stderr.lines() {
+                match line {
+                    Ok(line) => {
+                        eprintln!("stderr: {}", line);
+                        stderr_lines.push(line);
+                    }
+                    Err(e) => eprintln!("Error reading stderr: {}", e),
+                }
+            }
+            stderr_lines.join("\n")
+        });
+
+        let out = stdout_thread.join().expect("Failed to join stdout thread");
+        let err = stderr_thread.join().expect("Failed to join stderr thread");
+
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
+
         Ok(out)
     }
 }
@@ -1936,6 +1972,42 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
 
+    println!("Start ssh-agent");
+    let output = Command::new("ssh-agent")
+        .arg("-s")
+        .stdout(Stdio::piped())
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow!(
+            "Failed to start ssh-agent: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    println!("Parse ssh-agent output");
+    let output_str = String::from_utf8(output.stdout)?;
+    for line in output_str.lines() {
+        if let Some((key, value)) = line.split_once('=') {
+            let value = value
+                .split_once(';')
+                .map(|(before, _)| before)
+                .unwrap_or(value);
+            std::env::set_var(key, value);
+            println!("Set environment variable: {}={}", key, value);
+        }
+    }
+
+    if let (Ok(sock), Ok(pid)) = (
+        std::env::var("SSH_AUTH_SOCK"),
+        std::env::var("SSH_AGENT_PID"),
+    ) {
+        println!("SSH_AUTH_SOCK: {}", sock);
+        println!("SSH_AGENT_PID: {}", pid);
+    } else {
+        println!("Failed to set SSH_AUTH_SOCK or SSH_AGENT_PID.");
+    }
+
     println!("Adding SSH key");
     let mut cmd = Command::new("ssh-add");
     cmd.arg(priv_key_path.clone());
@@ -1952,12 +2024,20 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let identities = agent.identities()?;
     for identity in identities {
         println!("Using identity: {}", identity.comment());
-        if agent.userauth(SSH_USERNAME, &identity).is_ok() {
-            println!(
-                "Authenticated successfully with identity: {}",
-                identity.comment()
-            );
-            break;
+        match agent.userauth(SSH_USERNAME, &identity) {
+            Ok(()) => {
+                println!(
+                    "Authenticated successfully with identity: {}",
+                    identity.comment()
+                );
+                break;
+            }
+            Err(err) => {
+                println!(
+                    "Failed to authenticate with identity {}: {err:?}",
+                    identity.comment()
+                )
+            }
         }
     }
 
