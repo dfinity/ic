@@ -1,11 +1,11 @@
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-
-use ic_config::flag_status::FlagStatus;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use std::ops::RangeInclusive;
+use std::path::PathBuf;
 use std::{path::Path, process::Command, str::FromStr};
 use tempfile::TempDir;
 // TODO: Add support for PocketIc.
@@ -98,8 +98,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         hypervisor_config.unwrap_or_default(),
     )));
 
-    let state_dir =
-        download_and_untar_golden_nns_state_or_panic(scp_location, archive_state_dir_name);
+    let state_dir = maybe_download_golden_nns_state_or_panic(scp_location, archive_state_dir_name);
     let state_machine_builder = state_machine_builder
         .with_state_machine_state_dir(Box::new(state_dir))
         // Patch StateMachine. This is a bit of a hack that we need because we
@@ -112,6 +111,28 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     println!("Done building StateMachine...");
 
     state_machine
+}
+
+fn maybe_download_golden_nns_state_or_panic(
+    scp_location: ScpLocation,
+    archive_state_dir_name: &str,
+) -> TempDir {
+    match std::env::var_os("USE_EXISTING_STATE_DIR") {
+        Some(existing_state_dir_name) => {
+            let existing_state_dir = PathBuf::from(existing_state_dir_name.clone());
+            let existing_state = existing_state_dir.join(archive_state_dir_name);
+            let destination_dir = TempDir::new_in(&existing_state_dir).unwrap();
+            if !existing_state.exists() {
+                panic!(
+                    "USE_EXISTING_STATE_DIR is set to {:?}, but {:?} does not exist",
+                    existing_state_dir_name, existing_state
+                );
+            }
+            std::fs::rename(&existing_state, &destination_dir).unwrap();
+            destination_dir
+        }
+        None => download_and_untar_golden_nns_state_or_panic(scp_location, archive_state_dir_name),
+    }
 }
 
 fn download_and_untar_golden_nns_state_or_panic(
