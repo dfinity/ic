@@ -23,7 +23,6 @@ pub const BLOCK_2_ENCODED: &str = "010000004860eb18bf1b1620e37e9490fc8a427514416
 /// an overflow occurs if bits is set to 0.
 ///
 /// https://github.com/bitcoin/bitcoin/blame/master/src/chainparams.cpp#L402
-
 const TARGET: Target = Target::MAX_ATTAINABLE_REGTEST;
 
 fn decode_block(hex_str: &str) -> Block {
