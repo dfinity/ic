@@ -143,7 +143,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     // retry generating blocks until the bitcoind is up and running
     let start = std::time::Instant::now();
     loop {
-        match btc_rpc.generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap()) {
+        match btc_rpc.generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap().assume_checked()) {
             Ok(_) => break,
             Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
