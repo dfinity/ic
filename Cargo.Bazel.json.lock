@@ -1,5 +1,5 @@
 {
-  "checksum": "4ccd9584772f3080197c29d447288d85b80c5e050752533a7a9bc85d2d82e2cc",
+  "checksum": "7ad240f3364cce93e81bf6380ec76aa3f302372278b8a52d756062257be4a94e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -63897,12 +63897,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": {
-          "common": [
-            "--cfg=rust_secp_no_symbol_renaming"
-          ],
-          "selects": {}
-        },
         "version": "0.10.0"
       },
       "build_script_attrs": {
