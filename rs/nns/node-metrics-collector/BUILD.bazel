@@ -45,6 +45,5 @@ rust_canister(
     service_file = ":node-metrics-collector.did",
     deps = DEPENDENCIES + [
         ":build_script",
-        ":cmc",
     ],
 )
