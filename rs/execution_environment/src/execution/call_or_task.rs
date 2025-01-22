@@ -126,7 +126,9 @@ pub fn execute_call_or_task(
         | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
             request.metadata.for_downstream_call()
         }
-        _ => RequestMetadata::for_new_call_tree(time),
+        CanisterCallOrTask::Update(CanisterCall::Ingress(_))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(_))
+        | CanisterCallOrTask::Task(_) => RequestMetadata::for_new_call_tree(time),
     };
 
     let original = OriginalContext {
