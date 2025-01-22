@@ -57,7 +57,7 @@ fn initialize_execution_test(
     if is_wasm64 {
         test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
-        test = test.with_max_wasm_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
+        test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
     let mut test = test.build();
 

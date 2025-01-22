@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use super::{payload_builder, utils, PayloadCreationError};
+use crate::{payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::DkgPool,
@@ -24,6 +22,7 @@ use ic_types::{
     Height, NodeId, SubnetId,
 };
 use prometheus::IntCounterVec;
+use std::collections::HashSet;
 
 /// Reasons for why a dkg payload might be invalid.
 // The `Debug` implementation is ignored during the dead code analysis and we are getting a `field

@@ -30,7 +30,7 @@ where
 {
     struct HexStrVisitor<T>(PhantomData<T>);
 
-    impl<'de, T> Visitor<'de> for HexStrVisitor<T>
+    impl<T> Visitor<'_> for HexStrVisitor<T>
     where
         T: FromHex,
         <T as FromHex>::Error: fmt::Display,

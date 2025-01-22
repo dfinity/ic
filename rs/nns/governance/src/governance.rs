@@ -53,10 +53,10 @@ use crate::{
         swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
         CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-        InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo,
-        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo, NeuronState,
+        NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
@@ -94,7 +94,11 @@ use ic_nns_constants::{
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem, proposal_validation,
+    pb::v1::{
+        self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+        ListNeuronsResponse,
+    },
+    proposal_validation,
     subnet_rental::SubnetRentalRequest,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
@@ -1057,7 +1061,7 @@ impl Proposal {
     fn allowed_when_resources_are_low(&self) -> bool {
         self.action
             .as_ref()
-            .map_or(false, |a| a.allowed_when_resources_are_low())
+            .is_some_and(|a| a.allowed_when_resources_are_low())
     }
 
     fn omit_large_fields(self) -> Self {
@@ -1177,7 +1181,7 @@ impl ProposalData {
     pub fn is_manage_neuron(&self) -> bool {
         self.proposal
             .as_ref()
-            .map_or(false, Proposal::is_manage_neuron)
+            .is_some_and(Proposal::is_manage_neuron)
     }
 
     pub fn reward_status(
@@ -2470,7 +2474,14 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(&neuron_id, |neuron| {
                 // Populate neuron_infos.
-                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(self.voting_power_economics(), now, caller));
+                let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
+
+                // We will be able to get rid of this conversion once we delete
+                // NeuronInfo from governance.proto. That should be possible,
+                // since we do not store NeuronInfo in stable memory.
+                let neuron_info = api::NeuronInfo::from(neuron_info);
+
+                neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
                 let let_caller_read_full_neuron =
@@ -2489,7 +2500,7 @@ impl Governance {
                     // we need to do a larger refactoring to use the correct API types instead of the internal
                     // governance proto at this level.
                     proto.recent_ballots = neuron.sorted_recent_ballots();
-                    full_neurons.push(proto);
+                    full_neurons.push(api::Neuron::from(proto));
                 }
             });
         }
@@ -5308,6 +5319,8 @@ impl Governance {
     }
 
     fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+        // TODO: Jira ticket NNS1-3555
+        #[allow(non_local_definitions)]
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)
