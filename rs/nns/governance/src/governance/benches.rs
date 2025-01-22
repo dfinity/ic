@@ -8,8 +8,8 @@ use crate::{
     pb::v1::{
         install_code::CanisterInstallMode, neuron::Followees, proposal::Action, Ballot, BallotInfo,
         CreateServiceNervousSystem, ExecuteNnsFunction, Governance as GovernanceProto, InstallCode,
-        KnownNeuron, ListNeurons, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto,
-        NnsFunction, Proposal, ProposalData, Topic, Vote, VotingPowerEconomics,
+        KnownNeuron, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto, NnsFunction,
+        Proposal, ProposalData, Topic, Vote, VotingPowerEconomics,
     },
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
@@ -28,6 +28,7 @@ use ic_nns_common::{
     types::NeuronId,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::pb::v1::ListNeurons;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
 use rand::{Rng, SeedableRng};

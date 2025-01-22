@@ -448,7 +448,9 @@ impl UpdateHelper {
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
         let old_balance = self.canister.system_state.balance();
-        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         let reveal_top_up = self
             .canister
             .controllers()
