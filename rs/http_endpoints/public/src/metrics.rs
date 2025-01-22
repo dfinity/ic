@@ -24,6 +24,8 @@ pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_time
 pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
 pub const CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
+pub const CALL_V3_STATUS_IS_NOT_LEAF: &str = "is_leaf";
+pub const CALL_V3_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";

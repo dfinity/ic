@@ -11,7 +11,8 @@ use crate::{
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
         CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
-        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, CALL_V3_STATUS_IS_INVALID_UTF8,
+        CALL_V3_STATUS_IS_NOT_LEAF,
     },
     HttpError,
 };
@@ -229,8 +230,6 @@ async fn call_sync_v3(
             CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         )),
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
-            // TODO: Send a warning or notification.
-            // This probably means that the ingress watcher panicked.
             error!(
                 every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
@@ -330,11 +329,12 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
 
     match tree.lookup(&status_path) {
         LookupStatus::Found(MixedHashTree::Leaf(status)) => ParsedMessageStatus::Known(
-            String::from_utf8(status.clone()).unwrap_or_else(|_| "invalid_utf8_status".to_string()),
+            String::from_utf8(status.clone())
+                .unwrap_or_else(|_| CALL_V3_STATUS_IS_INVALID_UTF8.to_string()),
         ),
-        // This should never happen. Otherwise the tree is not following the spec.
-        // TODO: Log as error.
-        LookupStatus::Found(_) => ParsedMessageStatus::Known("Status not a leaf".to_string()),
+        LookupStatus::Found(_) => {
+            ParsedMessageStatus::Known(CALL_V3_STATUS_IS_NOT_LEAF.to_string())
+        }
         LookupStatus::Absent | LookupStatus::Unknown => ParsedMessageStatus::Unknown,
     }
 }
