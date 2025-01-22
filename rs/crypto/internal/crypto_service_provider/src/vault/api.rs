@@ -974,10 +974,14 @@ pub trait VetKdCspVault {
 /// Vault-level error for vetKD key share creation.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum VetKdEncryptedKeyShareCreationVaultError {
-    /// If some arguments are invalid
-    InvalidArgument(String),
+    /// If the secret key is missing in the key store of if it has the wrong type
+    SecretKeyMissingOrWrongType(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
+    /// If the given master public key is invalid
+    InvalidArgumentMasterPublicKey,
+    /// If the given encryption public key is invalid
+    InvalidArgumentEncryptionPublicKey,
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].
