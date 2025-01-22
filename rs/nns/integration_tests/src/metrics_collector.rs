@@ -10,13 +10,13 @@ use pocket_ic::PocketIcBuilder;
 async fn test_node_metrics_collector() {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_application_subnet()
+        .with_sns_subnet()
         .with_fiduciary_subnet()
         .build_async()
         .await;
 
     // Step 0: Install the (master) NNS canisters.
-    install_nns_canisters(&pocket_ic, vec![], true, None, vec![]).await;
+    install_nns_canisters(&pocket_ic, vec![], false, None, vec![]).await;
 
     // Step 3: Deploy the node-metrics-collector canister
     let metrics_collector_wasm = build_mainnet_metrics_collector_wasm();
@@ -37,6 +37,8 @@ async fn test_node_metrics_collector() {
     pocket_ic
         .add_cycles(metrics_collector_id, STARTING_CYCLES_PER_CANISTER)
         .await;
+
+    println!("Querying node_metrics_history");
     // Give the governance canister some time to initialize so that we do not hit the
     // following error:
     // Could not claim neuron: Unavailable: Neuron ID generation is not available
