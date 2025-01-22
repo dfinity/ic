@@ -1,10 +1,11 @@
-use candid::Principal;
+use candid::{Encode, Principal};
 use ic_base_types::CanisterId;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_nns_canisters, STARTING_CYCLES_PER_CANISTER,
-};
+use ic_base_types::PrincipalId;
+use ic_management_canister_types::NodeMetricsHistoryArgs;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::STARTING_CYCLES_PER_CANISTER;
 use ic_nns_test_utils::common::build_mainnet_metrics_collector_wasm;
 use pocket_ic::PocketIcBuilder;
+use std::str::FromStr;
 
 #[tokio::test]
 async fn test_node_metrics_collector() {
@@ -16,7 +17,6 @@ async fn test_node_metrics_collector() {
         .await;
 
     // Step 0: Install the (master) NNS canisters.
-    install_nns_canisters(&pocket_ic, vec![], false, None, vec![]).await;
 
     // Step 3: Deploy the node-metrics-collector canister
     let metrics_collector_wasm = build_mainnet_metrics_collector_wasm();
@@ -38,7 +38,6 @@ async fn test_node_metrics_collector() {
         .add_cycles(metrics_collector_id, STARTING_CYCLES_PER_CANISTER)
         .await;
 
-    println!("Querying node_metrics_history");
     // Give the governance canister some time to initialize so that we do not hit the
     // following error:
     // Could not claim neuron: Unavailable: Neuron ID generation is not available
@@ -48,13 +47,19 @@ async fn test_node_metrics_collector() {
         .await;
     pocket_ic.tick().await;
 
-    pocket_ic
+    let _ = pocket_ic
         .query_call(
             metrics_collector_id,
             Principal::anonymous(),
             "node_metrics_history",
-            vec![],
+            Encode!(&NodeMetricsHistoryArgs {
+                subnet_id: PrincipalId::from_str(
+                    "ewlco-wjy6h-oafn4-sjmhf-litbm-aout5-atu3t-ygdsc-mqpmz-vpx73-sae"
+                )
+                .unwrap(),
+                start_at_timestamp_nanos: 0
+            })
+            .unwrap(),
         )
-        .await
-        .unwrap();
+        .await;
 }
