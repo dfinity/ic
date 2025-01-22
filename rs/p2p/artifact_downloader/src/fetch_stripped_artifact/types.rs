@@ -9,7 +9,11 @@ pub(super) mod stripped;
 
 type IngressBytesHash = CryptoHashOf<SignedRequestBytes>;
 
-/// A unique identifier of a `[SignedIngress]`.
+/// A unique identifier of a [`SignedIngress`].
+/// Note that the hash of [`SignedIngress::binary`] should be enough to uniquely identify a
+/// [`SignedIngress`] because all the fields of [`SignedIngress`] are derived from it.
+/// Note also that [`IngressMessageId`] is not strictly required here to uniquely identify
+/// [`SignedIngress`] but we keep it here because of [`IngressPool`] API.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SignedIngressId {
     pub(crate) ingress_message_id: IngressMessageId,
