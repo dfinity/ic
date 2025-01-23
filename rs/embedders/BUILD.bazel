@@ -176,6 +176,7 @@ rust_bench(
     name = "compilation_bench",
     srcs = ["benches/compilation.rs"],
     compile_data = glob(["benches/test-data/*"]),
+    with_test = True,
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

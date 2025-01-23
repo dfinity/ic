@@ -79,7 +79,7 @@ fn test(env: TestEnv) {
                         scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
                         scale_cycles(ECDSA_SIGNATURE_FEE),
                     ),
-                    error_code: None
+                    error_code: Some("IC0406".to_string())
                 })
             )
         }

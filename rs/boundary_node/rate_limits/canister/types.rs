@@ -18,24 +18,27 @@ pub struct RuleId(pub Uuid);
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct IncidentId(pub Uuid);
 
+#[derive(Debug)]
 pub enum DiscloseRulesArg {
     RuleIds(Vec<RuleId>),
     IncidentIds(Vec<IncidentId>),
 }
 
+#[derive(Debug)]
 pub struct ConfigResponse {
     pub version: Version,
     pub active_since: Timestamp,
     pub config: OutputConfig,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OutputConfig {
     pub schema_version: SchemaVersion,
     pub is_redacted: bool,
     pub rules: Vec<OutputRule>,
 }
 
+#[derive(Debug)]
 pub struct InputConfig {
     pub schema_version: SchemaVersion,
     pub rules: Vec<InputRule>,
@@ -63,7 +66,7 @@ impl PartialEq for InputRule {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OutputRule {
     pub id: RuleId,
     pub incident_id: IncidentId,
@@ -76,7 +79,7 @@ impl From<OutputRule> for api::OutputRule {
     fn from(value: OutputRule) -> Self {
         api::OutputRule {
             description: value.description,
-            id: value.id.to_string(),
+            rule_id: value.id.to_string(),
             incident_id: value.incident_id.to_string(),
             rule_raw: value.rule_raw,
         }
@@ -223,6 +226,8 @@ pub enum InputConfigError {
     InvalidRuleJsonEncoding(usize),
     #[error("Invalid UUID format of incident_id for rule at index={0}")]
     InvalidIncidentUuidFormat(usize),
+    #[error("Duplicate rules detected at indices {0} and {1}")]
+    DuplicateRules(usize, usize),
 }
 
 impl TryFrom<api::InputConfig> for InputConfig {
@@ -242,6 +247,11 @@ impl TryFrom<api::InputConfig> for InputConfig {
                 rule_raw: rule.rule_raw,
                 description: rule.description,
             };
+
+            // Duplicate rules in a config are forbidden
+            if let Some(existing_rule_idx) = rules.iter().position(|r| *r == rule) {
+                return Err(InputConfigError::DuplicateRules(existing_rule_idx, idx));
+            }
 
             rules.push(rule);
         }
@@ -275,7 +285,7 @@ impl From<ConfigResponse> for api::ConfigResponse {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct OutputRuleMetadata {
     pub id: RuleId,
     pub incident_id: IncidentId,
@@ -289,7 +299,7 @@ pub struct OutputRuleMetadata {
 impl From<OutputRuleMetadata> for api::OutputRuleMetadata {
     fn from(value: OutputRuleMetadata) -> Self {
         api::OutputRuleMetadata {
-            id: value.id.0.to_string(),
+            rule_id: value.id.0.to_string(),
             incident_id: value.incident_id.0.to_string(),
             rule_raw: value.rule_raw,
             description: value.description,
