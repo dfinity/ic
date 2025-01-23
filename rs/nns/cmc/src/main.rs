@@ -238,8 +238,9 @@ pub struct StateV1 {
     // canister(s), in particular ledger, it is possible for duplicate requests
     // to interleave. In such cases, we want subsequent operations to see that
     // an operation is already in flight. Therefore, before making any canister
-    // calls, we check that the block does not already have a status, and set
-    // its status to Processing. Only then do we proceed with calling the other
+    // calls, we check that the block does not already have a status. If it
+    // already has a status, do not proceed. If it dos not already have a
+    // status, set it to Processing. Then, we can proceed with calling the other
     // canister (i.e. ledger). Once that comes back, we update the block's
     // status. This avoids using the same ICP to perform multiple operations.
     pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
