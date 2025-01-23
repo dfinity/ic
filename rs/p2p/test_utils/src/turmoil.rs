@@ -19,6 +19,7 @@ use bytes::BytesMut;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
@@ -381,20 +382,20 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx) =
+                let AbortableBroadcastChannel { outbound_tx, inbound_rx } =
                     consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,
-                    inbound_tx,
+                    inbound_rx,
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
 
-                let (consensus_router, manager) = consensus_builder.build();
+                let consensus_router = consensus_builder.router();
                 router = Some(router.unwrap_or_default().merge(consensus_router));
 
-                Some((artifact_processor_jh, manager))
+                Some((artifact_processor_jh, consensus_builder))
             } else {
                 None
             };

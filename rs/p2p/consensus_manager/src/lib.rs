@@ -28,33 +28,22 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub struct AbortableBroadcastChannelManager(Vec<StartConsensusManagerFn>);
-
-impl AbortableBroadcastChannelManager {
-    pub fn start(
-        self,
-        transport: Arc<dyn Transport>,
-        topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> Vec<Shutdown> {
-        let mut ret = vec![];
-        for client in self.0 {
-            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
-        }
-        ret
-    }
-}
-
 /// Same order of magnitude as the number of active artifacts.
 const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
 pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
 
+pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
+    pub outbound_tx: AbortableBroadcastSender<T>,
+    pub inbound_rx: AbortableBroadcastReceiver<T>,
+}
+
 pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
-    clients: Vec<StartConsensusManagerFn>,
+    managers: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
 }
 
@@ -64,7 +53,7 @@ impl AbortableBroadcastChannelBuilder {
             log,
             metrics_registry,
             rt_handle,
-            clients: Vec::new(),
+            managers: Vec::new(),
             router: None,
         }
     }
@@ -79,10 +68,7 @@ impl AbortableBroadcastChannelBuilder {
         &mut self,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
-    ) -> (
-        AbortableBroadcastSender<Artifact>,
-        AbortableBroadcastReceiver<Artifact>,
-    ) {
+    ) -> AbortableBroadcastChannel<Artifact> {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
         // Making this channel bounded can be problematic since we don't have true multiplexing
         // of P2P messages.
@@ -125,15 +111,27 @@ impl AbortableBroadcastChannelBuilder {
                 .merge(assembler_router),
         );
 
-        self.clients.push(Box::new(builder));
-        (outbound_tx, inbound_rx)
+        self.managers.push(Box::new(builder));
+        AbortableBroadcastChannel {
+            outbound_tx,
+            inbound_rx,
+        }
     }
 
-    pub fn build(self) -> (Router, AbortableBroadcastChannelManager) {
-        (
-            self.router.unwrap(),
-            AbortableBroadcastChannelManager(self.clients),
-        )
+    pub fn router(&self) -> Router {
+        self.router.clone().unwrap_or_default()
+    }
+
+    pub fn start(
+        self,
+        transport: Arc<dyn Transport>,
+        topology_watcher: watch::Receiver<SubnetTopology>,
+    ) -> Vec<Shutdown> {
+        let mut ret = vec![];
+        for m in self.managers {
+            ret.append(&mut m(transport.clone(), topology_watcher.clone()));
+        }
+        ret
     }
 }
 
