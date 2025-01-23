@@ -3,11 +3,12 @@
 
 == Background 
 
-[quote, Internet Computer for Geeks]
-To guarantee liveness, the Internet Computer Protocol assumes a form of partial synchrony, which (roughly stated) says that the network will
+Most properties of the protocols of the Consensus layer hold under an asynchronous network model, with no a priori bound on the delay of messages sent between replicas. 
+To guarantee liveness, the Internet Computer Consensus Protocol assumes a form of partial synchrony, which (roughly stated) says that the network will
 be periodically synchronous for short intervals of time. In such intervals of synchrony, all undelivered messages will be delivered in less than time δ, for some fixed bound δ. 
 The bound δ does not have to be known in advance (the protocol is initialized with a reasonable bound, but will dynamically adapt and increase this bound if it is too small).
-Regardless of whether we are assuming an asynchronous or a partially synchronous network, we assume that every message sent from one honest replica to another will eventually be delivered.
+Regardless of whether an asynchronous or a partially synchronous network is assumed, the Consensus layer protocols rely on the fact that messages sent from one honest replica
+to another will eventually be delivered unless the transmission is explicitly aborted. It is the responsibility of the P2P layer to provide these guarantees.
 
 == Overview  
 
