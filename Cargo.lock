@@ -9760,6 +9760,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "candid",
+ "cycles-minting-canister",
  "ic-agent",
  "ic-base-types",
  "ic-nervous-system-clients",
@@ -9771,6 +9772,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-sns-wasm",
  "pocket-ic",
+ "registry-canister",
  "serde",
  "tempfile",
  "thiserror 2.0.11",
