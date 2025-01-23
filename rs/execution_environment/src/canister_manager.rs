@@ -16,7 +16,6 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::{
     execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
 };
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -31,6 +30,7 @@ use ic_management_canister_types::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, CanisterSnapshotError},
     canister_state::{
@@ -2193,14 +2193,18 @@ impl CanisterManager {
             .certified_data
             .clone_from(snapshot.certified_data());
 
-        let is_wasm64_execution = new_execution_state.as_ref().is_some_and(|es| es.is_wasm64);
+        let wasm_execution_mode = new_execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |exec_state| {
+                exec_state.wasm_execution_mode
+            });
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
 
         let memory_allocation_given =
-            canister.memory_limit(self.get_max_canister_memory_size(is_wasm64_execution));
+            canister.memory_limit(self.get_max_canister_memory_size(wasm_execution_mode));
 
         if new_memory_usage > memory_allocation_given {
             return (
@@ -2220,7 +2224,7 @@ impl CanisterManager {
             subnet_size,
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
         ) {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
@@ -2345,11 +2349,13 @@ impl CanisterManager {
 
     /// Depending on the canister architecture (Wasm32 or Wasm64), returns the
     /// maximum memory size that can be allocated by a canister.
-    pub(crate) fn get_max_canister_memory_size(&self, is_wasm64_execution: bool) -> NumBytes {
-        if is_wasm64_execution {
-            self.config.max_canister_memory_size_wasm64
-        } else {
-            self.config.max_canister_memory_size_wasm32
+    pub(crate) fn get_max_canister_memory_size(
+        &self,
+        wasm_execution_mode: WasmExecutionMode,
+    ) -> NumBytes {
+        match wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
+            WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
         }
     }
 }

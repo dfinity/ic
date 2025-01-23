@@ -8,7 +8,6 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -40,6 +39,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
     page_map::{
@@ -287,7 +287,7 @@ impl ExecutionTest {
         if let Some(state) = self.state.as_ref() {
             if let Some(canister) = state.canister_state(&canister_id).as_ref() {
                 if let Some(execution_state) = canister.execution_state.as_ref() {
-                    return execution_state.is_wasm64.into();
+                    return execution_state.wasm_execution_mode;
                 }
             }
         }

@@ -12,6 +12,7 @@ use crate::execution::common::{
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use crate::metrics::CallTreeMetricsNoOp;
 use ic_error_types::{ErrorCode, UserError};
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -45,10 +46,10 @@ pub fn execute_replicated_query(
 
     let reveal_top_up = canister.controllers().contains(req.sender());
 
-    let is_wasm64_execution = canister
+    let wasm_execution_mode = canister
         .execution_state
         .as_ref()
-        .is_some_and(|es| es.is_wasm64);
+        .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
@@ -58,7 +59,7 @@ pub fn execute_replicated_query(
         instruction_limit,
         subnet_size,
         reveal_top_up,
-        is_wasm64_execution.into(),
+        wasm_execution_mode,
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
@@ -82,7 +83,7 @@ pub fn execute_replicated_query(
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
         let user_error = UserError::new(
@@ -108,7 +109,7 @@ pub fn execute_replicated_query(
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
         return finish_call_with_error(
@@ -175,7 +176,7 @@ pub fn execute_replicated_query(
         prepaid_execution_cycles,
         round.counters.execution_refund_error,
         subnet_size,
-        is_wasm64_execution.into(),
+        wasm_execution_mode,
         round.log,
     );
 

@@ -321,7 +321,7 @@ impl WasmExecutor for WasmExecutorImpl {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: serialized_module.is_wasm64(),
+            wasm_execution_mode: serialized_module.is_wasm64().into(),
         };
 
         Ok((

@@ -199,7 +199,7 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        use ic_cycles_account_manager::WasmExecutionMode;
+        use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
