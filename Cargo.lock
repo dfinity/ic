@@ -5487,6 +5487,7 @@ dependencies = [
  "futures",
  "ic-artifact-pool",
  "ic-config",
+ "ic-consensus-manager",
  "ic-interfaces",
  "ic-metrics",
  "ic-protobuf",
