@@ -180,7 +180,7 @@ impl Server {
             let msg_with_eol = format!("{}\n", msg_for_client);
             #[allow(clippy::disallowed_methods)]
             let num_bytes_written = wr.write(msg_with_eol.as_bytes()).await.unwrap();
-            assert_eq!(num_bytes_written, msg_with_eol.as_bytes().len());
+            assert_eq!(num_bytes_written, msg_with_eol.len());
 
             const ACK: u8 = 0x06;
             let reply = rd.read_u8().await.unwrap();

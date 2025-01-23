@@ -22,6 +22,7 @@ use ic_types::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod bouncer_metrics;
 pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
@@ -86,7 +87,7 @@ pub fn find_lowest_ranked_non_disqualified_proposals(
         .filter(|proposal| !disqualified.contains(&proposal.signature.signer))
     {
         let best_rank = best_proposals.first().map(HasRank::rank);
-        if !best_rank.is_some_and(|rank| rank <= proposal.rank()) {
+        if best_rank.is_none_or(|rank| rank > proposal.rank()) {
             best_proposals = vec![proposal];
         } else if Some(proposal.rank()) == best_rank {
             best_proposals.push(proposal);
@@ -262,7 +263,10 @@ pub fn active_low_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
-            transcript.dkg_id.clone()
+            transcript
+                .expect("No active low threshold transcript available for tag {:?}")
+                .dkg_id
+                .clone()
         })
     })
 }
@@ -274,7 +278,10 @@ pub fn active_high_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            transcript.dkg_id.clone()
+            transcript
+                .expect("No active high threshold transcript available for tag {:?}")
+                .dkg_id
+                .clone()
         })
     })
 }
@@ -286,6 +293,7 @@ pub fn active_low_threshold_committee(
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            let transcript = transcript.expect("No active low threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),
@@ -301,6 +309,7 @@ pub fn active_high_threshold_committee(
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            let transcript = transcript.expect("No active high threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),
@@ -356,7 +365,7 @@ fn get_transcript_data_at_given_summary<T>(
     summary_block: &Block,
     height: Height,
     tag: NiDkgTag,
-    getter: impl Fn(&NiDkgTranscript) -> T,
+    getter: impl Fn(Option<&NiDkgTranscript>) -> T,
 ) -> Option<T> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
@@ -364,7 +373,7 @@ fn get_transcript_data_at_given_summary<T>(
     } else if dkg_summary.next_interval_includes(height) {
         let transcript = dkg_summary
             .next_transcript(&tag)
-            .unwrap_or_else(|| dkg_summary.current_transcript(&tag));
+            .or(dkg_summary.current_transcript(&tag));
         Some(getter(transcript))
     } else {
         None

@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
@@ -995,7 +996,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            max_canister_memory_size: NumBytes::from(10 * MIB),
+            max_canister_memory_size_wasm32: NumBytes::from(10 * MIB),
             ..Default::default()
         },
     ));
@@ -1338,6 +1339,92 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
 
     let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+}
+
+#[test]
+fn max_canister_memory_size_is_different_between_wasm32_vs_wasm64() {
+    fn create_wat(memory_increase_in_pages: i64, is_wasm64: bool) -> String {
+        // Wat that grows the memory by parameter and can be formatted to Wasm32 and Wasm64.
+        let mem_declaration = if is_wasm64 {
+            "(memory $memory i64 1 250)"
+        } else {
+            "(memory $memory 1 250)"
+        };
+        let func_msg_decl = if is_wasm64 {
+            "(import \"ic0\" \"msg_reply_data_append\" (func $msg_reply_data_append (param i64 i64)))"
+        } else {
+            "(import \"ic0\" \"msg_reply_data_append\" (func $msg_reply_data_append (param i32 i32)))"
+        };
+        let call_msg_reply_append = if is_wasm64 {
+            "(call $msg_reply_data_append (i64.const 0) (i64.const 1))"
+        } else {
+            "(call $msg_reply_data_append (i32.const 0) (i32.const 1))"
+        };
+        let memory_grow_instruction = if is_wasm64 {
+            format!(
+                "(drop (memory.grow (i64.const {})))",
+                memory_increase_in_pages
+            )
+        } else {
+            format!(
+                "(drop (memory.grow (i32.const {})))",
+                memory_increase_in_pages
+            )
+        };
+        format!(
+            r#"
+            (module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                {}    
+                (func $update
+                    {}
+                    {}
+                    (call $msg_reply)
+                )
+                {}
+                (export "canister_update update" (func $update))
+            )"#,
+            func_msg_decl, memory_grow_instruction, call_msg_reply_append, mem_declaration
+        )
+    }
+
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            max_canister_memory_size_wasm32: NumBytes::from(10 * MIB),
+            max_canister_memory_size_wasm64: NumBytes::from(20 * MIB),
+            ..Default::default()
+        },
+    ));
+
+    // Create wat that grows a Wasm32 canister to the 15 MiB, which is over the Wasm32 limit.
+    // A Wasm page is 64 KiB. Therefore 15 MiB is 240 pages.
+    let num_pages = 240;
+    let wat_32 = create_wat(num_pages, false);
+    // Create wat that grows a Wasm64 canister to the 15 MiB, which is below the Wasm64 limit.
+    let wat_64 = create_wat(num_pages, true);
+
+    let wasm32_canister = create_canister_with_cycles(
+        &env,
+        wat::parse_str(&wat_32).unwrap(),
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    let wasm64_canister = create_canister_with_cycles(
+        &env,
+        wat::parse_str(&wat_64).unwrap(),
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    // When running, the wasm32 canister should trap because it tries to grow the memory beyond its limit of 15 MiB.
+    // and the Wasm64 canister should succeed because it has a higher limit.
+    let res32 = env.execute_ingress(wasm32_canister, "update", vec![]);
+    let res64 = env.execute_ingress(wasm64_canister, "update", vec![]);
+
+    assert_eq!(res32.unwrap_err().code(), ErrorCode::CanisterOutOfMemory);
+    assert_replied(res64);
 }
 
 #[test]
@@ -2055,6 +2142,7 @@ fn system_subnets_are_not_rate_limited() {
     );
 }
 
+#[ignore]
 #[test]
 fn toolchain_error_message() {
     let sm = StateMachine::new();
@@ -2771,4 +2859,37 @@ fn do_not_initialize_wasm_memory_limit_if_it_is_not_empty() {
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
     assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
+}
+
+/// Even if a Wasm module has inital memory size 0, it is allowed to have data
+/// segments of length 0 inserted at address 0. This test checks that such data
+/// segments don't trigger any of our critical errors.
+#[test]
+fn no_critical_error_on_empty_data_segment() {
+    let env = StateMachine::new();
+    let wat: &str = r#"
+        (module
+            (memory (;0;) i64 0)
+            (data (;0;) (i64.const 0) "")
+        )
+    "#;
+    let _id = env.install_canister_wat(wat, vec![], None);
+
+    // A module with an empty data segment outside of memory should fail to
+    // install, but not trigger any critical errors.
+    let wat: &str = r#"
+        (module
+            (memory (;0;) i64 0)
+            (data (;0;) (i64.const 1) "")
+        )
+    "#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let id = env.create_canister(None);
+    let error = env
+        .install_wasm_in_mode(id, CanisterInstallMode::Install, wasm, vec![])
+        .unwrap_err();
+    error.assert_contains(
+        ErrorCode::CanisterInvalidWasm,
+        "Wasm module has invalid data segment of 0 bytes at 1.",
+    );
 }

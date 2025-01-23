@@ -1220,9 +1220,11 @@ pub enum CanisterInstallMode {
 pub enum WasmMemoryPersistence {
     /// Retain the main memory across upgrades.
     /// Used for enhanced orthogonal persistence, as implemented in Motoko
+    #[serde(rename = "keep")]
     Keep,
     /// Reinitialize the main memory on upgrade.
     /// Default behavior without enhanced orthogonal persistence.
+    #[serde(rename = "replace")]
     Replace,
 }
 
@@ -1473,9 +1475,19 @@ impl From<CanisterInstallModeV2> for CanisterInstallMode {
     /// The function is lossy, hence it should be avoided when possible.
     fn from(item: CanisterInstallModeV2) -> Self {
         match item {
-            CanisterInstallModeV2::Install => CanisterInstallMode::Install,
-            CanisterInstallModeV2::Reinstall => CanisterInstallMode::Reinstall,
-            CanisterInstallModeV2::Upgrade(_) => CanisterInstallMode::Upgrade,
+            CanisterInstallModeV2::Install => Self::Install,
+            CanisterInstallModeV2::Reinstall => Self::Reinstall,
+            CanisterInstallModeV2::Upgrade(_) => Self::Upgrade,
+        }
+    }
+}
+
+impl From<CanisterInstallMode> for CanisterInstallModeV2 {
+    fn from(item: CanisterInstallMode) -> Self {
+        match item {
+            CanisterInstallMode::Install => Self::Install,
+            CanisterInstallMode::Reinstall => Self::Reinstall,
+            CanisterInstallMode::Upgrade => Self::Upgrade(None),
         }
     }
 }

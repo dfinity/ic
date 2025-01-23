@@ -852,7 +852,7 @@ macro_rules! define_affine_and_projective_types {
                 const WINDOW_MASK: u8 = (1 << Self::WINDOW_BITS) - 1;
 
                 // The total number of windows in a scalar
-                const WINDOWS : usize = (Self::SUBGROUP_BITS + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+                const WINDOWS: usize = Self::SUBGROUP_BITS.div_ceil(Self::WINDOW_BITS);
 
                 // We must select from 2^WINDOW_BITS elements in each table
                 // group. However one element of the table group is always the
@@ -2337,7 +2337,7 @@ struct WindowInfo<const WINDOW_SIZE: usize> {}
 
 impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const SIZE: usize = WINDOW_SIZE;
-    const WINDOWS: usize = (Scalar::BYTES * 8 + Self::SIZE - 1) / Self::SIZE;
+    const WINDOWS: usize = (Scalar::BYTES * 8).div_ceil(Self::SIZE);
 
     const MASK: u8 = 0xFFu8 >> (8 - Self::SIZE);
     const ELEMENTS: usize = (1 << Self::SIZE) as usize;

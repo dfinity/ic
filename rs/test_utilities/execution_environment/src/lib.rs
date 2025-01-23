@@ -69,13 +69,15 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
-use std::convert::TryFrom;
-use std::sync::Arc;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    convert::TryFrom,
+    os::unix::prelude::FileExt,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
     time::Duration,
 };
-use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
 
 mod wat_canister;
@@ -2113,6 +2115,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_wasm64_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_wasm64_memory_size = wasm_memory_size;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self
@@ -2313,6 +2322,7 @@ impl ExecutionTestBuilder {
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            Path::new("/tmp"),
         );
         if self.precompiled_universal_canister {
             hypervisor.compilation_cache_insert_for_testing(

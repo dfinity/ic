@@ -51,6 +51,9 @@ prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = [ "custom" ] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }

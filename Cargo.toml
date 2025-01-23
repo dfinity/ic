@@ -7,6 +7,7 @@ members = [
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
     "packages/ic-ethereum-types",
+    "packages/ic-metrics-assert",
     "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
@@ -172,6 +173,7 @@ members = [
     "rs/monitoring/tracing/jaeger_exporter",
     "rs/monitoring/tracing/logging_layer",
     "rs/nervous_system/agent",
+    "rs/nervous_system/candid_utils",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
     "rs/nervous_system/common",
@@ -197,6 +199,7 @@ members = [
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
+    "rs/nervous_system/tools/release-runscript",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
@@ -247,6 +250,7 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
+    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -287,9 +291,6 @@ members = [
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "rs/ledger_suite/icrc1",
-    "rs/ledger_suite/icrc1/benchmark/generator",
-    "rs/ledger_suite/icrc1/benchmark/worker",
-    "rs/ledger_suite/icrc1/index",
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/tests/sm-tests",
@@ -377,6 +378,8 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/consensus/vetkd",
+    "rs/tests/cross_chain",
     "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
@@ -559,26 +562,23 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.37.1", features = [
-    "experimental_sync_call",
-    "hyper",
-    "reqwest",
-    "pem",
-] }
+ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
 ic-btc-interface = "0.2.2"
-ic-cbor = "2.6.0"
+ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
+ic-cbor = "3"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
-ic-certificate-verification = "2.6.0"
-ic-certification = "2.6.0"
-ic-http-certification = "2.6.0"
-ic-response-verification = "2.6.0"
+ic-certificate-verification = "3"
+ic-certification = "3"
+ic-http-certification = "3"
+ic-http-gateway = "0.1"
+ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
-ic-transport-types = { version = "0.37.1" }
-ic-utils = { version = "0.37.0", features = ["raw"] }
+ic-transport-types = { version = "0.39.2" }
+ic-utils = { version = "0.39", features = ["raw"] }
 ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
@@ -589,6 +589,7 @@ ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 inferno = "0.12.0"
+ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
@@ -613,7 +614,7 @@ minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.2.0"
 nftables = "0.4"
-nix = "0.24.3"
+nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
@@ -714,6 +715,7 @@ tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
+tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.12.3"

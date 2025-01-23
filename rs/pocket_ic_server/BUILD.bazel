@@ -141,7 +141,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(

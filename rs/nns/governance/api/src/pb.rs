@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    governance::migration::MigrationStatus, governance_error::ErrorType, manage_neuron_response,
-    neuron::DissolveState, CreateServiceNervousSystem, GovernanceError, ManageNeuronResponse,
-    NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
-    NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics, XdrConversionRate,
+    governance::migration::MigrationStatus, governance_error::ErrorType, neuron::DissolveState,
+    CreateServiceNervousSystem, GovernanceError, NetworkEconomics, Neuron, NeuronState,
+    NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics,
+    XdrConversionRate,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
@@ -15,15 +15,6 @@ pub mod v1;
 
 /// The number of e8s per ICP;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
-
-impl ManageNeuronResponse {
-    pub fn panic_if_error(self, msg: &str) -> Self {
-        if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
-            panic!("{}: {:?}", msg, err);
-        }
-        self
-    }
-}
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
