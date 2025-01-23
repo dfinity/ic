@@ -840,8 +840,8 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
 
     // Step 2: Run code under test.
 
-    // Step 2.1: Send ICP from USER1 to CMC, but use a garbage memo. There is no
-    // immediate explosion; "the bomb is only being planted" so to speak.
+    // Step 2.1: Send ICP from USER1 to CMC, but use a garbage memo. Even though
+    // the problem is created here, it is not detected until later.
 
     let garbage_memo = [0xEF, 0xBE, 0xAD, 0xDE, 0, 0, 0, 0]; // little endian 0x_DEAD_BEEF
     assert!(!MEANINGFUL_MEMOS.contains(&Memo(u64::from_le_bytes(garbage_memo))));
