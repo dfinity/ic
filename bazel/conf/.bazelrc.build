@@ -132,7 +132,23 @@ cquery --ui_event_filters=-info,-debug --noshow_progress
 # The default value makes rules_rust pick a dummy toolchain that breaks
 # our canister that depend on C deps
 #   https://github.com/bazelbuild/rules_rust/issues/2764
-common --noincompatible_enable_cc_toolchain_resolution
+#
+# TODO: I had to comment this because it leads to the following error:
+#
+#   ERROR: /home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/BUILD.bazel:96:15: in rust_toolchain rule @@rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools//:rust_toolchain:
+#   Traceback (most recent call last):
+#           File "/home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/rules_rust/rust/toolchain.bzl", line 670, column 72, in _rust_toolchain_impl
+#                   libstd_and_allocator_ccinfo = _make_libstd_and_allocator_ccinfo(ctx, rust_std, ctx.attr.allocator_library, "std"),
+#           File "/home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/rules_rust/rust/toolchain.bzl", line 159, column 60, in _make_libstd_and_allocator_ccinfo
+#                   cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
+#           File "/home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/rules_rust/rust/private/utils.bzl", line 55, column 43, in find_cc_toolchain
+#                   cc_toolchain = find_rules_cc_toolchain(ctx)
+#           File "/home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/bazel_tools/tools/cpp/toolchain_utils.bzl", line 63, column 9, in find_cpp_toolchain
+#                   fail("In order to use find_cpp_toolchain, you must define the '_cc_toolchain' attribute on your rule or aspect.")
+#   Error in fail: In order to use find_cpp_toolchain, you must define the '_cc_toolchain' attribute on your rule or aspect.
+#   ERROR: /home/ubuntu/.cache/bazel/_bazel_bas/6d065581cce7ad9076e3b8db2b3afaf0/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/BUILD.bazel:96:15: Analysis of target '@@rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools//:rust_toolchain' failed
+#
+# common --noincompatible_enable_cc_toolchain_resolution
 
 # This is disabled by default on bazel 7+ some of our targets choke
 # on this (not yet clear why)
