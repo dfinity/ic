@@ -45,7 +45,7 @@ def limit_file_contexts(file_contexts, base_path):
             continue
         if base_path:
             if line.startswith(base_path):
-                lines.append(line[len(base_path):])
+                lines.append(line[len(base_path) :])
         else:
             lines.append(line)
     return "\n".join(lines) + "\n"
