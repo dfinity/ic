@@ -374,23 +374,23 @@ mod tests {
         const MB: usize = 1024 * 1024;
         const MAX_SIZE: NumBytes = NumBytes::new(20 * MB as u64);
 
-        proptest! {
-            #[test]
-            // Try chunks 2x as big as the size limit.
-            // If all inserts below the size limit succeeded, we'd expect 50 *
-            // .5 MiB = 25 MiB total. So set the max size below that to
-            // evenutally hit the size limit.
-            fn insert_result_matches_can_insert(vecs in prop_vec((any::<u8>(), 0..2 * MB), 100)) {
-                let mut store = WasmChunkStore::new_for_testing();
-                for (byte, length) in vecs {
-                    let chunk = vec![byte; length];
-                    let check = store.can_insert_chunk(MAX_SIZE, &chunk);
-                    let hash = store.insert_chunk(MAX_SIZE, &chunk);
-                    if hash.is_ok() {
-                        assert_eq!(check, Ok(()));
-                    } else {
-                        assert_eq!(check.unwrap_err(), hash.unwrap_err());
-                    }
+        #[test_strategy::proptest]
+        // Try chunks 2x as big as the size limit.
+        // If all inserts below the size limit succeeded, we'd expect 50 *
+        // .5 MiB = 25 MiB total. So set the max size below that to
+        // evenutally hit the size limit.
+        fn insert_result_matches_can_insert(
+            #[strategy(prop_vec((any::<u8>(), 0..2 * MB), 100))] vecs: Vec<(u8, usize)>,
+        ) {
+            let mut store = WasmChunkStore::new_for_testing();
+            for (byte, length) in vecs {
+                let chunk = vec![byte; length];
+                let check = store.can_insert_chunk(MAX_SIZE, &chunk);
+                let hash = store.insert_chunk(MAX_SIZE, &chunk);
+                if hash.is_ok() {
+                    prop_assert_eq!(check, Ok(()));
+                } else {
+                    prop_assert_eq!(check.unwrap_err(), hash.unwrap_err());
                 }
             }
         }

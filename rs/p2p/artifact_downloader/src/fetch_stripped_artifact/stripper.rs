@@ -3,8 +3,9 @@ use ic_types::{
     artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
 };
 
-use super::types::stripped::{
-    MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload,
+use super::types::{
+    stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload},
+    SignedIngressId,
 };
 
 /// Provides functionality for stripping objects of given information.
@@ -25,11 +26,11 @@ impl Strippable for ConsensusMessage {
 
         match self {
             // We only strip data blocks.
-            ConsensusMessage::BlockProposal(block_proposal)
+            ConsensusMessage::BlockProposal(ref block_proposal)
                 if block_proposal.as_ref().payload.payload_type()
                     == ic_types::consensus::PayloadType::Data =>
             {
-                let mut proto = pb::BlockProposal::from(&block_proposal);
+                let mut proto = pb::BlockProposal::from(block_proposal);
 
                 // Remove the ingress payload from the proto.
                 if let Some(block) = proto.value.as_mut() {
@@ -54,9 +55,12 @@ impl Strippable for &IngressPayload {
     type Output = StrippedIngressPayload;
 
     fn strip(self) -> Self::Output {
-        Self::Output {
-            ingress_messages: self.message_ids(),
-        }
+        let ingress_messages = self
+            .iter_serialized()
+            .map(|(id, bytes)| SignedIngressId::new(id.clone(), bytes))
+            .collect();
+
+        StrippedIngressPayload { ingress_messages }
     }
 }
 

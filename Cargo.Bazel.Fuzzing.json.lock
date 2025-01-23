@@ -1,5 +1,5 @@
 {
-  "checksum": "e904ebd5eba74e59f5c8c82f9170ceb30c11cb23b89e7edc0f00a0b3bade57c1",
+  "checksum": "e2f0c9fb8047d4200e8e14e235a3d28792aef48b70952cf21a1f849ff9ea495d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1821,14 +1821,14 @@
       ],
       "license_file": null
     },
-    "allocator-api2 0.2.16": {
+    "allocator-api2 0.2.21": {
       "name": "allocator-api2",
-      "version": "0.2.16",
+      "version": "0.2.21",
       "package_url": "https://github.com/zakarumych/allocator-api2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/allocator-api2/0.2.16/download",
-          "sha256": "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
+          "url": "https://static.crates.io/crates/allocator-api2/0.2.21/download",
+          "sha256": "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
         }
       },
       "targets": [
@@ -1857,14 +1857,14 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.16"
+        "version": "0.2.21"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "license"
+      "license_file": "LICENSE-APACHE"
     },
     "android-tzdata 0.1.1": {
       "name": "android-tzdata",
@@ -5439,7 +5439,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -8979,14 +8979,14 @@
       ],
       "license_file": null
     },
-    "bumpalo 3.14.0": {
+    "bumpalo 3.16.0": {
       "name": "bumpalo",
-      "version": "3.14.0",
+      "version": "3.16.0",
       "package_url": "https://github.com/fitzgen/bumpalo",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bumpalo/3.14.0/download",
-          "sha256": "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
+          "url": "https://static.crates.io/crates/bumpalo/3.16.0/download",
+          "sha256": "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
         }
       },
       "targets": [
@@ -9010,12 +9010,22 @@
         ],
         "crate_features": {
           "common": [
+            "allocator-api2",
             "default"
           ],
           "selects": {}
         },
+        "deps": {
+          "common": [
+            {
+              "id": "allocator-api2 0.2.21",
+              "target": "allocator_api2"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2021",
-        "version": "3.14.0"
+        "version": "3.16.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -9604,7 +9614,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -10756,20 +10766,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cc 1.0.83": {
+    "cc 1.1.37": {
       "name": "cc",
-      "version": "1.0.83",
+      "version": "1.1.37",
       "package_url": "https://github.com/rust-lang/cc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cc/1.0.83/download",
-          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "url": "https://static.crates.io/crates/cc/1.1.37/download",
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
         }
       },
       "targets": [
@@ -10795,97 +10799,98 @@
           "common": [],
           "selects": {
             "aarch64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ],
             "arm-unknown-linux-gnueabi": [
-              "jobserver",
               "parallel"
             ],
             "i686-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "i686-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "powerpc-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "s390x-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-apple-darwin": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-pc-windows-msvc": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-freebsd": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-linux-gnu": [
-              "jobserver",
               "parallel"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "jobserver",
               "parallel"
             ]
           }
         },
         "deps": {
-          "common": [],
+          "common": [
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            }
+          ],
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
-              }
-            ],
-            "cfg(unix)": [
+              },
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -10893,62 +10898,90 @@
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
               }
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "jobserver 0.1.27",
+                "id": "jobserver 0.1.32",
                 "target": "jobserver"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "1.0.83"
+        "version": "1.1.37"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -11112,12 +11145,6 @@
                 "target": "crossterm"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "crossterm 0.27.0",
-                "target": "crossterm"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "crossterm 0.27.0",
@@ -11125,6 +11152,12 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "crossterm 0.27.0",
+                "target": "crossterm"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "crossterm 0.27.0",
                 "target": "crossterm"
@@ -11248,7 +11281,7 @@
                 "target": "wasm_bindgen"
               }
             ],
-            "wasm32-wasi": [
+            "wasm32-wasip1": [
               {
                 "id": "serde-wasm-bindgen 0.5.0",
                 "target": "serde_wasm_bindgen"
@@ -11270,12 +11303,6 @@
                 "target": "crossterm"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "crossterm 0.27.0",
-                "target": "crossterm"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "crossterm 0.27.0",
@@ -11289,6 +11316,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "crossterm 0.27.0",
+                "target": "crossterm"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "crossterm 0.27.0",
                 "target": "crossterm"
@@ -11751,12 +11784,6 @@
                 "target": "iana_time_zone"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "iana-time-zone 0.1.59",
-                "target": "iana_time_zone"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "android-tzdata 0.1.1",
@@ -11771,6 +11798,12 @@
               {
                 "id": "windows-targets 0.52.6",
                 "target": "windows_targets"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "iana-time-zone 0.1.59",
+                "target": "iana_time_zone"
               }
             ],
             "aarch64-unknown-linux-gnu": [
@@ -11881,12 +11914,6 @@
                 "target": "iana_time_zone"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "iana-time-zone 0.1.59",
-                "target": "iana_time_zone"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "android-tzdata 0.1.1",
@@ -11904,6 +11931,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "iana-time-zone 0.1.59",
+                "target": "iana_time_zone"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "iana-time-zone 0.1.59",
                 "target": "iana_time_zone"
@@ -14332,14 +14365,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cranelift-bforest 0.114.0": {
+    "cranelift-bforest 0.115.0": {
       "name": "cranelift-bforest",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bforest/0.114.0/download",
-          "sha256": "2ba4f80548f22dc9c43911907b5e322c5555544ee85f785115701e6a28c9abe1"
+          "url": "https://static.crates.io/crates/cranelift-bforest/0.115.0/download",
+          "sha256": "ac89549be94911dd0e839b4a7db99e9ed29c17517e1c026f61066884c168aa3c"
         }
       },
       "targets": [
@@ -14364,14 +14397,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.114.0",
+              "id": "cranelift-entity 0.115.0",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14379,14 +14412,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-bitset 0.114.0": {
+    "cranelift-bitset 0.115.0": {
       "name": "cranelift-bitset",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bitset/0.114.0/download",
-          "sha256": "005884e3649c3e5ff2dc79e8a94b138f11569cc08a91244a292714d2a86e9156"
+          "url": "https://static.crates.io/crates/cranelift-bitset/0.115.0/download",
+          "sha256": "b9bd49369f76c77e34e641af85d0956869237832c118964d08bf5f51f210875a"
         }
       },
       "targets": [
@@ -14433,7 +14466,7 @@
           ],
           "selects": {}
         },
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14441,14 +14474,14 @@
       ],
       "license_file": null
     },
-    "cranelift-codegen 0.114.0": {
+    "cranelift-codegen 0.115.0": {
       "name": "cranelift-codegen",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen/0.114.0/download",
-          "sha256": "fe4036255ec33ce9a37495dfbcfc4e1118fd34e693eff9a1e106336b7cd16a9b"
+          "url": "https://static.crates.io/crates/cranelift-codegen/0.115.0/download",
+          "sha256": "fd96ce9cf8efebd7f5ab8ced5a0ce44250280bbae9f593d74a6d7effc3582a35"
         }
       },
       "targets": [
@@ -14495,31 +14528,31 @@
         "deps": {
           "common": [
             {
-              "id": "bumpalo 3.14.0",
+              "id": "bumpalo 3.16.0",
               "target": "bumpalo"
             },
             {
-              "id": "cranelift-bforest 0.114.0",
+              "id": "cranelift-bforest 0.115.0",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-bitset 0.114.0",
+              "id": "cranelift-bitset 0.115.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-codegen 0.114.0",
+              "id": "cranelift-codegen 0.115.0",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.114.0",
+              "id": "cranelift-codegen-shared 0.115.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-control 0.114.0",
+              "id": "cranelift-control 0.115.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.114.0",
+              "id": "cranelift-entity 0.115.0",
               "target": "cranelift_entity"
             },
             {
@@ -14535,7 +14568,7 @@
               "target": "log"
             },
             {
-              "id": "regalloc2 0.10.2",
+              "id": "regalloc2 0.11.1",
               "target": "regalloc2"
             },
             {
@@ -14554,7 +14587,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -14566,11 +14599,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.114.0",
+              "id": "cranelift-codegen-meta 0.115.0",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.114.0",
+              "id": "cranelift-isle 0.115.0",
               "target": "cranelift_isle"
             }
           ],
@@ -14583,14 +14616,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-meta 0.114.0": {
+    "cranelift-codegen-meta 0.115.0": {
       "name": "cranelift-codegen-meta",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.114.0/download",
-          "sha256": "f7ca74f4b68319da11d39e894437cb6e20ec7c2e11fbbda823c3bf207beedff7",
+          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.115.0/download",
+          "sha256": "5a68e358827afe4bfb6239fcbf6fbd5ac56206ece8a99c8f5f9bbd518773281a",
           "patch_args": [
             "-p4"
           ],
@@ -14621,14 +14654,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-shared 0.114.0",
+              "id": "cranelift-codegen-shared 0.115.0",
               "target": "cranelift_codegen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14636,14 +14669,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-shared 0.114.0": {
+    "cranelift-codegen-shared 0.115.0": {
       "name": "cranelift-codegen-shared",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.114.0/download",
-          "sha256": "897e54f433a0269c4187871aa06d452214d5515d228d5bdc22219585e9eef895"
+          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.115.0/download",
+          "sha256": "e184c9767afbe73d50c55ec29abcf4c32f9baf0d9d22b86d58c4d55e06dee181"
         }
       },
       "targets": [
@@ -14666,7 +14699,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14674,14 +14707,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-control 0.114.0": {
+    "cranelift-control 0.115.0": {
       "name": "cranelift-control",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-control/0.114.0/download",
-          "sha256": "29cb4018f5bf59fb53f515fa9d80e6f8c5ce19f198dc538984ebd23ecf8965ec"
+          "url": "https://static.crates.io/crates/cranelift-control/0.115.0/download",
+          "sha256": "5cc7664f2a66f053e33f149e952bb5971d138e3af637f5097727ed6dc0ed95dd"
         }
       },
       "targets": [
@@ -14720,7 +14753,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14728,14 +14761,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-entity 0.114.0": {
+    "cranelift-entity 0.115.0": {
       "name": "cranelift-entity",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-entity/0.114.0/download",
-          "sha256": "305399fd781a2953ac78c1396f02ff53144f39c33eb7fc7789cf4e8936d13a96"
+          "url": "https://static.crates.io/crates/cranelift-entity/0.115.0/download",
+          "sha256": "118597e3a9cf86c3556fa579a7a23b955fa18231651a52a77a2475d305a9cf84"
         }
       },
       "targets": [
@@ -14768,7 +14801,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.114.0",
+              "id": "cranelift-bitset 0.115.0",
               "target": "cranelift_bitset"
             },
             {
@@ -14788,7 +14821,7 @@
           ],
           "selects": {}
         },
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14796,14 +14829,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-frontend 0.114.0": {
+    "cranelift-frontend 0.115.0": {
       "name": "cranelift-frontend",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-frontend/0.114.0/download",
-          "sha256": "9230b460a128d53653456137751d27baf567947a3ab8c0c4d6e31fd08036d81e"
+          "url": "https://static.crates.io/crates/cranelift-frontend/0.115.0/download",
+          "sha256": "7638ea1efb069a0aa18d8ee67401b6b0d19f6bfe5de5e9ede348bfc80bb0d8c7"
         }
       },
       "targets": [
@@ -14835,7 +14868,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.114.0",
+              "id": "cranelift-codegen 0.115.0",
               "target": "cranelift_codegen"
             },
             {
@@ -14854,7 +14887,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14862,14 +14895,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-isle 0.114.0": {
+    "cranelift-isle 0.115.0": {
       "name": "cranelift-isle",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-isle/0.114.0/download",
-          "sha256": "b961e24ae3ec9813a24a15ae64bbd2a42e4de4d79a7f3225a412e3b94e78d1c8",
+          "url": "https://static.crates.io/crates/cranelift-isle/0.115.0/download",
+          "sha256": "15c53e1152a0b01c4ed2b1e0535602b8e86458777dd9d18b28732b16325c7dc0",
           "patch_args": [
             "-p4"
           ],
@@ -14918,14 +14951,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.114.0",
+              "id": "cranelift-isle 0.115.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -14941,14 +14974,14 @@
       ],
       "license_file": null
     },
-    "cranelift-native 0.114.0": {
+    "cranelift-native 0.115.0": {
       "name": "cranelift-native",
-      "version": "0.114.0",
+      "version": "0.115.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-native/0.114.0/download",
-          "sha256": "4d5bd76df6c9151188dfa428c863b33da5b34561b67f43c0cf3f24a794f9fa1f"
+          "url": "https://static.crates.io/crates/cranelift-native/0.115.0/download",
+          "sha256": "7b7d8f895444fa52dd7bdd0bed11bf007a7fb43af65a6deac8fcc4094c6372f7"
         }
       },
       "targets": [
@@ -14980,7 +15013,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.114.0",
+              "id": "cranelift-codegen 0.115.0",
               "target": "cranelift_codegen"
             },
             {
@@ -14998,7 +15031,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.114.0"
+        "version": "0.115.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15748,20 +15781,6 @@
                 "target": "signal_hook_mio"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "mio 0.8.10",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.3",
-                "target": "signal_hook_mio"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "mio 0.8.10",
@@ -15784,6 +15803,20 @@
               {
                 "id": "winapi 0.3.9",
                 "target": "winapi"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "mio 0.8.10",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.3",
+                "target": "signal_hook_mio"
               }
             ],
             "aarch64-unknown-linux-gnu": [
@@ -15998,20 +16031,6 @@
                 "target": "signal_hook_mio"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "mio 0.8.10",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.3",
-                "target": "signal_hook_mio"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "mio 0.8.10",
@@ -16037,6 +16056,20 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "mio 0.8.10",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.3",
+                "target": "signal_hook_mio"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "mio 0.8.10",
                 "target": "mio"
@@ -18497,7 +18530,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -19379,6 +19412,10 @@
               "target": "syn"
             },
             {
+              "id": "syscalls 0.6.18",
+              "target": "syscalls"
+            },
+            {
               "id": "tar 0.4.39",
               "target": "tar"
             },
@@ -19445,6 +19482,10 @@
             {
               "id": "tokio-socks 0.5.2",
               "target": "tokio_socks"
+            },
+            {
+              "id": "tokio-stream 0.1.17",
+              "target": "tokio_stream"
             },
             {
               "id": "tokio-test 0.4.4",
@@ -19563,11 +19604,11 @@
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime 27.0.0",
+              "id": "wasmtime 28.0.0",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 27.0.0",
+              "id": "wasmtime-environ 28.0.0",
               "target": "wasmtime_environ"
             },
             {
@@ -21941,7 +21982,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -22597,12 +22638,6 @@
                 "target": "parking"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "parking 2.1.1",
-                "target": "parking"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "parking 2.1.1",
@@ -22610,6 +22645,12 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "parking 2.1.1",
+                "target": "parking"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "parking 2.1.1",
                 "target": "parking"
@@ -22729,12 +22770,6 @@
                 "target": "parking"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "parking 2.1.1",
-                "target": "parking"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "parking 2.1.1",
@@ -22748,6 +22783,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "parking 2.1.1",
+                "target": "parking"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "parking 2.1.1",
                 "target": "parking"
@@ -22850,12 +22891,6 @@
                 "target": "parking"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "parking 2.1.1",
-                "target": "parking"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "parking 2.1.1",
@@ -22863,6 +22898,12 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "parking 2.1.1",
+                "target": "parking"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "parking 2.1.1",
                 "target": "parking"
@@ -22982,12 +23023,6 @@
                 "target": "parking"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "parking 2.1.1",
-                "target": "parking"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "parking 2.1.1",
@@ -23001,6 +23036,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "parking 2.1.1",
+                "target": "parking"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "parking 2.1.1",
                 "target": "parking"
@@ -23926,7 +23967,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -24247,6 +24288,44 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "foldhash 0.1.4": {
+      "name": "foldhash",
+      "version": "0.1.4",
+      "package_url": "https://github.com/orlp/foldhash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/foldhash/0.1.4/download",
+          "sha256": "a0d2fde1f7b3d48b8395d5f2de76c18a528bd6a9cdde438df747bfcba3e05d6f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "foldhash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "foldhash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.1.4"
+      },
+      "license": "Zlib",
+      "license_ids": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE"
     },
     "form_urlencoded 1.2.1": {
       "name": "form_urlencoded",
@@ -26517,7 +26596,7 @@
               "target": "ahash"
             },
             {
-              "id": "allocator-api2 0.2.16",
+              "id": "allocator-api2 0.2.21",
               "target": "allocator_api2"
             },
             {
@@ -26529,6 +26608,60 @@
         },
         "edition": "2021",
         "version": "0.14.5"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "hashbrown 0.15.2": {
+      "name": "hashbrown",
+      "version": "0.15.2",
+      "package_url": "https://github.com/rust-lang/hashbrown",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hashbrown/0.15.2/download",
+          "sha256": "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hashbrown",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hashbrown",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default-hasher"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "foldhash 0.1.4",
+              "target": "foldhash"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.15.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -29003,15 +29136,15 @@
               "webpki-roots",
               "webpki-tokio"
             ],
-            "aarch64-fuchsia": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
             "aarch64-linux-android": [
               "webpki-roots",
               "webpki-tokio"
             ],
             "aarch64-pc-windows-msvc": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "aarch64-unknown-fuchsia": [
               "webpki-roots",
               "webpki-tokio"
             ],
@@ -29091,10 +29224,6 @@
               "webpki-roots",
               "webpki-tokio"
             ],
-            "x86_64-fuchsia": [
-              "webpki-roots",
-              "webpki-tokio"
-            ],
             "x86_64-linux-android": [
               "webpki-roots",
               "webpki-tokio"
@@ -29104,6 +29233,10 @@
               "webpki-tokio"
             ],
             "x86_64-unknown-freebsd": [
+              "webpki-roots",
+              "webpki-tokio"
+            ],
+            "x86_64-unknown-fuchsia": [
               "webpki-roots",
               "webpki-tokio"
             ],
@@ -29188,12 +29321,6 @@
                 "target": "webpki_roots"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "webpki-roots 0.26.1",
@@ -29201,6 +29328,12 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "webpki-roots 0.26.1",
+                "target": "webpki_roots"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "webpki-roots 0.26.1",
                 "target": "webpki_roots"
@@ -29320,12 +29453,6 @@
                 "target": "webpki_roots"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "webpki-roots 0.26.1",
@@ -29339,6 +29466,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "webpki-roots 0.26.1",
+                "target": "webpki_roots"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "webpki-roots 0.26.1",
                 "target": "webpki_roots"
@@ -29761,7 +29894,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -32939,7 +33072,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_locid 1.5.0": {
@@ -33011,7 +33146,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_locid_transform 1.5.0": {
@@ -33087,7 +33224,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_locid_transform_data 1.5.0": {
@@ -33123,7 +33262,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_normalizer 1.5.0": {
@@ -33216,7 +33357,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_normalizer_data 1.5.0": {
@@ -33252,7 +33395,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_properties 1.5.1": {
@@ -33333,7 +33478,9 @@
         "version": "1.5.1"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_properties_data 1.5.0": {
@@ -33369,7 +33516,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_provider 1.5.0": {
@@ -33457,7 +33606,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "icu_provider_macros 1.5.0": {
@@ -33510,7 +33661,9 @@
         "version": "1.5.0"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "id-arena 2.2.1": {
@@ -35683,14 +35836,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "jobserver 0.1.27": {
+    "jobserver 0.1.32": {
       "name": "jobserver",
-      "version": "0.1.27",
-      "package_url": "https://github.com/alexcrichton/jobserver-rs",
+      "version": "0.1.32",
+      "package_url": "https://github.com/rust-lang/jobserver-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/jobserver/0.1.27/download",
-          "sha256": "8c37f63953c4c63420ed5fd3d6d398c719489b9f872b9fa683262f8edd363c7d"
+          "url": "https://static.crates.io/crates/jobserver/0.1.32/download",
+          "sha256": "48d1dbcbbeb6a7fec7e059840aa538bd62aaccf972c7346c4d9d2059312853d0"
         }
       },
       "targets": [
@@ -35723,10 +35876,10 @@
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.1.27"
+        "edition": "2021",
+        "version": "0.1.32"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -38114,7 +38267,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -38396,7 +38549,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38497,7 +38650,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38603,7 +38756,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38712,7 +38865,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -38810,7 +38963,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -39005,7 +39158,9 @@
         "version": "0.7.3"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "little-loadshedder 0.2.0": {
@@ -39216,7 +39371,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -39986,7 +40141,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -41607,10 +41762,10 @@
             "aarch64-apple-ios-sim": [
               "os-ext"
             ],
-            "aarch64-fuchsia": [
+            "aarch64-linux-android": [
               "os-ext"
             ],
-            "aarch64-linux-android": [
+            "aarch64-unknown-fuchsia": [
               "os-ext"
             ],
             "aarch64-unknown-linux-gnu": [
@@ -41655,13 +41810,13 @@
             "x86_64-apple-ios": [
               "os-ext"
             ],
-            "x86_64-fuchsia": [
-              "os-ext"
-            ],
             "x86_64-linux-android": [
               "os-ext"
             ],
             "x86_64-unknown-freebsd": [
+              "os-ext"
+            ],
+            "x86_64-unknown-fuchsia": [
               "os-ext"
             ],
             "x86_64-unknown-linux-gnu": [
@@ -44438,14 +44593,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "object 0.36.1": {
+    "object 0.36.7": {
       "name": "object",
-      "version": "0.36.1",
+      "version": "0.36.7",
       "package_url": "https://github.com/gimli-rs/object",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/object/0.36.1/download",
-          "sha256": "081b846d1d56ddfc18fdf1a922e4f6e07a11768ea1b92dec44e42b72712ccfce"
+          "url": "https://static.crates.io/crates/object/0.36.7/download",
+          "sha256": "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
         }
       },
       "targets": [
@@ -44453,6 +44608,18 @@
           "Library": {
             "crate_name": "object",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -44489,7 +44656,7 @@
               "target": "crc32fast"
             },
             {
-              "id": "hashbrown 0.14.5",
+              "id": "hashbrown 0.15.2",
               "target": "hashbrown"
             },
             {
@@ -44499,12 +44666,24 @@
             {
               "id": "memchr 2.6.4",
               "target": "memchr"
+            },
+            {
+              "id": "object 0.36.7",
+              "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.36.1"
+        "version": "0.36.7"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -45034,7 +45213,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -46170,7 +46349,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -46285,7 +46464,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -47480,7 +47659,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -52375,7 +52554,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -52551,14 +52730,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pulley-interpreter 27.0.0": {
+    "pulley-interpreter 28.0.0": {
       "name": "pulley-interpreter",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/pulley",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pulley-interpreter/27.0.0/download",
-          "sha256": "a3b8d81cf799e20564931e9867ca32de545188c6ee4c2e0f6e41d32f0c7dc6fb"
+          "url": "https://static.crates.io/crates/pulley-interpreter/28.0.0/download",
+          "sha256": "403a1a95f4c18a45c86c7bff13df00347afd0abcbf2e54af273c837339ffcf77"
         }
       },
       "targets": [
@@ -52583,7 +52762,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.114.0",
+              "id": "cranelift-bitset 0.115.0",
               "target": "cranelift_bitset"
             },
             {
@@ -52598,7 +52777,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -53589,13 +53768,13 @@
                 "target": "libc"
               }
             ],
-            "aarch64-fuchsia": [
+            "aarch64-linux-android": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
-            "aarch64-linux-android": [
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -53685,12 +53864,6 @@
                 "target": "libc"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "libc 0.2.158",
@@ -53698,6 +53871,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -55137,14 +55316,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regalloc2 0.10.2": {
+    "regalloc2 0.11.1": {
       "name": "regalloc2",
-      "version": "0.10.2",
+      "version": "0.11.1",
       "package_url": "https://github.com/bytecodealliance/regalloc2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regalloc2/0.10.2/download",
-          "sha256": "12908dbeb234370af84d0579b9f68258a0f67e201412dd9a2814e6f45b2fc0f0"
+          "url": "https://static.crates.io/crates/regalloc2/0.11.1/download",
+          "sha256": "145c1c267e14f20fb0f88aa76a1c5ffec42d592c1d28b3cd9148ae35916158d3"
         }
       },
       "targets": [
@@ -55177,7 +55356,15 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.14.5",
+              "id": "allocator-api2 0.2.21",
+              "target": "allocator_api2"
+            },
+            {
+              "id": "bumpalo 3.16.0",
+              "target": "bumpalo"
+            },
+            {
+              "id": "hashbrown 0.15.2",
               "target": "hashbrown"
             },
             {
@@ -55189,10 +55376,6 @@
               "target": "rustc_hash"
             },
             {
-              "id": "slice-group-by 0.3.1",
-              "target": "slice_group_by"
-            },
-            {
               "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
@@ -55200,7 +55383,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.2"
+        "version": "0.11.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -55938,36 +56121,6 @@
                 "target": "webpki_roots"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "async-compression 0.4.4",
-                "target": "async_compression"
-              },
-              {
-                "id": "hyper-rustls 0.24.2",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.21.12",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pemfile 1.0.3",
-                "target": "rustls_pemfile"
-              },
-              {
-                "id": "tokio-rustls 0.24.1",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.13",
-                "target": "tokio_util"
-              },
-              {
-                "id": "webpki-roots 0.25.2",
-                "target": "webpki_roots"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "async-compression 0.4.4",
@@ -55999,6 +56152,36 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "async-compression 0.4.4",
+                "target": "async_compression"
+              },
+              {
+                "id": "hyper-rustls 0.24.2",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "rustls 0.21.12",
+                "target": "rustls"
+              },
+              {
+                "id": "rustls-pemfile 1.0.3",
+                "target": "rustls_pemfile"
+              },
+              {
+                "id": "tokio-rustls 0.24.1",
+                "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-util 0.7.13",
+                "target": "tokio_util"
+              },
+              {
+                "id": "webpki-roots 0.25.2",
+                "target": "webpki_roots"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "async-compression 0.4.4",
                 "target": "async_compression"
@@ -56674,36 +56857,6 @@
                 "target": "webpki_roots"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "async-compression 0.4.4",
-                "target": "async_compression"
-              },
-              {
-                "id": "hyper-rustls 0.24.2",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.21.12",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pemfile 1.0.3",
-                "target": "rustls_pemfile"
-              },
-              {
-                "id": "tokio-rustls 0.24.1",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.13",
-                "target": "tokio_util"
-              },
-              {
-                "id": "webpki-roots 0.25.2",
-                "target": "webpki_roots"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "async-compression 0.4.4",
@@ -56765,6 +56918,36 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "async-compression 0.4.4",
+                "target": "async_compression"
+              },
+              {
+                "id": "hyper-rustls 0.24.2",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "rustls 0.21.12",
+                "target": "rustls"
+              },
+              {
+                "id": "rustls-pemfile 1.0.3",
+                "target": "rustls_pemfile"
+              },
+              {
+                "id": "tokio-rustls 0.24.1",
+                "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-util 0.7.13",
+                "target": "tokio_util"
+              },
+              {
+                "id": "webpki-roots 0.25.2",
+                "target": "webpki_roots"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "async-compression 0.4.4",
                 "target": "async_compression"
@@ -57148,56 +57331,6 @@
                 "target": "webpki_roots"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              },
-              {
-                "id": "h2 0.4.4",
-                "target": "h2"
-              },
-              {
-                "id": "hickory-resolver 0.24.1",
-                "target": "hickory_resolver"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.18",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-native-certs 0.8.0",
-                "target": "rustls_native_certs"
-              },
-              {
-                "id": "rustls-pemfile 2.2.0",
-                "target": "rustls_pemfile"
-              },
-              {
-                "id": "rustls-pki-types 1.10.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-socks 0.5.2",
-                "target": "tokio_socks"
-              },
-              {
-                "id": "tokio-util 0.7.13",
-                "target": "tokio_util"
-              },
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "futures-channel 0.3.31",
@@ -57249,6 +57382,56 @@
               }
             ],
             "aarch64-pc-windows-msvc": [
+              {
+                "id": "futures-channel 0.3.31",
+                "target": "futures_channel"
+              },
+              {
+                "id": "h2 0.4.4",
+                "target": "h2"
+              },
+              {
+                "id": "hickory-resolver 0.24.1",
+                "target": "hickory_resolver"
+              },
+              {
+                "id": "hyper-rustls 0.27.3",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "rustls 0.23.18",
+                "target": "rustls"
+              },
+              {
+                "id": "rustls-native-certs 0.8.0",
+                "target": "rustls_native_certs"
+              },
+              {
+                "id": "rustls-pemfile 2.2.0",
+                "target": "rustls_pemfile"
+              },
+              {
+                "id": "rustls-pki-types 1.10.0",
+                "target": "rustls_pki_types"
+              },
+              {
+                "id": "tokio-rustls 0.26.0",
+                "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-socks 0.5.2",
+                "target": "tokio_socks"
+              },
+              {
+                "id": "tokio-util 0.7.13",
+                "target": "tokio_util"
+              },
+              {
+                "id": "webpki-roots 0.26.1",
+                "target": "webpki_roots"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
@@ -58224,7 +58407,7 @@
                 "target": "wasm_streams"
               }
             ],
-            "wasm32-wasi": [
+            "wasm32-wasip1": [
               {
                 "id": "wasm-streams 0.4.0",
                 "target": "wasm_streams"
@@ -58281,56 +58464,6 @@
               }
             ],
             "x86_64-apple-ios": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              },
-              {
-                "id": "h2 0.4.4",
-                "target": "h2"
-              },
-              {
-                "id": "hickory-resolver 0.24.1",
-                "target": "hickory_resolver"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.18",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-native-certs 0.8.0",
-                "target": "rustls_native_certs"
-              },
-              {
-                "id": "rustls-pemfile 2.2.0",
-                "target": "rustls_pemfile"
-              },
-              {
-                "id": "rustls-pki-types 1.10.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-socks 0.5.2",
-                "target": "tokio_socks"
-              },
-              {
-                "id": "tokio-util 0.7.13",
-                "target": "tokio_util"
-              },
-              {
-                "id": "webpki-roots 0.26.1",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-fuchsia": [
               {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
@@ -58481,6 +58614,56 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "futures-channel 0.3.31",
+                "target": "futures_channel"
+              },
+              {
+                "id": "h2 0.4.4",
+                "target": "h2"
+              },
+              {
+                "id": "hickory-resolver 0.24.1",
+                "target": "hickory_resolver"
+              },
+              {
+                "id": "hyper-rustls 0.27.3",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "rustls 0.23.18",
+                "target": "rustls"
+              },
+              {
+                "id": "rustls-native-certs 0.8.0",
+                "target": "rustls_native_certs"
+              },
+              {
+                "id": "rustls-pemfile 2.2.0",
+                "target": "rustls_pemfile"
+              },
+              {
+                "id": "rustls-pki-types 1.10.0",
+                "target": "rustls_pki_types"
+              },
+              {
+                "id": "tokio-rustls 0.26.0",
+                "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-socks 0.5.2",
+                "target": "tokio_socks"
+              },
+              {
+                "id": "tokio-util 0.7.13",
+                "target": "tokio_util"
+              },
+              {
+                "id": "webpki-roots 0.26.1",
+                "target": "webpki_roots"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
@@ -59056,7 +59239,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -59173,7 +59356,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -60598,7 +60781,7 @@
               "time",
               "use-libc-auxv"
             ],
-            "aarch64-fuchsia": [
+            "aarch64-linux-android": [
               "default",
               "event",
               "mm",
@@ -60608,7 +60791,7 @@
               "time",
               "use-libc-auxv"
             ],
-            "aarch64-linux-android": [
+            "aarch64-unknown-fuchsia": [
               "default",
               "event",
               "mm",
@@ -60779,7 +60962,7 @@
               "termios",
               "use-libc-auxv"
             ],
-            "wasm32-wasi": [
+            "wasm32-wasip1": [
               "default",
               "termios",
               "use-libc-auxv"
@@ -60804,16 +60987,6 @@
               "time",
               "use-libc-auxv"
             ],
-            "x86_64-fuchsia": [
-              "default",
-              "event",
-              "mm",
-              "pipe",
-              "process",
-              "termios",
-              "time",
-              "use-libc-auxv"
-            ],
             "x86_64-linux-android": [
               "default",
               "event",
@@ -60825,6 +60998,16 @@
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
+              "default",
+              "event",
+              "mm",
+              "pipe",
+              "process",
+              "termios",
+              "time",
+              "use-libc-auxv"
+            ],
+            "x86_64-unknown-fuchsia": [
               "default",
               "event",
               "mm",
@@ -60912,17 +61095,6 @@
                 "target": "libc"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "errno 0.3.8",
@@ -60939,6 +61111,17 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
@@ -61114,7 +61297,7 @@
                 "target": "libc"
               }
             ],
-            "wasm32-wasi": [
+            "wasm32-wasip1": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61147,17 +61330,6 @@
                 "target": "libc"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "errno 0.3.8",
@@ -61177,6 +61349,17 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -63548,7 +63731,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63633,7 +63816,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -63722,7 +63905,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -66701,44 +66884,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "slice-group-by 0.3.1": {
-      "name": "slice-group-by",
-      "version": "0.3.1",
-      "package_url": "https://github.com/Kerollmops/slice-group-by",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/slice-group-by/0.3.1/download",
-          "sha256": "826167069c09b99d56f31e9ae5c99049e932a98c9dc2dac47645b08dbbf76ba7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "slice_group_by",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "slice_group_by",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.3.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "slog 2.7.0": {
       "name": "slog",
       "version": "2.7.0",
@@ -67722,13 +67867,13 @@
             "aarch64-apple-ios-sim": [
               "once"
             ],
-            "aarch64-fuchsia": [
-              "once"
-            ],
             "aarch64-linux-android": [
               "once"
             ],
             "aarch64-pc-windows-msvc": [
+              "once"
+            ],
+            "aarch64-unknown-fuchsia": [
               "once"
             ],
             "aarch64-unknown-linux-gnu": [
@@ -67776,9 +67921,6 @@
             "x86_64-apple-ios": [
               "once"
             ],
-            "x86_64-fuchsia": [
-              "once"
-            ],
             "x86_64-linux-android": [
               "once"
             ],
@@ -67786,6 +67928,9 @@
               "once"
             ],
             "x86_64-unknown-freebsd": [
+              "once"
+            ],
+            "x86_64-unknown-fuchsia": [
               "once"
             ],
             "x86_64-unknown-linux-gnu": [
@@ -68098,7 +68243,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -69557,6 +69702,95 @@
       ],
       "license_file": "LICENSE"
     },
+    "syscalls 0.6.18": {
+      "name": "syscalls",
+      "version": "0.6.18",
+      "package_url": "https://github.com/jasonwhite/syscalls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/syscalls/0.6.18/download",
+          "sha256": "43d0e35dc7d73976a53c7e6d7d177ef804a0c0ee774ec77bcc520c2216fd7cbe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syscalls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "syscalls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde",
+            "serde_repr",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "syscalls 0.6.18",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_repr 0.1.19",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.18"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "BSD-2-Clause",
+      "license_ids": [
+        "BSD-2-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
     "system-configuration 0.5.1": {
       "name": "system-configuration",
       "version": "0.5.1",
@@ -69938,13 +70172,13 @@
                 "target": "xattr"
               }
             ],
-            "aarch64-fuchsia": [
+            "aarch64-linux-android": [
               {
                 "id": "xattr 0.2.3",
                 "target": "xattr"
               }
             ],
-            "aarch64-linux-android": [
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "xattr 0.2.3",
                 "target": "xattr"
@@ -70040,12 +70274,6 @@
                 "target": "xattr"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "xattr 0.2.3",
-                "target": "xattr"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "xattr 0.2.3",
@@ -70053,6 +70281,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "xattr 0.2.3",
+                "target": "xattr"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "xattr 0.2.3",
                 "target": "xattr"
@@ -71559,7 +71793,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -71736,7 +71970,7 @@
                 "target": "num_threads"
               }
             ],
-            "aarch64-fuchsia": [
+            "aarch64-linux-android": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -71746,7 +71980,7 @@
                 "target": "num_threads"
               }
             ],
-            "aarch64-linux-android": [
+            "aarch64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -71896,16 +72130,6 @@
                 "target": "num_threads"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              },
-              {
-                "id": "num_threads 0.1.6",
-                "target": "num_threads"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "libc 0.2.158",
@@ -71917,6 +72141,16 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              },
+              {
+                "id": "num_threads 0.1.6",
+                "target": "num_threads"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -72244,7 +72478,9 @@
         "version": "0.7.6"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "tinytemplate 1.2.1": {
@@ -72627,20 +72863,6 @@
                 "target": "socket2"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              },
-              {
-                "id": "signal-hook-registry 1.4.1",
-                "target": "signal_hook_registry"
-              },
-              {
-                "id": "socket2 0.5.7",
-                "target": "socket2"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "libc 0.2.158",
@@ -72663,6 +72885,20 @@
               {
                 "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              },
+              {
+                "id": "signal-hook-registry 1.4.1",
+                "target": "signal_hook_registry"
+              },
+              {
+                "id": "socket2 0.5.7",
+                "target": "socket2"
               }
             ],
             "aarch64-unknown-linux-gnu": [
@@ -72901,20 +73137,6 @@
                 "target": "socket2"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              },
-              {
-                "id": "signal-hook-registry 1.4.1",
-                "target": "signal_hook_registry"
-              },
-              {
-                "id": "socket2 0.5.7",
-                "target": "socket2"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "libc 0.2.158",
@@ -72940,6 +73162,20 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              },
+              {
+                "id": "signal-hook-registry 1.4.1",
+                "target": "signal_hook_registry"
+              },
+              {
+                "id": "socket2 0.5.7",
+                "target": "socket2"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -73166,7 +73402,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -73532,14 +73768,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-stream 0.1.16": {
+    "tokio-stream 0.1.17": {
       "name": "tokio-stream",
-      "version": "0.1.16",
+      "version": "0.1.17",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-stream/0.1.16/download",
-          "sha256": "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
+          "url": "https://static.crates.io/crates/tokio-stream/0.1.17/download",
+          "sha256": "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
         }
       },
       "targets": [
@@ -73587,7 +73823,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.16"
+        "version": "0.1.17"
       },
       "license": "MIT",
       "license_ids": [
@@ -73643,7 +73879,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             }
           ],
@@ -74146,7 +74382,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -76376,7 +76612,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.16",
+              "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
             },
             {
@@ -78641,7 +78877,7 @@
         "deps": {
           "common": [
             {
-              "id": "bumpalo 3.14.0",
+              "id": "bumpalo 3.16.0",
               "target": "bumpalo"
             },
             {
@@ -79056,14 +79292,14 @@
       ],
       "license_file": null
     },
-    "wasm-encoder 0.219.1": {
+    "wasm-encoder 0.221.2": {
       "name": "wasm-encoder",
-      "version": "0.219.1",
+      "version": "0.221.2",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.219.1/download",
-          "sha256": "29cbbd772edcb8e7d524a82ee8cef8dd046fc14033796a754c3ad246d019fa54"
+          "url": "https://static.crates.io/crates/wasm-encoder/0.221.2/download",
+          "sha256": "c17a3bd88f2155da63a1f2fcb8a56377a24f0b6dfed12733bb5f544e86f690c5"
         }
       },
       "targets": [
@@ -79102,7 +79338,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.219.1"
+        "version": "0.221.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -79461,14 +79697,14 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.219.1": {
+    "wasmparser 0.221.2": {
       "name": "wasmparser",
-      "version": "0.219.1",
+      "version": "0.221.2",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.219.1/download",
-          "sha256": "5c771866898879073c53b565a6c7b49953795159836714ac56a5befb581227c5"
+          "url": "https://static.crates.io/crates/wasmparser/0.221.2/download",
+          "sha256": "9845c470a2e10b61dd42c385839cdd6496363ed63b5c9e420b5488b77bd22083"
         }
       },
       "targets": [
@@ -79476,6 +79712,18 @@
           "Library": {
             "crate_name": "wasmparser",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -79495,6 +79743,7 @@
             "component-model",
             "features",
             "serde",
+            "simd",
             "std",
             "validate"
           ],
@@ -79503,20 +79752,8 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
               "id": "bitflags 2.6.0",
               "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.2.6",
-              "target": "indexmap"
             },
             {
               "id": "semver 1.0.22",
@@ -79525,12 +79762,24 @@
             {
               "id": "serde 1.0.217",
               "target": "serde"
+            },
+            {
+              "id": "wasmparser 0.221.2",
+              "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.219.1"
+        "version": "0.221.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -79595,14 +79844,14 @@
       ],
       "license_file": null
     },
-    "wasmprinter 0.219.1": {
+    "wasmprinter 0.221.2": {
       "name": "wasmprinter",
-      "version": "0.219.1",
+      "version": "0.221.2",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmprinter/0.219.1/download",
-          "sha256": "228cdc1f30c27816da225d239ce4231f28941147d34713dee8f1fff7cb330e54"
+          "url": "https://static.crates.io/crates/wasmprinter/0.221.2/download",
+          "sha256": "a80742ff1b9e6d8c231ac7c7247782c6fc5bce503af760bca071811e5fc9ee56"
         }
       },
       "targets": [
@@ -79642,14 +79891,14 @@
               "target": "termcolor"
             },
             {
-              "id": "wasmparser 0.219.1",
+              "id": "wasmparser 0.221.2",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.219.1"
+        "version": "0.221.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -79658,14 +79907,14 @@
       ],
       "license_file": null
     },
-    "wasmtime 27.0.0": {
+    "wasmtime 28.0.0": {
       "name": "wasmtime",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime/27.0.0/download",
-          "sha256": "5b79302e3e084713249cc5622e8608e7410afdeeea8c8026d04f491d1fab0b4b"
+          "url": "https://static.crates.io/crates/wasmtime/28.0.0/download",
+          "sha256": "f639ecae347b9a2227e453a7b7671e84370a0b61f47a15e0390fe9b7725e47b3"
         }
       },
       "targets": [
@@ -79707,6 +79956,7 @@
             "once_cell",
             "parallel-compilation",
             "runtime",
+            "signals-based-traps",
             "std"
           ],
           "selects": {}
@@ -79722,7 +79972,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bumpalo 3.14.0",
+              "id": "bumpalo 3.16.0",
               "target": "bumpalo"
             },
             {
@@ -79750,7 +80000,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.36.1",
+              "id": "object 0.36.7",
               "target": "object"
             },
             {
@@ -79782,31 +80032,31 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.219.1",
+              "id": "wasmparser 0.221.2",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 27.0.0",
+              "id": "wasmtime 28.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-asm-macros 27.0.0",
+              "id": "wasmtime-asm-macros 28.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-cranelift 27.0.0",
+              "id": "wasmtime-cranelift 28.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 27.0.0",
+              "id": "wasmtime-environ 28.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-icache-coherence 27.0.0",
+              "id": "wasmtime-jit-icache-coherence 28.0.0",
               "target": "wasmtime_jit_icache_coherence"
             },
             {
-              "id": "wasmtime-slab 27.0.0",
+              "id": "wasmtime-slab 28.0.0",
               "target": "wasmtime_slab"
             }
           ],
@@ -79833,12 +80083,6 @@
                 "target": "rustix"
               }
             ],
-            "aarch64-fuchsia": [
-              {
-                "id": "rustix 0.38.32",
-                "target": "rustix"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "rustix 0.38.32",
@@ -79849,6 +80093,12 @@
               {
                 "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
+              }
+            ],
+            "aarch64-unknown-fuchsia": [
+              {
+                "id": "rustix 0.38.32",
+                "target": "rustix"
               }
             ],
             "aarch64-unknown-linux-gnu": [
@@ -79981,12 +80231,6 @@
                 "target": "rustix"
               }
             ],
-            "x86_64-fuchsia": [
-              {
-                "id": "rustix 0.38.32",
-                "target": "rustix"
-              }
-            ],
             "x86_64-linux-android": [
               {
                 "id": "rustix 0.38.32",
@@ -80000,6 +80244,12 @@
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "rustix 0.38.32",
+                "target": "rustix"
+              }
+            ],
+            "x86_64-unknown-fuchsia": [
               {
                 "id": "rustix 0.38.32",
                 "target": "rustix"
@@ -80039,7 +80289,7 @@
               "target": "serde_derive"
             },
             {
-              "id": "wasmtime-versioned-export-macros 27.0.0",
+              "id": "wasmtime-versioned-export-macros 28.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -80066,7 +80316,7 @@
           ],
           "selects": {}
         },
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -80078,7 +80328,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             }
           ],
@@ -80087,7 +80337,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 27.0.0",
+              "id": "wasmtime-versioned-export-macros 28.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -80100,14 +80350,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-asm-macros 27.0.0": {
+    "wasmtime-asm-macros 28.0.0": {
       "name": "wasmtime-asm-macros",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-asm-macros/27.0.0/download",
-          "sha256": "fe53a24e7016a5222875d8ca3ad6024b464465985693c42098cd0bb710002c28"
+          "url": "https://static.crates.io/crates/wasmtime-asm-macros/28.0.0/download",
+          "sha256": "882a18800471cfc063c8b3ccf75723784acc3fd534009ac09421f2fac2fcdcec"
         }
       },
       "targets": [
@@ -80139,7 +80389,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80147,14 +80397,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-component-macro 27.0.0": {
+    "wasmtime-component-macro 28.0.0": {
       "name": "wasmtime-component-macro",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-component-macro/27.0.0/download",
-          "sha256": "e118acbd2bc09b32ad8606bc7cef793bf5019c1b107772e64dc6c76b5055d40b"
+          "url": "https://static.crates.io/crates/wasmtime-component-macro/28.0.0/download",
+          "sha256": "eb5c0a77c9e1927c3d471f53cc13767c3d3438e5d5ffd394e3eb31c86445fd60"
         }
       },
       "targets": [
@@ -80207,26 +80457,26 @@
               "target": "syn"
             },
             {
-              "id": "wasmtime-component-macro 27.0.0",
+              "id": "wasmtime-component-macro 28.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-component-util 27.0.0",
+              "id": "wasmtime-component-util 28.0.0",
               "target": "wasmtime_component_util"
             },
             {
-              "id": "wasmtime-wit-bindgen 27.0.0",
+              "id": "wasmtime-wit-bindgen 28.0.0",
               "target": "wasmtime_wit_bindgen"
             },
             {
-              "id": "wit-parser 0.219.1",
+              "id": "wit-parser 0.221.2",
               "target": "wit_parser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -80242,14 +80492,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-component-util 27.0.0": {
+    "wasmtime-component-util 28.0.0": {
       "name": "wasmtime-component-util",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-component-util/27.0.0/download",
-          "sha256": "4a6db4f3ee18c699629eabb9c64e77efe5a93a5137f098db7cab295037ba41c2"
+          "url": "https://static.crates.io/crates/wasmtime-component-util/28.0.0/download",
+          "sha256": "43702ca98bf5162eca0573db691ed9ecd36d716f8c6688410fe26ec16b6f9bcb"
         }
       },
       "targets": [
@@ -80272,7 +80522,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80280,14 +80530,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-cranelift 27.0.0": {
+    "wasmtime-cranelift 28.0.0": {
       "name": "wasmtime-cranelift",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift/27.0.0/download",
-          "sha256": "8b87e6c78f562b50aff1afd87ff32a57e241424c846c1c8f3c5fd352d2d62906"
+          "url": "https://static.crates.io/crates/wasmtime-cranelift/28.0.0/download",
+          "sha256": "20070aa5b75080a8932ec328419faf841df2bc6ceb16b55b0df2b952098392a2"
         }
       },
       "targets": [
@@ -80327,23 +80577,23 @@
               "target": "cfg_if"
             },
             {
-              "id": "cranelift-codegen 0.114.0",
+              "id": "cranelift-codegen 0.115.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-control 0.114.0",
+              "id": "cranelift-control 0.115.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.114.0",
+              "id": "cranelift-entity 0.115.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.114.0",
+              "id": "cranelift-frontend 0.115.0",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.114.0",
+              "id": "cranelift-native 0.115.0",
               "target": "cranelift_native"
             },
             {
@@ -80359,7 +80609,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.36.1",
+              "id": "object 0.36.7",
               "target": "object"
             },
             {
@@ -80375,11 +80625,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.219.1",
+              "id": "wasmparser 0.221.2",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 27.0.0",
+              "id": "wasmtime-environ 28.0.0",
               "target": "wasmtime_environ"
             }
           ],
@@ -80389,13 +80639,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 27.0.0",
+              "id": "wasmtime-versioned-export-macros 28.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80403,14 +80653,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-environ 27.0.0": {
+    "wasmtime-environ 28.0.0": {
       "name": "wasmtime-environ",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-environ/27.0.0/download",
-          "sha256": "c25bfeaa16432d59a0706e2463d315ef4c9ebcfaf5605670b99d46373bdf9f27"
+          "url": "https://static.crates.io/crates/wasmtime-environ/28.0.0/download",
+          "sha256": "2604ddb24879d4dc1dedcb7081d7a8e017259bce916fdae097a97db52cbaab80"
         }
       },
       "targets": [
@@ -80448,11 +80698,11 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-bitset 0.114.0",
+              "id": "cranelift-bitset 0.115.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-entity 0.114.0",
+              "id": "cranelift-entity 0.115.0",
               "target": "cranelift_entity"
             },
             {
@@ -80468,7 +80718,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.36.1",
+              "id": "object 0.36.7",
               "target": "object"
             },
             {
@@ -80488,15 +80738,15 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasm-encoder 0.219.1",
+              "id": "wasm-encoder 0.221.2",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.219.1",
+              "id": "wasmparser 0.221.2",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.219.1",
+              "id": "wasmprinter 0.221.2",
               "target": "wasmprinter"
             }
           ],
@@ -80512,7 +80762,7 @@
           ],
           "selects": {}
         },
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80520,14 +80770,133 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-jit-icache-coherence 27.0.0": {
-      "name": "wasmtime-jit-icache-coherence",
-      "version": "27.0.0",
+    "wasmtime-fiber 28.0.0": {
+      "name": "wasmtime-fiber",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/27.0.0/download",
-          "sha256": "91b218a92866f74f35162f5d03a4e0f62cd0e1cc624285b1014275e5d4575fad"
+          "url": "https://static.crates.io/crates/wasmtime-fiber/28.0.0/download",
+          "sha256": "98593412d2b167ebe2b59d4a17a184978a72f976b53b3a0ec05629451079ac1d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmtime_fiber",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmtime_fiber",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "wasmtime-asm-macros 28.0.0",
+              "target": "wasmtime_asm_macros"
+            },
+            {
+              "id": "wasmtime-fiber 28.0.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "rustix 0.38.32",
+                "target": "rustix"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.59.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "wasmtime-versioned-export-macros 28.0.0",
+              "target": "wasmtime_versioned_export_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "28.0.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.1.37",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "wasmtime-versioned-export-macros 28.0.0",
+              "target": "wasmtime_versioned_export_macros"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "wasmtime-jit-icache-coherence 28.0.0": {
+      "name": "wasmtime-jit-icache-coherence",
+      "version": "28.0.0",
+      "package_url": "https://github.com/bytecodealliance/wasmtime",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/28.0.0/download",
+          "sha256": "d40d7722b9e1fbeae135715710a8a2570b1e6cf72b74dd653962d89831c6c70d"
         }
       },
       "targets": [
@@ -80576,7 +80945,7 @@
           }
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80584,14 +80953,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-slab 27.0.0": {
+    "wasmtime-slab 28.0.0": {
       "name": "wasmtime-slab",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-slab/27.0.0/download",
-          "sha256": "4d5f8acf677ee6b3b8ba400dd9753ea4769e56a95c4b30b045ac6d2d54b2f8ea"
+          "url": "https://static.crates.io/crates/wasmtime-slab/28.0.0/download",
+          "sha256": "8579c335220b4ece9aa490a0e8b46de78cd342b195ab21ff981d095e14b52383"
         }
       },
       "targets": [
@@ -80614,7 +80983,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80622,14 +80991,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-versioned-export-macros 27.0.0": {
+    "wasmtime-versioned-export-macros 28.0.0": {
       "name": "wasmtime-versioned-export-macros",
-      "version": "27.0.0",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/27.0.0/download",
-          "sha256": "df09be00c38f49172ca9936998938476e3f2df782673a39ae2ef9fb0838341b6"
+          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/28.0.0/download",
+          "sha256": "d7de0a56fb0a69b185968f2d7a9ba54750920a806470dff7ad8de91ac06d277e"
         }
       },
       "targets": [
@@ -80669,7 +81038,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80677,14 +81046,93 @@
       ],
       "license_file": null
     },
-    "wasmtime-wit-bindgen 27.0.0": {
-      "name": "wasmtime-wit-bindgen",
-      "version": "27.0.0",
+    "wasmtime-winch 28.0.0": {
+      "name": "wasmtime-winch",
+      "version": "28.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-wit-bindgen/27.0.0/download",
-          "sha256": "bf3963c9c29df91564d8bd181eb00d0dbaeafa1b2a01e15952bb7391166b704e"
+          "url": "https://static.crates.io/crates/wasmtime-winch/28.0.0/download",
+          "sha256": "abd309943c443f5590d12f9aba9ba63c481091c955a0a14de0c2a9e0e3aaeca9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmtime_winch",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmtime_winch",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "cranelift-codegen 0.115.0",
+              "target": "cranelift_codegen"
+            },
+            {
+              "id": "gimli 0.31.1",
+              "target": "gimli"
+            },
+            {
+              "id": "object 0.36.7",
+              "target": "object"
+            },
+            {
+              "id": "target-lexicon 0.12.16",
+              "target": "target_lexicon"
+            },
+            {
+              "id": "wasmparser 0.221.2",
+              "target": "wasmparser"
+            },
+            {
+              "id": "wasmtime-cranelift 28.0.0",
+              "target": "wasmtime_cranelift"
+            },
+            {
+              "id": "wasmtime-environ 28.0.0",
+              "target": "wasmtime_environ"
+            },
+            {
+              "id": "winch-codegen 28.0.0",
+              "target": "winch_codegen"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "28.0.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "wasmtime-wit-bindgen 28.0.0": {
+      "name": "wasmtime-wit-bindgen",
+      "version": "28.0.0",
+      "package_url": "https://github.com/bytecodealliance/wasmtime",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmtime-wit-bindgen/28.0.0/download",
+          "sha256": "969f83022dac3435d6469edb582ceed04cfe32aa44dc3ef16e5cb55574633df8"
         }
       },
       "targets": [
@@ -80721,14 +81169,14 @@
               "target": "indexmap"
             },
             {
-              "id": "wit-parser 0.219.1",
+              "id": "wit-parser 0.221.2",
               "target": "wit_parser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "27.0.0"
+        "version": "28.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -80775,7 +81223,7 @@
         "deps": {
           "common": [
             {
-              "id": "bumpalo 3.14.0",
+              "id": "bumpalo 3.16.0",
               "target": "bumpalo"
             },
             {
@@ -81696,6 +82144,109 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "winch-codegen 28.0.0": {
+      "name": "winch-codegen",
+      "version": "28.0.0",
+      "package_url": "https://github.com/bytecodealliance/wasmtime",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/winch-codegen/28.0.0/download",
+          "sha256": "9110decc2983ed94de904804dcd979ba59cbabc78a94fec6b1d8468ec513d0f6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winch_codegen",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "winch_codegen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.93",
+              "target": "anyhow"
+            },
+            {
+              "id": "cranelift-codegen 0.115.0",
+              "target": "cranelift_codegen"
+            },
+            {
+              "id": "gimli 0.31.1",
+              "target": "gimli"
+            },
+            {
+              "id": "regalloc2 0.11.1",
+              "target": "regalloc2"
+            },
+            {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "target-lexicon 0.12.16",
+              "target": "target_lexicon"
+            },
+            {
+              "id": "wasmparser 0.221.2",
+              "target": "wasmparser"
+            },
+            {
+              "id": "wasmtime-cranelift 28.0.0",
+              "target": "wasmtime_cranelift"
+            },
+            {
+              "id": "wasmtime-environ 28.0.0",
+              "target": "wasmtime_environ"
+            },
+            {
+              "id": "winch-codegen 28.0.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "28.0.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "windows-core 0.52.0": {
       "name": "windows-core",
@@ -84151,14 +84702,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wit-parser 0.219.1": {
+    "wit-parser 0.221.2": {
       "name": "wit-parser",
-      "version": "0.219.1",
+      "version": "0.221.2",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wit-parser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wit-parser/0.219.1/download",
-          "sha256": "4a86f669283257e8e424b9a4fc3518e3ade0b95deb9fbc0f93a1876be3eda598"
+          "url": "https://static.crates.io/crates/wit-parser/0.221.2/download",
+          "sha256": "fbe1538eea6ea5ddbe5defd0dc82539ad7ba751e1631e9185d24a931f0a5adc8"
         }
       },
       "targets": [
@@ -84224,7 +84775,7 @@
               "target": "unicode_xid"
             },
             {
-              "id": "wasmparser 0.219.1",
+              "id": "wasmparser 0.221.2",
               "target": "wasmparser"
             }
           ],
@@ -84240,7 +84791,7 @@
           ],
           "selects": {}
         },
-        "version": "0.219.1"
+        "version": "0.221.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -84327,7 +84878,9 @@
         "version": "0.5.5"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "wsl 0.1.0": {
@@ -84990,7 +85543,9 @@
         "version": "0.7.4"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "yoke-derive 0.7.4": {
@@ -85047,7 +85602,9 @@
         "version": "0.7.4"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "zerocopy 0.7.32": {
@@ -85213,7 +85770,9 @@
         "version": "0.1.4"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "zerofrom-derive 0.1.4": {
@@ -85270,7 +85829,9 @@
         "version": "0.1.4"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "zeroize 1.8.1": {
@@ -85448,7 +86009,9 @@
         "version": "0.10.4"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "zerovec-derive 0.10.3": {
@@ -85501,7 +86064,9 @@
         "version": "0.10.3"
       },
       "license": "Unicode-3.0",
-      "license_ids": [],
+      "license_ids": [
+        "Unicode-3.0"
+      ],
       "license_file": "LICENSE"
     },
     "zstd 0.13.2": {
@@ -85721,7 +86286,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.83",
+              "id": "cc 1.1.37",
               "target": "cc"
             },
             {
@@ -85759,15 +86324,15 @@
     "aarch64-apple-ios-sim": [
       "aarch64-apple-ios-sim"
     ],
-    "aarch64-fuchsia": [
-      "aarch64-fuchsia"
-    ],
     "aarch64-linux-android": [
       "aarch64-linux-android"
     ],
     "aarch64-pc-windows-gnullvm": [],
     "aarch64-pc-windows-msvc": [
       "aarch64-pc-windows-msvc"
+    ],
+    "aarch64-unknown-fuchsia": [
+      "aarch64-unknown-fuchsia"
     ],
     "aarch64-unknown-linux-gnu": [
       "aarch64-unknown-linux-gnu",
@@ -85811,10 +86376,10 @@
     "cfg(all(not(curve25519_dalek_backend = \"fiat\"), not(curve25519_dalek_backend = \"serial\"), target_arch = \"x86_64\"))": [
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -85832,8 +86397,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-nto-qnx710",
       "armv7-linux-androideabi",
       "i686-apple-darwin",
@@ -85846,12 +86411,12 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-none"
     ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
@@ -85876,7 +86441,7 @@
       "wasm32-unknown-unknown"
     ],
     "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\"))": [
-      "wasm32-wasi"
+      "wasm32-wasip1"
     ],
     "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
       "wasm32-unknown-unknown"
@@ -85904,8 +86469,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -85920,14 +86485,14 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
     "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
-      "aarch64-fuchsia",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -85937,16 +86502,16 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "x86_64-fuchsia",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
     "cfg(all(unix, not(target_os = \"macos\")))": [
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -85959,9 +86524,9 @@
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -85970,9 +86535,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -85988,10 +86553,10 @@
       "thumbv8m.main-none-eabi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86000,9 +86565,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86013,10 +86578,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86025,9 +86590,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86038,10 +86603,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86058,17 +86623,17 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
     ],
     "cfg(any(target_arch = \"x86\", target_arch = \"x86_64\", all(any(target_arch = \"aarch64\", target_arch = \"arm\"), any(target_os = \"android\", target_os = \"fuchsia\", target_os = \"linux\"))))": [
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "arm-unknown-linux-gnueabi",
@@ -86081,10 +86646,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86097,10 +86662,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86143,9 +86708,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "arm-unknown-linux-gnueabi",
@@ -86158,13 +86723,13 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86218,8 +86783,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86234,9 +86799,9 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86244,8 +86809,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86260,9 +86825,9 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86270,8 +86835,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86284,12 +86849,12 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86297,9 +86862,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86315,10 +86880,10 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86327,9 +86892,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86346,13 +86911,13 @@
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86361,8 +86926,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86380,19 +86945,19 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
     ],
     "cfg(not(any(target_os = \"macos\", target_os = \"ios\", target_os = \"windows\", target_arch = \"wasm32\")))": [
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86408,9 +86973,9 @@
       "s390x-unknown-linux-gnu",
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86419,8 +86984,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86439,9 +87004,9 @@
       "thumbv8m.main-none-eabi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86450,8 +87015,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86468,12 +87033,12 @@
       "s390x-unknown-linux-gnu",
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86482,9 +87047,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86504,10 +87069,10 @@
       "thumbv8m.main-none-eabi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86516,9 +87081,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86538,10 +87103,10 @@
       "thumbv8m.main-none-eabi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86550,8 +87115,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86569,12 +87134,12 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86583,9 +87148,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86604,13 +87169,13 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86620,16 +87185,16 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710"
     ],
     "cfg(target_arch = \"wasm32\")": [
       "wasm32-unknown-unknown",
-      "wasm32-wasi"
+      "wasm32-wasip1"
     ],
     "cfg(target_arch = \"x86\")": [
       "i686-apple-darwin",
@@ -86641,10 +87206,10 @@
     "cfg(target_arch = \"x86_64\")": [
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -86665,8 +87230,8 @@
     "cfg(target_os = \"cloudabi\")": [],
     "cfg(target_os = \"dragonfly\")": [],
     "cfg(target_os = \"fuchsia\")": [
-      "aarch64-fuchsia",
-      "x86_64-fuchsia"
+      "aarch64-unknown-fuchsia",
+      "x86_64-unknown-fuchsia"
     ],
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
@@ -86693,7 +87258,7 @@
     ],
     "cfg(target_os = \"redox\")": [],
     "cfg(target_os = \"wasi\")": [
-      "wasm32-wasi"
+      "wasm32-wasip1"
     ],
     "cfg(target_os = \"windows\")": [
       "aarch64-pc-windows-msvc",
@@ -86705,8 +87270,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -86721,9 +87286,9 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -86772,17 +87337,14 @@
     "wasm32-unknown-unknown": [
       "wasm32-unknown-unknown"
     ],
-    "wasm32-wasi": [
-      "wasm32-wasi"
+    "wasm32-wasip1": [
+      "wasm32-wasip1"
     ],
     "x86_64-apple-darwin": [
       "x86_64-apple-darwin"
     ],
     "x86_64-apple-ios": [
       "x86_64-apple-ios"
-    ],
-    "x86_64-fuchsia": [
-      "x86_64-fuchsia"
     ],
     "x86_64-linux-android": [
       "x86_64-linux-android"
@@ -86794,6 +87356,9 @@
     ],
     "x86_64-unknown-freebsd": [
       "x86_64-unknown-freebsd"
+    ],
+    "x86_64-unknown-fuchsia": [
+      "x86_64-unknown-fuchsia"
     ],
     "x86_64-unknown-linux-gnu": [
       "x86_64-unknown-linux-gnu",
@@ -86855,7 +87420,7 @@
     "candid 0.10.10",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
-    "cc 1.0.83",
+    "cc 1.1.37",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
@@ -87084,6 +87649,7 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
+    "syscalls 0.6.18",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.12.0",
@@ -87102,6 +87668,7 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.2",
+    "tokio-stream 0.1.17",
     "tokio-test 0.4.4",
     "tokio-util 0.7.13",
     "toml 0.5.11",
@@ -87131,8 +87698,8 @@
     "wasm-smith 0.212.0",
     "wasmparser 0.217.0",
     "wasmprinter 0.217.0",
-    "wasmtime 27.0.0",
-    "wasmtime-environ 27.0.0",
+    "wasmtime 28.0.0",
+    "wasmtime-environ 28.0.0",
     "wast 212.0.0",
     "wat 1.212.0",
     "wee_alloc 0.4.5",
@@ -87145,5 +87712,6 @@
     "zeroize 1.8.1",
     "zstd 0.13.2"
   ],
-  "direct_dev_deps": []
+  "direct_dev_deps": [],
+  "unused_patches": []
 }

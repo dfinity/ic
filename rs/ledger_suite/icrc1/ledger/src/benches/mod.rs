@@ -12,7 +12,8 @@ mod benches_u256;
 #[cfg(not(feature = "u256-tokens"))]
 mod benches_u64;
 
-pub const NUM_TRANSFERS: u32 = 10_000;
+pub const NUM_OPERATIONS: u32 = 10_000;
+pub const NUM_GET_BLOCKS: u32 = 100;
 
 pub fn upgrade() {
     let _p = canbench_rs::bench_scope("upgrade");
@@ -20,8 +21,9 @@ pub fn upgrade() {
     post_upgrade(None);
 }
 
-pub fn icrc1_transfer(
+pub fn icrc_transfer(
     from: Principal,
+    spender: Option<Account>,
     arg: TransferArg,
 ) -> Result<BlockIndex, ic_ledger_canister_core::ledger::TransferError<Tokens>> {
     let from_account = Account {
@@ -31,7 +33,7 @@ pub fn icrc1_transfer(
     execute_transfer_not_async(
         from_account,
         arg.to,
-        None,
+        spender,
         arg.fee,
         arg.amount,
         arg.memo,
@@ -52,14 +54,26 @@ pub fn max_length_principal(index: u32) -> Principal {
     Principal::from_slice(&principal)
 }
 
+pub fn test_account(i: u32) -> Account {
+    Account {
+        owner: max_length_principal(i),
+        subaccount: Some([11_u8; 32]),
+    }
+}
+
+pub fn test_account_offset(i: u32) -> Account {
+    test_account(1_000_000_000 + i)
+}
+
 fn mint_tokens<T: Into<Nat>>(minter: Principal, amount: T) -> Account {
     let account_with_tokens = Account {
         owner: max_length_principal(u32::MAX),
         subaccount: Some([255_u8; 32]),
     };
     assert_matches!(
-        icrc1_transfer(
+        icrc_transfer(
             minter,
+            None,
             TransferArg {
                 from_subaccount: None,
                 to: account_with_tokens,

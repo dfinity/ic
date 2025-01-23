@@ -167,9 +167,6 @@ fn schedule_timers() {
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
-
-    // Schedule the fix for the locked neuron
-    schedule_locked_spawning_neuron_fix();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -321,18 +318,6 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
         spawn(governance_mut().process_voting_state_machines());
-    });
-}
-
-// TODO(NNS1-3526): Remove this method once it is released.
-fn schedule_locked_spawning_neuron_fix() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-        spawn(async {
-            governance_mut()
-                .fix_locked_spawn_neuron()
-                .await
-                .expect("Failed to fix locked neuron");
-        });
     });
 }
 
@@ -718,11 +703,9 @@ async fn transfer_gtc_neuron(
 #[update]
 async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    ManageNeuronResponse::from(
-        governance_mut()
-            .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
-            .await,
-    )
+    governance_mut()
+        .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
+        .await
 }
 
 #[cfg(feature = "test")]
@@ -739,9 +722,7 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
-    let response =
-        governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
-    ManageNeuronResponse::from(response)
+    governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
 }
 
 #[query]
@@ -827,7 +808,7 @@ fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
-    governance().list_neurons(&(req.into()), caller()).into()
+    governance().list_neurons(&req, caller())
 }
 
 #[query]

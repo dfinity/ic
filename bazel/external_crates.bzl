@@ -27,12 +27,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "canbench": [crate.annotation(
             gen_binaries = True,
         )],
-        "cc": [crate.annotation(
-            # Patch for determinism issues
-            # https://github.com/rust-lang/cc-rs/issues/1271
-            patch_args = ["-p1"],
-            patches = ["@@//bazel:cc_rs.patch"],
-        )],
         "libssh2-sys": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p1"],
@@ -349,7 +343,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.2",
             ),
             "cc": crate.spec(
-                version = "^1.0",
+                version = "=1.1.37",
             ),
             "cddl": crate.spec(
                 version = "^0.9.4",
@@ -825,6 +819,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
+                features = [
+                    "ptrace",
+                ],
             ),
             "num-bigint": crate.spec(
                 version = "^0.4.6",
@@ -1240,6 +1237,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "syscalls": crate.spec(
+                version = "^0.6.18",
+            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
@@ -1295,6 +1295,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "ring",
                 ],
+            ),
+            "tokio-stream": crate.spec(
+                version = "^0.1.17",
             ),
             "tokio-serde": crate.spec(
                 version = "^0.8",
@@ -1430,7 +1433,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "^27.0.0",
+                version = "^28.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1441,7 +1444,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^27.0.0",
+                version = "^28.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",
