@@ -84,9 +84,9 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
-/// TODO: When moving to vestion 3 consider adding `#[serde(default, skip_serializing)]`
-/// to `balances` and `approvals` fields of the `Ledger` struct.
-/// Since `balances` don't use a default, this can only be done with an incompatible change.
+// TODO: When moving to vestion 3 consider adding `#[serde(default, skip_serializing)]`
+// to `balances` and `approvals` fields of the `Ledger` struct.
+// Since `balances` don't use a default, this can only be done with an incompatible change.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 2;
 
