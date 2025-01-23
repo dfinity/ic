@@ -1956,6 +1956,7 @@ mod verify_written_blocks {
 mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
+    use ic_ledger_suite_state_machine_tests::metadata;
     use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
     use num_bigint::BigUint;
 
@@ -2085,6 +2086,17 @@ mod incompatible_token_type_upgrade {
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
         env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args)
             .expect("Unable to upgrade the ledger canister");
+    }
+
+    fn icrc1_total_supply(env: &StateMachine, ledger_id: CanisterId) -> BigUint {
+        Decode!(
+            &env.query(ledger_id, "icrc1_total_supply", Encode!().unwrap())
+                .expect("failed to query total supply")
+                .bytes(),
+            Nat
+        )
+        .expect("failed to decode totalSupply response")
+        .0
     }
 
     #[test]
