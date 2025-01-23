@@ -36,6 +36,7 @@ use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
+use std::u32;
 use systest_message_routing_common::{install_canisters, start_all_canisters};
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
@@ -154,10 +155,10 @@ pub async fn test_async(env: TestEnv, config: Config) {
     info!(logger, "Calling start() on all canisters...");
     start_all_canisters(
         &canisters,
-        1024,    // send messages with 1024 byte payloads
-        &[None], // guaranteed response calls
-        1024,    // same response size
-        10,      // each canister sends 10 RPS
+        1024,                    // send messages with 1024 byte payloads
+        &[None, Some(u32::MAX)], // mix of guaranteed response and best-effort calls
+        1024,                    // same response size
+        10,                      // each canister sends 10 RPS
     )
     .await;
     info!(logger, "Starting chatter: 10 messages/round * 1024 bytes",);

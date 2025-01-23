@@ -112,7 +112,8 @@ impl Config {
             nodes_per_subnet,
             runtime,
             request_payload_size_bytes: PAYLOAD_SIZE_BYTES,
-            call_timeouts_seconds: vec![None],
+            // Default to a mix of guaranteed response and best-effort calls.
+            call_timeouts_seconds: vec![None, Some(u32::MAX)],
             response_payload_size_bytes: PAYLOAD_SIZE_BYTES,
             send_rate_threshold,
             error_percentage_threshold,

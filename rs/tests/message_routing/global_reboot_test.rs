@@ -190,7 +190,8 @@ pub fn start_all_canisters(
                 network_topology: topology.clone(),
                 canister_to_subnet_rate,
                 request_payload_size_bytes: payload_size_bytes,
-                call_timeouts_seconds: vec![None],
+                // A mix of guaranteed response and best-effort calls.
+                call_timeouts_seconds: vec![None, Some(u32::MAX)],
                 response_payload_size_bytes: payload_size_bytes,
             };
             let _: String = canister

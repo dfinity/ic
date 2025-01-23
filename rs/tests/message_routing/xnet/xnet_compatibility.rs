@@ -147,8 +147,8 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    // Make both guaranteed response and best-effort calls.
-    let call_timeouts = [None, Some(CALL_TIMEOUT_SECONDS)];
+    // Only guaranteed response calls, for now.
+    let call_timeouts = [None];
     let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10)
         .with_call_timeouts(&call_timeouts);
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(

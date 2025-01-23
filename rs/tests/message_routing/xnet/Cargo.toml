@@ -27,10 +27,6 @@ name = "xnet_malicious_slices"
 path = "xnet_malicious_slices.rs"
 
 [[bin]]
-name = "xnet_slo_3_subnets_best_effort_test"
-path = "xnet_slo_3_subnets_best_effort_test.rs"
-
-[[bin]]
 name = "xnet_slo_3_subnets_hotfix_test"
 path = "xnet_slo_3_subnets_hotfix_test.rs"
 
