@@ -752,7 +752,7 @@ fn main() {
 const BUFFER_SIZE: usize = 8388608;
 
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 250_000_000_000;
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 300_000_000_000;
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
 
@@ -897,7 +897,7 @@ fn migrate_next_part(instruction_limit: u64) {
         }
     }
     let instructions_migration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
         instruction_counter());
     if !is_ready() {
         print(format!(
