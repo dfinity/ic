@@ -249,8 +249,8 @@ Next ==
     \* Combine the transitions of all the submodules, by taking the disjunction of the transitions of any submodule.
     \* Additionally, each disjunct leaves unchanged the variables that are not used by the submodule.
     \/ Claim!Next /\  UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id >>
-    \* \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
-    \* \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Disburse!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, amount_to_target, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
+    \/ Disburse_To!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, to_account, account, fees_amount, amount_to_target, neuron_id, account, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Merge!Next /\ UNCHANGED <<env_vars, neuron_id, disburse_amount, to_account, account, disburse_amount, to_account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Spawn!Next /\ UNCHANGED pc /\ UNCHANGED <<env_vars, neuron_id, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, ready_to_spawn_ids, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
     \/ Spawn_Neurons!Next /\ UNCHANGED <<env_vars, source_neuron_id, target_neuron_id, fees_amount, amount_to_target, disburse_amount, to_account, account, child_account_id, child_neuron_id, parent_neuron_id, sn_parent_neuron_id, sn_amount, sn_child_neuron_id, sn_child_account_id>>
@@ -270,9 +270,11 @@ Can_Stake_Sanity == \A n \in DOMAIN(neuron) : neuron[n].cached_stake = 0
 
 Can_Decrease_Stake_Sanity == [][\A n \in DOMAIN(neuron) \cap DOMAIN(neuron') : neuron[n].cached_stake <= neuron'[n].cached_stake]_<<global_non_ledger_vars, local_vars, env_vars>>
 
-Cached_Stake_Capped_By_Balance == \A n \in DOMAIN(neuron) :
-    neuron[n].cached_stake <= balances[neuron[n].account]
 
+\* Cached_Stake_Capped_By_Balance == \A n \in DOMAIN(neuron) :
+\*     neuron[n].cached_stake <= balances[neuron[n].account]
+
+\* TODO: if needed, we can add a precondition that the neuron is not locked
 Fees_Smaller_Than_Cached_Stake == \A n \in DOMAIN(neuron):
     neuron[n].fees <= neuron[n].cached_stake
 
@@ -295,6 +297,7 @@ Neuron_And_Account_Id_By_Neuron_Coherent == \A n \in DOMAIN(neuron), a \in DOMAI
 
 Cached_Stake_Not_Underflowing == \A n \in DOMAIN(neuron): neuron[n].cached_stake >= 0
 
+\* TODO: this probably doesn't hold, and we probably don't want it as is (maybe: either 0 or this)
 Neurons_Have_At_Least_Min_Stake == \A n \in DOMAIN(neuron) :
     n \notin locks => neuron[n].cached_stake >= MIN_STAKE
 
