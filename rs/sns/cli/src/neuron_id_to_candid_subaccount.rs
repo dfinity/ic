@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use candid::IDLValue;
+use candid_utils::printing;
 use clap::Parser;
 use ic_sns_governance::pb::v1::NeuronId;
 
@@ -37,9 +37,7 @@ pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<S
         .to_vec();
 
     // We'll convert it to a candid string.
-    let idl = IDLValue::try_from_candid_type(&subaccount)
-        .unwrap()
-        .to_string();
+    let idl = printing::pretty(&subaccount).unwrap();
 
     if args.escaped {
         Ok(idl.replace('\\', "\\\\").replace('\"', "\\\""))

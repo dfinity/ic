@@ -1780,6 +1780,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "pretty_assertions",
 ]
 
 [[package]]
@@ -11847,6 +11848,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "candid",
+ "candid-utils",
  "clap 4.5.27",
  "futures",
  "hex",
