@@ -1587,13 +1587,13 @@ impl SandboxedExecutionController {
 
         let StateModifications {
             execution_state_modifications,
-            system_state_changes,
+            system_state_modifications,
         } = exec_output.take_state_modifications();
 
         match execution_state_modifications {
             None => CanisterStateChanges {
                 execution_state_changes: None,
-                system_state_changes,
+                system_state_modifications,
             },
             Some(execution_state_modifications) => {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
@@ -1647,7 +1647,7 @@ impl SandboxedExecutionController {
                         wasm_memory,
                         stable_memory,
                     }),
-                    system_state_changes,
+                    system_state_modifications,
                 }
             }
         }

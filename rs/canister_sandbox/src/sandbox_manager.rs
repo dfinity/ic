@@ -160,7 +160,7 @@ impl Execution {
         match wasm_result {
             Ok(_) => {
                 let state_modifications = {
-                    let system_state_changes = match instance_or_system_api {
+                    let system_state_modifications = match instance_or_system_api {
                         // Here we use `store_data_mut` instead of
                         // `into_store_data` because the later will drop the
                         // wasmtime Instance which can be an expensive
@@ -172,8 +172,8 @@ impl Execution {
                             .store_data_mut()
                             .system_api_mut()
                             .expect("System api not present in the wasmtime instance")
-                            .take_system_state_changes(),
-                        Err(system_api) => system_api.into_system_state_changes(),
+                            .take_system_state_modifications(),
+                        Err(system_api) => system_api.into_system_state_modifications(),
                     };
 
                     let execution_state_modifications = deltas.map(
@@ -193,7 +193,7 @@ impl Execution {
 
                     StateModifications {
                         execution_state_modifications,
-                        system_state_changes,
+                        system_state_modifications,
                     }
                 };
                 if state_modifications.execution_state_modifications.is_some() {

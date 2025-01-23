@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
-use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
+use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::NumOsPages;
@@ -146,7 +146,7 @@ pub struct ExecutionStateChanges {
 pub struct CanisterStateChanges {
     pub execution_state_changes: Option<ExecutionStateChanges>,
 
-    pub system_state_changes: SystemStateChanges,
+    pub system_state_modifications: SystemStateModifications,
 }
 
 /// The result of WebAssembly execution with deterministic time slicing.
@@ -260,7 +260,7 @@ impl WasmExecutor for WasmExecutorImpl {
             Ok(instance) => instance.into_store_data().system_api.unwrap(),
             Err(system_api) => system_api,
         };
-        let system_state_changes = system_api.into_system_state_changes();
+        let system_state_modifications = system_api.into_system_state_modifications();
 
         (
             compilation_result,
@@ -269,7 +269,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 wasm_execution_output,
                 CanisterStateChanges {
                     execution_state_changes,
-                    system_state_changes,
+                    system_state_modifications,
                 },
             ),
         )
@@ -497,7 +497,7 @@ pub fn wasm_execution_error(
         },
         CanisterStateChanges {
             execution_state_changes: None,
-            system_state_changes: SystemStateChanges::default(),
+            system_state_modifications: SystemStateModifications::default(),
         },
     )
 }
