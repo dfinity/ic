@@ -36,7 +36,7 @@ type HttpResponse = record {
   body: blob;
 };
 
- // Initialization arguments used when installing/upgrading/reinstalling the canister
+// Initialization arguments used when installing/upgrading/reinstalling the canister
 type InitArg = record {
     // Optional interval (in seconds) for regenerating the salt value.
     // If specified, the first regeneration occurs immediately. Otherwise, the previously set regeneration schedule is unaffected.
