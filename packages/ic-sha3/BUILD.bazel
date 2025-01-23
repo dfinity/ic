@@ -28,7 +28,7 @@ rust_test_suite(
     srcs = glob(
         ["tests/*.rs"],
     ),
-    data = [
+    compile_data = [
         "test_resources/SHAKE256ShortMsg_subset.rsp",
         "test_resources/SHAKE256VariableOut_subset.rsp",
     ],

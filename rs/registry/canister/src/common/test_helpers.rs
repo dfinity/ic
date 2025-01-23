@@ -10,14 +10,17 @@ use ic_nns_test_utils::registry::{
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_registry_transport::upsert;
+use ic_registry_transport::{insert, upsert};
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::collections::BTreeMap;
@@ -147,4 +150,59 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
         preconditions: vec![],
     };
     (mutate_request, node_ids_and_dkg_pks)
+}
+
+pub fn registry_create_subnet_with_nodes(
+    registry: &mut Registry,
+    node_ids_and_dkg_pks: &BTreeMap<NodeId, PublicKey>,
+    node_offsets: &[usize],
+) -> ic_types::SubnetId {
+    let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+
+    // Create a subnet with the specified nodes
+    let subnet_id = subnet_test_id(1000);
+    let mut subnet_list_record = registry.get_subnet_list_record();
+    let subnet_record: SubnetRecord =
+        get_invariant_compliant_subnet_record(node_offsets.iter().map(|&i| node_ids[i]).collect());
+    let subnet_nodes = node_offsets
+        .iter()
+        .map(|&i| (node_ids[i], node_ids_and_dkg_pks[&node_ids[i]].clone()))
+        .collect();
+    registry.maybe_apply_mutation_internal(add_fake_subnet(
+        subnet_id,
+        &mut subnet_list_record,
+        subnet_record,
+        &subnet_nodes,
+    ));
+
+    subnet_id
+}
+
+pub fn registry_add_node_operator_for_node(
+    registry: &mut Registry,
+    node_id: NodeId,
+    node_allowance: u64,
+) -> PrincipalId {
+    let node_operator_id =
+        PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
+    let node_operator_record_key = make_node_operator_record_key(node_operator_id);
+
+    if registry
+        .get(
+            node_operator_record_key.as_bytes(),
+            registry.latest_version(),
+        )
+        .is_none()
+    {
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance,
+            ..Default::default()
+        };
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            node_operator_record_key,
+            node_operator_record.encode_to_vec(),
+        )]);
+    };
+    node_operator_id
 }

@@ -63,10 +63,11 @@ pub fn execute_update(
                 let is_wasm64_execution = canister
                     .execution_state
                     .as_ref()
-                    .map_or(false, |es| es.is_wasm64);
+                    .is_some_and(|es| es.is_wasm64);
 
-                let prepaid_execution_cycles =
-                    match round.cycles_account_manager.prepay_execution_cycles(
+                let prepaid_execution_cycles = match round
+                    .cycles_account_manager
+                    .prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
                         message_memory_usage,
@@ -76,19 +77,35 @@ pub fn execute_update(
                         reveal_top_up,
                         is_wasm64_execution.into(),
                     ) {
-                        Ok(cycles) => cycles,
-                        Err(err) => {
-                            return finish_call_with_error(
-                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                                canister,
-                                call_or_task,
-                                NumInstructions::from(0),
-                                round.time,
-                                execution_parameters.subnet_type,
-                                round.log,
-                            );
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
+                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            canister
+                                .system_state
+                                .task_queue
+                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                            canister
+                                .system_state
+                                .task_queue
+                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
-                    };
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            call_or_task,
+                            NumInstructions::from(0),
+                            round.time,
+                            execution_parameters.subnet_type,
+                            round.log,
+                        );
+                    }
+                };
                 (canister, prepaid_execution_cycles, false)
             }
         };
@@ -251,7 +268,7 @@ fn finish_err(
     let is_wasm64_execution = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .is_some_and(|es| es.is_wasm64);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -520,7 +537,7 @@ impl UpdateHelper {
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .is_some_and(|es| es.is_wasm64);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,

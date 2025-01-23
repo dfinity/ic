@@ -43,7 +43,7 @@ pub(crate) struct LMDBIterator<'a, F> {
     db_env: Arc<Environment>,
 }
 
-impl<'a, F> LMDBIterator<'a, F> {
+impl<F> LMDBIterator<'_, F> {
     /// Return a new iterator that will iterator through DB objects between
     /// min_key and max_key (inclusive) that are deserialized using the
     /// given deserialize function.
@@ -71,7 +71,7 @@ impl<'a, F> LMDBIterator<'a, F> {
     }
 }
 
-impl<'a, T, F: Fn(&RoTransaction<'_>, &[u8]) -> lmdb::Result<T>> Iterator for LMDBIterator<'a, F> {
+impl<T, F: Fn(&RoTransaction<'_>, &[u8]) -> lmdb::Result<T>> Iterator for LMDBIterator<'_, F> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -106,7 +106,7 @@ pub(crate) struct LMDBIDkgIterator<'a, F> {
     _db_env: Arc<Environment>,
 }
 
-impl<'a, F> LMDBIDkgIterator<'a, F> {
+impl<F> LMDBIDkgIterator<'_, F> {
     pub fn new(
         db_env: Arc<Environment>,
         db: Database,
@@ -136,7 +136,7 @@ impl<'a, F> LMDBIDkgIterator<'a, F> {
     }
 }
 
-impl<'a, K, T, F: Fn(&[u8], &[u8]) -> Option<(K, T)>> Iterator for LMDBIDkgIterator<'a, F> {
+impl<K, T, F: Fn(&[u8], &[u8]) -> Option<(K, T)>> Iterator for LMDBIDkgIterator<'_, F> {
     type Item = (K, T);
 
     fn next(&mut self) -> Option<Self::Item> {

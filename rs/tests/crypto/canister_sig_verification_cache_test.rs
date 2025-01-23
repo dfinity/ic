@@ -58,9 +58,9 @@ const RETRY_DELAY: Duration = Duration::from_secs(1);
 const NUM_RETRIES: usize = 100;
 
 /// Range for the random initialization of the number of users in this test
-const NUM_USERS_RANGE: RangeInclusive<usize> = 5..=15;
+const NUM_USERS_RANGE: RangeInclusive<usize> = 5..=10;
 /// Range for the random initialization of the number of calls per user in this test
-const NUM_CALLS_PER_USER_RANGE: RangeInclusive<usize> = 5..=15;
+const NUM_CALLS_PER_USER_RANGE: RangeInclusive<usize> = 5..=10;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

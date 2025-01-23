@@ -11,7 +11,7 @@ where
 {
     let mut items: Vec<(S, Option<T>)> = items.map(|i| (i, None)).collect();
     let threads = thread_pool.thread_count() as usize;
-    let items_per_thread = ((items.len() + threads - 1) / threads).max(1);
+    let items_per_thread = items.len().div_ceil(threads).max(1);
     thread_pool.scoped(|scope| {
         for items in items.chunks_mut(items_per_thread) {
             scope.execute(move || {
