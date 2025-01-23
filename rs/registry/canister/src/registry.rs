@@ -286,7 +286,7 @@ impl Registry {
         self.apply_mutations(mutations);
     }
 
-    #[cfg(any(test, feature = "test"))]
+    #[cfg(test)]
     pub fn apply_mutations_for_test(&mut self, mutations: Vec<RegistryMutation>) {
         self.apply_mutations(mutations);
     }

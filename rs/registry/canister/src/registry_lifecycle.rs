@@ -97,12 +97,10 @@ mod test {
     use super::*;
     use crate::{
         common::test_helpers::{empty_mutation, invariant_compliant_registry},
-        mutations::node_management::common::make_add_node_registry_mutations,
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
     use ic_base_types::{NodeId, PrincipalId};
-    use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_transport::insert;
 
@@ -231,7 +229,7 @@ mod test {
             };
 
             node_additions.push(insert(
-                make_node_record_key(NodeId::new(PrincipalId::from_str(&id).unwrap())),
+                make_node_record_key(NodeId::new(PrincipalId::from_str(id).unwrap())),
                 record.encode_to_vec(),
             ));
         }
@@ -240,7 +238,6 @@ mod test {
         assert_eq!(nodes_expected, 1418);
 
         registry.apply_mutations_for_test(node_additions);
-        let stable_storage_bytes = stable_storage_from_registry(&registry, None);
 
         let mutations = add_missing_node_types_to_nodes(&registry);
         assert_eq!(mutations.len(), nodes_expected);
@@ -249,7 +246,7 @@ mod test {
 
         for (id, reward_type) in MISSING_NODE_TYPES_MAP.iter() {
             let record =
-                registry.get_node_or_panic(NodeId::from(PrincipalId::from_str(&id).unwrap()));
+                registry.get_node_or_panic(NodeId::from(PrincipalId::from_str(id).unwrap()));
 
             let expected_reward_type = NodeRewardType::from(reward_type.clone());
             assert_eq!(
