@@ -36,7 +36,6 @@ use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
-use std::u32;
 use systest_message_routing_common::{install_canisters, start_all_canisters};
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
