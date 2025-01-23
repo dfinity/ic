@@ -467,12 +467,12 @@ impl ReplicatedState {
             ref canister_snapshots,
         } = self;
         (
-            &canister_states,
-            &metadata,
-            &subnet_queues,
-            &consensus_queue,
-            &epoch_query_stats,
-            &canister_snapshots,
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
         )
     }
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
