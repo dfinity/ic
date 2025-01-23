@@ -45,7 +45,7 @@ use ic_replicated_state::{
     canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
-    canister_state::execution_state::{SandboxMemory, WasmBinary},
+    canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
     PageIndex, PageMap, ReplicatedState,
 };
@@ -1322,18 +1322,16 @@ fn switch_to_checkpoint(
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
-            let wasm_binary = WasmBinary::new(
-                canister_layout
-                    .wasm()
-                    .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?,
-            );
+            let wasm_binary = canister_layout
+                .wasm()
+                .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
-                wasm_binary.binary.as_slice()
+                wasm_binary.as_slice()
             );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
-                    binary: Arc::into_inner(wasm_binary).unwrap().binary,
+                    binary: wasm_binary,
                     embedder_cache,
                 },
             );

@@ -51,9 +51,6 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a layout of the new state that is equivalent to the
 /// given one and a result of the operation.
-///
-/// This function uses the provided thread-pool to parallelize expensive
-/// operations.
 pub(crate) fn make_unvalidated_checkpoint(
     state: &ReplicatedState,
     height: Height,
