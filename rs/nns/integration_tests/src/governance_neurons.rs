@@ -553,6 +553,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: vec![],
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -569,6 +570,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: vec![],
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -585,6 +587,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: vec![],
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -602,6 +605,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: vec![],
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);

@@ -3520,7 +3520,24 @@ pub struct ListNeurons {
     /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
     #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
+    /// A list of neurons by subaccounts to return in the response.  If the neurons are not
+    /// found by subaccount, no error is returned, but the page will still be returned.
+    #[prost(message, repeated, tag = "7")]
+    pub neuron_subaccounts: Vec<list_neurons::NeuronSubaccount>,
 }
+
+mod list_neurons {
+    /// A type for the request to list neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronSubaccount {
+        #[prost(bytes = "vec", tag = "1")]
+        #[serde(with = "serde_bytes")]
+        pub subaccount: Vec<u8>,
+    }
+}
+
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.

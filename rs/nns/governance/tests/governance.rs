@@ -10610,6 +10610,8 @@ fn test_include_public_neurons_in_full_neurons() {
 
             page_number: None,
             page_size: None,
+            // TODO DO NOT MERGE, add something to the test here
+            neuron_subaccounts: vec![],
         },
         caller,
     );
@@ -14674,6 +14676,7 @@ fn test_neuron_info_private_enforcement() {
                         include_public_neurons_in_full_neurons: None,
                         page_number: None,
                         page_size: None,
+                        neuron_subaccounts: vec![],
                     },
                     requester,
                 )

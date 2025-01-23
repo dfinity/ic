@@ -2230,6 +2230,7 @@ impl Governance {
             include_public_neurons_in_full_neurons,
             page_number,
             page_size,
+            neuron_subaccounts,
         } = list_neurons;
 
         let page_number = page_number.unwrap_or(0);

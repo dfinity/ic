@@ -50,6 +50,7 @@ fn test_list_neurons_with_paging() {
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
+        neuron_subaccounts: vec![],
     };
 
     let response_with_no_page_number = governance.list_neurons(&request, user_id);
@@ -68,6 +69,7 @@ fn test_list_neurons_with_paging() {
             include_public_neurons_in_full_neurons: None,
             page_number: Some(1),
             page_size: None,
+            neuron_subaccounts: vec![],
         },
         user_id,
     );
@@ -84,6 +86,7 @@ fn test_list_neurons_with_paging() {
             include_public_neurons_in_full_neurons: None,
             page_number: Some(0),
             page_size: Some(501),
+            neuron_subaccounts: vec![],
         },
         user_id,
     );
