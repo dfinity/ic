@@ -1172,6 +1172,84 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// Returns the replication factor of the provided subnet.
+    ///
+    /// Traps if `src`/`size` are not a valid encoding of a principal, or if
+    /// the principal is not a subnet.
+    fn ic0_replication_factor(&self, src: usize, size: usize, heap: &[u8])
+        -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of an inter-canister call,
+    /// i.e., `ic0.call_perform`
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_call(
+        &self,
+        num_req_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of creating a canister on
+    /// the same subnet, i.e., the management canister's `create_canister`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of making an http outcall,
+    /// i.e., the management canister's `http_request`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_http_request(
+        &self,
+        num_req_bytes: u64,
+        num_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// i.e., the management canister's `sign_with_ecdsa`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with schnorr,
+    /// i.e., the management canister's `sign_with_schnorr`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// i.e., the management canister's `vetkd_encrypted_key`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_vetkey(
+        &self,
+        src: usize,
+        size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
