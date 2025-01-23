@@ -44,9 +44,9 @@ canister_version_tests ecid =
                               ctr <- callToQuery'' cid (replyData canister_version) >>= is2xx >>= isReply >>= asWord64
                               ctr @?= 1
                               ctr <- callToQuery'' cid (replyData canister_version) >>= is2xx >>= isReply >>= asWord64
-                              ctr @?= 1
+                              ctr @?= 2
                               ctr <- callToQuery'' cid (replyData canister_version) >>= is2xx >>= isReply >>= asWord64
-                              ctr @?= 1,
+                              ctr @?= 3,
                             simpleTestCase "in update" ecid $ \cid -> do
                               ctr <- call cid (replyData canister_version) >>= asWord64
                               ctr @?= 1

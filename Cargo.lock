@@ -2544,6 +2544,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-vetkd-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister-test",
+ "ic-management-canister-types",
+ "ic-nns-constants",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "console"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5438,6 +5455,7 @@ dependencies = [
  "futures",
  "http-body-util",
  "ic-base-types",
+ "ic-canister-client-sender",
  "ic-consensus-manager",
  "ic-interfaces",
  "ic-logger",
@@ -5470,6 +5488,7 @@ dependencies = [
  "futures",
  "ic-artifact-pool",
  "ic-config",
+ "ic-consensus-manager",
  "ic-interfaces",
  "ic-metrics",
  "ic-protobuf",
@@ -8406,6 +8425,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "rand 0.8.5",
+ "regex",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
@@ -11675,7 +11695,6 @@ dependencies = [
  "ic-limits",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-handler-root",
