@@ -3081,6 +3081,7 @@ dependencies = [
  "ic-cbor",
  "ic-cdk 0.16.0",
  "ic-cdk 0.18.0-alpha.1",
+ "ic-cdk-macros 0.18.0-alpha.1",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-certificate-verification",

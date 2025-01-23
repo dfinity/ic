@@ -1,5 +1,5 @@
 {
-  "checksum": "7e1687acc23c282eb7013d3bc050d3359b7287703d4d9aebaebab28b7a6d132a",
+  "checksum": "aff264525a382b4c04af89ef867c1e0ce0fadf2db0f1355d609a02e3b3082b99",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10027,7 +10027,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -10122,7 +10122,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -10209,14 +10209,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.12": {
+    "candid 0.10.13": {
       "name": "candid",
-      "version": "0.10.12",
+      "version": "0.10.13",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.12/download",
-          "sha256": "51e129c4051c57daf943586e01ef72faae48b04a8f692d5f646febf17a264c38"
+          "url": "https://static.crates.io/crates/candid/0.10.13/download",
+          "sha256": "a253bab4a9be502c82332b60cbeee6202ad0692834efeec95fae9f29db33d692"
         }
       },
       "targets": [
@@ -10323,7 +10323,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.12"
+        "version": "0.10.13"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10438,7 +10438,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -18346,7 +18346,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -23086,7 +23086,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -29837,7 +29837,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30308,7 +30308,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30412,7 +30412,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30499,7 +30499,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30562,7 +30562,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30630,7 +30630,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30698,7 +30698,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30769,7 +30769,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30841,7 +30841,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30908,7 +30908,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30975,7 +30975,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31042,7 +31042,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31112,7 +31112,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31250,7 +31250,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31525,7 +31525,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31604,7 +31604,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31780,7 +31780,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31977,7 +31977,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32036,7 +32036,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32120,7 +32120,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32214,7 +32214,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32492,7 +32492,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32567,7 +32567,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32949,7 +32949,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -33020,7 +33020,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -49413,7 +49413,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -87493,7 +87493,7 @@
     "cached 0.49.2",
     "canbench 0.1.8",
     "canbench-rs 0.1.8",
-    "candid 0.10.12",
+    "candid 0.10.13",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.1.37",

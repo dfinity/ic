@@ -1,5 +1,5 @@
 {
-  "checksum": "3428a4d4773c91ada5005c503a1079e4fcaf0c5a14ac3c5a7ec3096c55f9c1ed",
+  "checksum": "c7d2c203bba7ca14bf1c979ec0e925215d9f74e3d1e1c8c878321a508cce6b96",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19683,6 +19683,11 @@
               "target": "ic_cdk_macros"
             },
             {
+              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "target": "ic_cdk_macros",
+              "alias": "ic_cdk_macros_next"
+            },
+            {
               "id": "indoc 1.0.9",
               "target": "indoc"
             },
@@ -30909,7 +30914,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31252,7 +31257,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -87677,6 +87682,7 @@
     "ic-cdk 0.16.0",
     "ic-cdk 0.18.0-alpha.1",
     "ic-cdk-macros 0.9.0",
+    "ic-cdk-macros 0.18.0-alpha.1",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.2",
     "ic-certification 3.0.2",
