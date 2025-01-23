@@ -704,14 +704,15 @@ fn merge(
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) {
+    info!(
+        log,
+        "Starting merge, delaying 20s for better metrics",
+    );
+    std::thread::sleep(std::time::Duration::from_secs(20));
     // We have a merge candidate for each shard, unless no merge is needed, i. e.
     //   1) Shard forms a pyramid (hence overhead < 2.0)
     //   and
     //   2) number of files is <= MAX_NUMBER_OF_FILES
-    info!(
-        log,
-        "Starting merge",
-    );
     let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
         tip_handler,
         pagemaptypes,
