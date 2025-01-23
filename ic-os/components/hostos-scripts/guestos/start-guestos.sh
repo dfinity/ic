@@ -68,7 +68,6 @@ function start_guestos() {
 
 function main() {
     # Establish run order
-    echo "GUESTOS LAUNCHING. If onboarding a node, please wait up to 10 minutes for a 'Join request successful!' confirmation message.\n\n\n" > /dev/tty1
     define_guestos
     start_guestos
 }
