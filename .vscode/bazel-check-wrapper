@@ -2,6 +2,6 @@
 
 set -exo pipefail
 
-bazel build //rs/... --@rules_rust//:output_diagnostics=true --output_groups=rust_lib_rustc_output,rust_metadata_rustc_output >>.vscode/ra.logs 2>&1 || true
+bazel build //rs/... --@rules_rust//:rustc_output_diagnostics=true --output_groups=rust_lib_rustc_output,rust_metadata_rustc_output >>.vscode/ra.logs 2>&1 || true
 
 find -L $PWD/bazel-bin/rs -name '*.rustc-output' -print0 | xargs -0 cat

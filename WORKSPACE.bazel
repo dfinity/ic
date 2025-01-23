@@ -100,8 +100,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-cefSsSsYM5EzZEM1sxsVHa7bXYWLvtF0/h3GFe8I6iM=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.57.0/rules_rust-0.57.0.tar.gz"],
+    integrity = "sha256-4qOr06EWg6BTBbv9M8xJTfebNkE9VMBXsa17RZD071I=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.57.1/rules_rust-0.57.1.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
