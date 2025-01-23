@@ -7,6 +7,7 @@ use futures::{
 };
 use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::p2p::artifact_manager::JoinGuard;
@@ -18,7 +19,6 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
@@ -468,7 +468,10 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let AbortableBroadcastChannel { outbound_tx, inbound_rx } = cm1.abortable_broadcast_channel(downloader, usize::MAX);
+    let AbortableBroadcastChannel {
+        outbound_tx,
+        inbound_rx,
+    } = cm1.abortable_broadcast_channel(downloader, usize::MAX);
 
     let artifact_processor_jh = start_test_processor(
         outbound_tx,

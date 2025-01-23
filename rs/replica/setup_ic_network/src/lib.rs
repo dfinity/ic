@@ -377,7 +377,8 @@ pub fn setup_consensus_and_p2p(
         &catch_up_package,
     );
 
-    // Start the IO components of the IC protocol (a.k.a. P2P)
+    // Start the IO components of the IC protocol (a.k.a. P2P).
+    // P2P components includes the quic transport and anything that needs to register a handler within transport (including their dependencies).
     let (channels, p2p_builder) = AbortableBroadcastChannels::new(
         log,
         metrics_registry,
@@ -439,6 +440,7 @@ pub fn setup_consensus_and_p2p(
     let _abortable_broadcast_manager = p2p_builder.start(quic_transport.clone(), topology_watcher);
     let _state_sync_manager = state_sync_manager_runner.start(quic_transport.clone());
 
+    // End of IO/P2P stack initialization.
     start_consensus(
         log,
         metrics_registry,
