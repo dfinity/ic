@@ -1878,11 +1878,12 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         return match prior_block_status {
             Processing => Err(NotifyError::Processing),
 
-            Status::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }) =>
+            Status::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }) => {
                 Err(NotifyError::Refunded {
                     block_index: refund_block_index,
                     reason: reason_for_refund,
-                }),
+                })
+            }
 
             // There is no (known) way to reach this case, since we already
             // verified that memo is in MEANINGFUL_MEMOS.
@@ -1913,9 +1914,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     let old_entry_value = with_state_mut(|state| {
         state.blocks_notified.insert(
             incoming_block_index,
-            NotificationStatus::NotMeaningfulMemo(NotMeaningfulMemo {
-                refund_block_index
-            }),
+            NotificationStatus::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }),
         )
     });
     // Log if the block's previous status somehow changed out from under us
