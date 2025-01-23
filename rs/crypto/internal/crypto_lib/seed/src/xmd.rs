@@ -78,7 +78,7 @@ pub fn xmd<H: XmdHashFunction>(msg: &[u8], dst: &[u8], len: usize) -> XmdResult<
 
     // len ≤ 255*H::OUTPUT_BYTES ⭢ ell ≤ 255
     // thus values ≤ ell can be safely cast to u8
-    let ell = (len + H::OUTPUT_BYTES - 1) / H::OUTPUT_BYTES;
+    let ell = len.div_ceil(H::OUTPUT_BYTES);
 
     let mut out = vec![0u8; len];
 

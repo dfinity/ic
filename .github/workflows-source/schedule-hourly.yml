@@ -16,7 +16,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+    image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -30,13 +30,12 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  docker-login: &docker-login
-    name: Login to Dockerhub
+  before-script: &before-script
+    name: Before script
+    id: before-script
     shell: bash
-    run: ./ci/scripts/docker-login.sh
-    env:
-      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -58,7 +57,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *docker-login
+      - <<: *before-script
       - name: Run Bazel Build All No Cache
         uses:  ./.github/actions/bazel-test-all/
         env:
@@ -77,7 +76,7 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *docker-login
+      - <<: *before-script
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/

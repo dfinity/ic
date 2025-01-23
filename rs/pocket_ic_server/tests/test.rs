@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -25,13 +25,13 @@ use reqwest::{StatusCode, Url};
 use slog::Level;
 use std::io::Read;
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
-pub const LOCALHOST: &str = "127.0.0.1";
+pub const LOCALHOST: &str = "[::1]";
 
 fn start_server_helper(
     test_driver_pid: Option<u32>,
@@ -290,7 +290,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     assert_eq!(http_gateway_details.domains, domains);
     assert_eq!(http_gateway_details.https_config, https_config);
 
-    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.(raw.)localhost/example.com to 127.0.0.1
+    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.(raw.)localhost/example.com to [::1]
     let mut builder = NonblockingClient::builder();
     for domain in [
         localhost,
@@ -302,7 +302,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     ] {
         builder = builder.resolve(
             domain,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
         );
     }
     // add a custom root certificate
@@ -341,13 +341,13 @@ async fn test_gateway(server_url: Url, https: bool) {
         .await
         .unwrap();
 
-    // perform frontend asset request for the title page at http://127.0.0.1:<port>/?canisterId=<canister-id>
+    // perform frontend asset request for the title page at http://[::1]:<port>/?canisterId=<canister-id>
     let mut test_urls = vec![];
     if !https {
         assert_eq!(proto, "http");
         let canister_url = format!(
             "{}://{}:{}/?canisterId={}",
-            "http", "127.0.0.1", port, canister_id
+            "http", LOCALHOST, port, canister_id
         );
         test_urls.push(canister_url);
     }
@@ -628,12 +628,7 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
     let res = pic
         .query_call(canister_id, Principal::anonymous(), "read", vec![])
         .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            assert_eq!(u32::from_le_bytes(data.try_into().unwrap()), expected_ctr);
-        }
-        _ => panic!("Unexpected update call response"),
-    };
+    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
 }
 
 /// Tests that the PocketIC topology and canister states
@@ -1117,7 +1112,7 @@ fn test_gateway_ip_addr_host() {
 
     let mut endpoint = pic.make_live(None);
     endpoint
-        .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+        .set_ip_host(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)))
         .unwrap();
 
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1479,7 +1474,7 @@ fn test_gateway_address_in_use() {
     )
     .unwrap_err();
     assert!(err.contains(&format!(
-        "Failed to bind to address 127.0.0.1:{}: Address already in use",
+        "Failed to bind to address [::1]:{}: Address already in use",
         port
     )));
 }

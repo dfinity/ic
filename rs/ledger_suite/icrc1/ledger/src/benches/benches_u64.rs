@@ -1,15 +1,17 @@
 use crate::benches::{
-    assert_has_num_balances, emulate_archive_blocks, icrc1_transfer, max_length_principal,
-    mint_tokens, upgrade, NUM_TRANSFERS,
+    assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
+    test_account_offset, upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
 };
-use crate::{init_state, Access, LOG};
+use crate::{icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, LOG};
 use assert_matches::assert_matches;
 use canbench_rs::{bench, BenchResult};
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_icrc1_ledger::{FeatureFlags, InitArgs, InitArgsBuilder};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
 
@@ -30,22 +32,74 @@ fn bench_icrc1_transfers() -> BenchResult {
 
     canbench_rs::bench_fn(|| {
         {
-            let _p = canbench_rs::bench_scope("before_upgrade");
-            for i in 0..NUM_TRANSFERS {
+            let _p = canbench_rs::bench_scope("icrc1_transfer");
+            for i in 0..NUM_OPERATIONS {
                 let transfer = TransferArg {
                     from_subaccount: account_with_tokens.subaccount,
-                    to: Account {
-                        owner: max_length_principal(i),
-                        subaccount: Some([11_u8; 32]),
-                    },
+                    to: test_account(i),
                     created_at_time: Some(start_time + i as u64),
                     ..ckbtc_transfer()
                 };
-                let result = icrc1_transfer(account_with_tokens.owner, transfer.clone());
+                let result = icrc_transfer(account_with_tokens.owner, None, transfer.clone());
                 assert_matches!(result, Ok(_));
                 emulate_archive_blocks::<Access>(&LOG);
             }
-            assert_has_num_balances(NUM_TRANSFERS + 2);
+            assert_has_num_balances(NUM_OPERATIONS + 2);
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc2_approve");
+            for i in 0..NUM_OPERATIONS {
+                let approve = ApproveArgs {
+                    from_subaccount: account_with_tokens.subaccount,
+                    spender: test_account(i),
+                    created_at_time: Some(start_time + i as u64),
+                    amount: u64::MAX.into(),
+                    expected_allowance: Some(0u64.into()),
+                    expires_at: Some(u64::MAX),
+                    fee: None,
+                    memo: Some(MEMO.to_vec().into()),
+                };
+                let result = icrc2_approve_not_async(account_with_tokens.owner, approve.clone());
+                assert_matches!(result, Ok(_));
+                emulate_archive_blocks::<Access>(&LOG);
+            }
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc2_transfer_from");
+            for i in 0..NUM_OPERATIONS {
+                let spender = test_account(i);
+                let transfer = TransferArg {
+                    from_subaccount: account_with_tokens.subaccount,
+                    to: test_account_offset(i),
+                    created_at_time: Some(start_time + i as u64),
+                    ..ckbtc_transfer()
+                };
+                let result =
+                    icrc_transfer(account_with_tokens.owner, Some(spender), transfer.clone());
+                assert_matches!(result, Ok(_));
+                emulate_archive_blocks::<Access>(&LOG);
+            }
+            assert_has_num_balances(2 * NUM_OPERATIONS + 2);
+        }
+        for i in 0..NUM_GET_BLOCKS {
+            let spender = test_account(i);
+            let transfer = TransferArg {
+                from_subaccount: account_with_tokens.subaccount,
+                to: test_account_offset(i),
+                created_at_time: Some(1_000_000_000 + start_time + i as u64),
+                ..ckbtc_transfer()
+            };
+            let result = icrc_transfer(account_with_tokens.owner, Some(spender), transfer.clone());
+            assert_matches!(result, Ok(_));
+        }
+        {
+            let req = GetBlocksRequest {
+                start: Nat::from(3 * NUM_OPERATIONS),
+                length: Nat::from(NUM_GET_BLOCKS),
+            };
+            let _p = canbench_rs::bench_scope("icrc3_get_blocks");
+            let blocks_res = icrc3_get_blocks(vec![req]);
+            assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
         }
         upgrade();
     })
@@ -84,6 +138,12 @@ fn ckbtc_ledger_init_args_with_archive() -> InitArgs {
         .build()
 }
 
+const MEMO: [u8; 41] = [
+    0x82_u8, 0x00, 0x83, 0x58, 0x20, 0x18, 0x19, 0xcc, 0xd2, 0x28, 0xad, 0x2e, 0x83, 0xc6, 0xc8,
+    0x63, 0x99, 0xa0, 0xd7, 0xd0, 0x2e, 0xe9, 0x75, 0x96, 0x95, 0x86, 0xf3, 0x47, 0x85, 0xf6, 0xaf,
+    0x99, 0x00, 0x1e, 0x08, 0x8b, 0xa0, 0x02, 0x19, 0x07, 0xd0,
+];
+
 /// ckBTC ledger transaction 1604556
 fn ckbtc_transfer() -> TransferArg {
     TransferArg {
@@ -97,14 +157,7 @@ fn ckbtc_transfer() -> TransferArg {
         },
         fee: None,
         created_at_time: None,
-        memo: Some(
-            vec![
-                0x82_u8, 0x00, 0x83, 0x58, 0x20, 0x18, 0x19, 0xcc, 0xd2, 0x28, 0xad, 0x2e, 0x83,
-                0xc6, 0xc8, 0x63, 0x99, 0xa0, 0xd7, 0xd0, 0x2e, 0xe9, 0x75, 0x96, 0x95, 0x86, 0xf3,
-                0x47, 0x85, 0xf6, 0xaf, 0x99, 0x00, 0x1e, 0x08, 0x8b, 0xa0, 0x02, 0x19, 0x07, 0xd0,
-            ]
-            .into(),
-        ),
+        memo: Some(MEMO.to_vec().into()),
         amount: 167_708_u32.into(),
     }
 }

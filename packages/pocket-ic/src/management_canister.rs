@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 
 pub type CanisterId = Principal;
+pub type SubnetId = Principal;
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct CanisterIdRecord {
@@ -235,6 +236,11 @@ pub struct CanisterInfoArgs {
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SubnetInfoArgs {
+    pub subnet_id: SubnetId,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum ChangeOrigin {
     #[serde(rename = "from_user")]
     FromUser { user_id: Principal },
@@ -290,6 +296,11 @@ pub struct CanisterInfoResult {
     pub module_hash: Option<Vec<u8>>,
     pub recent_changes: Vec<Change>,
     pub total_num_changes: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SubnetInfoResult {
+    pub replica_version: String,
 }
 
 // raw randomness
@@ -455,6 +466,18 @@ pub struct SignWithSchnorrArgs {
     pub key_id: SignWithSchnorrArgsKeyId,
     pub derivation_path: Vec<Vec<u8>>,
     pub message: Vec<u8>,
+    pub aux: Option<SignWithSchnorrAux>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum SignWithSchnorrAux {
+    #[serde(rename = "bip341")]
+    Bip341(SignWithBip341Aux),
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct SignWithBip341Aux {
+    pub merkle_root_hash: Vec<u8>,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
