@@ -890,9 +890,9 @@ pub fn compute_manifest(
 ) -> Result<Manifest, CheckpointError> {
     info!(
         log,
-        "Starting compute_manifest, delaying 30s for better metrics",
+        "Starting compute_manifest, delaying 40s for better metrics",
     );
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    std::thread::sleep(std::time::Duration::from_secs(40));
     info!(
         log,
         "compute_manifest files_with_sizes",

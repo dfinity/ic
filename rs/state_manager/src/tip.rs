@@ -706,9 +706,9 @@ fn merge(
 ) {
     info!(
         log,
-        "Starting merge, delaying 20s for better metrics",
+        "Starting merge, delaying 40s for better metrics",
     );
-    std::thread::sleep(std::time::Duration::from_secs(20));
+    std::thread::sleep(std::time::Duration::from_secs(40));
     // We have a merge candidate for each shard, unless no merge is needed, i. e.
     //   1) Shard forms a pyramid (hence overhead < 2.0)
     //   and
