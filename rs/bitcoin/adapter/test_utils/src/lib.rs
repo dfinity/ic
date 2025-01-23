@@ -1,8 +1,10 @@
 use std::collections::HashSet;
 
 use bitcoin::{
-    consensus::deserialize, util::uint::Uint256, Block, BlockHash, BlockHeader, Transaction,
-    TxMerkleNode,
+    block::{Header as BlockHeader, Version},
+    consensus::deserialize,
+    hashes::Hash,
+    Block, BlockHash, Target, Transaction, TxMerkleNode,
 };
 use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
@@ -21,12 +23,7 @@ pub const BLOCK_2_ENCODED: &str = "010000004860eb18bf1b1620e37e9490fc8a427514416
 /// an overflow occurs if bits is set to 0.
 ///
 /// https://github.com/bitcoin/bitcoin/blame/master/src/chainparams.cpp#L402
-const TARGET: Uint256 = Uint256([
-    0xffffffffffffffff,
-    0xffffffffffffffff,
-    0xffffffffffffffff,
-    0x7fffffffffffffff,
-]);
+const TARGET: Target = Target::MAX_ATTAINABLE_REGTEST;
 
 fn decode_block(hex_str: &str) -> Block {
     let encoded_block_1 = Vec::from_hex(hex_str).expect("failed to covert hex to vec");
@@ -49,11 +46,11 @@ pub fn headers_to_hashes(headers: &[BlockHeader]) -> Vec<BlockHash> {
 fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> Block {
     let mut block = Block {
         header: BlockHeader {
-            version: 1,
+            version: Version::ONE,
             prev_blockhash: *prev_blockhash,
-            merkle_root: TxMerkleNode::default(),
+            merkle_root: TxMerkleNode::all_zeros(),
             time: prev_time + gen_time_delta(),
-            bits: BlockHeader::compact_target_from_u256(&TARGET),
+            bits: TARGET.to_compact_lossy(),
             nonce: 0,
         },
         txdata: vec![],
@@ -64,7 +61,9 @@ fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> B
         block.txdata.push(tx.clone());
     }
 
-    block.header.merkle_root = block.compute_merkle_root().unwrap_or_default();
+    block.header.merkle_root = block
+        .compute_merkle_root()
+        .unwrap_or(TxMerkleNode::all_zeros());
     solve_proof_of_work(&mut block.header);
     block
 }
@@ -124,11 +123,11 @@ pub fn generate_headers(
 /// This helper generates a single header with a given previous blockhash.
 pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) -> BlockHeader {
     let mut header = BlockHeader {
-        version: 1,
+        version: Version::ONE,
         prev_blockhash,
-        merkle_root: TxMerkleNode::default(),
+        merkle_root: TxMerkleNode::all_zeros(),
         time: prev_time + gen_time_delta(),
-        bits: BlockHeader::compact_target_from_u256(&TARGET),
+        bits: TARGET.to_compact_lossy(),
         nonce,
     };
 
@@ -145,7 +144,7 @@ fn gen_time_delta() -> u32 {
 /// This method is used to solve a header's proof of work puzzle.
 fn solve_proof_of_work(header: &mut BlockHeader) {
     let target = header.target();
-    while header.validate_pow(&target).is_err() {
+    while header.validate_pow(target).is_err() {
         header.nonce += 1;
     }
 }

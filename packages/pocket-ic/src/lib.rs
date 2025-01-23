@@ -99,7 +99,7 @@ const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 7.0.0";
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
-const LOCALHOST: &str = "127.0.0.1";
+const LOCALHOST: &str = "[::1]";
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
@@ -1685,6 +1685,9 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 

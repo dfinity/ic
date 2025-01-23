@@ -19,6 +19,7 @@ use bytes::BytesMut;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
@@ -358,19 +359,21 @@ pub fn add_transport_to_sim<F>(
             let this_ip = turmoil::lookup(peer.to_string());
             let custom_udp = CustomUdp::new(this_ip, udp_listener);
 
-            let state_sync_rx = if let Some(ref state_sync) = state_sync_client_clone {
-                let (state_sync_router, state_sync_rx) = ic_state_sync_manager::build_axum_router(
-                    state_sync.clone(),
-                    log.clone(),
-                    &MetricsRegistry::default(),
-                );
+            let state_sync_manager = if let Some(ref state_sync) = state_sync_client_clone {
+                let (state_sync_router, state_sync_manager) =
+                    ic_state_sync_manager::build_state_sync_manager(
+                        &log,
+                        &MetricsRegistry::default(),
+                        &tokio::runtime::Handle::current(),
+                        state_sync.clone(),
+                    );
                 router = Some(router.unwrap_or_default().merge(state_sync_router));
-                Some(state_sync_rx)
+                Some(state_sync_manager)
             } else {
                 None
             };
 
-            let _artifact_processor_jh = if let Some(consensus) = consensus_manager_clone {
+            let con = if let Some(consensus) = consensus_manager_clone {
                 let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
                 let downloader = FetchArtifact::new(
                     log.clone(),
@@ -379,18 +382,22 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx) =
-                    consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let AbortableBroadcastChannel {
+                    outbound_tx,
+                    inbound_rx,
+                } = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,
-                    inbound_tx,
+                    inbound_rx,
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
-                router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 
-                Some(artifact_processor_jh)
+                let consensus_router = consensus_builder.router();
+                router = Some(router.unwrap_or_default().merge(consensus_router));
+
+                Some((artifact_processor_jh, consensus_builder))
             } else {
                 None
             };
@@ -407,17 +414,12 @@ pub fn add_transport_to_sim<F>(
                 router.unwrap_or_default(),
             ));
 
-            consensus_builder.run(transport.clone(), topology_watcher_clone.clone());
+            if let Some((_, con_manager)) = con {
+                con_manager.start(transport.clone(), topology_watcher_clone.clone());
+            }
 
-            if let Some(state_sync_rx) = state_sync_rx {
-                ic_state_sync_manager::start_state_sync_manager(
-                    &log,
-                    &MetricsRegistry::default(),
-                    &tokio::runtime::Handle::current(),
-                    transport.clone(),
-                    state_sync_client_clone.unwrap().clone(),
-                    state_sync_rx,
-                );
+            if let Some(state_sync_manager) = state_sync_manager {
+                state_sync_manager.start(transport.clone());
             }
 
             post_setup_future_clone(peer, transport).await;
