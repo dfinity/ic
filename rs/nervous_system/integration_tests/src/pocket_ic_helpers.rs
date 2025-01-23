@@ -181,10 +181,10 @@ pub async fn install_canister_with_controllers(
         .await
         .unwrap();
     pocket_ic
-        .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
+        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
         .await;
     pocket_ic
-        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
+        .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
         .await;
     let subnet_id = pocket_ic.get_subnet(canister_id).await.unwrap();
     println!(
