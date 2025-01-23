@@ -141,7 +141,12 @@ pub enum NotificationStatus {
     NotifiedMint(NotifyMintCyclesResult),
     /// The transaction did not have a supported memo (or icrc1_memo).
     /// Therefore, we decided to send the ICP back to its source (minus fee).
-    AutomaticallyRefunded(Option<BlockIndex>),
+    NotMeaningfulMemo(NotMeaningfulMemo),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct NotMeaningfulMemo {
+    refund_block_index: Option<BlockIndex>,
 }
 
 /// Version of the State type.
@@ -1219,7 +1224,7 @@ async fn notify_top_up(
                 NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as mint request".into(),
                 ))),
-                NotificationStatus::AutomaticallyRefunded(_) => {
+                NotificationStatus::NotMeaningfulMemo(_) => {
                     Some(Err(NotifyError::InvalidTransaction(
                         "The same payment is already processed as automatic refund".into(),
                     )))
@@ -1310,7 +1315,7 @@ async fn notify_mint_cycles(
                 NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as a top up request.".into(),
                 ))),
-                NotificationStatus::AutomaticallyRefunded(_) => {
+                NotificationStatus::NotMeaningfulMemo(_) => {
                     Some(Err(NotifyError::InvalidTransaction(
                         "The same payment is already processed as an automatic refund.".into(),
                     )))
@@ -1416,7 +1421,7 @@ async fn notify_create_canister(
                 NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as a mint request.".into(),
                 ))),
-                NotificationStatus::AutomaticallyRefunded(_) => {
+                NotificationStatus::NotMeaningfulMemo(_) => {
                     Some(Err(NotifyError::InvalidTransaction(
                         "The same payment is already processed as an automatic refund.".into(),
                     )))
@@ -1775,7 +1780,7 @@ fn clear_block_processing_status(block_index: BlockIndex) {
 ///     2. The block's status is set to Processing.
 ///
 /// If the ledger call succeeds, then the block's status is updated to
-/// AutomaticallyRefunded. Otherwise, if the ledger call fails, then the block's
+/// NotMeaningfulMemo. Otherwise, if the ledger call fails, then the block's
 /// status is cleared to allow the user to try again. Some reasons the call
 /// might fail:
 ///
@@ -1863,15 +1868,16 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         // Do not proceed, because block is either being processed, or was
         // finished being processed earlier.
         use NotificationStatus::{
-            AutomaticallyRefunded, NotifiedCreateCanister, NotifiedMint, NotifiedTopUp, Processing,
+            self as Status, NotifiedCreateCanister, NotifiedMint, NotifiedTopUp, Processing,
         };
         return match prior_block_status {
             Processing => Err(NotifyError::Processing),
 
-            AutomaticallyRefunded(block_index) => Err(NotifyError::Refunded {
-                block_index,
-                reason: reason_for_refund,
-            }),
+            Status::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }) =>
+                Err(NotifyError::Refunded {
+                    block_index: refund_block_index,
+                    reason: reason_for_refund,
+                }),
 
             // There is no (known) way to reach this case, since we already
             // verified that memo is in MEANINGFUL_MEMOS.
@@ -1898,11 +1904,13 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     })?;
 
     // Sending the ICP back succeeded. Therefore, update the block's status to
-    // AutomaticallyRefunded.
+    // NotMeaningfulMemo.
     let old_entry_value = with_state_mut(|state| {
         state.blocks_notified.insert(
             incoming_block_index,
-            NotificationStatus::AutomaticallyRefunded(refund_block_index),
+            NotificationStatus::NotMeaningfulMemo(NotMeaningfulMemo {
+                refund_block_index
+            }),
         )
     });
     // Log if the block's previous status somehow changed out from under us
@@ -1958,7 +1966,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
                 Err(format!("Already notified: {:?}", resp))
             }
             NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::AutomaticallyRefunded(resp) => {
+            NotificationStatus::NotMeaningfulMemo(resp) => {
                 Err(format!("Already notified: {:?}", resp))
             }
         },
