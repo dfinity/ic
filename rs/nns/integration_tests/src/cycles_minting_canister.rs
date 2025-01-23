@@ -797,7 +797,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    let assert_canister_statuses_fixed = |narrative_phase| {
+    let assert_canister_statuses_fixed = |test_phase| {
         assert_eq!(
             btreemap! {
                 btreemap! { "status".to_string() => "running".to_string() } => 11,
@@ -809,7 +809,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                 "replicated_state_registered_canisters"
             ),
             "{}",
-            narrative_phase
+            test_phase,
         );
     };
     // This will be called again later to verify that no canisters were added.
@@ -817,7 +817,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     // understanding of how many canisters there are originally.
     assert_canister_statuses_fixed("start");
 
-    let assert_balance = |nominal_amount_tokens: u64, fee_count: u64, narrative_phase: &str| {
+    let assert_balance = |nominal_amount_tokens: u64, fee_count: u64, test_phase: &str| {
         let observed_balance = icrc1_balance(
             &state_machine,
             LEDGER_CANISTER_ID,
@@ -832,7 +832,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             .unwrap()
             .checked_sub(&total_fees)
             .unwrap();
-        assert_eq!(observed_balance, expected_balance, "{}", narrative_phase);
+        assert_eq!(observed_balance, expected_balance, "{}", test_phase);
     };
     // This is more to gain confidence that assert_balance works; there is very
     // little risk that USER1's balance is not 100.
