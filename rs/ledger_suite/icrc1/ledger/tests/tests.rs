@@ -1986,6 +1986,7 @@ mod incompatible_token_type_upgrade {
         .unwrap()
     }
 
+    // TODO: enable and rewrite when FI-1653 is fixed.
     #[ignore]
     #[test]
     fn should_successfully_upgrade_ledger_from_u64_to_u256_to_u64_wasm() {
