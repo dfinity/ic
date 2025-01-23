@@ -1,6 +1,7 @@
 use super::*;
+use pretty_assertions::{assert_eq, assert_str_eq};
 
-#[derive(candid::CandidType, Clone, PartialEq)]
+#[derive(CandidType)]
 struct DummyCandidStruct {
     pub status: Option<i32>,
     pub module_hash: Vec<u8>,
@@ -9,38 +10,36 @@ struct DummyCandidStruct {
     pub cycles: Option<u64>,
 }
 
-#[derive(candid::CandidType, Clone, PartialEq)]
+#[derive(CandidType)]
 enum DummyCandidVariant {
     Foo(String),
     Bar { abc: String, xyz: String },
 }
 
-#[derive(candid::CandidType, Clone, PartialEq)]
+#[derive(CandidType)]
 struct DummyCandidContainer {
     foo: DummyCandidVariant,
     bar: Result<DummyCandidVariant, String>,
 }
 
 #[track_caller]
-fn run_test<T: CandidType>(value: T, expected_result: Result<String, String>) {
+fn assert_expectation<T: CandidType>(value: &T, expected_result: Result<String, String>) {
     let observed_result = pretty(value);
 
     match (observed_result, expected_result) {
         (Ok(observed), Ok(expected)) => {
-            pretty_assertions::assert_str_eq!(observed, expected);
+            assert_str_eq!(observed, expected);
         }
         (observed, expected) => {
-            pretty_assertions::assert_eq!(observed, expected);
+            assert_eq!(observed, expected);
         }
     }
 }
 
 #[test]
-fn test_candid_value_pretty_printing() {
-    // Scenario A: Simple structure whose fields are various built-in types.
-
-    run_test(
-        DummyCandidStruct {
+fn test_pretty_printing_simple_struct() {
+    assert_expectation(
+        &DummyCandidStruct {
             status: Some(42),
             module_hash: vec![1, 2, 3, 4],
             controllers: "foo".to_string(),
@@ -56,23 +55,22 @@ fn test_candid_value_pretty_printing() {
 }"#
         .to_string()),
     );
+}
 
-    // Scenario B: Complex structure.
-
-    let expected_result = r#"record {
-  bar = variant { Ok = variant { Bar = record { abc = "abc"; xyz = "xyz" } } };
-  foo = variant { Foo = "hello" };
-}"#
-    .to_string();
-
-    run_test(
-        DummyCandidContainer {
+#[test]
+fn test_pretty_printing_complex_struct() {
+    assert_expectation(
+        &DummyCandidContainer {
             foo: DummyCandidVariant::Foo("hello".to_string()),
             bar: Ok(DummyCandidVariant::Bar {
                 abc: "abc".to_string(),
                 xyz: "xyz".to_string(),
             }),
         },
-        Ok(expected_result),
+        Ok(r#"record {
+  bar = variant { Ok = variant { Bar = record { abc = "abc"; xyz = "xyz" } } };
+  foo = variant { Foo = "hello" };
+}"#
+        .to_string()),
     );
 }
