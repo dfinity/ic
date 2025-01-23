@@ -244,6 +244,9 @@ pub struct StateV1 {
     // canister (i.e. ledger). Once that comes back, we update the block's
     // status. This avoids using the same ICP to perform multiple operations.
     pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    // The status of blocks not new than this is ambiguous. This is because we
+    // must bound how much memory we use; in particular, blocks_notified must
+    // not grow without bound.
     pub last_purged_notification: BlockIndex,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
