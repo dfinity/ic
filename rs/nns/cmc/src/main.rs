@@ -232,7 +232,7 @@ pub struct StateV1 {
 
     pub total_cycles_minted: Cycles,
 
-    // We use this for synchronization/journaling.
+    // We use this for synchronization.
     //
     // Because our operations (e.g. minting cycles) require calling other
     // canister(s), in particular ledger, it is possible for duplicate requests
@@ -1199,7 +1199,7 @@ async fn notify_top_up(
     //
     //     2. The block is "sufficiently recent". More precisely, it must be
     //        more recent than last_purged_notification. (To avoid unbounded
-    //        growth of the journal.)
+    //        growth of the blocks_notified.)
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
@@ -1771,8 +1771,8 @@ fn clear_block_processing_status(block_index: BlockIndex) {
 ///
 /// If the ledger call failed, the user can retry.
 ///
-/// Like the rest of this canister, uses blocks_notified for "journaling". More
-/// precisely, before calling ledger, there are two things:
+/// Like the rest of this canister, uses blocks_notified for synchronization.
+/// More precisely, before calling ledger, there are two things:
 ///
 ///     1. The block MUST have no status. If it does, this returns Err, and no
 ///        ledger call is attempted.
