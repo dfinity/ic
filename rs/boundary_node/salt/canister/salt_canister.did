@@ -1,0 +1,54 @@
+// Represents timestamp in milliseconds since the epoch (1970-01-01)
+type Timestamp = nat64;
+// Structured HTTP header representation
+type HeaderField = record { text; text; };
+
+ // Detailed salt retrieval response
+type GetSaltResponse = variant {
+  Ok: SaltResponse;
+  Err: GetSaltError;
+};
+
+// Comprehensive error for salt retrieval
+type GetSaltError = variant {
+    // Indicates an unauthorized attempt to get the salt
+    Unauthorized;
+    // Captures all unexpected internal errors during process
+    Internal: text;                 
+};
+
+// Salt response containing salt itself and additional metadata
+type SaltResponse = record {
+    salt: blob;
+    salt_id: Timestamp;
+};
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+ // Initialization arguments used when installing/upgrading/reinstalling the canister
+type InitArg = record {
+    // Optional interval (in seconds) for regenerating the salt value.
+    // If specified, the first regeneration occurs immediately. Otherwise, the previously set regeneration schedule is unaffected.
+    salt_regeneration_interval_secs: opt nat64;
+    // Interval (in seconds) for polling API boundary node IDs from the registry.
+    // The first polling operation occurs immediately.
+    registry_polling_interval_secs: nat64;
+};
+
+service : (InitArg) -> {
+  // Fetches the current salt (randomly generated value to be added to data before hashing)
+  get_salt: () -> (GetSaltResponse) query;
+  // Canister metrics (Http Interface)
+  http_request: (HttpRequest) -> (HttpResponse) query;
+}
