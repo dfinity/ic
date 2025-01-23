@@ -270,8 +270,8 @@ pub struct HttpRequestEnvelope<C> {
 /// A strongly-typed version of [`HttpRequestEnvelope`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct HttpRequest<C> {
-    content: C,
-    auth: Authentication,
+    pub content: C,
+    pub auth: Authentication,
 }
 
 /// The authentication associated with an HTTP request.

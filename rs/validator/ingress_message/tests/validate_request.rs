@@ -42,6 +42,65 @@ mod request_nonce {
     use rand::RngCore;
 
     #[test]
+    fn abc1() {
+        use ic_crypto_tree_hash::Path;
+        use ic_types::messages::HttpRequest;
+
+        let signer_public_key = vec![
+            48u8, 86, 48, 16, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 5, 43, 129, 4, 0, 10, 3, 66, 0,
+            4, 213, 160, 120, 218, 84, 90, 121, 221, 9, 255, 236, 247, 108, 204, 160, 185, 19, 249,
+            35, 109, 45, 119, 244, 135, 191, 136, 181, 116, 190, 254, 238, 236, 58, 223, 44, 254,
+            156, 219, 115, 16, 16, 25, 109, 106, 89, 171, 55, 162, 129, 207, 16, 90, 180, 126, 30,
+            12, 234, 62, 102, 35, 129, 192, 148, 93,
+        ];
+
+        let signature = vec![
+            221u8, 60, 91, 9, 181, 23, 3, 209, 105, 226, 161, 193, 56, 114, 147, 187, 146, 205, 29,
+            161, 11, 104, 183, 252, 242, 181, 17, 176, 110, 184, 136, 162, 34, 143, 141, 95, 56,
+            79, 152, 24, 84, 129, 61, 17, 254, 49, 179, 35, 36, 204, 100, 29, 58, 20, 248, 53, 123,
+            138, 250, 244, 138, 232, 220, 89,
+        ];
+
+        let labels = vec![
+            ic_crypto_tree_hash::Label::from("request_status"),
+            ic_crypto_tree_hash::Label::from(
+                hex::decode("77402ACD86F25345D9C33A03E0E24BB79109348A716EDA9A4E53CA3F24DD857A")
+                    .expect("invalid hex"),
+            ),
+        ];
+        let paths: Vec<Path> = vec![Path::from(labels)];
+        let ingress_expiry: u64 = 1737628560000000000;
+        let verifier =
+            verifier_at_time(Time::from_nanos_since_unix_epoch(ingress_expiry - 10000)).build();
+
+        let content = ic_types::messages::ReadState {
+            source: UserId::from(
+                PrincipalId::from_str(
+                    "btn47-pp4lk-4qn3s-s753g-tqhrn-j6zen-hnxpr-4lvws-2c46n-ddmvn-nqe",
+                )
+                .expect("invalid principal"),
+            ),
+            paths,
+            ingress_expiry,
+            nonce: None,
+        };
+
+        let auth =
+            ic_types::messages::Authentication::Authenticated(ic_types::messages::UserSignature {
+                signature: signature,
+                signer_pubkey: signer_public_key,
+                sender_delegation: None,
+            });
+
+        let request = HttpRequest { content, auth };
+
+        let result = verifier.validate_request(&request);
+        println!("request: {request:?}");
+        println!("validation result: {result:?}");
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
     fn should_check_request_nonce() {
         let rng = &mut ReproducibleRng::new();
         let verifier = default_verifier()
