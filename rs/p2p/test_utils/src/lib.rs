@@ -7,6 +7,7 @@ use futures::{
 };
 use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::p2p::artifact_manager::JoinGuard;
@@ -467,7 +468,10 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let (outbound_tx, inbound_rx) = cm1.abortable_broadcast_channel(downloader, usize::MAX);
+    let AbortableBroadcastChannel {
+        outbound_tx,
+        inbound_rx,
+    } = cm1.abortable_broadcast_channel(downloader, usize::MAX);
 
     let artifact_processor_jh = start_test_processor(
         outbound_tx,
