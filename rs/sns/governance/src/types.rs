@@ -458,6 +458,7 @@ impl NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
+            automatically_advance_target_version: Some(false),
         }
     }
 
@@ -525,6 +526,9 @@ impl NervousSystemParameters {
             maturity_modulation_disabled: self
                 .maturity_modulation_disabled
                 .or(base.maturity_modulation_disabled),
+            automatically_advance_target_version: self
+                .automatically_advance_target_version
+                .or(base.automatically_advance_target_version),
         }
     }
 

@@ -703,11 +703,9 @@ async fn transfer_gtc_neuron(
 #[update]
 async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    ManageNeuronResponse::from(
-        governance_mut()
-            .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
-            .await,
-    )
+    governance_mut()
+        .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
+        .await
 }
 
 #[cfg(feature = "test")]
@@ -724,9 +722,7 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
-    let response =
-        governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
-    ManageNeuronResponse::from(response)
+    governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
 }
 
 #[query]
