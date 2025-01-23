@@ -34,7 +34,7 @@ use ic_types::{
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::BuildHasher;
 use std::{
@@ -52,6 +52,7 @@ type IngressPayloadCache =
 
 /// Keeps the metrics to be exported by the IngressManager
 struct IngressManagerMetrics {
+    on_state_change_duration: HistogramVec,
     ingress_handler_time: Histogram,
     ingress_selector_get_payload_time: Histogram,
     ingress_selector_validate_payload_time: Histogram,
@@ -80,7 +81,22 @@ impl IngressManagerMetrics {
                 "ingress_payload_cache_size",
                 "The number of HashSets in payload builder's ingress payload cache.",
             ),
+            on_state_change_duration: metrics_registry.histogram_vec(
+                "ingress_handle_on_state_change_duration",
+                "Ingress handler on state change duration in seconds, labelled by an operation",
+                decimal_buckets(-3, 1),
+                &["operation"],
+            ),
         }
+    }
+
+    pub(crate) fn start_on_state_change_timer(
+        &self,
+        operation: &str,
+    ) -> prometheus::HistogramTimer {
+        self.on_state_change_duration
+            .with_label_values(&[operation])
+            .start_timer()
     }
 }
 
@@ -141,6 +157,7 @@ pub struct IngressManager {
 
     /// Remember last purge time to control purge frequency.
     pub(crate) last_purge_time: RwLock<Time>,
+    pub(crate) last_purge_height: RwLock<Height>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
 
@@ -197,6 +214,7 @@ impl IngressManager {
             subnet_id,
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),
+            last_purge_height: RwLock::new(Height::new(0)),
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,

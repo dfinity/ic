@@ -148,6 +148,17 @@ impl IngressManager {
         get_status: &dyn Fn(&MessageId) -> IngressStatus,
         change_set: &mut Mutations,
     ) {
+        let _timer = self
+            .metrics
+            .start_on_state_change_timer("purge_known_messages");
+
+        let mut last_purge_height = self.last_purge_height.write().unwrap();
+        // no need to do anything if the state hasn't changed since the last purge
+        if *last_purge_height == self.state_reader.latest_state_height() {
+            return;
+        }
+        *last_purge_height = self.state_reader.latest_state_height();
+
         for validated_artifact in pool.validated().get_all_by_expiry_range(expiry_range) {
             let ingress_object = &validated_artifact.msg;
 
@@ -168,6 +179,10 @@ impl IngressManager {
 
     /// Remove finalized messages that were requested to purge.
     fn purge_delivered_messages(&self, change_set: &mut Mutations) {
+        let _timer = self
+            .metrics
+            .start_on_state_change_timer("purge_delivered_messages");
+
         let mut to_purge = self.messages_to_purge.write().unwrap();
         while let Some(message_ids) = to_purge.pop() {
             message_ids
@@ -189,6 +204,10 @@ impl IngressManager {
         registry_version: RegistryVersion,
         change_set: &mut Mutations,
     ) {
+        let _timer = self
+            .metrics
+            .start_on_state_change_timer("validate_messages");
+
         let unvalidated_artifacts_changeset = pool
             .unvalidated()
             .get_all_by_expiry_range(expiry_range)
