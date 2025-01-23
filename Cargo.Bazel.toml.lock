@@ -1752,9 +1752,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51e129c4051c57daf943586e01ef72faae48b04a8f692d5f646febf17a264c38"
+checksum = "a253bab4a9be502c82332b60cbeee6202ad0692834efeec95fae9f29db33d692"
 dependencies = [
  "anyhow",
  "binread",
@@ -3075,6 +3075,8 @@ dependencies = [
  "ic-canister-sig-creation",
  "ic-cbor",
  "ic-cdk 0.16.0",
+ "ic-cdk 0.18.0-alpha.1",
+ "ic-cdk-macros 0.18.0-alpha.1",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-certificate-verification",
@@ -5120,6 +5122,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.18.0-alpha.1",
+ "ic0 0.24.0-alpha.1",
+ "serde",
+ "serde_bytes",
+ "thiserror 2.0.3",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5166,6 +5181,19 @@ name = "ic-cdk-macros"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8df41980e95dead28735ab0f748c75477b0c5eab37a09a5641c78ec406a1db0"
+dependencies = [
+ "candid",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_tokenstream 0.2.1",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -5477,6 +5505,11 @@ name = "ic0"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
+
+[[package]]
+name = "ic0"
+version = "0.24.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 
 [[package]]
 name = "ic_bls12_381"
