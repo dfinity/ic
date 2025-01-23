@@ -1800,8 +1800,9 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     incoming_block_index: BlockIndex,
     // This is needed because transaction only has an AccountIdentifier.
     // Although it is possible to go from PrincipalId + Subaccount to
-    // AccountIdentifier, the reverse is not possible. This is a super confusing
-    // feature of the ICP ledger, but for better or worse, it is intentional.
+    // AccountIdentifier, the reverse is not possible. The reader might find it
+    // surprising that conversion in only one direction is possible, but this
+    // really is how it works, for better or worse.
     incoming_to_subaccount: Subaccount,
     incoming_transaction: &Transaction,
 ) -> Result<(), NotifyError> {
