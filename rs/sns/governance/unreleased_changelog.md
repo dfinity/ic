@@ -36,6 +36,8 @@ proposal, e.g.:
     )'
     ```
 
+* Do not redact chunked Wasm data in `ProposalInfo` served from `SnsGov.list_proposals`.
+
 ## Changed
 
 ## Deprecated
