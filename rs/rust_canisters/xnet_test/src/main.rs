@@ -36,8 +36,8 @@ thread_local! {
     /// Pad requests to this size (in bytes) if smaller.
     static REQUEST_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
 
-    /// Timeout to set on requests. Zero for guaranteed response calls.
-    static REQUEST_TIMEOUT_SECONDS: RefCell<u32> = const { RefCell::new(0) };
+    /// Timeouts to set on calls. `None` for guaranteed response calls.
+    static CALL_TIMEOUTS_SECONDS: RefCell<Vec<Option<u32>>> = const { RefCell::new(Vec::new()) };
 
     /// Pad responses to this size (in bytes) if smaller.
     static RESPONSE_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
@@ -148,12 +148,19 @@ fn log(message: &str) {
 /// requests to other canisters.
 #[update]
 fn start(start_args: StartArgs) -> String {
+    // Default to guaranteed response calls only.
+    let call_timeouts_seconds = if start_args.call_timeouts_seconds.is_empty() {
+        vec![None]
+    } else {
+        start_args.call_timeouts_seconds
+    };
+
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = start_args.network_topology;
     });
     PER_SUBNET_RATE.with(|r| *r.borrow_mut() = start_args.canister_to_subnet_rate);
     REQUEST_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.request_payload_size_bytes);
-    REQUEST_TIMEOUT_SECONDS.with(|r| *r.borrow_mut() = start_args.request_timeout_seconds);
+    CALL_TIMEOUTS_SECONDS.with(|r| *r.borrow_mut() = call_timeouts_seconds);
     RESPONSE_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.response_payload_size_bytes);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
@@ -176,7 +183,7 @@ async fn fanout() {
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
-    let timeout_seconds = REQUEST_TIMEOUT_SECONDS.with(|p| *p.borrow());
+    let timeouts_seconds = CALL_TIMEOUTS_SECONDS.with(|p| p.borrow().clone());
     let payload_size = REQUEST_PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
 
     let mut futures = vec![];
@@ -202,11 +209,16 @@ async fn fanout() {
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
+            // Cycle over the timeouts.
+            let timeout_seconds = timeouts_seconds
+                .get(seq_no as usize % timeouts_seconds.len())
+                .unwrap();
+
             let call = Call::new(canister, "handle_request").with_arg(payload);
-            let call = if timeout_seconds == 0 {
-                call.with_guaranteed_response()
+            let call = if let Some(timeout_seconds) = timeout_seconds {
+                call.change_timeout(*timeout_seconds)
             } else {
-                call.change_timeout(timeout_seconds)
+                call.with_guaranteed_response()
             };
             futures.push(call.call::<Reply>());
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);

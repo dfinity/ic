@@ -15,8 +15,8 @@ use ic_types::{
     Cycles,
 };
 use maplit::btreemap;
-use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::{collections::BTreeSet, vec};
 use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
@@ -103,7 +103,7 @@ impl SubnetPairProxy {
             network_topology,
             canister_to_subnet_rate,
             request_payload_size_bytes: payload_size_bytes,
-            request_timeout_seconds: 0,
+            call_timeouts_seconds: vec![None],
             response_payload_size_bytes: payload_size_bytes,
         })
     }

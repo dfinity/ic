@@ -153,10 +153,11 @@ pub async fn test_async(env: TestEnv, config: Config) {
     // Start all canisters (via update `start` call).
     info!(logger, "Calling start() on all canisters...");
     start_all_canisters(
-        &canisters, 1024, // send messages with 1024 byte payloads
-        0,    // guaranteed response calls
-        1024, // same response size
-        10,   // each canister sends 10 RPS
+        &canisters,
+        1024,    // send messages with 1024 byte payloads
+        &[None], // guaranteed response calls
+        1024,    // same response size
+        10,      // each canister sends 10 RPS
     )
     .await;
     info!(logger, "Starting chatter: 10 messages/round * 1024 bytes",);

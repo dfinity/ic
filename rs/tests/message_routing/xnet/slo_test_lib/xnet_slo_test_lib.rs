@@ -39,6 +39,7 @@ use ic_system_test_driver::util::{block_on, runtime_from_url};
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
+use std::vec;
 use systest_message_routing_common::{install_canisters, parallel_async, start_all_canisters};
 use xnet_test::Metrics;
 
@@ -59,7 +60,8 @@ pub struct Config {
     nodes_per_subnet: usize,
     runtime: Duration,
     request_payload_size_bytes: u64,
-    request_timeout_seconds: u32,
+    /// Possible call timeouts. `None` for guaranteed response.
+    call_timeouts_seconds: Vec<Option<u32>>,
     response_payload_size_bytes: u64,
     send_rate_threshold: f64,
     error_percentage_threshold: f64,
@@ -110,7 +112,7 @@ impl Config {
             nodes_per_subnet,
             runtime,
             request_payload_size_bytes: PAYLOAD_SIZE_BYTES,
-            request_timeout_seconds: 0,
+            call_timeouts_seconds: vec![None],
             response_payload_size_bytes: PAYLOAD_SIZE_BYTES,
             send_rate_threshold,
             error_percentage_threshold,
@@ -134,9 +136,9 @@ impl Config {
         config
     }
 
-    pub fn with_best_effort_response(self, timeout_seconds: u32) -> Self {
+    pub fn with_call_timeouts(self, timeouts_seconds: &[Option<u32>]) -> Self {
         let mut config = self.clone();
-        config.request_timeout_seconds = timeout_seconds;
+        config.call_timeouts_seconds = timeouts_seconds.to_vec();
         config
     }
 
@@ -267,7 +269,7 @@ pub async fn deploy_and_start<'a, 'b>(
     start_all_canisters(
         &canisters,
         config.request_payload_size_bytes,
-        config.request_timeout_seconds,
+        &config.call_timeouts_seconds,
         config.response_payload_size_bytes,
         config.canister_to_subnet_rate as u64,
     )

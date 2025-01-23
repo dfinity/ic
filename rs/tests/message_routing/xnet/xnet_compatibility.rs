@@ -48,6 +48,7 @@ use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const CALL_TIMEOUT_SECONDS: u32 = 300;
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
@@ -146,7 +147,10 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10);
+    // Make both guaranteed response and best-effort calls.
+    let call_timeouts = [None, Some(CALL_TIMEOUT_SECONDS)];
+    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10)
+        .with_call_timeouts(&call_timeouts);
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
@@ -163,7 +167,8 @@ pub async fn test_async(env: TestEnv) {
         // with error thresholds.
         75.0,
         40,
-    );
+    )
+    .with_call_timeouts(&call_timeouts);
 
     let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt").unwrap();
 

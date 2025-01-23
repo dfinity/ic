@@ -15,7 +15,7 @@ pub struct StartArgs {
     pub network_topology: NetworkTopology,
     pub canister_to_subnet_rate: u64,
     pub request_payload_size_bytes: u64,
-    pub request_timeout_seconds: u32,
+    pub call_timeouts_seconds: Vec<Option<u32>>,
     pub response_payload_size_bytes: u64,
 }
 

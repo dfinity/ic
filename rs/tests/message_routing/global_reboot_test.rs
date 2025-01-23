@@ -190,7 +190,7 @@ pub fn start_all_canisters(
                 network_topology: topology.clone(),
                 canister_to_subnet_rate,
                 request_payload_size_bytes: payload_size_bytes,
-                request_timeout_seconds: 0,
+                call_timeouts_seconds: vec![None],
                 response_payload_size_bytes: payload_size_bytes,
             };
             let _: String = canister
