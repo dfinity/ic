@@ -130,6 +130,8 @@ function process_bootstrap() {
     sync
 }
 
+/opt/ic/bin/vsock_guest --notify "GUESTOS LAUNCHING. If onboarding a node, please wait up to 10 minutes for a 'Join request successful!' confirmation message.\n\n\n"
+
 MAX_TRIES=10
 
 get_guestos_version
