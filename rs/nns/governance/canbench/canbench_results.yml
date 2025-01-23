@@ -151,7 +151,7 @@ benches:
     scopes: {}
   range_neurons_performance:
     total:
-      instructions: 56447340
+      instructions: 56448740
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
