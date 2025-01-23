@@ -60796,11 +60796,6 @@
               "time",
               "use-libc-auxv"
             ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "termios",
-              "use-libc-auxv"
-            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
