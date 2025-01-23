@@ -2,7 +2,7 @@
 use std::{
     error::Error as StdError,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -50,7 +50,7 @@ use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rand::rngs::OsRng;
-use tokio::sync::RwLock;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -201,6 +201,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // Setup registry-related stuff
     let persister = Persister::new(Arc::clone(&routing_table));
 
+    // Snapshot update notification channels
+    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
+
     // Registry Client
     let (registry_client, registry_replicator, nns_pub_key) =
         if let Some(v) = &cli.registry.registry_local_store_path {
@@ -222,6 +225,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
                 http_client_check,
                 &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
                 &mut runners,
             )?;
 
@@ -283,16 +288,30 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Generic Ratelimiter
+    let generic_limiter_opts = generic::Options {
+        tti: cli.rate_limiting.rate_limit_generic_tti,
+        max_shards: cli.rate_limiting.rate_limit_generic_max_shards,
+        poll_interval: cli.rate_limiting.rate_limit_generic_poll_interval,
+        autoscale: cli.rate_limiting.rate_limit_generic_autoscale,
+    };
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
-        Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
+        Some(Arc::new(generic::GenericLimiter::new_from_file(
+            v.clone(),
+            generic_limiter_opts,
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
+    } else if let Some(v) = cli.rate_limiting.rate_limit_generic_canister_id {
+        Some(Arc::new(generic::GenericLimiter::new_from_canister(
+            v,
+            agent.clone().unwrap(),
+            generic_limiter_opts,
+            cli.misc.crypto_config.is_some(),
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
     } else {
-        cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
-            Arc::new(if cli.misc.crypto_config.is_some() {
-                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
-            } else {
-                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
-            })
-        })
+        None
     };
 
     // HTTP Logs Anonymization
@@ -424,11 +443,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.push(Box::new(metrics_runner));
 
     if let Some(v) = generic_limiter {
-        let runner = Box::new(WithThrottle(
-            v,
-            ThrottleParams::new(cli.rate_limiting.rate_limit_generic_poll_interval),
-        ));
-        runners.push(runner);
+        runners.push(Box::new(v));
     }
 
     // HTTP Logs Anonymization
@@ -594,10 +609,11 @@ fn setup_registry(
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn http::Client>,
     metrics_registry: &Registry,
+    channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     runners: &mut Vec<Box<dyn Run>>,
 ) -> Result<(Option<RegistryReplicator>, Option<ThresholdSigPublicKey>), Error> {
     // Snapshots
-    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
     let snapshot_runner = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
@@ -818,7 +834,7 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
-    generic_limiter: Option<Arc<generic::Limiter>>,
+    generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,

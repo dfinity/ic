@@ -22,7 +22,7 @@ mod sealed {
 pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
-    fn payload(&self) -> Vec<u8>;
+    fn payload(&self) -> Result<Vec<u8>, candid::Error>;
     type Response: CandidType + DeserializeOwned;
 }
 
@@ -33,8 +33,8 @@ impl<R: ic_nervous_system_clients::Request> Request for R {
     fn update(&self) -> bool {
         Self::UPDATE
     }
-    fn payload(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self)
     }
 
     type Response = <Self as ic_nervous_system_clients::Request>::Response;

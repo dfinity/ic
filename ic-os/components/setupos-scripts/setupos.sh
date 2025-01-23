@@ -39,8 +39,10 @@ main() {
     log_start "$(basename $0)"
     start_setupos
     /opt/ic/bin/check-setupos-age.sh
+    /opt/ic/bin/check-config.sh
     /opt/ic/bin/check-hardware.sh
     /opt/ic/bin/check-network.sh
+    /opt/ic/bin/check-ntp.sh
     if kernel_cmdline_bool_default_true ic.setupos.perform_installation; then
         true
     else

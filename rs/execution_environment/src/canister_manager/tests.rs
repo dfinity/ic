@@ -84,7 +84,7 @@ use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_lt};
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, path::Path, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -262,6 +262,7 @@ impl CanisterManagerBuilder {
             SchedulerConfig::application_subnet().dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            Path::new("/tmp"),
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(
@@ -304,6 +305,7 @@ fn canister_manager_config(
         // Compute capacity for 2-core scheduler is 100%
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
+        MAX_CANISTER_MEMORY_SIZE,
         MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
@@ -4275,7 +4277,7 @@ fn canister_version_changes_are_visible() {
 
     let result = test.ingress(canister_id, "version", vec![]);
     let reply = get_reply(result);
-    assert_eq!(reply, vec![2]);
+    assert_eq!(reply, vec![3]);
 }
 
 // This test confirms that we can always create as many canisters as possible if

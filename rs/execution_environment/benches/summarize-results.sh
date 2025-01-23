@@ -65,10 +65,13 @@ esac
 # Produce top regressed/improved details.
 if [ "${total_diff}" != "0" ]; then
     cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -5 | while read diff name; do
-        echo "+ ${name} time regressed by ${diff}%"
+        echo "  + ${name} time regressed by ${diff}%"
     done
     cat "${TMP_FILE}" | sort -n | rg '^-' | head -5 | while read diff name; do
-        echo "- ${name} time improved by ${diff}%"
+        echo "  - ${name} time improved by ${diff}%"
     done
 fi
-# rm -f "${TMP_FILE}"
+rm -f "${TMP_FILE}"
+
+# Return an error is there are changes, so the calling script might retry or report an error.
+[ "${total_diff}" != "0" ]

@@ -757,13 +757,12 @@ pub enum ReplicaHealthStatus {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HttpStatusResponse {
-    pub ic_api_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]

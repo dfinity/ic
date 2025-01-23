@@ -101,6 +101,7 @@ fn main() -> Result<()> {
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 domain: None,
+                node_reward_type: None,
             },
         );
 
@@ -204,7 +205,7 @@ fn main() -> Result<()> {
         .arg("--config-file")
         .args([config_path.to_str().unwrap()]);
     info!(log, "Executing {:?}", cmd);
-    cmd.exec();
+    let _ = cmd.exec();
 
     Ok(())
 }

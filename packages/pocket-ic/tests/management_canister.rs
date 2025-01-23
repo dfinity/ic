@@ -62,6 +62,11 @@ fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
 }
 
 #[update]
+fn subnet_info(_: SubnetInfoArgs) -> SubnetInfoResult {
+    unreachable!()
+}
+
+#[update]
 fn delete_canister(_: CanisterIdRecord) {
     unreachable!()
 }

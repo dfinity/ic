@@ -62,7 +62,7 @@ use ic_nns_governance::{
         add_or_remove_node_provider::Change,
         governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
         governance_error::ErrorType::{
-            self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
         install_code::CanisterInstallMode,
         manage_neuron::{
@@ -75,7 +75,6 @@ use ic_nns_governance::{
             MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
             StartDissolving,
         },
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         neuron::{self, DissolveState, Followees},
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action, ActionDesc},
@@ -84,11 +83,10 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
-        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
-        ProposalChange, ProposalData, ProposalDataChange,
+        KnownNeuron, KnownNeuronData, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
+        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
+        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -101,7 +99,12 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    pb::v1::{
+        self as api,
+        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
+        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+        ListNeuronsResponse, ManageNeuronResponse,
+    },
     proposal_validation::validate_proposal_title,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -2214,8 +2217,8 @@ async fn test_no_voting_after_deadline() {
         result,
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Error(
-                GovernanceError::new_with_message(
-                    PreconditionFailed,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::PreconditionFailed,
                     "Proposal deadline has passed.",
                 )
             ))
@@ -2329,13 +2332,17 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
     assert_eq!(neuron_info.visibility, None);
     assert_eq!(full_neuron.visibility, None);
 
+    // This conversion will not be needed if/when we get rid of the definition
+    // of NeuronInfo from governance.proto.
+    let neuron_info = api::NeuronInfo::from(neuron_info);
+
     assert_eq!(
         list_neurons_response,
         ListNeuronsResponse {
             neuron_infos: hashmap! {
                 1 => neuron_info,
             },
-            full_neurons: vec![full_neuron],
+            full_neurons: vec![api::Neuron::from(full_neuron)],
         },
     );
 }
@@ -2384,13 +2391,17 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
     assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
 
+    // This conversion will not be needed if/when we get rid of the definition
+    // of NeuronInfo from governance.proto.
+    let neuron_info = api::NeuronInfo::from(neuron_info);
+
     assert_eq!(
         list_neurons_response,
         ListNeuronsResponse {
             neuron_infos: hashmap! {
                 1 => neuron_info,
             },
-            full_neurons: vec![full_neuron],
+            full_neurons: vec![api::Neuron::from(full_neuron)],
         },
     );
 }
@@ -4261,6 +4272,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 /// If we approve KYC for Principals 1 and 2, neurons A, B and C should have
 /// `kyc_verified=true`, while neuron D still has `kyc_verified=false`
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_approve_kyc() {
     let governance_proto = fixture_for_approve_kyc();
     let driver = fake::FakeDriver::default()
@@ -4519,7 +4531,7 @@ fn claim_or_refresh_neuron_by_memo(
         .now_or_never()
         .unwrap();
     match manage_neuron_response.command.unwrap() {
-        CommandResponse::Error(error) => Err(error),
+        CommandResponse::Error(error) => Err(GovernanceError::from(error)),
         CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
             Ok(claim_or_refresh_response.refreshed_neuron_id.unwrap())
         }
@@ -4700,6 +4712,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4737,6 +4750,7 @@ fn test_neuron_lifecycle() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_subaccount() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -4830,6 +4844,7 @@ fn test_nns1_520() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_main_account() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -5395,8 +5410,8 @@ fn test_rate_limiting_neuron_creation() {
         Some(CommandResponse::Error(e)) => {
             assert_eq!(
                 e,
-                GovernanceError::new_with_message(
-                    ErrorType::Unavailable,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::Unavailable,
                     "Reached maximum number of neurons that can be created in this hour. \
                         Please wait and try again later."
                 )
@@ -5427,6 +5442,7 @@ fn test_rate_limiting_neuron_creation() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -6230,6 +6246,127 @@ fn test_neuron_spawn_with_subaccount() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
+#[test]
+fn test_maturity_correctly_reset_if_spawn_fails() {
+    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    // Compute the subaccount to which the transfer would have been made
+    let nonce = 1234u64;
+
+    let block_height = 543212234;
+    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
+    let neuron_stake_e8s = 1_000_000_000;
+
+    let (mut driver, mut gov, id, _) = governance_with_staked_neuron(
+        dissolve_delay_seconds,
+        neuron_stake_e8s,
+        block_height,
+        from,
+        nonce,
+    );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
+
+    let now = driver.now();
+    assert_eq!(
+        gov.with_neuron(&id, |neuron| neuron
+            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
+            .state())
+            .unwrap(),
+        NeuronState::NotDissolving
+    );
+
+    // Artificially set the neuron's maturity to sufficient value
+    let parent_maturity_e8s_equivalent: u64 = 123_456_789;
+    assert!(
+        parent_maturity_e8s_equivalent
+            > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+    );
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
+
+    // Advance the time so that we can check that the spawned neuron has the age
+    // and the right creation timestamp
+    driver.advance_time_by(1);
+
+    // Nonce used for spawn (given as input).
+    let nonce_spawn = driver.random_u64().expect("Could not get random number");
+
+    let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    let child_nid = gov
+        .spawn_neuron(
+            &id,
+            &from,
+            &Spawn {
+                new_controller: Some(child_controller),
+                nonce: Some(nonce_spawn),
+                percentage_to_spawn: None,
+            },
+        )
+        .unwrap();
+
+    let creation_timestamp = driver.now();
+
+    // We should now have 2 neurons.
+    assert_eq!(gov.neuron_store.len(), 2);
+    // And we should have one ledger accounts.
+    driver.assert_num_neuron_accounts_exist(1);
+
+    // Running periodic tasks shouldn't cause the ICP to be minted.
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    // Maturity on the parent neuron should be reset.
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+
+    // Advance the time by one week, should cause the neuron's ICP
+    // to be minted.
+    driver.advance_time_by(7 * 86400);
+    driver.fail_next_ledger_call();
+
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
+
+    //Driver should fail to finish spawning neurons now (i.e. minting) b/c ledger returns error
+
+    driver.assert_num_neuron_accounts_exist(1);
+
+    let child_neuron = gov
+        .get_full_neuron(&child_nid, &child_controller)
+        .expect("The child neuron is missing");
+
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, Some(1730737555));
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
+    // We expect maturity modulation of 100 basis points, which is 1%, because of the
+    // result returned from FakeDriver when pretending to be CMC.
+    assert_eq!(
+        gov.heap_data
+            .cached_daily_maturity_modulation_basis_points
+            .unwrap(),
+        100
+    );
+    // The value here should be reset to the original value, without being modulated.
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 123_456_789);
+}
+
 /// Checks that:
 /// * Specifying a percentage_to_spawn different from 100 lead to the proper fractional maturity
 ///   to be spawned.
@@ -6588,6 +6725,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -6925,7 +7063,7 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
     assert!(result.is_err());
     assert_eq!(
         result.clone().err().unwrap().error_type(),
-        ErrorType::NotAuthorized
+        api::governance_error::ErrorType::NotAuthorized
     );
     assert_eq!(
         result.err().unwrap().error_message,
@@ -9112,6 +9250,8 @@ async fn test_max_number_of_proposals_with_ballots() {
                     install_mode: Some(CanisterInstallMode::Upgrade as i32),
                     arg: Some(vec![4, 5, 6]),
                     skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(vec![7, 8, 9]),
+                    arg_hash: Some(vec![10, 11, 12]),
                 })),
                 ..Default::default()
             },
@@ -9456,11 +9596,13 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
     assert_eq!(
         response,
         ManageNeuronResponse {
-            command: Some(CommandResponse::Error(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "The command MergeMaturity is no longer available, as this functionality was \
+            command: Some(CommandResponse::Error(
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::InvalidCommand,
+                    "The command MergeMaturity is no longer available, as this functionality was \
                 superseded by StakeMaturity. Use StakeMaturity instead."
-            ))),
+                )
+            )),
         }
     );
 }
@@ -10018,7 +10160,10 @@ fn test_join_neurons_fund() {
             )
             .now_or_never()
             .unwrap();
-        assert_eq!(ErrorType::NotAuthorized, result.err().unwrap().error_type());
+        assert_eq!(
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotAuthorized,
+        );
     }
     // Join the Neurons' Fund for neuron 3.
     {
@@ -10125,8 +10270,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::AlreadyJoinedCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::AlreadyJoinedCommunityFund,
         );
     }
     // Principal B leaves the Neurons' Fund for Neuron 3
@@ -10171,8 +10316,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::NotInTheCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotInTheCommunityFund,
         );
     }
     // Run periodic tasks to populate metrics. Need to call it twice
@@ -10277,7 +10422,7 @@ where
 
     match result {
         CommandResponse::Configure(ok) => Ok(ok),
-        CommandResponse::Error(err) => Err(err),
+        CommandResponse::Error(err) => Err(GovernanceError::from(err)),
         _ => panic!("{:#?}", result),
     }
 }
@@ -10689,6 +10834,10 @@ fn test_include_public_neurons_in_full_neurons() {
         }
     }
 
+    let expected_full_neurons = expected_full_neurons
+        .into_iter()
+        .map(api::Neuron::from)
+        .collect::<Vec<_>>();
     assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
 }
 
@@ -10775,7 +10924,7 @@ async fn test_refresh_voting_power() {
     );
     match err {
         manage_neuron_response::Command::Error(error) => {
-            let GovernanceError {
+            let api::GovernanceError {
                 error_type,
                 error_message,
             } = &error;
@@ -10922,8 +11071,8 @@ fn wait_for_quiet_test_helper(
             };
             let deadline_passed_response = ManageNeuronResponse {
                 command: Some(manage_neuron_response::Command::Error(
-                    GovernanceError::new_with_message(
-                        PreconditionFailed,
+                    api::GovernanceError::new_with_message(
+                        api::governance_error::ErrorType::PreconditionFailed,
                         "Proposal deadline has passed.",
                     ),
                 )),
@@ -14629,7 +14778,7 @@ fn test_neuron_info_private_enforcement() {
     let hot_key = PrincipalId::new_user_test_id(random.gen());
 
     let proposal_id = random.gen();
-    let recent_ballots = vec![BallotInfo {
+    let recent_ballots = vec![api::BallotInfo {
         proposal_id: Some(ProposalId { id: proposal_id }),
         vote: Vote::Yes as i32,
     }];
@@ -14640,7 +14789,11 @@ fn test_neuron_info_private_enforcement() {
     let base_neuron = {
         let controller = Some(controller);
         let hot_keys = vec![hot_key];
-        let recent_ballots = recent_ballots.clone();
+        let recent_ballots = recent_ballots
+            .iter()
+            .cloned()
+            .map(BallotInfo::from)
+            .collect();
 
         let dissolve_state = Some(DissolveState::DissolveDelaySeconds(random.gen()));
         let cached_neuron_stake_e8s = random.gen();
@@ -14711,8 +14864,16 @@ fn test_neuron_info_private_enforcement() {
             let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
 
             // Step 2.1: Call get_neuron_info.
-            let get_neuron_info =
-                |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
+            let get_neuron_info = |requester| {
+                let neuron_info = governance.get_neuron_info(&neuron_id, requester).unwrap();
+
+                // We would like to get rid of the definition of NeuronInfo
+                // in governance.proto. When we get rid of that definition,
+                // this conversion will no longer be needed. Getting rid of
+                // the definition should be possible, since we do not store
+                // NeuronInfo in stable memory (AFAIK).
+                api::NeuronInfo::from(neuron_info)
+            };
             let controller_get_result = get_neuron_info(controller);
             let hot_key_get_result = get_neuron_info(hot_key);
             let random_principal_get_result = get_neuron_info(random_principal_id);
