@@ -1,5 +1,5 @@
 {
-  "checksum": "c940ed0c71e779f38de47e366662d71cd883022d89016936e1952a55719fe089",
+  "checksum": "89f35c9e6e96fe249087f86a8fc63dd7badbccf2d8be3353ee5808c0e2ffe0cd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10669,7 +10669,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
