@@ -35,15 +35,15 @@ def _run_system_test(ctx):
 
             # Resolve any RUN_SCRIPT_ variables
 
-            # RUN_SCRIPT_REPO_ICOS_IMAGES:
-            # For every repo image specified, first ensure it's in remote
+            # RUN_SCRIPT_ICOS_IMAGES:
+            # For every ic-os image specified, first ensure it's in remote
             # storage, then export its download URL and HASH as environment
             # variables.
-            if [ -n "$RUN_SCRIPT_REPO_ICOS_IMAGES" ]; then
+            if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
               # split the ";"-delimited list of "env_prefixr:filepath;env_prefix2:filepath2;..."
               # into an array
-              IFS=';' read -ra repo_icos_images <<<"$RUN_SCRIPT_REPO_ICOS_IMAGES"
-              for image in "${{repo_icos_images[@]}}"; do
+              IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
+              for image in "${{icos_images[@]}}"; do
                   # split "envvar:filepath"
                   image_var_prefix=${{image%:*}}
                   image_filename=${{image#*:}}
@@ -59,7 +59,7 @@ def _run_system_test(ctx):
                   export "${{image_var_prefix}}_HASH=$image_download_hash"
               done
             fi
-            unset RUN_SCRIPT_REPO_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
@@ -97,15 +97,15 @@ def _run_system_test(ctx):
     # RUN_SCRIPT_ env variables are special. They are processed by the run
     # script, and not passed directly to the test.
 
-    # RUN_SCRIPT_REPO_ICOS_IMAGES:
+    # RUN_SCRIPT_ICOS_IMAGES:
     # Have the run script resolve repo based ICOS images.
     # The run script expects a map of enviromment variable prefixes to targets. e.g.
-    # RUN_SCRIPT_REPO_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
-    repo_icos_images = ctx.attr.repo_icos_images
+    # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
+    icos_images = ctx.attr.icos_images
     env |= {
-        "RUN_SCRIPT_REPO_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in repo_icos_images.items()]),
+        "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
     }
-    env_deps = dict(env_deps, **repo_icos_images)
+    env_deps = dict(env_deps, **icos_images)
 
     env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
 
@@ -157,7 +157,7 @@ run_system_test = rule(
         "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.string_keyed_label_dict(allow_files = True),
-        "repo_icos_images": attr.string_keyed_label_dict(doc = "Specifies repo images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
+        "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
     },
 )
@@ -258,14 +258,14 @@ def system_test(
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
-    repo_icos_images = dict()
+    icos_images = dict()
 
     if uses_guestos_dev:
-        repo_icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
-        repo_icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_hostos_dev_test:
-        repo_icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
+        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     if uses_setupos_dev:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
@@ -275,16 +275,16 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_guestos_dev_test:
-        repo_icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
-        repo_icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
-        repo_icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
 
     if uses_boundary_guestos:
-        repo_icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
+        icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
 
     run_system_test(
         name = name,
@@ -292,7 +292,7 @@ def system_test(
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env = env,
-        repo_icos_images = repo_icos_images,
+        icos_images = icos_images,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
@@ -329,7 +329,7 @@ def system_test(
         env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
-        repo_icos_images = repo_icos_images,
+        icos_images = icos_images,
         tags = tags + ["requires-network", "system_test"] +
                (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
                additional_colocate_tags,
