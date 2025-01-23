@@ -890,8 +890,9 @@ pub fn compute_manifest(
 ) -> Result<Manifest, CheckpointError> {
     info!(
         log,
-        "Starting compute_manifest",
+        "Starting compute_manifest, delaying 30s for better metrics",
     );
+    std::thread::sleep(std::time::Duration::from_secs(30));
     info!(
         log,
         "compute_manifest files_with_sizes",
@@ -956,10 +957,11 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
-    info!(
-        log,
-        "compute_manifest build_chunk_table_sequential",
-    );
+    //info!(
+    //    log,
+    //    "compute_manifest build_chunk_table_sequential",
+    //);
+    #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
         let metrics_registry = ic_metrics::MetricsRegistry::new();
         let metrics = ManifestMetrics::new(&metrics_registry);
