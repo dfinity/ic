@@ -15,8 +15,10 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+Update the ckBTC minter to include the latest code changes, notably:
+* Add metrics for the `update_latency` method.
+* Add timestamps to the minter events. 
 
 ## Upgrade args
 
