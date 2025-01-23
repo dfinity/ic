@@ -15,7 +15,7 @@ INSERT NEW RELEASES HERE
 
 http://dashboard.internetcomputer.org/proposals/134907
 
-You can now set wasm_memory_threshold via proposal.
+No behavior changes. This was just a maintenance release.
 
 
 END
