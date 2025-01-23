@@ -3759,52 +3759,6 @@ impl From<pb_api::ListProposalInfoResponse> for pb::ListProposalInfoResponse {
     }
 }
 
-impl From<pb::ListNeurons> for pb_api::ListNeurons {
-    fn from(item: pb::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-impl From<pb_api::ListNeurons> for pb::ListNeurons {
-    fn from(item: pb_api::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-
-impl From<pb::ListNeuronsResponse> for pb_api::ListNeuronsResponse {
-    fn from(item: pb::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-impl From<pb_api::ListNeuronsResponse> for pb::ListNeuronsResponse {
-    fn from(item: pb_api::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-
 impl From<pb::ListKnownNeuronsResponse> for pb_api::ListKnownNeuronsResponse {
     fn from(item: pb::ListKnownNeuronsResponse) -> Self {
         Self {
