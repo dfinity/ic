@@ -319,8 +319,8 @@ pub struct CyclesLedgerDepositResult {
 // operation they want to perform.
 //
 // We promise that we will NEVER use 0 as one of these values. (This would be
-// very bad, because if no memo is explicitly supplied, the Transaction might
-// implicitly have 0 in the memo field.)
+// very bad, because then, we would have no way to disambiguate between "the
+// user wanted X" vs. "the user made an oversight".)
 //
 // Note to developers: If you add new values, update MEANINGFUL_MEMOS.
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
