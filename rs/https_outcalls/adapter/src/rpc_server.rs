@@ -171,37 +171,19 @@ impl CanisterHttp {
     // Attempts to load the socks client from the cache. If not present, creates a new socks client and adds it to the cache.
     fn get_socks_client(
         &self,
-        address: &str,
-    ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
+        socks_proxy_uri: Uri,
+    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody> {
         let cache_guard = self.cache.upgradable_read();
 
-        if let Some(client) = cache_guard.get(address) {
-            Some(client.clone())
+        if let Some(client) = cache_guard.get(&socks_proxy_uri.to_string()) {
+            client.clone()
         } else {
             let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
             self.metrics.socks_cache_misses.inc();
-
-            match address.parse() {
-                Ok(proxy_addr) => {
-                    let client = self.create_socks_proxy_client(proxy_addr);
-                    cache_guard.insert(address.to_string(), client);
-                    self.metrics.socks_cache_size.set(cache_guard.len() as i64);
-                }
-                Err(e) => {
-                    debug!(self.logger, "Failed to parse SOCKS proxy address: {}", e);
-                }
-            }
-
-            match cache_guard.get(address) {
-                Some(client) => Some(client.clone()),
-                None => {
-                    debug!(
-                        self.logger,
-                        "Failed to create SOCKS client for address: {}", address
-                    );
-                    None
-                }
-            }
+            let client = self.create_socks_proxy_client(socks_proxy_uri.clone());
+            cache_guard.insert(socks_proxy_uri.to_string(), client.clone());
+            self.metrics.socks_cache_size.set(cache_guard.len() as i64);
+            client
         }
     }
 
@@ -219,35 +201,41 @@ impl CanisterHttp {
         let mut tries = 0;
 
         for socks_proxy_addr in &socks_proxy_addrs {
+            let socks_proxy_uri: Uri = match socks_proxy_addr.parse() {
+                Ok(uri) => uri,
+                Err(e) => {
+                    debug!(self.logger, "Failed to parse SOCKS proxy address: {}", e);
+                    continue;
+                }
+            };
+
             tries += 1;
             if tries > MAX_SOCKS_PROXY_RETRIES {
                 break;
             }
 
-            let socks_client = self.get_socks_client(socks_proxy_addr);
+            let socks_client = self.get_socks_client(socks_proxy_uri);
 
-            if let Some(socks_client) = socks_client {
-                match socks_client.request(request.clone()).await {
-                    Ok(resp) => {
-                        self.metrics
-                            .socks_connection_attempts
-                            .with_label_values(&[&tries.to_string(), "success", socks_proxy_addr])
-                            .inc();
-                        return Ok(resp);
-                    }
-                    Err(socks_err) => {
-                        self.metrics
-                            .socks_connection_attempts
-                            .with_label_values(&[&tries.to_string(), "failure", socks_proxy_addr])
-                            .inc();
-                        debug!(
-                            self.logger,
-                            "Failed to connect through SOCKS with address {}: {}",
-                            socks_proxy_addr,
-                            socks_err
-                        );
-                        last_error = Some(socks_err);
-                    }
+            match socks_client.request(request.clone()).await {
+                Ok(resp) => {
+                    self.metrics
+                        .socks_connection_attempts
+                        .with_label_values(&[&tries.to_string(), "success", socks_proxy_addr])
+                        .inc();
+                    return Ok(resp);
+                }
+                Err(socks_err) => {
+                    self.metrics
+                        .socks_connection_attempts
+                        .with_label_values(&[&tries.to_string(), "failure", socks_proxy_addr])
+                        .inc();
+                    debug!(
+                        self.logger,
+                        "Failed to connect through SOCKS with address {}: {}",
+                        socks_proxy_addr,
+                        socks_err
+                    );
+                    last_error = Some(socks_err);
                 }
             }
         }
