@@ -1,5 +1,6 @@
 [Unit]
 Description=Discard unused blocks once a week
+Requires=fstrim_tool.service
 
 [Timer]
 OnCalendar=weekly
