@@ -990,7 +990,7 @@ runGet a b = case Get.runGetOrFail (a <* done) b of
 -- * Status endpoint parsing
 
 data StatusResponse = StatusResponse
-  { status_root_key :: Blob }
+  {status_root_key :: Blob}
 
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
@@ -1000,7 +1000,7 @@ statusResponse =
     _ <- optionalField text "impl_revision"
     pk <- field blob "root_key"
     swallowAllFields -- More fields are explicitly allowed
-    return StatusResponse { status_root_key = pk}
+    return StatusResponse {status_root_key = pk}
 
 -- * Interacting with aaaaa-aa (via HTTP)
 
