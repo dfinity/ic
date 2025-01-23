@@ -13,43 +13,43 @@ benches:
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 112621384
+      instructions: 112621390
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
-      instructions: 8497153
+      instructions: 8497159
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_all_heap:
     total:
-      instructions: 34975772
+      instructions: 35650914
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_heap_neurons_stable_index:
     total:
-      instructions: 61110811
+      instructions: 61785953
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_stable_everything:
     total:
-      instructions: 188618685
+      instructions: 188618691
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   cascading_vote_stable_neurons_with_heap_index:
     total:
-      instructions: 162350250
+      instructions: 162350256
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   centralized_following_all_stable:
     total:
-      instructions: 78266705
+      instructions: 78266711
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
@@ -61,7 +61,7 @@ benches:
     scopes: {}
   draw_maturity_from_neurons_fund_heap:
     total:
-      instructions: 7581598
+      instructions: 7643198
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -73,19 +73,19 @@ benches:
     scopes: {}
   list_active_neurons_fund_neurons_heap:
     total:
-      instructions: 427763
+      instructions: 435463
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_active_neurons_fund_neurons_stable:
     total:
-      instructions: 2749439
+      instructions: 2757139
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_neurons_heap:
     total:
-      instructions: 4936521
+      instructions: 4947095
       heap_increase: 9
       stable_memory_increase: 0
     scopes: {}
@@ -103,13 +103,13 @@ benches:
     scopes: {}
   list_neurons_stable:
     total:
-      instructions: 113479440
+      instructions: 113490014
       heap_increase: 4
       stable_memory_increase: 0
     scopes: {}
   list_proposals:
     total:
-      instructions: 168095016
+      instructions: 6477035
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -157,7 +157,7 @@ benches:
     scopes: {}
   single_vote_all_stable:
     total:
-      instructions: 2805829
+      instructions: 2805835
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
