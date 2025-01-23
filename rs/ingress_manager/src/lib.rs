@@ -82,7 +82,7 @@ impl IngressManagerMetrics {
                 "The number of HashSets in payload builder's ingress payload cache.",
             ),
             on_state_change_duration: metrics_registry.histogram_vec(
-                "ingress_handle_on_state_change_duration",
+                "ingress_handler_on_state_change_duration",
                 "Ingress handler on state change duration in seconds, labelled by an operation",
                 decimal_buckets(-3, 1),
                 &["operation"],
@@ -338,9 +338,12 @@ pub(crate) mod tests {
         let consensus_time = consensus_time.unwrap_or_else(|| Arc::new(MockConsensusTime::new()));
 
         let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_latest_state_height()
+            .return_const(Height::new(1));
         state_manager.expect_get_state_at().return_const(Ok(
             ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
+                Height::new(1),
                 Arc::new(state.unwrap_or_else(|| ReplicatedStateBuilder::default().build())),
             ),
         ));

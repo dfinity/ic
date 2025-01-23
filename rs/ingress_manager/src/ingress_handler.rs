@@ -488,10 +488,6 @@ mod tests {
         ingress_hist_reader
             .expect_get_latest_status()
             .times(1)
-            .returning(|| Box::new(|_| IngressStatus::Unknown));
-        ingress_hist_reader
-            .expect_get_latest_status()
-            .times(1)
             .returning(|| {
                 Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
@@ -519,17 +515,18 @@ mod tests {
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_message,
+                        message: ingress_message.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time,
                     });
-                    let change_set = ingress_manager.on_state_change(ingress_pool);
-                    ingress_pool.apply(change_set);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(
+                        IngressMessageId::from(&ingress_message),
+                    )]);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let expected_change_action = ChangeAction::RemoveFromValidated(message_id);
-                assert!(change_set.contains(&expected_change_action));
+                assert!(dbg!(change_set).contains(&expected_change_action));
             },
         )
     }
