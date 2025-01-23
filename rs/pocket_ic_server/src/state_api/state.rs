@@ -18,7 +18,7 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use fqdn::{fqdn, FQDN};
+use fqdn::FQDN;
 use futures::future::Shared;
 use http::{
     header::{
@@ -38,7 +38,7 @@ use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
 };
-use pocket_ic::{ErrorCode, UserError, WasmResult};
+use pocket_ic::RejectResponse;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -230,7 +230,7 @@ impl PocketIcApiStateBuilder {
 pub enum OpOut {
     NoOutput,
     Time(u64),
-    CanisterResult(Result<WasmResult, UserError>),
+    CanisterResult(Result<Vec<u8>, RejectResponse>),
     CanisterId(CanisterId),
     Controllers(Vec<PrincipalId>),
     Cycles(u128),
@@ -256,24 +256,6 @@ pub enum PocketIcError {
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
-}
-
-impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
-    fn from(
-        r: Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>,
-    ) -> Self {
-        let res = {
-            match r {
-                Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
-                Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
 }
 
 impl std::fmt::Debug for OpOut {
@@ -813,7 +795,7 @@ impl ApiState {
         let ip_addr = http_gateway_config
             .ip_addr
             .clone()
-            .unwrap_or("127.0.0.1".to_string());
+            .unwrap_or("[::1]".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
@@ -847,8 +829,9 @@ impl ApiState {
             .clone()
             .unwrap_or(vec!["localhost".to_string()])
             .iter()
-            .map(|d| fqdn!(d))
-            .collect();
+            .map(|d| FQDN::from_str(d))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)

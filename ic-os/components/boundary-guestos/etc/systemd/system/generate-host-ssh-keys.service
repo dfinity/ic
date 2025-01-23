@@ -8,7 +8,7 @@ Before=ssh.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-ssh-keys.sh
+ExecStart=/opt/ic/bin/generate-host-ssh-keys.sh
 
 [Install]
 WantedBy=multi-user.target

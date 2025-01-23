@@ -61,20 +61,26 @@ fn main() -> Result<()> {
 }
 
 fn setup_with_system_and_application_subnets(env: TestEnv) {
-    setup_anvil(&env);
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .add_nodes(1)
-                .with_dkg_interval_length(Height::from(10)),
-        )
-        .setup_and_start(&env)
-        .expect("Failed to setup IC under test");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCustomizations::default(),
-    );
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            setup_anvil(&env);
+        });
+        s.spawn(|| {
+            InternetComputer::new()
+                .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+                .add_subnet(
+                    Subnet::new(SubnetType::Application)
+                        .add_nodes(1)
+                        .with_dkg_interval_length(Height::from(10)),
+                )
+                .setup_and_start(&env)
+                .expect("Failed to setup IC under test");
+            install_nns_with_customizations_and_check_progress(
+                env.topology_snapshot(),
+                NnsCustomizations::default(),
+            );
+        });
+    });
 }
 
 fn setup_anvil(env: &TestEnv) {
@@ -865,7 +871,7 @@ struct LedgerCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerCanister<'a> {
+impl LedgerCanister<'_> {
     fn principal(&self) -> Principal {
         self.canister.canister_id().get().0
     }
@@ -875,7 +881,7 @@ struct CkEthMinterCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> CkEthMinterCanister<'a> {
+impl CkEthMinterCanister<'_> {
     async fn minter_address(&self) -> String {
         self.canister
             .update_("minter_address", candid, ())
@@ -913,7 +919,7 @@ struct LedgerSuiteOrchestratorCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerSuiteOrchestratorCanister<'a> {
+impl LedgerSuiteOrchestratorCanister<'_> {
     async fn upgrade(&mut self, arg: LedgerSuiteOrchestratorUpgradeArg) {
         self.canister
             .upgrade_to_self_binary(Encode!(&OrchestratorArg::UpgradeArg(arg)).unwrap())

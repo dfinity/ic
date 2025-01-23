@@ -140,10 +140,12 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     let height = summary.height;
     let low_dkg_id = summary
         .current_transcript(&NiDkgTag::LowThreshold)
+        .unwrap()
         .dkg_id
         .clone();
     let high_dkg_id = summary
         .current_transcript(&NiDkgTag::HighThreshold)
+        .unwrap()
         .dkg_id
         .clone();
     let block = Block::new(

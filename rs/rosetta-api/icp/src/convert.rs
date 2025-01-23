@@ -36,7 +36,6 @@ use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures
-
 pub fn to_rosetta_core_transaction(
     transaction_index: BlockIndex,
     transaction: Transaction,
