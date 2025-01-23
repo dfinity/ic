@@ -1,10 +1,11 @@
 use crate::{
     governance::Governance,
-    pb::v1::{neuron::DissolveState, ListNeurons, NetworkEconomics, Neuron},
+    pb::v1::{neuron::DissolveState, NetworkEconomics, Neuron},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::pb::v1::ListNeurons;
 
 #[test]
 fn test_list_neurons_with_paging() {
