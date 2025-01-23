@@ -524,6 +524,7 @@ impl BlockchainManager {
 
     fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
+        //TODO(mihailjianu): elements in retry_queue could just be added to the end of block_sync_queue.
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
@@ -762,20 +763,22 @@ impl BlockchainManager {
     }
 }
 
+// This should prioritize blocks in the longest chain. 
 fn get_next_block_hash_to_sync(
     is_cache_full: bool,
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-    if !retry_queue.is_empty() {
-        return retry_queue.pop_front();
-    }
 
     if is_cache_full {
         return None;
     }
 
-    sync_queue.pop_front()
+    if !sync_queue.is_empty() {
+        return sync_queue.pop_front();
+    }
+
+    retry_queue.pop_front()
 }
 
 #[cfg(test)]
