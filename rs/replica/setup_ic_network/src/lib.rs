@@ -79,8 +79,8 @@ const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = false;
 const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
 const SLOT_TABLE_NO_LIMIT: usize = usize::MAX;
 
-/// Artifact pools that are not persisted on disks.
-struct UnpersistedArtifactPools {
+/// Artifact pools excluding the consensus one.
+struct ArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
@@ -88,7 +88,7 @@ struct UnpersistedArtifactPools {
     https_outcalls_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
-impl UnpersistedArtifactPools {
+impl ArtifactPools {
     fn new(
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -207,7 +207,7 @@ impl AbortableBroadcastChannels {
         message_router: Arc<dyn MessageRouting>,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         time_source: Arc<dyn TimeSource>,
-        artifact_pools: &UnpersistedArtifactPools,
+        artifact_pools: &ArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
         let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
@@ -369,7 +369,7 @@ pub fn setup_consensus_and_p2p(
 ) {
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-    let artifact_pools = UnpersistedArtifactPools::new(
+    let artifact_pools = ArtifactPools::new(
         log,
         metrics_registry,
         node_id,
@@ -477,10 +477,10 @@ fn start_consensus(
     metrics_registry: &MetricsRegistry,
     node_id: NodeId,
     subnet_id: SubnetId,
+    artifact_pools: ArtifactPools,
+    abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
-    artifact_pools: UnpersistedArtifactPools,
-    abortable_broadcast_channels: AbortableBroadcastChannels,
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -569,8 +569,7 @@ fn start_consensus(
     );
     // Create the consensus client.
     join_handles.push(create_artifact_handler(
-        abortable_broadcast_channels.consensus.outbound_tx,
-        abortable_broadcast_channels.consensus.inbound_rx,
+        abortable_broadcast_channels.consensus,
         consensus_impl,
         time_source.clone(),
         consensus_pool.clone(),
@@ -579,8 +578,7 @@ fn start_consensus(
     #[allow(clippy::disallowed_methods)]
     let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
     join_handles.push(create_ingress_handlers(
-        abortable_broadcast_channels.ingress.outbound_tx,
-        abortable_broadcast_channels.ingress.inbound_rx,
+        abortable_broadcast_channels.ingress,
         user_ingress_rx,
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&artifact_pools.ingress_pool),
@@ -600,8 +598,7 @@ fn start_consensus(
         max_certified_height_tx,
     );
     join_handles.push(create_artifact_handler(
-        abortable_broadcast_channels.certifier.outbound_tx,
-        abortable_broadcast_channels.certifier.inbound_rx,
+        abortable_broadcast_channels.certifier,
         certifier,
         Arc::clone(&time_source) as Arc<_>,
         artifact_pools.certification_pool,
@@ -609,8 +606,7 @@ fn start_consensus(
     ));
     // Create the DKG client.
     join_handles.push(create_artifact_handler(
-        abortable_broadcast_channels.dkg.outbound_tx,
-        abortable_broadcast_channels.dkg.inbound_rx,
+        abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
             node_id,
             Arc::clone(&consensus_crypto),
@@ -637,8 +633,7 @@ fn start_consensus(
         finalized.payload.as_ref().as_idkg().is_some(),
     );
     join_handles.push(create_artifact_handler(
-        abortable_broadcast_channels.idkg.outbound_tx,
-        abortable_broadcast_channels.idkg.inbound_rx,
+        abortable_broadcast_channels.idkg,
         idkg::IDkgImpl::new(
             node_id,
             consensus_pool.read().unwrap().get_block_cache(),
@@ -653,8 +648,7 @@ fn start_consensus(
         metrics_registry.clone(),
     ));
     join_handles.push(create_artifact_handler(
-        abortable_broadcast_channels.https_outcalls.outbound_tx,
-        abortable_broadcast_channels.https_outcalls.inbound_rx,
+        abortable_broadcast_channels.https_outcalls,
         CanisterHttpPoolManagerImpl::new(
             Arc::clone(&state_reader),
             Arc::new(Mutex::new(canister_http_adapter_client)),
