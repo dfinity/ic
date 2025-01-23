@@ -884,7 +884,10 @@ fn get_latest_reward_event() -> RewardEvent {
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
-    let votable = governance().get_neuron_ids_by_principal(&caller());
+    let votable = governance()
+        .get_neuron_ids_by_principal(&caller())
+        .into_iter()
+        .collect();
 
     governance()
         .get_managed_neuron_ids_for(votable)

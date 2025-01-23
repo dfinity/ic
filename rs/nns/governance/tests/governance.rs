@@ -121,7 +121,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
@@ -129,7 +129,7 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
     ops::{Deref, Div},
@@ -2343,6 +2343,7 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2402,6 +2403,7 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -4477,24 +4479,21 @@ fn test_get_neuron_ids_by_principal() {
         driver.get_fake_cmc(),
     );
 
-    let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
-    principal2_neuron_ids.sort_unstable();
-
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal1),
-        vec![NeuronId { id: 1 }]
+        btreeset![NeuronId { id: 1 }]
     );
     assert_eq!(
-        principal2_neuron_ids,
-        vec![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+        gov.get_neuron_ids_by_principal(&principal2),
+        btreeset![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal3),
-        Vec::<NeuronId>::new()
+        BTreeSet::<NeuronId>::new()
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal4),
-        vec![NeuronId { id: 4 }]
+        btreeset![NeuronId { id: 4 }]
     );
 }
 
@@ -4656,7 +4655,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), btreeset![id]);
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -5799,10 +5798,8 @@ fn test_neuron_split() {
         parent_neuron.voting_power_refreshed_timestamp_seconds,
     );
 
-    let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
-    neuron_ids.sort_unstable();
-    let mut expected_neuron_ids = vec![id, child_nid];
-    expected_neuron_ids.sort_unstable();
+    let neuron_ids = governance.get_neuron_ids_by_principal(&from);
+    let expected_neuron_ids = btreeset![id, child_nid];
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
@@ -10807,6 +10804,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
             // This should have no effect.
             include_empty_neurons_readable_by_caller: Some(true),
+
+            page_number: None,
+            page_size: None,
         },
         caller,
     );
@@ -14886,6 +14886,8 @@ fn test_neuron_info_private_enforcement() {
                         include_neurons_readable_by_caller: false,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None,
                     },
                     requester,
                 )
