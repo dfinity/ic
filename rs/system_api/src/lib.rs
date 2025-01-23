@@ -27,7 +27,9 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -1492,12 +1494,12 @@ impl SystemApiImpl {
         }
     }
 
-    pub fn into_system_state_changes(self) -> SystemStateChanges {
+    pub fn into_system_state_modifications(self) -> SystemStateModifications {
         match self.api_type {
-            // List all fields of `SystemStateChanges` so that
+            // List all fields of `SystemStateModifications` so that
             // there's an explicit decision that needs to be made
             // for each context when a new field is added.
-            ApiType::InspectMessage { .. } => SystemStateChanges {
+            ApiType::InspectMessage { .. } => SystemStateModifications {
                 new_certified_data: None,
                 callback_updates: vec![],
                 cycles_balance_change: CyclesBalanceChange::zero(),
@@ -1510,11 +1512,11 @@ impl SystemApiImpl {
                 canister_log: Default::default(),
                 on_low_wasm_memory_hook_condition_check_result: None,
             },
-            ApiType::NonReplicatedQuery { .. } => SystemStateChanges {
+            ApiType::NonReplicatedQuery { .. } => SystemStateModifications {
                 new_certified_data: None,
                 callback_updates: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .callback_updates
                     .clone(),
                 cycles_balance_change: CyclesBalanceChange::zero(),
@@ -1523,40 +1525,40 @@ impl SystemApiImpl {
                 call_context_balance_taken: None,
                 request_slots_used: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .request_slots_used
                     .clone(),
                 requests: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .requests
                     .clone(),
                 new_global_timer: None,
                 canister_log: Default::default(),
                 on_low_wasm_memory_hook_condition_check_result: None,
             },
-            ApiType::ReplicatedQuery { .. } => SystemStateChanges {
+            ApiType::ReplicatedQuery { .. } => SystemStateModifications {
                 new_certified_data: None,
                 callback_updates: vec![],
                 cycles_balance_change: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .cycles_balance_change,
                 reserved_cycles: Cycles::zero(),
                 consumed_cycles_by_use_case: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .consumed_cycles_by_use_case,
                 call_context_balance_taken: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .call_context_balance_taken,
                 request_slots_used: BTreeMap::new(),
                 requests: vec![],
                 new_global_timer: None,
                 canister_log: self
                     .sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .canister_log
                     .clone(),
                 on_low_wasm_memory_hook_condition_check_result: None,
@@ -1568,11 +1570,13 @@ impl SystemApiImpl {
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
             | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => self.sandbox_safe_system_state.system_state_changes,
+            | ApiType::RejectCallback { .. } => {
+                self.sandbox_safe_system_state.system_state_modifications
+            }
         }
     }
 
-    pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
+    pub fn take_system_state_modifications(&mut self) -> SystemStateModifications {
         self.sandbox_safe_system_state.take_changes()
     }
 
@@ -3213,7 +3217,7 @@ impl SystemApi for SystemApiImpl {
 
                 // Update the certified data.
                 self.sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }

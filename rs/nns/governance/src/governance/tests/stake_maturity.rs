@@ -3,14 +3,13 @@ use crate::{
         tests::{MockEnvironment, StubCMC, StubIcpLedger},
         Governance,
     },
-    pb::v1::{
-        manage_neuron::StakeMaturity,
-        manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
-        neuron, Governance as GovernanceProto, Neuron,
-    },
+    pb::v1::{manage_neuron::StakeMaturity, neuron, Governance as GovernanceProto, Neuron},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::pb::v1::manage_neuron_response::{
+    MergeMaturityResponse, StakeMaturityResponse,
+};
 use maplit::btreemap;
 
 #[test]
