@@ -514,19 +514,18 @@ mod tests {
                 let (ingress_message, message_id) = fake_ingress_message(time + MAX_INGRESS_TTL, 2);
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
+                    let ingress_id = IngressMessageId::from(&ingress_message);
                     ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_message.clone(),
+                        message: ingress_message,
                         peer_id: node_test_id(0),
                         timestamp: time,
                     });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(
-                        IngressMessageId::from(&ingress_message),
-                    )]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(ingress_id)]);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
                 let expected_change_action = ChangeAction::RemoveFromValidated(message_id);
-                assert!(dbg!(change_set).contains(&expected_change_action));
+                assert!(change_set.contains(&expected_change_action));
             },
         )
     }
