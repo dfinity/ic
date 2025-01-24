@@ -37,6 +37,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
