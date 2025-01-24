@@ -37,6 +37,8 @@ spec:
             efi:
               secureBoot: false
         devices:
+          autoattachSerialConsole: true
+          logSerialConsole: true
           disks:
             - name: disk0
               disk:
@@ -123,6 +125,8 @@ spec:
             efi:
               secureBoot: false
         devices:
+          autoattachSerialConsole: true
+          logSerialConsole: true
           disks:
             - name: disk0
               disk:

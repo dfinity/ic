@@ -94,6 +94,7 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(4),
         )
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 

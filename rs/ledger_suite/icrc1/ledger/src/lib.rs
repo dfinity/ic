@@ -84,6 +84,9 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
+// TODO: When moving to version 3 consider adding `#[serde(default, skip_serializing)]`
+// to `balances` and `approvals` fields of the `Ledger` struct.
+// Since `balances` don't use a default, this can only be done with an incompatible change.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 2;
 
@@ -582,12 +585,8 @@ pub struct Ledger {
     #[serde(default)]
     accounts_overflow_trim_quantity: usize,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
-}
-
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

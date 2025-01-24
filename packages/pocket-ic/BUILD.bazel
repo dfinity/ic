@@ -33,7 +33,8 @@ MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/error_types",
-    "@crate_index//:bitcoin",
+    #TODO: try upgrading this to the latest bitcion crate
+    "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
@@ -93,9 +94,6 @@ rust_test_suite(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
-        "requires-network",
         "test_macos",
     ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
@@ -116,9 +114,6 @@ rust_test_suite(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
-        "requires-network",
         "test_macos",
     ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
@@ -142,9 +137,6 @@ rust_test_suite(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
-        "requires-network",
         "test_macos",
     ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,

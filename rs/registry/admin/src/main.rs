@@ -193,7 +193,7 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true)]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app")]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
