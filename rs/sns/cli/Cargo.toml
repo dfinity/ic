@@ -17,6 +17,7 @@ path = "src/lib.rs"
 anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
+candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }

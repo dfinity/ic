@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
@@ -87,6 +88,14 @@ impl Node {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct ApiBoundaryNode {
+    pub id: Principal,
+    pub addr: IpAddr,
+    pub port: u16,
+}
+
+#[derive(Clone, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
@@ -138,6 +147,7 @@ pub struct RegistrySnapshot {
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
+    pub api_bns: Vec<ApiBoundaryNode>,
 }
 
 pub struct Snapshotter {
@@ -192,6 +202,38 @@ impl Snapshotter {
         self.persister = Some(persister);
     }
 
+    fn get_api_boundary_nodes(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<ApiBoundaryNode>, Error> {
+        let node_ids = self
+            .registry_client
+            .get_api_boundary_node_ids(version)
+            .context("unable to get API BN node ids")?;
+
+        let nodes = node_ids
+            .into_iter()
+            .map(|x| -> Result<_, Error> {
+                let node = self
+                    .registry_client
+                    .get_node_record(x, version)
+                    .context("unable to get node record")?
+                    .context("node not available")?;
+
+                let http_endpoint = node.http.context("http endpoint not available")?;
+
+                Ok(ApiBoundaryNode {
+                    id: x.get().0,
+                    addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                        .context("unable to parse IP address")?,
+                    port: http_endpoint.port as u16,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(nodes)
+    }
+
     // Creates a snapshot of the registry for given version
     fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
@@ -242,6 +284,11 @@ impl Snapshotter {
             .get_subnet_ids(version)
             .context("failed to get subnet ids")? // Result
             .context("subnet ids not available")?; // Option
+
+        // Fetch a list of API BNs
+        let api_bns = self
+            .get_api_boundary_nodes(version)
+            .context("unable to get API BNs")?;
 
         let subnets = subnet_ids
             .into_iter()
@@ -337,6 +384,7 @@ impl Snapshotter {
             nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
+            api_bns,
         })
     }
 }
@@ -463,6 +511,7 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
         nns_public_key: vec![],
         subnets,
         nodes,
+        api_bns: vec![],
     }
 }
 

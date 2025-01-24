@@ -33,7 +33,7 @@ use ic_nns_constants::{
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -41,7 +41,7 @@ use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
@@ -72,8 +72,14 @@ const MAX_MEMO_LENGTH: usize = 32;
 /// This is the minimum amount needed for creating a canister as of October 2023.
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
+/// Prior to 2024-12-10, we used 50e15, but legitimate users started running
+/// into this. At that time, prices had recently gone up, so we resolved to
+/// increase this by 3x.
+const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
+
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -335,7 +341,7 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
+            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
@@ -1563,6 +1569,62 @@ fn memo_to_intent_str(memo: Memo) -> String {
     }
 }
 
+/// Returns Ok if transaction matches expected_memo.
+///
+/// First, looks at the memo field. If that does not match, falls back to the
+/// icrc1_field. If that is of length 8, converts assuming little endian, and if
+/// that matches, returns Ok.
+fn transaction_has_expected_memo(
+    transaction: &Transaction,
+    expected_memo: Memo,
+) -> Result<(), NotifyError> {
+    fn stringify_memo(memo: Memo) -> String {
+        format!("{} ({})", memo_to_intent_str(memo), memo.0)
+    }
+
+    if transaction.memo == expected_memo {
+        return Ok(());
+    }
+
+    // Fall back to icrc1_memo.
+
+    // Read the field.
+    let Some(icrc1_memo) = &transaction.icrc1_memo else {
+        return Err(NotifyError::InvalidTransaction(format!(
+            "The transaction's memo ({}) does not have the required value ({}).",
+            stringify_memo(transaction.memo),
+            stringify_memo(expected_memo),
+        )));
+    };
+
+    // Convert it to Memo.
+    type U64Array = [u8; std::mem::size_of::<u64>()];
+    let observed_icrc1_memo = U64Array::try_from(icrc1_memo.as_ref()).map_err(|_err| {
+        NotifyError::InvalidTransaction(format!(
+            "The transaction's memo ({}) does not have the required value ({}).",
+            stringify_memo(transaction.memo),
+            stringify_memo(expected_memo),
+        ))
+    })?;
+    let observed_icrc1_memo = Memo(u64::from_le_bytes(observed_icrc1_memo));
+
+    // Compare to the required value.
+    if observed_icrc1_memo == expected_memo {
+        return Ok(());
+    }
+
+    Err(NotifyError::InvalidTransaction(format!(
+        "Neither the memo ({}) nor the icrc1_memo ({}) of the transaction \
+         has the required value ({}).",
+        stringify_memo(transaction.memo),
+        stringify_memo(observed_icrc1_memo),
+        stringify_memo(expected_memo),
+    )))
+}
+
+/// Returns amount, and source of the transfer in (ICP) ledger.
+///
+/// Returns Ok if the arguments are matched. (Otherwise, returns Err).
 async fn fetch_transaction(
     block_index: BlockIndex,
     expected_destination_account: AccountIdentifier,
@@ -1582,22 +1644,15 @@ async fn fetch_transaction(
             ))
         }
     };
+
     if to != expected_destination_account {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
             to, expected_destination_account
         )));
     }
-    let memo = block.transaction().memo;
-    if memo != expected_memo {
-        return Err(NotifyError::InvalidTransaction(format!(
-            "Intent in the block ({} == {}) different than in the notification ({} == {})",
-            memo.0,
-            memo_to_intent_str(memo),
-            expected_memo.0,
-            memo_to_intent_str(expected_memo),
-        )));
-    }
+
+    transaction_has_expected_memo(block.transaction().as_ref(), expected_memo)?;
 
     Ok((amount, from))
 }
@@ -2179,6 +2234,10 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         let count = state.limiter.get_count();
 
         if count + cycles_to_mint > state.cycles_limit {
+            LIMITER_REJECT_COUNT.with(|count| {
+                count.set(count.get().saturating_add(1));
+            });
+
             return Err(format!(
                 "More than {} cycles have been minted in the last {} seconds, please try again later.",
                 state.cycles_limit,
@@ -2273,6 +2332,9 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
+
+    // Delete after release.
+    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -2382,6 +2444,30 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
             "The current state of the CMC calling the exchange rate canister.",
         )?;
+
+        w.encode_gauge(
+            "cmc_limiter_reject_count",
+            LIMITER_REJECT_COUNT.with(|count| count.get()) as f64,
+            "The number of times that the limiter has blocked a minting request \
+             (since the last upgrade of this canister, or when it was first \
+             installed).",
+        )?;
+        w.encode_gauge(
+            "cmc_limiter_cycles",
+            state.limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past. If someone tries \
+             to mint N cycles, but N + the value of this metric exceeds \
+             cmc_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_cycles_limit",
+            state.cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past. \
+             More precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
+        )?;
+
         Ok(())
     })
 }
@@ -2406,6 +2492,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
+    use serde_bytes::ByteBuf;
     use std::str::FromStr;
 
     pub(crate) fn init_test_state() {
@@ -3120,5 +3207,173 @@ mod tests {
             CandidSource::File(old_interface.as_path()),
         )
         .expect("The CMC canister interface is not compatible with the cmc.did file");
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_happy() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        let transaction_with_legacy_memo = Transaction {
+            memo: Memo(42),
+            icrc1_memo: None,
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_legacy_memo, Memo(42),),
+            Ok(()),
+        );
+
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
+        let transaction_with_icrc1_memo = Transaction {
+            memo: Memo(0),
+            icrc1_memo: Some(ByteBuf::from(43_u64.to_le_bytes().to_vec())),
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_icrc1_memo, Memo(43),),
+            Ok(()),
+        );
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_sad() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        {
+            let transaction = Transaction {
+                memo: Memo(77),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "77", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(78_u64.to_le_bytes().to_vec())),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "78", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case C: icrc1's memo is used, but is not of length 8, and we
+        // therefore do not consider it to contain a (little endian) u64.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(vec![1, 2, 3])),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case D: legacy memo is 0, and ircr1_memo is None.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
     }
 }

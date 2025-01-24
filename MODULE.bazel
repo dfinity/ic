@@ -174,6 +174,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# foundry container used in test
+oci.pull(
+    name = "foundry",
+    image = "ghcr.io/foundry-rs/foundry@sha256:d2d6a8064db8659ab4d835bd36ee4ba19a781cbe62a9729a261d7cedf3774cdd",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "foundry", "foundry_linux_amd64")
+
 # nginx-proxy container used in test
 oci.pull(
     name = "nginx-proxy",
@@ -508,6 +518,15 @@ http_file(
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
 )
 
+# Asset canister that certifies long assets chunk-wise
+
+http_file(
+    name = "long_asset_canister",
+    downloaded_file_path = "http_gateway_canister_custom_assets.wasm.gz",
+    sha256 = "eedcbf986c67fd4ebe3042094604a9a5703e825e56433e2509a6a4d0384ccf95",
+    url = "https://github.com/dfinity/http-gateway/raw/refs/heads/main/examples/http-gateway/canister/http_gateway_canister_custom_assets.wasm.gz",
+)
+
 # Old version of wallet canister
 
 http_file(
@@ -768,7 +787,7 @@ cc_library(
 )
 
 http_archive(
-    name = "bitcoin_core",
+    name = "bitcoin_core_linux_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(
@@ -781,6 +800,40 @@ filegroup(
     urls = [
         "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
         "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "e1efd8c4605b2aabc876da93b6eee2bedd868ce7d1f02b0220c1001f903b3e2c",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_arm64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "1d9d9b837297a73fc7a3b1cfed376644e3fa25c4e1672fbc143d5946cb52431d",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
     ],
 )
 
@@ -810,8 +863,8 @@ http_file(
 http_file(
     name = "management_canister_did",
     downloaded_file_path = "ic.did",
-    sha256 = "31d4654d60b364420a2e52f546f06b2255dc78ac8c2d768271f004b8946e92cb",
-    url = "https://raw.githubusercontent.com/dfinity/portal/407ec5b92d06618c4df9f52e98514c5f4f44313e/docs/references/_attachments/ic.did",
+    sha256 = "0e92d8b9c2cf3d3fca166b76b2d3b8a2464d9b2b61117d8b2f63222b388d8dd1",
+    url = "https://raw.githubusercontent.com/dfinity/portal/78c93aa37ef17dc67484079d1a4bf58a10a63106/docs/references/_attachments/ic.did",
 )
 
 # Mozilla CA certificate store in PEM format

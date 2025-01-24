@@ -161,8 +161,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     };
 
     // Construct ICOSSettings
-    let node_reward_type = node_reward_type.unwrap_or_else(|| "type3.1".to_string());
-
     let mgmt_mac = match mgmt_mac {
         Some(mac) => mac,
         // Use a dummy MAC address
@@ -183,7 +181,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
             .iter()
             .map(|s| Url::parse(s))
             .collect::<Result<Vec<Url>, _>>()?,
-        None => vec![Url::parse("https://wiki.internetcomputer.org")?],
+        None => vec![Url::parse("https://cloudflare.com/cdn-cgi/trace")?],
     };
 
     let use_node_operator_private_key = use_node_operator_private_key.unwrap_or(false);
@@ -191,7 +189,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
     let icos_settings = ICOSSettings {
-        node_reward_type: Some(node_reward_type),
+        node_reward_type,
         mgmt_mac,
         deployment_environment,
         logging,

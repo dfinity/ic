@@ -1462,257 +1462,6 @@ pub mod manage_neuron {
         RefreshVotingPower(RefreshVotingPower),
     }
 }
-/// The response of the ManageNeuron command
-///
-/// There is a dedicated response type for each `ManageNeuron.command` field
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ManageNeuronResponse {
-    #[prost(
-        oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
-    )]
-    pub command: ::core::option::Option<manage_neuron_response::Command>,
-}
-/// Nested message and enum types in `ManageNeuronResponse`.
-pub mod manage_neuron_response {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct ConfigureResponse {}
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct DisburseResponse {
-        /// The block height at which the disburse transfer happened
-        #[prost(uint64, tag = "1")]
-        pub transfer_block_height: u64,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct SpawnResponse {
-        /// The ID of the Neuron created from spawning a Neuron
-        #[prost(message, optional, tag = "1")]
-        pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MergeMaturityResponse {
-        #[prost(uint64, tag = "1")]
-        pub merged_maturity_e8s: u64,
-        #[prost(uint64, tag = "2")]
-        pub new_stake_e8s: u64,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct StakeMaturityResponse {
-        #[prost(uint64, tag = "1")]
-        pub maturity_e8s: u64,
-        #[prost(uint64, tag = "2")]
-        pub staked_maturity_e8s: u64,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct FollowResponse {}
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MakeProposalResponse {
-        /// The ID of the created proposal
-        #[prost(message, optional, tag = "1")]
-        pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
-        #[prost(string, optional, tag = "2")]
-        pub message: ::core::option::Option<::prost::alloc::string::String>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct RegisterVoteResponse {}
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct SplitResponse {
-        /// The ID of the Neuron created from splitting another Neuron
-        #[prost(message, optional, tag = "1")]
-        pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    }
-    /// A response for merging or simulating merge neurons
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MergeResponse {
-        /// The resulting state of the source neuron
-        #[prost(message, optional, tag = "1")]
-        pub source_neuron: ::core::option::Option<super::Neuron>,
-        /// The resulting state of the target neuron
-        #[prost(message, optional, tag = "2")]
-        pub target_neuron: ::core::option::Option<super::Neuron>,
-        /// The NeuronInfo of the source neuron
-        #[prost(message, optional, tag = "3")]
-        pub source_neuron_info: ::core::option::Option<super::NeuronInfo>,
-        /// The NeuronInfo of the target neuron
-        #[prost(message, optional, tag = "4")]
-        pub target_neuron_info: ::core::option::Option<super::NeuronInfo>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct DisburseToNeuronResponse {
-        /// The ID of the Neuron created from disbursing a Neuron
-        #[prost(message, optional, tag = "1")]
-        pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct ClaimOrRefreshResponse {
-        #[prost(message, optional, tag = "1")]
-        pub refreshed_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        Copy,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct RefreshVotingPowerResponse {}
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
-    pub enum Command {
-        #[prost(message, tag = "1")]
-        Error(super::GovernanceError),
-        #[prost(message, tag = "2")]
-        Configure(ConfigureResponse),
-        #[prost(message, tag = "3")]
-        Disburse(DisburseResponse),
-        #[prost(message, tag = "4")]
-        Spawn(SpawnResponse),
-        #[prost(message, tag = "5")]
-        Follow(FollowResponse),
-        #[prost(message, tag = "6")]
-        MakeProposal(MakeProposalResponse),
-        #[prost(message, tag = "7")]
-        RegisterVote(RegisterVoteResponse),
-        #[prost(message, tag = "8")]
-        Split(SplitResponse),
-        #[prost(message, tag = "9")]
-        DisburseToNeuron(DisburseToNeuronResponse),
-        #[prost(message, tag = "10")]
-        ClaimOrRefresh(ClaimOrRefreshResponse),
-        #[prost(message, tag = "11")]
-        MergeMaturity(MergeMaturityResponse),
-        #[prost(message, tag = "12")]
-        Merge(MergeResponse),
-        #[prost(message, tag = "13")]
-        StakeMaturity(StakeMaturityResponse),
-        #[prost(message, tag = "14")]
-        RefreshVotingPower(RefreshVotingPowerResponse),
-    }
-}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3086,6 +2835,12 @@ pub struct InstallCode {
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+    /// The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+    #[prost(bytes = "vec", optional, tag = "7")]
+    pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
@@ -3263,6 +3018,8 @@ pub mod update_canister_settings {
         pub log_visibility: ::core::option::Option<i32>,
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "7")]
+        pub wasm_memory_threshold: ::core::option::Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -3924,72 +3681,6 @@ pub struct ListProposalInfo {
 pub struct ListProposalInfoResponse {
     #[prost(message, repeated, tag = "1")]
     pub proposal_info: ::prost::alloc::vec::Vec<ProposalInfo>,
-}
-/// A request to list neurons. The "requested list", i.e., the list of
-/// neuron IDs to retrieve information about, is the union of the list
-/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-/// the list of neuron IDs of neurons for which the caller is the
-/// controller or one of the hot keys.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListNeurons {
-    /// The neurons to get information about. The "requested list"
-    /// contains all of these neuron IDs.
-    #[prost(fixed64, repeated, packed = "false", tag = "1")]
-    pub neuron_ids: ::prost::alloc::vec::Vec<u64>,
-    /// If true, the "requested list" also contains the neuron ID of the
-    /// neurons that the calling principal is authorized to read.
-    #[prost(bool, tag = "2")]
-    pub include_neurons_readable_by_caller: bool,
-    /// Whether to also include empty neurons readable by the caller. This field only has an effect
-    /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
-    #[prost(bool, optional, tag = "3")]
-    pub include_empty_neurons_readable_by_caller: ::core::option::Option<bool>,
-    /// If this is set to true, and a neuron in the "requested list" has its
-    /// visibility set to public, then, it will (also) be included in the
-    /// full_neurons field in the response (which is of type ListNeuronsResponse).
-    /// Note that this has no effect on which neurons are in the "requested list".
-    /// In particular, this does not cause all public neurons to become part of the
-    /// requested list. In general, you probably want to set this to true, but
-    /// since this feature was added later, it is opt in to avoid confusing
-    /// existing (unmigrated) callers.
-    #[prost(bool, optional, tag = "4")]
-    pub include_public_neurons_in_full_neurons: ::core::option::Option<bool>,
-}
-/// A response to a `ListNeurons` request.
-///
-/// The "requested list" is described in `ListNeurons`.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListNeuronsResponse {
-    /// For each neuron ID in the "requested list", if this neuron exists,
-    /// its `NeuronInfo` at the time of the call will be in this map.
-    #[prost(map = "fixed64, message", tag = "1")]
-    pub neuron_infos: ::std::collections::HashMap<u64, NeuronInfo>,
-    /// For each neuron ID in the "requested list", if the neuron exists,
-    /// and the caller is authorized to read the full neuron (controller,
-    /// hot key, or controller or hot key of some followee on the
-    /// `ManageNeuron` topic).
-    #[prost(message, repeated, tag = "2")]
-    pub full_neurons: ::prost::alloc::vec::Vec<Neuron>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(

@@ -1178,7 +1178,7 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
         ..Default::default()
     };
     let allowed_wasm_memory_size_in_pages =
-        embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+        embedders_config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
     let wasm = wat2wasm(&format!(
         r#"(module

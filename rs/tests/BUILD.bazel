@@ -4,9 +4,7 @@ load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
-load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -18,19 +16,6 @@ exports_files([
 bool_flag(
     name = "k8s",
     build_setting_default = False,
-)
-
-rust_library(
-    name = "tests",
-    testonly = True,
-    srcs = glob(["src/**/*.rs"]),
-    compile_data = [
-        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
-    ],
-    crate_name = "ic_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES,
 )
 
 # Packages we install into the image; see base image definition and its
@@ -254,18 +239,6 @@ symlink_dir(
     },
 )
 
-symlink_dir(
-    name = "backup/binaries",
-    testonly = True,
-    targets = {
-        "//rs/backup:ic-backup": "ic-backup",
-        "//rs/replay:ic-replay": "ic-replay",
-        "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
-        "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
-        "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
-    },
-)
-
 symlink_dir_test(
     name = "cup_compatibility/binaries",
     targets = {
@@ -356,7 +329,7 @@ run_binary(
     ],
     args = ["$(location valid_import.wasm)"],  # passing location of an arbitrary output file is a hack, see https://github.com/bazelbuild/bazel-skylib/blob/288731ef9f7f688932bd50e704a91a45ec185f9b/rules/run_binary.bzl#L29
     target_compatible_with = ["@platforms//os:linux"],
-    tool = "//rs/tests/testing_verification/wabt-tests:generator",
+    tool = "//rs/tests/idx/wabt-tests:generator",
 )
 
 oci_tar(

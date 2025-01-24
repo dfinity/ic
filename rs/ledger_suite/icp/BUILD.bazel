@@ -97,9 +97,9 @@ rust_ic_test_suite(
         "tests/tests.rs",
         "tests/upgrade_downgrade.rs",
     ],
+    compile_data = ["ledger_archive.did"],
     data = [
         "ledger.did",
-        "ledger_archive.did",
         ":ledger_proxy.wasm",
         ":test_notified_canister",
         "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",

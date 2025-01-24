@@ -226,9 +226,10 @@ impl PrometheusVm {
                     continue;
                 }
 
-                let file_name = format!("{}.json", file.file_name().as_os_str().to_str().unwrap());
+                let file_name = file.file_name();
+                let file_name = file_name.as_os_str().to_str().unwrap();
 
-                let destination_path = dashboard_dir.join(&file_name);
+                let destination_path = dashboard_dir.join(file_name);
 
                 std::fs::copy(file.path(), destination_path)?;
                 info!(logger, "Copying `{}` dashboard...", file_name);
@@ -252,11 +253,12 @@ for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
 
+mkdir -p /config/grafana/dashboards
+
 if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  mkdir -p /config/grafana/dashboards
   cp -R /config/grafana/dashboards /var/lib/grafana/
   chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
@@ -270,6 +272,8 @@ fi
             )
             .unwrap();
 
+        let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
+        std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
         let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
         if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
             warn!(
@@ -278,7 +282,6 @@ fi
                 e.to_string()
             )
         } else {
-            let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
             debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
             TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
         }

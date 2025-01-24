@@ -8,7 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

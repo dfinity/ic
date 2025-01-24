@@ -293,8 +293,7 @@ pub fn test(env: TestEnv) {
         assert_eq!(archived_blocks.blocks[1].hash(), last_block_hash);
         assert_eq!(Nat::from(1_u8), last_block_index);
 
-        let data_certificate = agent.get_data_certificate().await.unwrap();
-        assert!(data_certificate.certificate.is_some());
+        let data_certificate = agent.icrc3_get_tip_certificate().await.unwrap();
 
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
@@ -309,7 +308,7 @@ pub fn test(env: TestEnv) {
             Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 
-        let cert = serde_cbor::from_slice(&data_certificate.certificate.unwrap()).unwrap();
+        let cert = serde_cbor::from_slice(&data_certificate.certificate).unwrap();
         assert_matches!(
             agent.verify_root_hash(&cert, &hash_tree.digest().0).await,
             Ok(_)
@@ -401,7 +400,7 @@ fn mleaf<B: AsRef<[u8]>>(blob: B) -> MixedHashTree {
     MixedHashTree::Leaf(blob.as_ref().to_vec())
 }
 
-pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &LedgerArgument) {
+pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
         get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),

@@ -57,7 +57,7 @@ macro loop_iteration(new_locks) {
                       ];
             governance_to_ledger := Append(governance_to_ledger,
                 request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)));
-            goto WaitForTransfer;
+            goto SpawnNeurons_Start_WaitForTransfer;
         };
 }
 
@@ -75,7 +75,7 @@ process (Spawn_Neurons \in Spawn_Neurons_Process_Ids)
         await ready_to_spawn_ids # {};
         spawning_neurons := TRUE;
         loop_iteration(locks);
-    WaitForTransfer:
+    SpawnNeurons_Start_WaitForTransfer:
         with(answer \in { resp \in ledger_to_governance: resp.caller = self };
             \* Work around PlusCal not being able to assing to the same variable twice in the same block
             new_locks = IF answer.response # Variant("Fail", UNIT)
@@ -98,7 +98,7 @@ process (Spawn_Neurons \in Spawn_Neurons_Process_Ids)
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "21b445f4" /\ chksum(tla) = "5862c78c")
+\* BEGIN TRANSLATION (chksum(pcal) = "90f0999" /\ chksum(tla) = "313ea5da")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, spawning_neurons, neuron_id,
           ready_to_spawn_ids
@@ -137,40 +137,41 @@ SpawnNeurons_Start(self) == /\ pc[self] = "SpawnNeurons_Start"
                                                   ]
                                      /\ governance_to_ledger' =                     Append(governance_to_ledger,
                                                                 request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)))
-                                     /\ pc' = [pc EXCEPT ![self] = "WaitForTransfer"]
+                                     /\ pc' = [pc EXCEPT ![self] = "SpawnNeurons_Start_WaitForTransfer"]
                             /\ UNCHANGED << neuron_id_by_account,
                                             ledger_to_governance >>
 
-WaitForTransfer(self) == /\ pc[self] = "WaitForTransfer"
-                         /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self }:
-                              LET new_locks ==         IF answer.response # Variant("Fail", UNIT)
-                                               THEN locks \ {neuron_id[self]}
-                                               ELSE locks IN
-                                /\ ledger_to_governance' = ledger_to_governance \ {answer}
-                                /\ ready_to_spawn_ids' = [ready_to_spawn_ids EXCEPT ![self] = ready_to_spawn_ids[self] \ {neuron_id[self]}]
-                                /\ IF ready_to_spawn_ids'[self] = {}
-                                      THEN /\ spawning_neurons' = FALSE
-                                           /\ locks' = new_locks
-                                           /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
-                                           /\ pc' = [pc EXCEPT ![self] = "SpawnNeurons_Start"]
-                                           /\ UNCHANGED << neuron,
-                                                           governance_to_ledger >>
-                                      ELSE /\ \E nid \in ready_to_spawn_ids'[self] \ locks:
-                                                LET neuron_stake == (neuron[nid].maturity * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY IN
-                                                  LET account == neuron[nid].account IN
-                                                    /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
-                                                    /\ locks' = (new_locks \union {neuron_id'[self]})
-                                                    /\ neuron' = [ neuron EXCEPT
-                                                                   ![neuron_id'[self]].maturity = 0,
-                                                                   ![neuron_id'[self]].cached_stake = neuron_stake
-                                                                 ]
-                                                    /\ governance_to_ledger' =                     Append(governance_to_ledger,
-                                                                               request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)))
-                                                    /\ pc' = [pc EXCEPT ![self] = "WaitForTransfer"]
-                                           /\ UNCHANGED spawning_neurons
-                         /\ UNCHANGED neuron_id_by_account
+SpawnNeurons_Start_WaitForTransfer(self) == /\ pc[self] = "SpawnNeurons_Start_WaitForTransfer"
+                                            /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self }:
+                                                 LET new_locks ==         IF answer.response # Variant("Fail", UNIT)
+                                                                  THEN locks \ {neuron_id[self]}
+                                                                  ELSE locks IN
+                                                   /\ ledger_to_governance' = ledger_to_governance \ {answer}
+                                                   /\ ready_to_spawn_ids' = [ready_to_spawn_ids EXCEPT ![self] = ready_to_spawn_ids[self] \ {neuron_id[self]}]
+                                                   /\ IF ready_to_spawn_ids'[self] = {}
+                                                         THEN /\ spawning_neurons' = FALSE
+                                                              /\ locks' = new_locks
+                                                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
+                                                              /\ pc' = [pc EXCEPT ![self] = "SpawnNeurons_Start"]
+                                                              /\ UNCHANGED << neuron,
+                                                                              governance_to_ledger >>
+                                                         ELSE /\ \E nid \in ready_to_spawn_ids'[self] \ locks:
+                                                                   LET neuron_stake == (neuron[nid].maturity * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY IN
+                                                                     LET account == neuron[nid].account IN
+                                                                       /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
+                                                                       /\ locks' = (new_locks \union {neuron_id'[self]})
+                                                                       /\ neuron' = [ neuron EXCEPT
+                                                                                      ![neuron_id'[self]].maturity = 0,
+                                                                                      ![neuron_id'[self]].cached_stake = neuron_stake
+                                                                                    ]
+                                                                       /\ governance_to_ledger' =                     Append(governance_to_ledger,
+                                                                                                  request(self, transfer(Minting_Account_Id, account, neuron_stake, 0)))
+                                                                       /\ pc' = [pc EXCEPT ![self] = "SpawnNeurons_Start_WaitForTransfer"]
+                                                              /\ UNCHANGED spawning_neurons
+                                            /\ UNCHANGED neuron_id_by_account
 
-Spawn_Neurons(self) == SpawnNeurons_Start(self) \/ WaitForTransfer(self)
+Spawn_Neurons(self) == SpawnNeurons_Start(self)
+                          \/ SpawnNeurons_Start_WaitForTransfer(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"

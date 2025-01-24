@@ -31,7 +31,7 @@ use sns_upgrade_test_utils::test_sns_upgrade;
 /// since there is sometimes a dependency between them, so we test them in both orders.
 ///
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
-
+///
 /// Deployment tests
 
 #[tokio::test]
@@ -84,8 +84,6 @@ async fn test_deployment_swap_upgrade() {
 }
 
 /// Upgrade Tests
-
-#[ignore]
 #[tokio::test]
 async fn test_upgrade_swap() {
     test_sns_upgrade(vec![SnsCanisterType::Swap]).await;

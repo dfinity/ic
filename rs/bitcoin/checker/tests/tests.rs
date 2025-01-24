@@ -1,22 +1,26 @@
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
     CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, InitArg, UpgradeArg,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs, InitArg,
+    UpgradeArg, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_cdk::api::call::RejectionCode;
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
-        CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
-        MockCanisterHttpResponse, RawMessageId,
+        CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
+        CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
+    query_candid, PocketIc, PocketIcBuilder, RejectResponse,
 };
 use std::str::FromStr;
 
@@ -29,11 +33,11 @@ const TEST_SUBNET_NODES: u16 = 34;
 // by a small margin. Namely, the universal_canister itself would consume
 // some cycle for decoding args and sending the call.
 //
-// The number 42_000_000 is obtained empirically by running tests with pocket-ic
+// The number 43_000_000 is obtained empirically by running tests with pocket-ic
 // and checking the actual consumptions. It is both big enough to allow tests to
 // succeed, and small enough not to interfere with the expected cycle cost we
 // are testing for.
-const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 42_000_000;
+const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 43_000_000;
 
 struct Setup {
     // Owner of canisters created for the setup.
@@ -65,6 +69,7 @@ impl Setup {
         let init_arg = InitArg {
             btc_network,
             check_mode: CheckMode::Normal,
+            num_subnet_nodes: TEST_SUBNET_NODES,
         };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
@@ -97,7 +102,7 @@ impl Setup {
         method: &str,
         args: Vec<u8>,
         cycles: u128,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let payload = wasm()
             .call_with_cycles(
                 PrincipalId(self.btc_checker_canister),
@@ -110,13 +115,6 @@ impl Setup {
             .build();
         self.env
             .submit_call(self.caller, self.controller, "update", payload)
-    }
-}
-
-fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
-    match result {
-        WasmResult::Reply(bytes) => decode_one(bytes).unwrap(),
-        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
 }
 
@@ -274,20 +272,21 @@ fn test_check_transaction_passed() {
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
     let env = &setup.env;
+    let check_transaction_args = Encode!(&CheckTransactionArgs {
+        txid: txid.as_ref().to_vec()
+    })
+    .unwrap();
+    let check_transaction_str_args = Encode!(&CheckTransactionStrArgs {
+        txid: txid.to_string()
+    })
+    .unwrap();
 
     // Normal operation requires making http outcalls.
     // We'll run this again after testing other CheckMode.
-    let test_normal_operation = || {
+    let test_normal_operation = |method, arg| {
         let cycles_before = setup.env.cycle_balance(setup.caller);
         let call_id = setup
-            .submit_btc_checker_call(
-                "check_transaction",
-                Encode!(&CheckTransactionArgs {
-                    txid: txid.as_ref().to_vec()
-                })
-                .unwrap(),
-                CHECK_TRANSACTION_CYCLES_REQUIRED,
-            )
+            .submit_btc_checker_call(method, arg, CHECK_TRANSACTION_CYCLES_REQUIRED)
             .expect("submit_call failed to return call id");
         // The response body used for testing below is generated from the output of
         //
@@ -362,7 +361,7 @@ fn test_check_transaction_passed() {
             .expect("the fetch request didn't finish");
 
         assert!(matches!(
-            decode::<CheckTransactionResponse>(&result),
+            decode_one(&result).unwrap(),
             CheckTransactionResponse::Passed
         ));
 
@@ -372,10 +371,13 @@ fn test_check_transaction_passed() {
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+        MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
+            r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
+        );
     };
 
     // With default installation
-    test_normal_operation();
+    test_normal_operation("check_transaction", check_transaction_args.clone());
 
     // Test CheckMode::RejectAll
     env.tick();
@@ -406,7 +408,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Failed(addresses) if addresses.is_empty()
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -414,6 +416,9 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
+        r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
+    );
 
     // Test CheckMode::AcceptAll
     env.tick();
@@ -444,7 +449,7 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Passed
     ),);
     let cycles_after = env.cycle_balance(setup.caller);
@@ -454,6 +459,9 @@ fn test_check_transaction_passed() {
     assert!(
         actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
+    );
+    MetricsAssert::from_http_query(&setup).assert_contains_metric_matching(
+        r#"btc_check_requests_total\{type=\"check_transaction\"\} 1 \d+"#,
     );
 
     // Test CheckMode::Normal
@@ -470,20 +478,37 @@ fn test_check_transaction_passed() {
     )
     .unwrap();
 
-    test_normal_operation();
+    test_normal_operation("check_transaction_str", check_transaction_str_args);
 }
 
 #[test]
 fn test_check_transaction_error() {
     let setup = Setup::new(BtcNetwork::Mainnet);
-    let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
             .unwrap()
             .as_ref()
             .to_vec();
 
+    // Test should return NotEnoughCycles error, not InvalidTransactionId
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: vec![0; 31] }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_SERVICE_FEE - 1,
+        )
+        .expect("submit_call failed to return call id");
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode_one(&result).unwrap(),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
+    ));
+
     // Test for cycles not enough
+    let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
         .submit_btc_checker_call(
             "check_transaction",
@@ -496,7 +521,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
@@ -534,7 +559,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 500 error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 500")
@@ -574,10 +599,49 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 404 error is retriable too
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 404")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+        + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for CanisterHttpReject error
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                reject_code: RejectionCode::SysTransient as u64,
+                message: "Failed to directly connect".to_string(),
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // Reject error is retriable too
+    assert!(matches!(
+        decode_one(&result).unwrap(),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("Failed to directly connect")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
@@ -614,7 +678,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // malformated tx error is retriable
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("TxEncoding")
@@ -641,7 +705,7 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
+        decode_one(&result).unwrap(),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
@@ -652,6 +716,54 @@ fn test_check_transaction_error() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for malformatted txid in string form
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let too_short_txid =
+        "a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475".to_string();
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction_str",
+            Encode!(&CheckTransactionStrArgs {
+                txid: too_short_txid
+            })
+            .unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode_one(&result).unwrap(),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransactionId(_)
+        ))
+    ));
+
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    MetricsAssert::from_http_query(&setup)
+        .assert_contains_metric_matching(
+            r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(500\)\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(200\)\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"HttpStatusCode\(404\)\"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"IcError\(2\)\"\} 1 \d+"#,
+        );
 }
 
 fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
@@ -673,45 +785,44 @@ fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
 
 #[test]
 fn should_query_logs_and_metrics() {
-    use candid::Decode;
-
     let setup = Setup::new(BtcNetwork::Mainnet);
-    test_http_query(&setup, "/metrics");
-    test_http_query(&setup, "/logs");
-
-    fn test_http_query<U: Into<String>>(setup: &Setup, url: U) {
-        let request = ic_canisters_http_types::HttpRequest {
-            method: "GET".to_string(),
-            url: url.into(),
-            headers: Default::default(),
-            body: Default::default(),
-        };
-
-        let response = Decode!(
-            &assert_reply(
-                setup
-                    .env
-                    .query_call(
-                        setup.btc_checker_canister,
-                        Principal::anonymous(),
-                        "http_request",
-                        Encode!(&request).expect("failed to encode HTTP request"),
-                    )
-                    .expect("failed to query get_transactions on the ledger")
-            ),
-            ic_canisters_http_types::HttpResponse
-        )
-        .unwrap();
-
-        assert_eq!(response.status_code, 200_u16);
-    }
+    make_http_query(&setup, "/metrics");
+    make_http_query(&setup, "/logs");
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
+fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
+    use candid::Decode;
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: url.into(),
+        headers: Default::default(),
+        body: Default::default(),
+    };
+
+    let response = Decode!(
+        &setup
+            .env
+            .query_call(
+                setup.btc_checker_canister,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).expect("failed to encode HTTP request"),
+            )
+            .expect("failed to query get_transactions on the ledger"),
+        HttpResponse
+    )
+    .unwrap();
+
+    assert_eq!(response.status_code, 200_u16);
+    response.body.into_vec()
+}
+
+impl PocketIcHttpQuery for &Setup {
+    fn get_pocket_ic(&self) -> &PocketIc {
+        &self.env
+    }
+
+    fn get_canister_id(&self) -> CanisterId {
+        self.btc_checker_canister
     }
 }

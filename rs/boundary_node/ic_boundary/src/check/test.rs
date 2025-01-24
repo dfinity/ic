@@ -83,6 +83,7 @@ pub fn generate_custom_registry_snapshot(
         nns_public_key: vec![],
         subnets,
         nodes: nodes_hash,
+        api_bns: vec![],
     }
 }
 

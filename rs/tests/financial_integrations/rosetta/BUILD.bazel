@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -40,7 +40,6 @@ system_test_nns(
     name = "rosetta_neuron_follow_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -54,5 +53,17 @@ system_test_nns(
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/nns/common",
+        "//rs/nns/governance/api",
+        "//rs/rosetta-api/icp:rosetta-api",
+        "//rs/rosetta-api/icp/test_utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/financial_integrations/rosetta/rosetta_test_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert-json-diff",
+        "@crate_index//:rand",
+        "@crate_index//:serde_json",
+    ],
 )

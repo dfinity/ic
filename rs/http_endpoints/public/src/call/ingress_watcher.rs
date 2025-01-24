@@ -1,5 +1,5 @@
 use crate::metrics::HttpHandlerMetrics;
-use ic_async_utils::JoinMap;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{

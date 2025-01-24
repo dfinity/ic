@@ -561,13 +561,18 @@ impl ExecutionState {
         self.exports.has_method(method)
     }
 
+    /// Returns the Wasm memory currently used by the `ExecutionState`.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.wasm_memory.size)
+            .expect("could not convert from wasm memory number of pages to bytes")
+    }
+
     /// Returns the memory currently used by the `ExecutionState`.
     pub fn memory_usage(&self) -> NumBytes {
         // We use 8 bytes per global.
         let globals_size_bytes = 8 * self.exported_globals.len() as u64;
         let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
-        num_bytes_try_from(self.wasm_memory.size)
-            .expect("could not convert from wasm memory number of pages to bytes")
+        self.wasm_memory_usage()
             + num_bytes_try_from(self.stable_memory.size)
                 .expect("could not convert from stable memory number of pages to bytes")
             + NumBytes::from(globals_size_bytes)

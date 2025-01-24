@@ -347,7 +347,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         // the implementation of stream builder will always allow one message if
         // the stream does not exist yet.
         let mut streams = provided_state.take_streams();
-        streams.get_mut_or_insert(REMOTE_SUBNET);
+        streams.entry(REMOTE_SUBNET).or_default();
         provided_state.put_streams(streams);
 
         // Set up the provided_canister_states.
@@ -1038,14 +1038,14 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 /// Pushes the message into the given canister's corresponding input queue.
 fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
-    canister_state
+    assert!(canister_state
         .push_input(
             msg,
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap()
+        .unwrap());
 }
 
 /// Asserts that the values of the `METRIC_ROUTED_MESSAGES` metric
