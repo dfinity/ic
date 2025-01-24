@@ -95,7 +95,6 @@ impl RemoveNodeOperatorsPayload {
     }
 
     pub fn principal_ids_to_remove(&self) -> Vec<PrincipalId> {
-        // Request from Max:
         // Ensure only one of the fields is set to avoid confusing semantics.
         // If the new field is present, panic if the old field is also set.
         // This approach encourages clients to use the new field and allows for
