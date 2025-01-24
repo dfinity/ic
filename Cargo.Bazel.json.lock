@@ -5617,6 +5617,12 @@
           ],
           "selects": {}
         },
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -6049,6 +6055,8 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
+            "std"
             "alloc",
             "std"
           ],
@@ -6931,11 +6939,15 @@
       "license_file": null
     },
     "bitcoin 0.32.5": {
+    "bitcoin 0.32.5": {
       "name": "bitcoin",
+      "version": "0.32.5",
       "version": "0.32.5",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
       "repository": {
         "Http": {
+          "url": "https://static.crates.io/crates/bitcoin/0.32.5/download",
+          "sha256": "ce6bc65742dea50536e35ad42492b234c27904a27f0abdcbce605015cb4ea026"
           "url": "https://static.crates.io/crates/bitcoin/0.32.5/download",
           "sha256": "ce6bc65742dea50536e35ad42492b234c27904a27f0abdcbce605015cb4ea026"
         }
@@ -6983,6 +6995,18 @@
           ],
           "selects": {}
         },
+        "crate_features": {
+          "common": [
+            "actual-serde",
+            "default",
+            "rand",
+            "rand-std",
+            "secp-recovery",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -6995,6 +7019,7 @@
               "target": "bech32"
             },
             {
+              "id": "bitcoin 0.32.5",
               "id": "bitcoin 0.32.5",
               "target": "build_script_build"
             },
@@ -7029,7 +7054,13 @@
             },
             {
               "id": "secp256k1 0.29.1",
+              "id": "secp256k1 0.29.1",
               "target": "secp256k1"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde",
+              "alias": "actual_serde"
             },
             {
               "id": "serde 1.0.217",
@@ -7040,6 +7071,7 @@
           "selects": {}
         },
         "edition": "2021",
+        "version": "0.32.5"
         "version": "0.32.5"
       },
       "build_script_attrs": {
@@ -7103,6 +7135,9 @@
             "default",
             "serde",
             "std"
+            "default",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7111,6 +7146,10 @@
             {
               "id": "bitcoin-internals 0.3.0",
               "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             },
             {
               "id": "serde 1.0.217",
@@ -7167,6 +7206,8 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
+            "std"
             "alloc",
             "std"
           ],
@@ -7290,6 +7331,9 @@
             "alloc",
             "serde",
             "std"
+            "alloc",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7299,6 +7343,10 @@
               "id": "bitcoin-internals 0.3.0",
               "target": "bitcoin_internals",
               "alias": "internals"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             },
             {
               "id": "serde 1.0.217",
@@ -7466,6 +7514,9 @@
             "io",
             "serde",
             "std"
+            "io",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7479,6 +7530,10 @@
               "id": "hex-conservative 0.2.1",
               "target": "hex_conservative",
               "alias": "hex"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             },
             {
               "id": "serde 1.0.217",
@@ -7497,11 +7552,15 @@
       "license_file": null
     },
     "bitcoincore-rpc 0.19.0": {
+    "bitcoincore-rpc 0.19.0": {
       "name": "bitcoincore-rpc",
+      "version": "0.19.0",
       "version": "0.19.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
         "Http": {
+          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
+          "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
           "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
           "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
         }
@@ -7532,13 +7591,22 @@
           ],
           "selects": {}
         },
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
               "id": "bitcoincore-rpc-json 0.19.0",
+              "id": "bitcoincore-rpc-json 0.19.0",
               "target": "bitcoincore_rpc_json"
             },
             {
+              "id": "jsonrpc 0.18.0",
               "id": "jsonrpc 0.18.0",
               "target": "jsonrpc"
             },
@@ -7559,6 +7627,8 @@
         },
         "edition": "2018",
         "version": "0.19.0"
+        "edition": "2018",
+        "version": "0.19.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -7567,11 +7637,15 @@
       "license_file": "LICENSE"
     },
     "bitcoincore-rpc-json 0.19.0": {
+    "bitcoincore-rpc-json 0.19.0": {
       "name": "bitcoincore-rpc-json",
+      "version": "0.19.0",
       "version": "0.19.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
         "Http": {
+          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
+          "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
           "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
           "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
         }
@@ -7602,9 +7676,17 @@
           ],
           "selects": {}
         },
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
+              "id": "bitcoin 0.32.5",
               "id": "bitcoin 0.32.5",
               "target": "bitcoin"
             },
@@ -7619,6 +7701,8 @@
           ],
           "selects": {}
         },
+        "edition": "2021",
+        "version": "0.19.0"
         "edition": "2021",
         "version": "0.19.0"
       },
@@ -10084,7 +10168,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -10179,7 +10263,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -10266,14 +10350,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.12": {
+    "candid 0.10.13": {
       "name": "candid",
-      "version": "0.10.12",
+      "version": "0.10.13",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.12/download",
-          "sha256": "51e129c4051c57daf943586e01ef72faae48b04a8f692d5f646febf17a264c38"
+          "url": "https://static.crates.io/crates/candid/0.10.13/download",
+          "sha256": "a253bab4a9be502c82332b60cbeee6202ad0692834efeec95fae9f29db33d692"
         }
       },
       "targets": [
@@ -10380,7 +10464,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.12"
+        "version": "0.10.13"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10495,7 +10579,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -18345,12 +18429,17 @@
               "id": "bitcoin 0.28.2",
               "target": "bitcoin",
               "alias": "bitcoin_0_28"
+              "target": "bitcoin",
+              "alias": "bitcoin_0_28"
             },
             {
               "id": "bitcoin 0.32.5",
               "target": "bitcoin"
+              "id": "bitcoin 0.32.5",
+              "target": "bitcoin"
             },
             {
+              "id": "bitcoincore-rpc 0.19.0",
               "id": "bitcoincore-rpc 0.19.0",
               "target": "bitcoincore_rpc"
             },
@@ -18403,7 +18492,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -18665,6 +18754,11 @@
             {
               "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk 0.18.0-alpha.1",
+              "target": "ic_cdk",
+              "alias": "ic_cdk_next"
             },
             {
               "id": "ic-cdk-timers 0.11.0",
@@ -19561,6 +19655,11 @@
             {
               "id": "ic-cdk-macros 0.9.0",
               "target": "ic_cdk_macros"
+            },
+            {
+              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "target": "ic_cdk_macros",
+              "alias": "ic_cdk_macros_next"
             },
             {
               "id": "indoc 1.0.9",
@@ -23133,7 +23232,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -27266,6 +27365,8 @@
           "common": [
             "alloc",
             "std"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -29885,7 +29986,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30356,7 +30457,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30460,7 +30561,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30547,7 +30648,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30610,7 +30711,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30678,7 +30779,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30746,7 +30847,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30775,6 +30876,81 @@
           "selects": {}
         },
         "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk 0.18.0-alpha.1": {
+      "name": "ic-cdk",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic-cdk"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.24.0-alpha.1",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "thiserror 2.0.3",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.18.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -30814,7 +30990,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30881,7 +31057,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -30948,7 +31124,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31015,7 +31191,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31043,6 +31219,76 @@
         },
         "edition": "2021",
         "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.18.0-alpha.1": {
+      "name": "ic-cdk-macros",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic-cdk-macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.13",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.18.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -31153,7 +31399,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31428,7 +31674,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31507,7 +31753,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31683,7 +31929,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31880,7 +32126,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -31939,7 +32185,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32023,7 +32269,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32117,7 +32363,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32395,7 +32641,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32470,7 +32716,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32596,6 +32842,47 @@
         ],
         "edition": "2021",
         "version": "0.23.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 0.24.0-alpha.1": {
+      "name": "ic0",
+      "version": "0.24.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "4e287ce51636b0e70768c193da38d2fc5324ea15"
+          },
+          "strip_prefix": "ic0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.24.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32811,7 +33098,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -32882,7 +33169,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -36025,10 +36312,15 @@
       "license_file": "LICENSE"
     },
     "jsonrpc 0.13.0": {
+    "jsonrpc 0.13.0": {
       "name": "jsonrpc",
+      "version": "0.13.0",
       "version": "0.13.0",
       "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
       "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/jsonrpc/0.13.0/download",
+          "sha256": "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
         "Http": {
           "url": "https://static.crates.io/crates/jsonrpc/0.13.0/download",
           "sha256": "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
@@ -36081,6 +36373,7 @@
         },
         "edition": "2018",
         "version": "0.13.0"
+        "version": "0.13.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -36089,11 +36382,15 @@
       "license_file": "LICENSE"
     },
     "jsonrpc 0.18.0": {
+    "jsonrpc 0.18.0": {
       "name": "jsonrpc",
+      "version": "0.18.0",
       "version": "0.18.0",
       "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
       "repository": {
         "Http": {
+          "url": "https://static.crates.io/crates/jsonrpc/0.18.0/download",
+          "sha256": "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
           "url": "https://static.crates.io/crates/jsonrpc/0.18.0/download",
           "sha256": "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
         }
@@ -36123,6 +36420,8 @@
             "default",
             "minreq",
             "minreq_http",
+            "minreq",
+            "minreq_http",
             "simple_http",
             "simple_tcp"
           ],
@@ -36133,6 +36432,10 @@
             {
               "id": "base64 0.13.1",
               "target": "base64"
+            },
+            {
+              "id": "minreq 2.13.0",
+              "target": "minreq"
             },
             {
               "id": "minreq 2.13.0",
@@ -36150,6 +36453,7 @@
           "selects": {}
         },
         "edition": "2018",
+        "version": "0.18.0"
         "version": "0.18.0"
       },
       "license": "CC0-1.0",
@@ -41617,6 +41921,93 @@
         "Zlib"
       ],
       "license_file": "LICENSE"
+    },
+    "minreq 2.13.0": {
+      "name": "minreq",
+      "version": "2.13.0",
+      "package_url": "https://github.com/neonmoe/minreq",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/minreq/2.13.0/download",
+          "sha256": "36a8e50e917e18a37d500d27d40b7bc7d127e71c0c94fb2d83f43b4afd308390"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "minreq",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "minreq",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "json-using-serde",
+            "serde",
+            "serde_json"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "minreq 2.13.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.13.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
+      ],
+      "license_file": null
     },
     "minreq 2.13.0": {
       "name": "minreq",
@@ -49366,7 +49757,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.12",
+              "id": "candid 0.10.13",
               "target": "candid"
             },
             {
@@ -63598,11 +63989,15 @@
       "license_file": "LICENSE"
     },
     "secp256k1 0.29.1": {
+    "secp256k1 0.29.1": {
       "name": "secp256k1",
+      "version": "0.29.1",
       "version": "0.29.1",
       "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
       "repository": {
         "Http": {
+          "url": "https://static.crates.io/crates/secp256k1/0.29.1/download",
+          "sha256": "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
           "url": "https://static.crates.io/crates/secp256k1/0.29.1/download",
           "sha256": "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
         }
@@ -63635,6 +64030,12 @@
             "recovery",
             "serde",
             "std"
+            "hashes",
+            "rand",
+            "rand-std",
+            "recovery",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -63650,8 +64051,16 @@
               "target": "rand"
             },
             {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
               "id": "secp256k1-sys 0.10.0",
               "target": "secp256k1_sys"
+            },
+            {
+              "id": "serde 1.0.217",
+              "target": "serde"
             },
             {
               "id": "serde 1.0.217",
@@ -63661,6 +64070,7 @@
           "selects": {}
         },
         "edition": "2021",
+        "version": "0.29.1"
         "version": "0.29.1"
       },
       "license": "CC0-1.0",
@@ -63881,6 +64291,9 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
+            "recovery",
+            "std"
             "alloc",
             "recovery",
             "std"
@@ -87449,6 +87862,8 @@
     "bitcoin 0.28.2",
     "bitcoin 0.32.5",
     "bitcoincore-rpc 0.19.0",
+    "bitcoin 0.32.5",
+    "bitcoincore-rpc 0.19.0",
     "bitcoind 0.32.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
@@ -87461,7 +87876,7 @@
     "cached 0.49.2",
     "canbench 0.1.8",
     "canbench-rs 0.1.8",
-    "candid 0.10.12",
+    "candid 0.10.13",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.1.37",
@@ -87528,7 +87943,9 @@
     "ic-canister-sig-creation 1.1.0",
     "ic-cbor 3.0.2",
     "ic-cdk 0.16.0",
+    "ic-cdk 0.18.0-alpha.1",
     "ic-cdk-macros 0.9.0",
+    "ic-cdk-macros 0.18.0-alpha.1",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 3.0.2",
     "ic-certification 3.0.2",
@@ -87757,6 +88174,13 @@
     "zstd 0.13.2"
   ],
   "direct_dev_deps": [],
+  "unused_patches": [
+    {
+      "name": "jsonrpc",
+      "version": "0.12.1",
+      "source": "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"
+    }
+  ]
   "unused_patches": [
     {
       "name": "jsonrpc",

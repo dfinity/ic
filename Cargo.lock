@@ -301,6 +301,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "http 1.2.0",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "schemars",
  "serde",
  "serde_json",
@@ -1235,6 +1236,7 @@ dependencies = [
  "hex_lit",
  "secp256k1 0.29.1",
  "serde",
+ "serde",
 ]
 
 [[package]]
@@ -1242,6 +1244,9 @@ name = "bitcoin-internals"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30bdbe14aa07b06e6cfeffc529a1f099e5fbe249524f8125358604df99a4bed2"
+dependencies = [
+ "serde",
+]
 dependencies = [
  "serde",
 ]
@@ -1265,6 +1270,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5285c8bcaa25876d07f37e3d30c303f2609179716e11d688f51e8f1fe70063e2"
 dependencies = [
  "bitcoin-internals",
+ "serde",
  "serde",
 ]
 
@@ -1293,15 +1299,19 @@ dependencies = [
  "bitcoin-io",
  "hex-conservative",
  "serde",
+ "serde",
 ]
 
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.19.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
 checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
 dependencies = [
  "bitcoincore-rpc-json",
+ "jsonrpc 0.18.0",
  "jsonrpc 0.18.0",
  "log",
  "serde",
@@ -1311,9 +1321,12 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.19.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
+checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
 dependencies = [
+ "bitcoin 0.32.5",
  "bitcoin 0.32.5",
  "serde",
  "serde_json",
@@ -1390,7 +1403,9 @@ dependencies = [
 [[package]]
 name = "borsh"
 version = "1.5.5"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5430e3be710b68d984d1391c854eb431a9d548640711faa54eecb1df93db91cc"
 checksum = "5430e3be710b68d984d1391c854eb431a9d548640711faa54eecb1df93db91cc"
 dependencies = [
  "borsh-derive",
@@ -1400,7 +1415,9 @@ dependencies = [
 [[package]]
 name = "borsh-derive"
 version = "1.5.5"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8b668d39970baad5356d7c83a86fee3a539e6f93bf6764c97368243e17a0487"
 checksum = "f8b668d39970baad5356d7c83a86fee3a539e6f93bf6764c97368243e17a0487"
 dependencies = [
  "once_cell",
@@ -1435,7 +1452,9 @@ dependencies = [
 [[package]]
 name = "brotli-decompressor"
 version = "4.0.2"
+version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74fa05ad7d803d413eb8380983b092cbbaf9a85f151b871360e7b00cd7060b37"
 checksum = "74fa05ad7d803d413eb8380983b092cbbaf9a85f151b871360e7b00cd7060b37"
 dependencies = [
  "alloc-no-stdlib",
@@ -1714,6 +1733,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "clap 4.5.27",
+ "clap 4.5.27",
  "futures-util",
  "http 1.2.0",
  "http-body 1.0.1",
@@ -1780,6 +1800,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "pretty_assertions",
 ]
 
 [[package]]
@@ -1952,6 +1973,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "clap 4.5.27",
+ "clap 4.5.27",
  "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
  "flate2",
  "futures",
@@ -1959,6 +1981,7 @@ dependencies = [
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
+ "ic-utils 0.39.3",
  "ic-utils 0.39.3",
  "idna 1.0.3",
  "instant-acme",
@@ -2162,7 +2185,9 @@ dependencies = [
 [[package]]
 name = "clap"
 version = "4.5.27"
+version = "4.5.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "769b0145982b4b48713e01ec42d61614425f27b7058bda7180a3a41f30104796"
 checksum = "769b0145982b4b48713e01ec42d61614425f27b7058bda7180a3a41f30104796"
 dependencies = [
  "clap_builder",
@@ -2172,7 +2197,9 @@ dependencies = [
 [[package]]
 name = "clap_builder"
 version = "4.5.27"
+version = "4.5.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b26884eb4b57140e4d2d93652abfa49498b938b3c9179f9fc487b0acc3edad7"
 checksum = "1b26884eb4b57140e4d2d93652abfa49498b938b3c9179f9fc487b0acc3edad7"
 dependencies = [
  "anstream",
@@ -2379,6 +2406,7 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "config_types",
  "ic-types",
@@ -2612,6 +2640,7 @@ dependencies = [
  "cpufeatures",
  "hex",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
 ]
 
@@ -2842,6 +2871,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
+ "clap 4.5.27",
  "clap 4.5.27",
  "criterion-plot",
  "futures",
@@ -3395,6 +3425,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "clap 4.5.27",
  "config_types",
  "ic-crypto-sha2",
  "macaddr",
@@ -3406,6 +3437,7 @@ name = "dflate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "libc",
  "tar",
@@ -3521,6 +3553,7 @@ name = "diroid"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "walkdir",
 ]
@@ -4129,6 +4162,7 @@ dependencies = [
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "lazy_static",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4587,6 +4621,7 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 dependencies = [
  "fallible-iterator 0.3.0",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "stable_deref_trait",
 ]
 
@@ -4633,6 +4668,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "clap 4.5.27",
  "config",
  "indoc",
  "itertools 0.12.1",
@@ -4654,6 +4690,7 @@ dependencies = [
  "futures-util",
  "http 0.2.12",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "slab",
  "tokio",
  "tokio-util",
@@ -4672,6 +4709,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.2.0",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "slab",
  "tokio",
@@ -4970,6 +5008,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "clap 4.5.27",
  "config",
  "config_types",
  "deterministic_ips",
@@ -5069,6 +5108,7 @@ name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
  "axum",
+ "clap 4.5.27",
  "clap 4.5.27",
  "hyper 1.5.2",
  "hyper-util",
@@ -5330,6 +5370,7 @@ dependencies = [
  "candid",
  "chrono",
  "clap 4.5.27",
+ "clap 4.5.27",
  "cycles-minting-canister",
  "futures",
  "hex",
@@ -5374,6 +5415,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-types",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "itertools 0.12.1",
  "maplit",
  "pocket-ic",
@@ -5400,7 +5442,9 @@ dependencies = [
 [[package]]
 name = "ic-agent"
 version = "0.39.3"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "820d65a05258f2fdff326c65561b1ddc7ec54e5d43a4b1203b25eb83075c83d4"
 checksum = "820d65a05258f2fdff326c65561b1ddc7ec54e5d43a4b1203b25eb83075c83d4"
 dependencies = [
  "arc-swap",
@@ -5490,6 +5534,7 @@ dependencies = [
  "futures",
  "ic-artifact-pool",
  "ic-config",
+ "ic-consensus-manager",
  "ic-interfaces",
  "ic-metrics",
  "ic-protobuf",
@@ -5507,6 +5552,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "byteorder",
+ "clap 4.5.27",
  "clap 4.5.27",
  "criterion",
  "ic-config",
@@ -5551,6 +5597,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap 4.5.27",
+ "clap 4.5.27",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-logger",
@@ -5589,6 +5636,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "proptest-derive",
  "prost 0.13.4",
  "serde",
@@ -5611,6 +5659,7 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
+ "bitcoin 0.32.5",
  "bitcoin 0.32.5",
  "candid",
  "candid_parser",
@@ -5644,6 +5693,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chacha20poly1305",
+ "clap 4.5.27",
  "clap 4.5.27",
  "clap_derive 4.5.24",
  "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
@@ -5708,6 +5758,7 @@ dependencies = [
  "axum-extra",
  "bytes",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "criterion",
  "dashmap 6.1.0",
@@ -5873,6 +5924,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "slog",
  "url",
 ]
@@ -5882,8 +5934,10 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5",
+ "bitcoin 0.32.5",
  "bitcoincore-rpc",
  "bitcoind",
+ "clap 4.5.27",
  "clap 4.5.27",
  "criterion",
  "futures",
@@ -5905,6 +5959,7 @@ dependencies = [
  "ic-metrics",
  "ic-test-utilities-logger",
  "parking_lot 0.12.3",
+ "primitive-types",
  "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -5948,6 +6003,7 @@ name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5",
+ "bitcoin 0.32.5",
  "flate2",
  "hex",
  "rand 0.8.5",
@@ -5979,6 +6035,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "scraper",
  "serde",
@@ -6016,6 +6073,7 @@ dependencies = [
  "ic-types",
  "mockall",
  "prometheus",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "slog",
@@ -6058,6 +6116,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.9.0"
 dependencies = [
+ "bitcoin 0.32.5",
  "bitcoin 0.32.5",
  "csv",
  "hex",
@@ -6267,6 +6326,7 @@ dependencies = [
  "maplit",
  "phantom_newtype",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -6286,6 +6346,7 @@ dependencies = [
  "ic-crypto-tree-hash-test-utils",
  "itertools 0.12.1",
  "leb128",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -6369,6 +6430,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.18.0-alpha.1",
+ "ic0 0.24.0-alpha.1",
+ "serde",
+ "serde_bytes",
+ "thiserror 2.0.11",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6429,6 +6503,19 @@ name = "ic-cdk-macros"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c792bf0d1621c893ccf2bcdeac4ee70121103a03030a1827031a6b3c60488944"
+dependencies = [
+ "candid",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_tokenstream 0.2.2",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -6627,6 +6714,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "ripemd",
  "scopeguard",
  "serde",
@@ -6679,6 +6767,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "phantom_newtype",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "rlp",
@@ -6737,6 +6826,7 @@ dependencies = [
  "ic-sys",
  "ic-types",
  "json5",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "proptest-derive",
  "serde",
@@ -6802,6 +6892,7 @@ dependencies = [
  "num-traits",
  "phantom_newtype",
  "prometheus",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -6940,6 +7031,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "clap 4.5.27",
+ "clap 4.5.27",
  "criterion",
  "hex",
  "ic-adapter-metrics-server",
@@ -7012,6 +7104,7 @@ dependencies = [
  "maplit",
  "mockall",
  "parking_lot 0.12.3",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "proptest-derive",
  "prost 0.13.4",
@@ -7193,6 +7286,7 @@ dependencies = [
  "ic-types",
  "num-bigint 0.4.6",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "proptest-derive",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -7352,6 +7446,7 @@ dependencies = [
  "num_cpus",
  "parking_lot 0.12.3",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "proptest-derive",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -7395,6 +7490,7 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "paste",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "strum",
 ]
@@ -7458,6 +7554,7 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -7510,6 +7607,7 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "parking_lot 0.12.3",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "proptest-derive",
  "rand 0.8.5",
@@ -8044,6 +8142,7 @@ dependencies = [
  "ic-protobuf",
  "maplit",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
  "serde",
@@ -8059,6 +8158,7 @@ dependencies = [
  "assert_matches",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "thiserror 2.0.11",
@@ -8214,6 +8314,7 @@ name = "ic-drun"
 version = "0.9.0"
 dependencies = [
  "clap 4.5.27",
+ "clap 4.5.27",
  "futures",
  "hex",
  "ic-canister-sandbox-backend-lib",
@@ -8259,6 +8360,7 @@ dependencies = [
  "candid",
  "canister-test",
  "clap 4.5.27",
+ "clap 4.5.27",
  "criterion",
  "embedders_bench",
  "ic-base-types",
@@ -8297,6 +8399,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rayon",
  "rustc-demangle",
  "serde",
@@ -8333,6 +8436,7 @@ dependencies = [
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "minicbor",
  "minicbor-derive",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "serde",
  "serde_json",
@@ -8403,6 +8507,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "regex",
  "scoped_threadpool",
@@ -8437,6 +8542,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_matches",
+ "clap 4.5.27",
  "clap 4.5.27",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
@@ -8562,6 +8668,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
  "reqwest 0.12.12",
@@ -8639,6 +8746,7 @@ dependencies = [
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "thiserror 1.0.69",
 ]
 
@@ -8669,6 +8777,7 @@ dependencies = [
  "async-stream",
  "byte-unit",
  "bytes",
+ "clap 4.5.27",
  "clap 4.5.27",
  "futures",
  "http 1.2.0",
@@ -8761,6 +8870,7 @@ dependencies = [
  "ic-types",
  "mockall",
  "prometheus",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -8858,6 +8968,7 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.5.27",
+ "clap 4.5.27",
  "futures",
  "hex",
  "ic-agent",
@@ -8878,6 +8989,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities-load-wasm",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "icrc-ledger-agent",
  "icrc-ledger-types",
  "indicatif",
@@ -8886,6 +8998,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pocket-ic",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "reqwest 0.12.12",
@@ -8914,6 +9027,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "hex",
  "ic-agent",
@@ -8974,6 +9088,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "serde",
@@ -9040,6 +9155,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-traits",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "scopeguard",
  "serde",
  "serde_bytes",
@@ -9085,6 +9201,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
  "serde_bytes",
 ]
@@ -9104,6 +9221,7 @@ dependencies = [
  "ic-types",
  "icrc-ledger-types",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -9127,6 +9245,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
 ]
 
@@ -9140,6 +9259,7 @@ dependencies = [
  "ic-stable-structures",
  "minicbor",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "serde",
 ]
@@ -9191,6 +9311,7 @@ dependencies = [
  "pprof",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "slog",
  "tokio",
@@ -9213,6 +9334,7 @@ dependencies = [
  "ic-types",
  "ic-wasm-types",
  "phantom_newtype",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "serde",
@@ -9317,6 +9439,7 @@ dependencies = [
  "icp-ledger",
  "on_wire",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "reqwest 0.12.12",
  "rusqlite",
  "serde",
@@ -9365,6 +9488,7 @@ dependencies = [
  "minicbor",
  "num-traits",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
  "serde_bytes",
 ]
@@ -9412,6 +9536,7 @@ dependencies = [
  "num-traits",
  "paste",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "scopeguard",
  "scraper",
  "serde",
@@ -9440,6 +9565,7 @@ dependencies = [
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
+ "proptest 1.6.0",
  "proptest 1.6.0",
 ]
 
@@ -9478,6 +9604,7 @@ dependencies = [
  "icrc1-test-env",
  "icrc1-test-suite",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
 ]
 
@@ -9557,6 +9684,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "candid_parser",
+ "clap 4.5.27",
  "clap 4.5.27",
  "futures",
  "hex",
@@ -9675,12 +9803,14 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "random-traffic-test",
  "serde",
  "slog",
  "tempfile",
+ "test-strategy 0.3.1",
  "tracing",
  "xnet-test",
 ]
@@ -9723,6 +9853,7 @@ name = "ic-metrics-tool"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
 ]
 
@@ -9827,6 +9958,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "priority-queue",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rust_decimal",
@@ -10162,6 +10294,7 @@ dependencies = [
  "ic-nervous-system-common",
  "lazy_static",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
@@ -10301,6 +10434,7 @@ dependencies = [
  "on_wire",
  "pretty_assertions",
  "prometheus-parse",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -10507,6 +10641,7 @@ dependencies = [
  "candid",
  "canister-test",
  "clap 4.5.27",
+ "clap 4.5.27",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",
@@ -10530,6 +10665,7 @@ dependencies = [
 name = "ic-nns-inspector"
 version = "0.1.0"
 dependencies = [
+ "clap 4.5.27",
  "clap 4.5.27",
  "csv",
  "hex",
@@ -10815,6 +10951,7 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "clap 4.5.27",
+ "clap 4.5.27",
  "fs_extra",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -10963,6 +11100,7 @@ version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "clap 4.5.27",
+ "clap 4.5.27",
  "futures",
  "hex",
  "ic-artifact-pool",
@@ -11012,6 +11150,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
+ "clap 4.5.27",
  "clap 4.5.27",
  "ic-base-types",
  "ic-crypto-sha2",
@@ -11255,6 +11394,7 @@ name = "ic-registry-replicator"
 version = "0.9.0"
 dependencies = [
  "clap 4.5.27",
+ "clap 4.5.27",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-http-endpoints-metrics",
@@ -11340,6 +11480,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "clap 4.5.27",
+ "clap 4.5.27",
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
@@ -11393,6 +11534,7 @@ version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "canister-test",
+ "clap 4.5.27",
  "clap 4.5.27",
  "criterion",
  "hex",
@@ -11589,6 +11731,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -11650,6 +11793,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "clap 4.5.27",
+ "clap 4.5.27",
  "dfn_candid",
  "dfn_protobuf",
  "futures",
@@ -11690,6 +11834,7 @@ dependencies = [
  "on_wire",
  "pocket-ic",
  "prometheus",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -11863,6 +12008,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "clap 4.5.27",
+ "clap 4.5.27",
  "comparable",
  "futures",
  "hex",
@@ -11915,6 +12061,7 @@ dependencies = [
  "num-traits",
  "pretty_assertions",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "prost-build 0.13.4",
  "rand 0.8.5",
@@ -11937,6 +12084,7 @@ version = "0.9.0"
 dependencies = [
  "bytes",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "comparable",
  "ic-base-types",
@@ -12101,6 +12249,7 @@ dependencies = [
  "pretty-bytes",
  "pretty_assertions",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
  "rust_decimal",
@@ -12195,6 +12344,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "pretty_assertions",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rust_decimal",
@@ -12353,6 +12503,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "clap 4.5.27",
  "ic-config",
  "ic-logger",
  "ic-management-canister-types",
@@ -12393,6 +12544,7 @@ dependencies = [
  "libc",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "scoped_threadpool",
  "slog",
@@ -12404,6 +12556,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
+ "clap 4.5.27",
  "clap 4.5.27",
  "hex",
  "ic-artifact-pool",
@@ -12458,6 +12611,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-xnet-payload-builder",
  "maplit",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "rand 0.8.5",
  "rcgen",
@@ -12525,6 +12679,7 @@ dependencies = [
  "parking_lot 0.12.3",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -12577,6 +12732,7 @@ name = "ic-state-tool"
 version = "0.9.0"
 dependencies = [
  "clap 4.5.27",
+ "clap 4.5.27",
  "hex",
  "ic-config",
  "ic-logger",
@@ -12601,6 +12757,7 @@ dependencies = [
 name = "ic-subnet-splitting"
 version = "0.9.0"
 dependencies = [
+ "clap 4.5.27",
  "clap 4.5.27",
  "hex",
  "ic-agent",
@@ -12698,6 +12855,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.27",
+ "clap 4.5.27",
  "config_types",
  "crossbeam-channel",
  "cycles-minting-canister",
@@ -12776,6 +12934,7 @@ dependencies = [
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "ic-wasm-types",
  "icp-ledger",
  "icrc-ledger-types",
@@ -12795,6 +12954,7 @@ dependencies = [
  "once_cell",
  "pem 1.1.1",
  "phantom_newtype",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -12919,6 +13079,7 @@ dependencies = [
  "nix 0.24.3",
  "parking_lot 0.12.3",
  "rand 0.8.5",
+ "rusty-fork 0.3.0",
  "rusty-fork 0.3.0",
  "serde",
  "serde_cbor",
@@ -13100,6 +13261,7 @@ dependencies = [
  "ic-wasm-types",
  "mockall",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "strum",
@@ -13251,7 +13413,9 @@ dependencies = [
 [[package]]
 name = "ic-transport-types"
 version = "0.39.3"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
 checksum = "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
 dependencies = [
  "candid",
@@ -13298,10 +13462,12 @@ dependencies = [
  "phantom_newtype",
  "pretty_assertions",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "proptest-derive",
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rusty-fork 0.3.0",
  "rusty-fork 0.3.0",
  "serde",
  "serde_bytes",
@@ -13320,6 +13486,7 @@ version = "0.9.0"
 dependencies = [
  "ic-protobuf",
  "ic-types",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "strum",
 ]
@@ -13352,7 +13519,9 @@ dependencies = [
 [[package]]
 name = "ic-utils"
 version = "0.39.3"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd4274ab690a646a4fb4105428617e9c622255903aad34183bdc892ad8a7cc48"
 checksum = "cd4274ab690a646a4fb4105428617e9c622255903aad34183bdc892ad8a7cc48"
 dependencies = [
  "async-trait",
@@ -13381,6 +13550,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "lru",
+ "proptest 1.6.0",
  "proptest 1.6.0",
 ]
 
@@ -13563,6 +13733,7 @@ dependencies = [
  "anyhow",
  "candid",
  "clap 4.5.27",
+ "clap 4.5.27",
  "libflate",
  "rustc-demangle",
  "serde",
@@ -13602,6 +13773,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
+ "clap 4.5.27",
  "clap 4.5.27",
  "console 0.11.3",
  "futures",
@@ -13693,6 +13865,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "rand 0.8.5",
  "reqwest 0.12.12",
  "slog",
@@ -13737,6 +13910,11 @@ name = "ic0"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
+
+[[package]]
+name = "ic0"
+version = "0.24.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 
 [[package]]
 name = "ic_bls12_381"
@@ -13970,6 +14148,7 @@ name = "icp-config"
 version = "0.9.0"
 dependencies = [
  "clap 4.5.27",
+ "clap 4.5.27",
  "eyre",
  "ic-config",
  "ic-replicated-state",
@@ -14014,6 +14193,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "pocket-ic",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14060,6 +14240,7 @@ dependencies = [
  "minicbor",
  "num-bigint 0.4.6",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
 ]
 
@@ -14112,6 +14293,7 @@ dependencies = [
  "minicbor",
  "num-bigint 0.4.6",
  "num-traits",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "serde",
  "serde_bytes",
@@ -14374,7 +14556,9 @@ dependencies = [
 [[package]]
 name = "indexmap"
 version = "2.7.1"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
 checksum = "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
 dependencies = [
  "equivalent",
@@ -14409,6 +14593,7 @@ checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash 0.8.11",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "is-terminal",
  "itoa",
  "log",
@@ -14427,10 +14612,12 @@ checksum = "692eda1cc790750b9f5a5e3921ef9c117fd5498b97cfacbc910693e5b29002dc"
 dependencies = [
  "ahash 0.8.11",
  "clap 4.5.27",
+ "clap 4.5.27",
  "crossbeam-channel",
  "crossbeam-utils",
  "dashmap 6.1.0",
  "env_logger",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "itoa",
  "log",
@@ -14446,6 +14633,7 @@ name = "inject-files"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "partition_tools",
  "tempfile",
@@ -14528,7 +14716,9 @@ dependencies = [
 [[package]]
 name = "ipnet"
 version = "2.11.0"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
 checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
 dependencies = [
  "serde",
@@ -14546,11 +14736,14 @@ dependencies = [
 [[package]]
 name = "is-terminal"
 version = "0.4.14"
+version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f187290c0ed3dfe3f7c85bedddd320949b68fc86ca0ceb71adfb05b3dc3af2a"
 checksum = "3f187290c0ed3dfe3f7c85bedddd320949b68fc86ca0ceb71adfb05b3dc3af2a"
 dependencies = [
  "hermit-abi 0.4.0",
  "libc",
+ "windows-sys 0.59.0",
  "windows-sys 0.59.0",
 ]
 
@@ -14693,6 +14886,9 @@ name = "jsonrpc"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
 dependencies = [
  "base64 0.13.1",
  "serde",
@@ -14702,10 +14898,13 @@ dependencies = [
 [[package]]
 name = "jsonrpc"
 version = "0.18.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
 checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
 dependencies = [
  "base64 0.13.1",
+ "minreq",
  "minreq",
  "serde",
  "serde_json",
@@ -14899,6 +15098,7 @@ name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.27",
+ "clap 4.5.27",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -14996,6 +15196,7 @@ dependencies = [
  "minicbor",
  "num-traits",
  "on_wire",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "serde",
  "serde_bytes",
@@ -15583,6 +15784,7 @@ dependencies = [
  "libc",
  "nix 0.24.3",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "slog",
  "tempfile",
 ]
@@ -15619,6 +15821,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-utils 0.39.3",
  "ic-utils 0.39.3",
  "itertools 0.12.1",
  "rand 0.8.5",
@@ -15694,6 +15897,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8402cab7aefae129c6977bb0ff1b8fd9a04eb5b51efc50a70bea51cda0c7924"
 dependencies = [
  "adler2",
+]
+
+[[package]]
+name = "minreq"
+version = "2.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36a8e50e917e18a37d500d27d40b7bc7d127e71c0c94fb2d83f43b4afd308390"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -15943,6 +16157,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.39.3",
+ "ic-utils 0.39.3",
  "proxy_canister",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -15964,6 +16179,7 @@ name = "nft_exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "serde",
  "serde_json",
@@ -16330,6 +16546,7 @@ dependencies = [
  "crc32fast",
  "hashbrown 0.15.2",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "memchr",
 ]
 
@@ -16595,6 +16812,7 @@ dependencies = [
  "async-trait",
  "backoff",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "env-file-reader",
  "exec",
@@ -16987,6 +17205,7 @@ checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
 dependencies = [
  "fixedbitset",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
 ]
 
 [[package]]
@@ -17256,9 +17475,11 @@ dependencies = [
  "backoff",
  "base64 0.13.1",
  "bitcoin 0.32.5",
+ "bitcoin 0.32.5",
  "bitcoincore-rpc",
  "bytes",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "ctrlc",
  "flate2",
@@ -17308,6 +17529,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
+ "ic-utils 0.39.3",
  "ic-utils 0.39.3",
  "ic-utils-thread",
  "ic-validator-ingress-message",
@@ -17691,6 +17913,26 @@ dependencies = [
 
 [[package]]
 name = "proptest"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01c477819b845fe023d33583ebf10c9f62518c8d79a0960ba5c36d6ac8a55a5b"
+dependencies = [
+ "bit-set 0.5.3",
+ "bitflags 1.3.2",
+ "byteorder",
+ "lazy_static",
+ "num-traits",
+ "quick-error",
+ "rand 0.6.5",
+ "rand_chacha 0.1.1",
+ "rand_xorshift 0.1.1",
+ "regex-syntax 0.6.29",
+ "rusty-fork 0.2.2",
+ "tempfile",
+]
+
+[[package]]
+name = "proptest"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14cae93065090804185d3b75f0bf93b8eeda30c7a9b4a33d3bdb3988d6229e50"
@@ -17704,6 +17946,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_xorshift 0.3.0",
  "regex-syntax 0.8.5",
+ "rusty-fork 0.3.0",
  "rusty-fork 0.3.0",
  "tempfile",
  "unarray",
@@ -18175,12 +18418,13 @@ dependencies = [
  "candid",
  "futures",
  "ic-base-types",
- "ic-cdk 0.16.0",
- "ic-cdk-macros 0.9.0",
+ "ic-cdk 0.18.0-alpha.1",
+ "ic-cdk-macros 0.18.0-alpha.1",
  "ic-error-types",
  "ic-types",
  "rand 0.8.5",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -18215,6 +18459,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "clap 4.5.27",
  "clap 4.5.27",
  "ic-agent",
  "k256",
@@ -18842,6 +19087,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-bigint 0.4.6",
  "proptest 1.6.0",
+ "proptest 1.6.0",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -19089,7 +19335,9 @@ dependencies = [
 [[package]]
 name = "rustix"
 version = "0.38.44"
+version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags 2.8.0",
@@ -19288,6 +19536,18 @@ dependencies = [
 
 [[package]]
 name = "rusty-fork"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3dd93264e10c577503e926bd1430193eeb5d21b059148910082245309b424fae"
+dependencies = [
+ "fnv",
+ "quick-error",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
+name = "rusty-fork"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb3dcc6e454c328bb824492db107ab7c0ae8fcffe4ad210136ef014458c1bc4f"
@@ -19353,6 +19613,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09c024468a378b7e36765cd36702b7a90cc3cba11654f6685c8f233408e89e92"
 dependencies = [
  "dyn-clone",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "schemars_derive",
  "serde",
@@ -19482,7 +19743,9 @@ checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
  "bitcoin_hashes 0.14.0",
  "rand 0.8.5",
+ "rand 0.8.5",
  "secp256k1-sys 0.10.1",
+ "serde",
  "serde",
 ]
 
@@ -19582,7 +19845,9 @@ dependencies = [
 [[package]]
 name = "semver"
 version = "1.0.25"
+version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f79dfe2d285b0488816f30e700a7438c5a73d816b5b7d3ac72fbc48b0d185e03"
 checksum = "f79dfe2d285b0488816f30e700a7438c5a73d816b5b7d3ac72fbc48b0d185e03"
 dependencies = [
  "serde",
@@ -19673,7 +19938,9 @@ dependencies = [
 [[package]]
 name = "serde_json"
 version = "1.0.137"
+version = "1.0.137"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "930cfb6e6abf99298aaad7d29abbef7a9999a9a8806a40088f55f0dcec03146b"
 checksum = "930cfb6e6abf99298aaad7d29abbef7a9999a9a8806a40088f55f0dcec03146b"
 dependencies = [
  "itoa",
@@ -19818,6 +20085,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "itoa",
  "ryu",
  "serde",
@@ -19839,6 +20107,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "clap 4.5.27",
  "indoc",
  "linux_kernel_command_line",
  "partition_tools",
@@ -19852,6 +20121,7 @@ name = "setupos-inject-configuration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "config",
  "partition_tools",
@@ -19868,6 +20138,7 @@ name = "setupos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.27",
  "clap 4.5.27",
  "config",
  "config_types",
@@ -19985,7 +20256,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "similar"
 version = "2.7.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
@@ -20189,6 +20462,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
+ "ic-utils 0.39.3",
  "ic-utils 0.39.3",
  "ic_consensus_system_test_utils",
  "icp-ledger",
@@ -20512,7 +20786,9 @@ checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 [[package]]
 name = "symbolic-common"
 version = "12.13.3"
+version = "12.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a4dfe4bbeef59c1f32fc7524ae7c95b9e1de5e79a43ce1604e181081d71b0c"
 checksum = "13a4dfe4bbeef59c1f32fc7524ae7c95b9e1de5e79a43ce1604e181081d71b0c"
 dependencies = [
  "debugid",
@@ -20524,7 +20800,9 @@ dependencies = [
 [[package]]
 name = "symbolic-demangle"
 version = "12.13.3"
+version = "12.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98cf6a95abff97de4d7ff3473f33cacd38f1ddccad5c1feab435d6760300e3b6"
 checksum = "98cf6a95abff97de4d7ff3473f33cacd38f1ddccad5c1feab435d6760300e3b6"
 dependencies = [
  "rustc-demangle",
@@ -20629,6 +20907,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "clap 4.5.27",
  "clap 4.5.27",
  "http 1.2.0",
  "itertools 0.12.1",
@@ -21283,6 +21562,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ae48d6208a266e853d946088ed816055e556cc6028c5e8e2b84d9fa5dd7c7f5"
 dependencies = [
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "toml_datetime",
  "winnow",
 ]
@@ -21360,6 +21640,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hdrhistogram",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "pin-project-lite",
  "slab",
@@ -21625,6 +21906,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "leb128",
  "maplit",
+ "proptest 1.6.0",
  "proptest 1.6.0",
  "proptest-derive",
  "serde",
@@ -21932,7 +22214,9 @@ dependencies = [
 [[package]]
 name = "uuid"
 version = "1.12.1"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
 checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
 dependencies = [
  "getrandom",
@@ -21990,6 +22274,7 @@ dependencies = [
 name = "vsock_guest"
 version = "1.0.0"
 dependencies = [
+ "clap 4.5.27",
  "clap 4.5.27",
  "vsock_lib",
 ]
@@ -22220,10 +22505,13 @@ dependencies = [
 [[package]]
 name = "wasm-encoder"
 version = "0.224.0"
+version = "0.224.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7249cf8cb0c6b9cb42bce90c0a5feb276fbf963fa385ff3d818ab3d90818ed6"
 checksum = "b7249cf8cb0c6b9cb42bce90c0a5feb276fbf963fa385ff3d818ab3d90818ed6"
 dependencies = [
  "leb128",
+ "wasmparser 0.224.0",
  "wasmparser 0.224.0",
 ]
 
@@ -22250,6 +22538,7 @@ dependencies = [
  "bitflags 2.8.0",
  "hashbrown 0.14.5",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "semver",
  "serde",
 ]
@@ -22264,6 +22553,7 @@ dependencies = [
  "bitflags 2.8.0",
  "hashbrown 0.14.5",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "semver",
  "serde",
 ]
@@ -22277,6 +22567,7 @@ dependencies = [
  "bitflags 2.8.0",
  "hashbrown 0.15.2",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "semver",
  "serde",
 ]
@@ -22284,10 +22575,13 @@ dependencies = [
 [[package]]
 name = "wasmparser"
 version = "0.224.0"
+version = "0.224.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65881a664fdd43646b647bb27bf186ab09c05bf56779d40aed4c6dce47d423f5"
 checksum = "65881a664fdd43646b647bb27bf186ab09c05bf56779d40aed4c6dce47d423f5"
 dependencies = [
  "bitflags 2.8.0",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "semver",
 ]
@@ -22326,6 +22620,7 @@ dependencies = [
  "cc",
  "cfg-if 1.0.0",
  "hashbrown 0.14.5",
+ "indexmap 2.7.1",
  "indexmap 2.7.1",
  "libc",
  "libm",
@@ -22424,6 +22719,7 @@ dependencies = [
  "cranelift-entity",
  "gimli 0.31.1",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "log",
  "object",
  "postcard",
@@ -22506,6 +22802,7 @@ dependencies = [
  "anyhow",
  "heck 0.5.0",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "wit-parser",
 ]
 
@@ -22525,7 +22822,9 @@ dependencies = [
 [[package]]
 name = "wast"
 version = "224.0.0"
+version = "224.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d722a51e62b669d17e5a9f6bc8ec210178b37d869114355aa46989686c5c6391"
 checksum = "d722a51e62b669d17e5a9f6bc8ec210178b37d869114355aa46989686c5c6391"
 dependencies = [
  "bumpalo",
@@ -22533,14 +22832,18 @@ dependencies = [
  "memchr",
  "unicode-width 0.2.0",
  "wasm-encoder 0.224.0",
+ "wasm-encoder 0.224.0",
 ]
 
 [[package]]
 name = "wat"
 version = "1.224.0"
+version = "1.224.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71dece6a7dd5bcbcf8d256606c7fb3faa36286d46bf3f98185407719a5ceede2"
+checksum = "71dece6a7dd5bcbcf8d256606c7fb3faa36286d46bf3f98185407719a5ceede2"
 dependencies = [
+ "wast 224.0.0",
  "wast 224.0.0",
 ]
 
@@ -22950,6 +23253,7 @@ dependencies = [
  "anyhow",
  "id-arena",
  "indexmap 2.7.1",
+ "indexmap 2.7.1",
  "log",
  "semver",
  "serde",
@@ -23250,6 +23554,11 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "jsonrpc"
+version = "0.12.1"
+source = "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"
 
 [[patch.unused]]
 name = "jsonrpc"
