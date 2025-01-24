@@ -1,5 +1,4 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -15,7 +14,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:serde",
@@ -41,7 +39,7 @@ rust_canister(
     name = "node-metrics-collector-canister",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    proc_macro_deps = [],
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":node-metrics-collector.did",
     deps = DEPENDENCIES + [
         ":build_script",

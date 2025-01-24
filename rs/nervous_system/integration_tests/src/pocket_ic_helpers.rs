@@ -36,7 +36,7 @@ use ic_nns_test_utils::{
         build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
+use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_sns_governance::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
@@ -71,6 +71,8 @@ use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::ops::Range;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::path::PathBuf;
+use ic_registry_transport::pb::v1::registry_mutation::Type;
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -310,6 +312,31 @@ pub async fn add_wasms_to_sns_wasm(
         SnsCanisterType::Ledger => (ledger_proposal_info, ledger_wasm),
         SnsCanisterType::Archive => (archive_proposal_info, archive_wasm),
     })
+}
+
+pub fn load_registry_mutations(local_registry: PathBuf) {
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
+    let updates = registry_data_provider
+        .get_updates_since(ZERO_REGISTRY_VERSION)
+        .unwrap();
+    let mutations = updates
+        .into_iter()
+        .map(|r| {
+            let mut m = RegistryMutation::default();
+
+            let t = if r.value.is_none() {
+                Type::Delete
+            } else {
+                Type::Insert
+            };
+            m.set_mutation_type(t);
+            m.key = r.key.as_bytes().to_vec();
+            m.value = r.value.unwrap_or_default();
+
+            m
+        })
+        .collect::<Vec<RegistryMutation>>();
+    mutations
 }
 
 /// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.

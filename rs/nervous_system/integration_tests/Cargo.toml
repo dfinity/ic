@@ -13,6 +13,8 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }

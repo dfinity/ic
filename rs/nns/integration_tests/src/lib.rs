@@ -146,3 +146,6 @@ mod api_boundary_node_queries;
 
 #[cfg(test)]
 mod metrics_collector;
+
+#[cfg(test)]
+mod node_metrics_collector;

@@ -75,18 +75,18 @@ async fn fetch_metrics(
                 (contract,),
                 0_u128,
             )
-            .map(move |result| {
-                result
-                    .map_err(|(code, msg)| {
-                        anyhow::anyhow!(
+                .map(move |result| {
+                    result
+                        .map_err(|(code, msg)| {
+                            anyhow::anyhow!(
                         "Error when calling management canister for subnet {}:\n Code:{:?}\nMsg:{}",
                         subnet_id,
                         code,
                         msg
                     )
-                    })
-                    .map(|(node_metrics,)| (subnet_id, node_metrics))
-            });
+                        })
+                        .map(|(node_metrics,)| (subnet_id, node_metrics))
+                });
 
         subnets_node_metrics.push(node_metrics);
     }
@@ -120,7 +120,7 @@ async fn fetch_subnets() -> anyhow::Result<Vec<PrincipalId>> {
 }
 
 /// Update node metrics
-pub async fn sync_node_metrics() {
+async fn sync_node_metrics() {
     let latest_metrics_ts = NODES_METRICS.with_borrow(|nodes_metrics| {
         nodes_metrics
             .last_key_value()
@@ -165,21 +165,29 @@ pub async fn sync_node_metrics() {
     ic_cdk::println!("Successfully updated trustworthy node metrics");
 }
 
-#[init]
-fn init() {
-    ic_cdk_timers::set_timer(std::time::Duration::from_secs(0), || {
-        ic_cdk::spawn(sync_node_metrics())
-    });
-}
-
-#[post_upgrade]
-fn post_upgrade() {
+fn setup_timers() {
     ic_cdk_timers::set_timer(
         std::time::Duration::from_secs(
             DAY_SECONDS + HR_BUFFER - (ic_cdk::api::time() / 1_000_000_000) % DAY_SECONDS,
         ),
-        || ic_cdk::spawn(sync_node_metrics()),
+        || {
+            ic_cdk::spawn(sync_node_metrics());
+            ic_cdk_timers::set_timer_interval(
+                std::time::Duration::from_secs(DAY_SECONDS),
+                || ic_cdk::spawn(sync_node_metrics()),
+            );
+        },
     );
+}
+
+#[init]
+fn init() {
+    setup_timers();
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    setup_timers();
 }
 
 #[query]

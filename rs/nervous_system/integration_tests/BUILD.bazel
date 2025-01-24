@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
@@ -19,6 +20,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
+    "//rs/registry/proto_data_provider",
     "//rs/sns/governance",
     "//rs/sns/init",
     "//rs/sns/root",
