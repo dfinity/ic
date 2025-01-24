@@ -14,8 +14,8 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
@@ -26,11 +26,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_cmc_wasm, build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_cmc_wasm, build_mainnet_governance_wasm, build_mainnet_ledger_wasm,
-        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
-        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
-        NnsInitPayloadsBuilder,
+        build_cmc_wasm, build_governance_wasm, build_index_wasm, build_ledger_wasm,
+        build_lifeline_wasm, build_mainnet_cmc_wasm, build_mainnet_governance_wasm,
+        build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
+        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
+        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -329,6 +329,7 @@ pub struct NnsInstaller {
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_cycles_minting_canister: bool,
     with_cycles_ledger: bool,
+    with_index_canister: bool,
 }
 
 impl NnsInstaller {
@@ -386,6 +387,11 @@ impl NnsInstaller {
 
     pub fn with_cycles_ledger(&mut self) -> &mut Self {
         self.with_cycles_ledger = true;
+        self
+    }
+
+    pub fn with_index_canister(&mut self) -> &mut Self {
+        self.with_index_canister = true;
         self
     }
 
@@ -547,6 +553,23 @@ impl NnsInstaller {
             cycles_ledger::install(pocket_ic).await;
         }
 
+        if self.with_index_canister {
+            let ledger_index_wasm = if with_mainnet_canister_versions {
+                build_mainnet_index_wasm()
+            } else {
+                build_index_wasm()
+            };
+            install_canister(
+                pocket_ic,
+                "Index",
+                LEDGER_INDEX_CANISTER_ID,
+                Encode!(&nns_init_payload.index).unwrap(),
+                ledger_index_wasm,
+                Some(ROOT_CANISTER_ID.get()),
+            )
+            .await;
+        }
+
         nns_init_payload
             .governance
             .neurons
@@ -694,7 +717,7 @@ pub mod cycles_ledger {
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
 /// 3. `custom_registry_mutations` are custom mutations for the inital Registry. These
 ///    should mutations should comply with Registry invariants, otherwise this function will fail.
-/// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
+/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
 /// Returns
 /// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.

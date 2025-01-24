@@ -41,6 +41,7 @@ pub struct NnsInitPayloads {
     pub lifeline: LifelineCanisterInitPayload,
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
+    pub index: ic_icp_index::InitArg,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -53,6 +54,7 @@ pub struct NnsInitPayloadsBuilder {
     pub lifeline: LifelineCanisterInitPayloadBuilder,
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
+    pub index: ic_icp_index::InitArg,
 }
 
 #[allow(clippy::new_without_default)]
@@ -94,6 +96,9 @@ impl NnsInitPayloadsBuilder {
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
             sns_wasms: SnsWasmCanisterInitPayloadBuilder::new(),
+            index: ic_icp_index::InitArg {
+                ledger_id: LEDGER_CANISTER_ID.get().into(),
+            },
         }
     }
 
@@ -283,6 +288,7 @@ impl NnsInitPayloadsBuilder {
             lifeline: self.lifeline.build(),
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
+            index: self.index.clone(),
         }
     }
 }
@@ -372,6 +378,12 @@ pub fn build_sns_wasms_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("sns-wasm-canister", &features)
 }
 
+/// Build Wasm for Index canister for the ICP Ledger
+pub fn build_index_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("ic-icp-index", &features)
+}
+
 /// Build mainnet Wasm for NNS SnsWasm canister
 pub fn build_mainnet_sns_wasms_wasm() -> Wasm {
     let features = [];
@@ -393,4 +405,10 @@ pub fn build_mainnet_ledger_wasm() -> Wasm {
 pub fn build_mainnet_governance_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
+}
+
+/// Build Wasm for Index canister for the ICP Ledger
+pub fn build_mainnet_index_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-index-canister", &features)
 }
