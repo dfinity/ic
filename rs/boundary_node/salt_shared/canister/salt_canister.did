@@ -40,7 +40,7 @@ type HttpResponse = record {
 type SaltGenerationStrategy = variant {
   // Generates a new salt at 00:00:00 UTC on the first day of the next calendar month
   // Handles calendar edge cases including: transitions between months (December-January), leap years
-  StartOfNextMonth;
+  StartOfMonth;
   // Generates a new salt at fixed intervals from an unspecified reference point
   FixedIntervalSecs: nat64;
 };
