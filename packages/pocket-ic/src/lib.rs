@@ -99,7 +99,7 @@ const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 7.0.0";
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
-const LOCALHOST: &str = "127.0.0.1";
+const LOCALHOST: &str = "[::1]";
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,

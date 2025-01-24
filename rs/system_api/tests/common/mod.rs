@@ -100,7 +100,12 @@ impl ApiTypeBuilder {
     }
 
     pub fn build_replicated_query_api() -> ApiType {
-        ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get())
+        ApiType::replicated_query(
+            UNIX_EPOCH,
+            vec![],
+            user_test_id(1).get(),
+            CallContextId::new(1),
+        )
     }
 
     pub fn build_non_replicated_query_api() -> ApiType {

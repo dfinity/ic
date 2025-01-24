@@ -92,16 +92,12 @@ impl IngressPayload {
         serialized_ingress_messages.is_empty()
     }
 
-    /// Return the [`SignedIngress`] referenced by the [`IngressMessageId`].
-    /// Return [`IngressPayloadError`] if we fail to deserialize the message.
-    pub fn get_by_id(
+    /// Return the [`SignedRequestBytes`] referenced by the [`IngressMessageId`].
+    pub fn get_serialized_by_id(
         &self,
         ingress_message_id: &IngressMessageId,
-    ) -> Result<Option<SignedIngress>, IngressPayloadError> {
-        self.serialized_ingress_messages
-            .get(ingress_message_id)
-            .map(|bytes| SignedIngress::try_from(bytes.clone()).map_err(IngressPayloadError))
-            .transpose()
+    ) -> Option<&SignedRequestBytes> {
+        self.serialized_ingress_messages.get(ingress_message_id)
     }
 
     /// Iterates over the ingress messages in their deserialized form.
@@ -119,6 +115,12 @@ impl IngressPayload {
                 SignedIngress::try_from(bytes.clone()).map_err(IngressPayloadError),
             )
         })
+    }
+
+    pub fn iter_serialized(
+        &self,
+    ) -> impl Iterator<Item = (&IngressMessageId, &SignedRequestBytes)> {
+        self.serialized_ingress_messages.iter()
     }
 }
 
@@ -155,7 +157,6 @@ impl From<Vec<SignedIngress>> for IngressPayload {
 
 impl TryFrom<IngressPayload> for Vec<SignedIngress> {
     type Error = IngressPayloadError;
-
     fn try_from(payload: IngressPayload) -> Result<Vec<SignedIngress>, Self::Error> {
         payload
             .serialized_ingress_messages
@@ -273,10 +274,10 @@ mod tests {
             payload
         );
         // Individual lookup works.
-        assert_eq!(payload.get_by_id(&id1), Ok(Some(m1)));
-        assert_eq!(payload.get_by_id(&id2), Ok(Some(m2)));
-        assert_eq!(payload.get_by_id(&id3), Ok(Some(m3)));
-        assert_eq!(payload.get_by_id(&id4), Ok(None));
+        assert_eq!(payload.get_serialized_by_id(&id1), Some(m1.binary()));
+        assert_eq!(payload.get_serialized_by_id(&id2), Some(m2.binary()));
+        assert_eq!(payload.get_serialized_by_id(&id3), Some(m3.binary()));
+        assert_eq!(payload.get_serialized_by_id(&id4), None);
         // Converting back to messages should match original
         assert_eq!(msgs, <Vec<SignedIngress>>::try_from(payload).unwrap());
     }
