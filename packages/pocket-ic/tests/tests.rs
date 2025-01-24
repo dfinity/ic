@@ -350,40 +350,6 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
-#[test]
-fn test_get_and_set_and_advance_time() {
-    let pic = PocketIc::new();
-
-    let unix_time_secs = 1630328630;
-    let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
-    pic.set_time(set_time);
-    assert_eq!(pic.get_time(), set_time);
-    pic.tick();
-    assert_eq!(pic.get_time(), set_time);
-
-    pic.advance_time(std::time::Duration::from_secs(420));
-    assert_eq!(
-        pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
-    );
-    pic.tick();
-    assert_eq!(
-        pic.get_time(),
-        set_time + std::time::Duration::from_secs(420)
-    );
-}
-
-#[test]
-#[should_panic(expected = "SettingTimeIntoPast")]
-fn set_time_into_past() {
-    let pic = PocketIc::new();
-
-    let now = SystemTime::now();
-    pic.set_time(now + std::time::Duration::from_secs(1));
-
-    pic.set_time(now);
-}
-
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic
         .get_time()
@@ -402,7 +368,7 @@ fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
 }
 
 #[test]
-fn query_call_after_advance_time() {
+fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
 
     // We create a test canister.
@@ -410,17 +376,54 @@ fn query_call_after_advance_time() {
     pic.add_cycles(canister, INIT_CYCLES);
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
+    let unix_time_secs = 1650000000;
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_time(time);
+    // time is not certified so `query_and_check_time` would fail here
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
     query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
 
+    let unix_time_secs = 1700000000;
+    let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_certified_time(time);
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time);
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(1));
+    pic.tick();
+    query_and_check_time(&pic, canister);
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_nanos(2));
+
+    let time = pic.get_time();
     pic.advance_time(std::time::Duration::from_secs(420));
+    // time is not certified so `query_and_check_time` would fail here
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_secs(420));
     pic.tick();
-
     query_and_check_time(&pic, canister);
-
-    pic.advance_time(std::time::Duration::from_secs(0));
+    assert_eq!(pic.get_time(), time + std::time::Duration::from_secs(420));
     pic.tick();
-
     query_and_check_time(&pic, canister);
+    assert_eq!(
+        pic.get_time(),
+        time + std::time::Duration::from_secs(420) + std::time::Duration::from_nanos(1)
+    );
+}
+
+#[test]
+#[should_panic(expected = "SettingTimeIntoPast")]
+fn set_time_into_past() {
+    let pic = PocketIc::new();
+
+    let now = SystemTime::now();
+    pic.set_time(now + std::time::Duration::from_secs(1));
+
+    pic.set_time(now);
 }
 
 #[test]

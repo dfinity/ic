@@ -302,7 +302,7 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
         let now = std::time::SystemTime::now();
-        self.set_time(now).await;
+        self.set_certified_time(now).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -473,6 +473,22 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
     pub async fn set_time(&self, time: SystemTime) {
         let endpoint = "update/set_time";
+        self.post::<(), _>(
+            endpoint,
+            RawTime {
+                nanos_since_epoch: time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_nanos() as u64,
+            },
+        )
+        .await;
+    }
+
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
+    pub async fn set_certified_time(&self, time: SystemTime) {
+        let endpoint = "update/set_certified_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
