@@ -12,8 +12,9 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
@@ -24,8 +25,9 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
+        build_cmc_wasm, build_governance_wasm, build_index_wasm, build_ledger_wasm,
+        build_lifeline_wasm, build_mainnet_cmc_wasm, build_mainnet_governance_wasm,
+        build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
         build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
         build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
     },
@@ -311,7 +313,8 @@ pub async fn add_wasms_to_sns_wasm(
     })
 }
 
-/// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
+/// Installs the following NNS canisters: Governance, Ledger, Root, Lifeline, SNS-W, and Registry.
+/// Ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
 /// Requires PocketIC to have at least an NNS and an SNS subnet.
 ///
 /// Arguments
@@ -321,7 +324,7 @@ pub async fn add_wasms_to_sns_wasm(
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
 /// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
 ///    should mutations should comply with Registry invariants, otherwise this function will fail.
-/// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
+/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
 /// Returns
 /// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
@@ -331,6 +334,77 @@ pub async fn install_nns_canisters(
     with_mainnet_nns_canister_versions: bool,
     custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
+) -> Vec<PrincipalId> {
+    install_nns_suite(
+        pocket_ic,
+        initial_balances,
+        with_mainnet_nns_canister_versions,
+        custom_initial_registry_mutations,
+        neurons_fund_hotkeys,
+        false,
+        false,
+    )
+    .await
+}
+
+/// Installs the all NNS canisters: Governance, Ledger, Root, Lifeline, SNS-W, Registry, Index, and CMC.
+/// Ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
+/// Requires PocketIC to have at least an NNS and an SNS subnet.
+///
+/// Arguments
+/// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
+///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
+/// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
+///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
+/// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
+///    should mutations should comply with Registry invariants, otherwise this function will fail.
+/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
+///
+/// Returns
+/// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
+pub async fn install_all_nns_canisters(
+    pocket_ic: &PocketIc,
+    initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    with_mainnet_nns_canister_versions: bool,
+    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    neurons_fund_hotkeys: Vec<PrincipalId>,
+) -> Vec<PrincipalId> {
+    install_nns_suite(
+        pocket_ic,
+        initial_balances,
+        with_mainnet_nns_canister_versions,
+        custom_initial_registry_mutations,
+        neurons_fund_hotkeys,
+        true,
+        true,
+    )
+    .await
+}
+
+/// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
+/// Requires PocketIC to have at least an NNS and an SNS subnet.
+///
+/// Arguments
+/// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
+///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
+/// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
+///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
+/// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
+///    mutations should comply with Registry invariants, otherwise this function will fail.
+/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
+/// 5. `install_index_canister` - a flag indicating whether the Index canister for ICP Ledger should be installed.
+/// 6. `install_cmc` - a flag indicating whether the Cycles minting canister should be installed.
+///
+/// Returns
+/// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
+pub async fn install_nns_suite(
+    pocket_ic: &PocketIc,
+    initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    with_mainnet_nns_canister_versions: bool,
+    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    neurons_fund_hotkeys: Vec<PrincipalId>,
+    install_index_canister: bool,
+    install_cmc: bool,
 ) -> Vec<PrincipalId> {
     let topology = pocket_ic.topology().await;
 
@@ -439,6 +513,40 @@ pub async fn install_nns_canisters(
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;
+
+    if install_index_canister {
+        let index_wasm = if with_mainnet_nns_canister_versions {
+            build_mainnet_index_wasm()
+        } else {
+            build_index_wasm()
+        };
+        install_canister(
+            pocket_ic,
+            "Index",
+            LEDGER_INDEX_CANISTER_ID,
+            Encode!(&nns_init_payload.index).unwrap(),
+            index_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+    }
+
+    if install_cmc {
+        let cycles_minting_wasm = if with_mainnet_nns_canister_versions {
+            build_mainnet_cmc_wasm()
+        } else {
+            build_cmc_wasm()
+        };
+        install_canister(
+            pocket_ic,
+            "Cycles minting",
+            CYCLES_MINTING_CANISTER_ID,
+            Encode!(&nns_init_payload.cycles_minting).unwrap(),
+            cycles_minting_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
+    }
 
     let nns_neurons = nns_init_payload
         .governance
