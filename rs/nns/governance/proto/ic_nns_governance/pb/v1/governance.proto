@@ -1224,88 +1224,6 @@ message ManageNeuron {
   }
 }
 
-// The response of the ManageNeuron command
-//
-// There is a dedicated response type for each `ManageNeuron.command` field
-message ManageNeuronResponse {
-  message ConfigureResponse {}
-
-  message DisburseResponse {
-    // The block height at which the disburse transfer happened
-    uint64 transfer_block_height = 1;
-  }
-
-  message SpawnResponse {
-    // The ID of the Neuron created from spawning a Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  message MergeMaturityResponse {
-    uint64 merged_maturity_e8s = 1;
-    uint64 new_stake_e8s = 2;
-  }
-
-  message StakeMaturityResponse {
-    uint64 maturity_e8s = 1;
-    uint64 staked_maturity_e8s = 2;
-  }
-
-  message FollowResponse {}
-
-  message MakeProposalResponse {
-    // The ID of the created proposal
-    ic_nns_common.pb.v1.ProposalId proposal_id = 1;
-    optional string message = 2;
-  }
-
-  message RegisterVoteResponse {}
-
-  message SplitResponse {
-    // The ID of the Neuron created from splitting another Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  // A response for merging or simulating merge neurons
-  message MergeResponse {
-    // The resulting state of the source neuron
-    Neuron source_neuron = 1;
-    // The resulting state of the target neuron
-    Neuron target_neuron = 2;
-    // The NeuronInfo of the source neuron
-    NeuronInfo source_neuron_info = 3;
-    // The NeuronInfo of the target neuron
-    NeuronInfo target_neuron_info = 4;
-  }
-
-  message DisburseToNeuronResponse {
-    // The ID of the Neuron created from disbursing a Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  message ClaimOrRefreshResponse {
-    ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
-  }
-
-  message RefreshVotingPowerResponse {}
-
-  oneof command {
-    GovernanceError error = 1;
-    ConfigureResponse configure = 2;
-    DisburseResponse disburse = 3;
-    SpawnResponse spawn = 4;
-    FollowResponse follow = 5;
-    MakeProposalResponse make_proposal = 6;
-    RegisterVoteResponse register_vote = 7;
-    SplitResponse split = 8;
-    DisburseToNeuronResponse disburse_to_neuron = 9;
-    ClaimOrRefreshResponse claim_or_refresh = 10;
-    MergeMaturityResponse merge_maturity = 11;
-    MergeResponse merge = 12;
-    StakeMaturityResponse stake_maturity = 13;
-    RefreshVotingPowerResponse refresh_voting_power = 14;
-  }
-}
-
 message GovernanceError {
   enum ErrorType {
     ERROR_TYPE_UNSPECIFIED = 0;
@@ -2212,6 +2130,10 @@ message InstallCode {
   optional bytes arg = 4;
   // Whether to skip stopping the canister before installing. Optional. Default is false.
   optional bool skip_stopping_before_installing = 5;
+  // The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+  optional bytes wasm_module_hash = 6;
+  // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+  optional bytes arg_hash = 7;
 }
 
 message StopOrStartCanister {
