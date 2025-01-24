@@ -1,6 +1,6 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client_sender::Sender as CanisterSender;
+use ic_canister_client_sender::Sender;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
@@ -53,7 +53,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
@@ -63,15 +63,16 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// Note: To ensure that this function does not block forever (in case of bugs),
 /// this function will panic if the process is not finished in some amount of
 /// time.
+#[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .blocking_send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
+        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -151,7 +152,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
-    pub ingress_sender: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -660,7 +661,7 @@ impl LocalTestRuntime {
         canister_id: CanisterId,
         method_name: M,
         payload: P,
-        sender: &CanisterSender,
+        sender: &Sender,
     ) -> Result<WasmResult, UserError> {
         process_ingress(
             &self.ingress_sender,
