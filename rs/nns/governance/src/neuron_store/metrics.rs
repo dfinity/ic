@@ -249,9 +249,7 @@ impl NeuronStore {
         now_seconds: u64,
     ) -> NeuronMetrics {
         let mut metrics = if self.allow_active_neurons_in_stable_memory {
-            NeuronMetrics {
-                ..Default::default()
-            }
+            NeuronMetrics::default()
         } else {
             // If we are not using stable memory for all neurons, we still assume
             // these base level metrics
@@ -259,8 +257,6 @@ impl NeuronStore {
                 garbage_collectable_neurons_count: with_stable_neuron_store(
                     |stable_neuron_store| stable_neuron_store.len() as u64,
                 ),
-                neurons_fund_total_active_neurons: self.list_active_neurons_fund_neurons().len()
-                    as u64,
                 ..Default::default()
             }
         };
@@ -497,6 +493,10 @@ impl NeuronStore {
             metrics.total_staked_maturity_e8s_equivalent +=
                 neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
             metrics.total_maturity_e8s_equivalent += neuron.maturity_e8s_equivalent;
+
+            if Self::is_active_neurons_fund_neuron(neuron, now_seconds) {
+                metrics.neurons_fund_total_active_neurons += 1;
+            }
 
             if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
                 metrics.community_fund_total_staked_e8s += neuron.minted_stake_e8s();
