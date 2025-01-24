@@ -18,7 +18,7 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use fqdn::FQDN;
+use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
     header::{
@@ -795,7 +795,7 @@ impl ApiState {
         let ip_addr = http_gateway_config
             .ip_addr
             .clone()
-            .unwrap_or("[::1]".to_string());
+            .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
@@ -829,9 +829,8 @@ impl ApiState {
             .clone()
             .unwrap_or(vec!["localhost".to_string()])
             .iter()
-            .map(|d| FQDN::from_str(d))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
