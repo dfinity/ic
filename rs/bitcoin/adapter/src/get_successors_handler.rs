@@ -22,11 +22,13 @@ use crate::{
 const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
-const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
+const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 1000;
 
 // Max number of blocks that can be returned in the `GetSuccessorsResponse`.
 // We limit the number of blocks because serializing many blocks to pb can take some time.
 const MAX_BLOCKS_LENGTH: usize = 100;
+
+const MAX_HEADERS_LENGTH: usize = 100;
 
 const BLOCK_HEADER_SIZE: usize = 80;
 
@@ -96,7 +98,8 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let response = {
+
+        let (blocks, next) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -115,17 +118,20 @@ impl GetSuccessorsHandler {
                 &request.processed_block_hashes,
                 &blocks,
             );
-            GetSuccessorsResponse { blocks, next }
+            (blocks, next)
+            
         };
+        let response_next = &next[..next.len().min(MAX_HEADERS_LENGTH)];
+        let response = GetSuccessorsResponse { blocks, next: response_next.to_vec() };
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
 
-        if !response.next.is_empty() {
+        if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    response.next.clone(),
+                    next.clone(),
                 ))
                 .ok();
         }
