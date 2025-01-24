@@ -549,8 +549,8 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
         .collect::<BTreeMap<u64, NeuronProto>>();
 
     let subaccounts = neurons
-        .iter()
-        .map(|(_, neuron)| NeuronSubaccount {
+        .values()
+        .map(|neuron| NeuronSubaccount {
             subaccount: neuron.account.clone(),
         })
         .collect();
