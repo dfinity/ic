@@ -26,7 +26,8 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
@@ -422,6 +423,14 @@ fn test_no_new_utxos() {
             suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
+        ); // no metrics for update call with new UTXOs
 }
 
 #[test]
@@ -481,6 +490,14 @@ fn update_balance_should_return_correct_confirmations() {
             suspended_utxos: Some(vec![]),
         })
     );
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ) // exactly 1 match for an update call with no new UTXOs
+        .assert_contains_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
+        ); // exactly 1 match for an update call with new UTXOs
 }
 
 #[test]
@@ -658,6 +675,7 @@ impl CkBtcSetup {
             Encode!(&CheckArg::InitArg(CheckerInitArg {
                 btc_network: CheckerBtcNetwork::Mainnet,
                 check_mode: CheckMode::AcceptAll,
+                num_subnet_nodes: 1,
             }))
             .unwrap(),
         )
@@ -1212,6 +1230,18 @@ impl CkBtcSetup {
         )
         .unwrap()
         .expect("minter self-check failed")
+    }
+
+    pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
+        MetricsAssert::from_http_query(self)
+    }
+}
+
+impl CanisterHttpQuery<UserError> for CkBtcSetup {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.env
+            .query(self.minter_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 
@@ -2045,6 +2075,7 @@ fn test_retrieve_btc_with_approval_fail() {
             btc_checker_wasm(),
             Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
                 check_mode: Some(CheckMode::RejectAll),
+                ..CheckerUpgradeArg::default()
             })))
             .unwrap(),
         )

@@ -18,7 +18,6 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "//rs/async_utils",
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/config",
@@ -26,6 +25,7 @@ rust_library(
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/tls_interfaces",
+        "//rs/http_endpoints/async_utils",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
         "//rs/interfaces",
@@ -79,7 +79,7 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":lib",
-        "//rs/async_utils",
+        "//rs/http_endpoints/async_utils",
         "@crate_index//:clap",
         "@crate_index//:tokio",
     ],
@@ -87,12 +87,12 @@ rust_binary(
 
 rust_test(
     name = "orchestrator_test",
-    crate = ":lib",
-    data = [
+    compile_data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
+    crate = ":lib",
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",

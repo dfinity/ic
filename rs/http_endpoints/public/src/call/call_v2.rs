@@ -117,7 +117,7 @@ pub(super) async fn handler(
 
     let message_id = ingress_submitter.message_id();
 
-    ingress_submitter.submit().await?;
+    ingress_submitter.try_submit()?;
 
     // We spawn a task to register the certification time of the message.
     // The subscriber in the spawned task records the certification time of the message

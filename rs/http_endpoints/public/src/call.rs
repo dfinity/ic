@@ -34,7 +34,7 @@ use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
@@ -46,7 +46,7 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -58,7 +58,7 @@ impl IngressValidatorBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
             log,
@@ -167,7 +167,7 @@ pub struct IngressValidator {
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidator {
@@ -251,7 +251,7 @@ impl IngressValidator {
             message: "".into(),
         })?
         .map_err(|validation_error| {
-            validation_error_to_http_error(message_id, validation_error, &log)
+            validation_error_to_http_error(msg.as_ref(), validation_error, &log)
         })?;
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();
@@ -276,7 +276,7 @@ impl IngressValidator {
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
     message: SignedIngress,
 }
@@ -289,7 +289,7 @@ impl IngressMessageSubmitter {
 
     /// Attempts to submit the ingress message to the ingress pool.
     /// An [`HttpError`] is returned if P2P is not running.
-    pub(crate) async fn submit(self) -> Result<(), HttpError> {
+    pub(crate) fn try_submit(self) -> Result<(), HttpError> {
         let Self {
             ingress_tx,
             node_id,
@@ -298,13 +298,17 @@ impl IngressMessageSubmitter {
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.
-        ingress_tx
+        let send_ingress_to_p2p_failed = ingress_tx
             .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
-            .await
-            .map_err(|_| HttpError {
+            .is_err();
+
+        if send_ingress_to_p2p_failed {
+            return Err(HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 message: "P2P is not running on this node.".to_string(),
-            })
+            });
+        }
+        Ok(())
     }
 }
 

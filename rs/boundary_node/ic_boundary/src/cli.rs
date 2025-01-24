@@ -10,6 +10,7 @@ use ic_bn_lib::{
     types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
+use ic_types::CanisterId;
 use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
@@ -128,6 +129,12 @@ pub struct Listen {
     /// Unix socket to listen on for HTTP
     #[clap(env, long)]
     pub listen_http_unix_socket: Option<PathBuf>,
+
+    /// Port on 127.0.0.1 to listen on for loopback usage.
+    /// Only needed if a rate-limiting canister or anonymization salt canister is used.
+    /// Change if the default one is occupied for whatever reason.
+    #[clap(env, long, default_value = "31337")]
+    pub listen_http_port_loopback: u16,
 }
 
 #[derive(Args)]
@@ -245,25 +252,49 @@ pub struct RateLimiting {
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(env, long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
+
     /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
     /// File is checked every 10sec and is reloaded if the changes are detected.
-    /// Expecting YAML list with objects that have (canister_id, methods, limit) fields.
+    /// Expecting YAML list with objects that have at least one of
+    /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
     /// E.g.
     ///
     /// - canister_id: aaaaa-aa
-    ///   methods: ^(foo|bar)$
+    ///   methods_regex: ^(foo|bar)$
+    ///   request_types: [query]
     ///   limit: 60/1s
     ///
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
-    ///   methods: ^baz$
-    ///   limit: block (this blocks all requests)
-    #[clap(
-        env,
-        long,
-        default_value = "/run/ic-node/etc/ic-boundary/canister-ratelimit.yml"
-    )]
-    pub rate_limit_generic: PathBuf,
+    ///   methods_regex: ^baz$
+    ///   limit: block
+    #[clap(env, long)]
+    pub rate_limit_generic_file: Option<PathBuf>,
+
+    /// ID of the rate-limiting canister where to obtain the rules.
+    /// If specified together with the file above - file takes precedence.
+    #[clap(env, long)]
+    pub rate_limit_generic_canister_id: Option<CanisterId>,
+
+    /// How frequently to poll for rules (from file or canister)
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub rate_limit_generic_poll_interval: Duration,
+
+    /// Time-to-idle for rules that have the `ip_group_prefix`.
+    /// If no requests are coming for the given shard - it will be removed.
+    #[clap(env, long, default_value = "1h", value_parser = parse_duration)]
+    pub rate_limit_generic_tti: Duration,
+
+    /// Maximum number of shards that we store (per rule)
+    #[clap(env, long, default_value = "30000")]
+    pub rate_limit_generic_max_shards: u64,
+
+    /// Whether to use the number of API BNs from the registry to scale the rate limit rules.
+    /// E.g. if a ratelimit action is set to "500/1h" and the number of API BNs is 5 then the
+    /// rule would be adjusted to "100/1h" so that the total ratelimit of all API BNs would be "500/1h".
+    /// Important: if after the divison the numerator would be less than 1 then it would be rounded to 1.
+    #[clap(env, long)]
+    pub rate_limit_generic_autoscale: bool,
 }
 
 #[derive(Args)]
@@ -325,8 +356,8 @@ pub struct Bouncer {
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
-    pub bouncer_burst_size: u64,
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_burst_size: u32,
 
     /// For how long to ban the IPs
     #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
@@ -373,7 +404,8 @@ pub struct Misc {
     #[clap(env, long)]
     pub skip_replica_tls_verification: bool,
 
-    /// Configuration of the node's crypto-vault
+    /// Configuration of the node's crypto-vault to use with the IC agent.
+    /// If not specified - then the agent will use anonymous sender.
     #[clap(env, long, value_parser=parse_crypto_config)]
     pub crypto_config: Option<CryptoConfig>,
 }

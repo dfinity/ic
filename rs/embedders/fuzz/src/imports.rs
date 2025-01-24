@@ -20,12 +20,7 @@ use wasm_encoder::{
 };
 use wasmtime::{Engine, Extern, Store, StoreLimits, ValType};
 
-pub(crate) fn system_api_imports() -> Vec<u8> {
-    let system_api_type = WasmMemoryType::Wasm64;
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
-
+pub(crate) fn system_api_imports(config: EmbeddersConfig) -> Vec<u8> {
     let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
         .expect("Failed to initialize Wasmtime engine");
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
@@ -60,13 +55,27 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
         },
     );
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
-    system_api::syscalls::<u32>(
-        &mut linker,
-        config.feature_flags,
-        config.stable_memory_dirty_page_limit,
-        config.stable_memory_accessed_page_limit,
-        system_api_type,
-    );
+
+    match config.feature_flags.wasm64 {
+        FlagStatus::Enabled => {
+            system_api::syscalls::<u64>(
+                &mut linker,
+                config.feature_flags,
+                config.stable_memory_dirty_page_limit,
+                config.stable_memory_accessed_page_limit,
+                WasmMemoryType::Wasm64,
+            );
+        }
+        FlagStatus::Disabled => {
+            system_api::syscalls::<u32>(
+                &mut linker,
+                config.feature_flags,
+                config.stable_memory_dirty_page_limit,
+                config.stable_memory_accessed_page_limit,
+                WasmMemoryType::Wasm32,
+            );
+        }
+    }
 
     // to avoid store move
     let mut system_api_imports: Vec<(&str, &str, wasmtime::Func)> = linker

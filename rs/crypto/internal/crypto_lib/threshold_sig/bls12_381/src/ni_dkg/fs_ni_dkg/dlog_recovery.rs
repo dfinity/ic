@@ -274,7 +274,7 @@ impl BabyStepGiantStep {
             BabyStepGiantStepTable::compute_table_size(range, max_mbytes, max_table_mul);
 
         let giant_steps = if range > 0 && table_size > 0 {
-            (range + table_size - 1) / table_size
+            range.div_ceil(table_size)
         } else {
             0
         };

@@ -171,7 +171,12 @@ fn update_api() -> ApiType {
 }
 
 fn replicated_query_api() -> ApiType {
-    ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get())
+    ApiType::replicated_query(
+        UNIX_EPOCH,
+        vec![],
+        user_test_id(1).get(),
+        call_context_test_id(1),
+    )
 }
 
 fn non_replicated_query_api() -> ApiType {
@@ -251,13 +256,13 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgReply => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgReject => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgDeadline => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
-        SystemApiCallId::MsgCyclesAvailable => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "RQ",  "Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded => vec!["Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded128 => vec!["Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::MsgCyclesAccept => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CanisterSelfSize => vec!["*"],
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
@@ -293,7 +298,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -745,6 +751,11 @@ fn api_availability_test(
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
             assert_api_not_supported(api.ic0_mint_cycles(0));
         }
+        SystemApiCallId::MintCycles128 => {
+            // ic0.mint_cycles128 is only supported for CMC which is tested separately
+            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
+            assert_api_not_supported(api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]));
+        }
         SystemApiCallId::IsController => {
             assert_api_availability(
                 |api| api.ic0_is_controller(0, 0, &[42; 128]),
@@ -822,7 +833,7 @@ fn system_api_availability() {
             let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
             check_stable_apis_support(api);
 
-            // check ic0.mint_cycles API availability for CMC
+            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles(0),
@@ -830,6 +841,14 @@ fn system_api_availability() {
                 &cmc_system_state,
                 cycles_account_manager,
                 SystemApiCallId::MintCycles,
+                context,
+            );
+            assert_api_availability(
+                |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
+                api_type.clone(),
+                &cmc_system_state,
+                cycles_account_manager,
+                SystemApiCallId::MintCycles128,
                 context,
             );
 
@@ -1123,8 +1142,8 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1296,8 +1315,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             res
         ),
     }
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1440,8 +1459,8 @@ fn helper_test_on_low_wasm_memory(
             .unwrap();
     }
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1709,8 +1728,8 @@ fn push_output_request_respects_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1825,8 +1844,8 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1861,8 +1880,8 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
 
     // Propagate system state changes
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -2054,4 +2073,41 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
     assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+}
+
+#[test]
+fn in_replicated_execution_works_correctly() {
+    // The following should execute in replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_update_api(),
+        ApiTypeBuilder::build_system_task_api(),
+        ApiTypeBuilder::build_start_api(),
+        ApiTypeBuilder::build_init_api(),
+        ApiTypeBuilder::build_pre_upgrade_api(),
+        ApiTypeBuilder::build_replicated_query_api(),
+        ApiTypeBuilder::build_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error")),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(1));
+    }
+
+    // The following should execute in non-replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_non_replicated_query_api(),
+        ApiTypeBuilder::build_composite_query_api(),
+        ApiTypeBuilder::build_composite_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_composite_reject_api(RejectContext::new(
+            RejectCode::CanisterReject,
+            "error",
+        )),
+        ApiTypeBuilder::build_inspect_message_api(),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(0));
+    }
 }

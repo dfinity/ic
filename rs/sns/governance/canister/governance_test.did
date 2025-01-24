@@ -166,6 +166,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DeregisterDappCanisters = record {
@@ -384,6 +385,7 @@ type ManageDappCanisterSettings = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
 };
 
 type SnsVersion = record {
@@ -493,6 +495,7 @@ type NervousSystemParameters = record {
   voting_rewards_parameters : opt VotingRewardsParameters;
   maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
+  automatically_advance_target_version : opt bool;
 };
 
 type Neuron = record {
@@ -723,8 +726,15 @@ type PendingVersion = record {
   target_version : opt Version;
 };
 
+type ChunkedCanisterWasm = record {
+  wasm_module_hash : blob;
+  store_canister_id : opt principal;
+  chunk_hashes_list : vec blob;
+};
+
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : blob;
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
   mode : opt int32;
   canister_id : opt principal;
   canister_upgrade_arg : opt blob;
@@ -789,6 +799,7 @@ type UpgradeStepsReset = record {
 type TargetVersionSet = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  is_advanced_automatically : opt bool;
 };
 
 type TargetVersionReset = record {

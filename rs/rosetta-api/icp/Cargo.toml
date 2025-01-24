@@ -1,6 +1,6 @@
 [package]
 name = "ic-rosetta-api"
-version = "2.1.0"
+version = "2.1.1"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 edition = "2021"
@@ -59,7 +59,6 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../../types/types" }
 proptest = { workspace = true }

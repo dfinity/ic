@@ -929,6 +929,15 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
+        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -937,7 +946,7 @@ impl IcNodeSnapshot {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
-                .as_provisional_create_with_amount(None)
+                .as_provisional_create_with_amount(cycles_amount)
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
@@ -1119,14 +1128,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1211,13 +1218,13 @@ pub fn get_boundary_node_img_sha256() -> Result<String> {
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version: String = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = read_dependency_to_string("mainnet_nns_subnet_revision.txt")?;
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }

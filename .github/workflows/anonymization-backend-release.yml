@@ -1,0 +1,111 @@
+name: anonymization-backend-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Title for the release'
+        required: true
+        type: string
+
+      description:
+        description: 'Human-readable description of the release'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  NAME: anonymization-backend
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-and-release:
+    name: Build and release the anonymization backend canister
+
+    runs-on:
+      group: zh1
+      labels: dind-large
+
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          TARGET='//rs/boundary_node/anonymization/backend:anonymization_backend'
+          bazel build --config=ci ${TARGET}
+
+          OUTPUT='bazel-bin/rs/boundary_node/anonymization/backend/anonymization_backend.wasm.gz'
+          mv ${OUTPUT} anonymization_backend.wasm.gz
+
+      - name: artifacts
+        run: |
+          ARTIFACTS=(
+            anonymization_backend.wasm.gz
+          )
+
+          echo "ARTIFACTS<<EOF"                                >> $GITHUB_ENV
+          for ARTIFACT in ${ARTIFACTS[@]}; do echo ${ARTIFACT} >> $GITHUB_ENV; done
+          echo "EOF"                                           >> $GITHUB_ENV
+
+      - name: checksums
+        run: |
+          CHECKSUMS=$(mktemp)
+
+          for ARTIFACT in ${ARTIFACTS}; do
+              shasum -a256 ${ARTIFACT} >> ${CHECKSUMS}
+          done
+
+          echo "CHECKSUMS=${CHECKSUMS}" >> "${GITHUB_ENV}"
+
+      - name: tag
+        run: |
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
+
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+
+      - name: release notes
+        run: |
+          NOTES=$(mktemp)
+
+          CODE_BLOCK='```'
+
+          cat > ${NOTES} <<EOF
+          ${{ inputs.description }}
+
+          ## Verification
+
+          To reproduce the artifacts of this release:
+
+          ${CODE_BLOCK}
+          bazel build --config=local //rs/boundary_node/anonymization/backend:anonymization_backend
+          ${CODE_BLOCK}
+
+          ## Checksums
+
+          ${CODE_BLOCK}
+          $(cat ${CHECKSUMS})
+          ${CODE_BLOCK}
+          EOF
+
+          echo "NOTES=${NOTES}" >> "${GITHUB_ENV}"
+
+      - name: release
+        uses: softprops/action-gh-release@e7a8f85e1c67a31e6ed99a94b41bd0b71bbee6b8
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ inputs.title }}
+          make_latest: false
+          body_path: ${{ env.NOTES }}
+          files: ${{ env.ARTIFACTS }}

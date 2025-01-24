@@ -237,7 +237,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         request.block_index
     );
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
@@ -341,7 +341,7 @@ pub async fn retrieve_btc_with_approval(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,

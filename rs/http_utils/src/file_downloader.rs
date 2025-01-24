@@ -513,7 +513,7 @@ mod tests {
         let mut tar = Builder::new(writer);
         let mut header = tar::Header::new_gnu();
         header.set_path("test.txt")?;
-        header.set_size("Hello, world!".as_bytes().len() as u64);
+        header.set_size("Hello, world!".len() as u64);
         header.set_cksum();
         tar.append(&header, "Hello, world!".as_bytes())?;
         tar.finish()?;

@@ -56,7 +56,7 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 #[derive(Parser)]
 #[clap(version = "7.0.0")]
 struct Args {
-    /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
+    /// The IP address to which the PocketIC server should bind (defaults to [::1])
     #[clap(long, short)]
     ip_addr: Option<String>,
     /// Log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
@@ -78,6 +78,11 @@ fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
 }
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+extern "C" {
+    fn install_backtrace_handler();
+}
+
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
@@ -89,6 +94,10 @@ fn main() {
     // before the arguments are parsed because the parent process does not pass
     // all the normally required arguments of `pocket-ic-server`.
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        unsafe {
+            install_backtrace_handler();
+        }
         canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
@@ -122,7 +131,7 @@ async fn start(runtime: Arc<Runtime>) {
         None
     };
 
-    let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
+    let ip_addr = args.ip_addr.unwrap_or("[::1]".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));

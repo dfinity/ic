@@ -74,7 +74,6 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/ledger_suite/icrc1/tokens_u256",
-    "//rs/nns/governance",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/test_utils",
@@ -99,7 +98,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.0"
+ROSETTA_VERSION = "2.1.1"
 
 rust_library(
     name = "rosetta-api",

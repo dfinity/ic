@@ -12,20 +12,16 @@ use crate::{
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::idkg::{
+    IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
+    IDkgPoolSectionOps, MutableIDkgPoolSection,
+};
 use ic_interfaces::p2p::consensus::{
     ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
     ValidatedPoolReader,
 };
-use ic_interfaces::{
-    idkg::{
-        IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
-        IDkgPoolSectionOps, MutableIDkgPoolSection,
-    },
-    time_source::TimeSource,
-};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::{
     idkg::{
         EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
@@ -34,6 +30,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -250,17 +247,36 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
+        object_pool.iter()
+    }
+
+    fn vetkd_key_shares_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
+        object_pool.iter_by_prefix(prefix)
+    }
+
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
-        let idkg_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
+        let ecdsa_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
+        let vetkd_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
         Box::new(
-            idkg_pool
+            ecdsa_pool
                 .iter()
                 .map(|(id, share)| (id, SigShare::Ecdsa(share)))
                 .chain(
                     schnorr_pool
                         .iter()
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                )
+                .chain(
+                    vetkd_pool
+                        .iter()
+                        .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),
         )
     }
@@ -361,11 +377,7 @@ impl IDkgPoolImpl {
     }
 
     // Populates the unvalidated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(
-        &mut self,
-        catch_up_package: &CatchUpPackage,
-        time_source: &dyn TimeSource,
-    ) {
+    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
         let block = catch_up_package.content.block.get_value();
 
         let mut initial_dealings = Vec::new();
@@ -394,7 +406,7 @@ impl IDkgPoolImpl {
             self.insert(UnvalidatedArtifact {
                 message: IDkgMessage::Dealing(signed_dealing.clone()),
                 peer_id: signed_dealing.dealer_id(),
-                timestamp: time_source.get_relative_time(),
+                timestamp: block.context.time,
             })
         }
     }

@@ -6,7 +6,7 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use std::fs::{create_dir, File};
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::process::Command;
 use std::str::FromStr;
 use std::time::SystemTime;
@@ -94,7 +94,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     let data_dir_path = tmp_dir.path().join("data");
     create_dir(data_dir_path.clone()).unwrap();
 
-    Command::new(bitcoind_path)
+    let mut bitcoin_d_process = Command::new(bitcoind_path)
         .arg(format!("-conf={}", conf_path.display()))
         .arg(format!("-datadir={}", data_dir_path.display()))
         .spawn()
@@ -105,7 +105,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .with_ii_subnet()
         .with_application_subnet()
         .with_bitcoind_addr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
             18444,
         ))
         .build();
@@ -130,7 +130,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     .0;
 
     let btc_rpc = Client::new(
-        "http://127.0.0.1:18443",
+        "http://[::1]:18443",
         Auth::UserPass(
             "ic-btc-integration".to_string(),
             "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
@@ -140,9 +140,25 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
 
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
     let mut n = 101;
-    btc_rpc
-        .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap())
-        .unwrap();
+    // retry generating blocks until the bitcoind is up and running
+    let start = std::time::Instant::now();
+    loop {
+        match btc_rpc.generate_to_address(
+            n,
+            &Address::from_str(&bitcoin_address)
+                .unwrap()
+                .assume_checked(),
+        ) {
+            Ok(_) => break,
+            Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
+                if start.elapsed() > std::time::Duration::from_secs(30) {
+                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {}", err),
+        }
+    }
 
     let reward = 50 * 100_000_000; // 50 BTC
 
@@ -175,9 +191,18 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             break;
         } else {
             btc_rpc
-                .generate_to_address(1, &Address::from_str(&bitcoin_address).unwrap())
+                .generate_to_address(
+                    1,
+                    &Address::from_str(&bitcoin_address)
+                        .unwrap()
+                        .assume_checked(),
+                )
                 .unwrap();
             n += 1;
         }
     }
+
+    // Kill the task to avoid zombie process.
+    bitcoin_d_process.kill().unwrap();
+    bitcoin_d_process.wait().unwrap();
 }

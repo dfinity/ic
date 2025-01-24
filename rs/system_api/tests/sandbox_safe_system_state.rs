@@ -253,7 +253,7 @@ fn correct_charging_source_canister_for_a_request() {
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -349,6 +349,59 @@ fn mint_cycles_fails_caller_not_on_nns() {
     );
 }
 
+fn common_mint_cycles_128(
+    initial_cycles: Cycles,
+    cycles_to_mint: Cycles,
+    expected_actually_minted: Cycles,
+) {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let system_state = SystemStateBuilder::new()
+        .initial_cycles(initial_cycles)
+        .canister_id(CYCLES_MINTING_CANISTER_ID)
+        .build();
+
+    let api_type = ApiTypeBuilder::build_update_api();
+    let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
+    let mut balance_before = [0u8; 16];
+    api.ic0_canister_cycle_balance128(0, &mut balance_before)
+        .unwrap();
+    let balance_before = u128::from_le_bytes(balance_before);
+    assert_eq!(balance_before, initial_cycles.get());
+    let mut heap = [0u8; 16];
+    api.ic0_mint_cycles128(cycles_to_mint, 0, &mut heap)
+        .unwrap();
+    let cycles_minted = u128::from_le_bytes(heap);
+    assert_eq!(cycles_minted, expected_actually_minted.get());
+    let mut balance_after = [0u8; 16];
+    api.ic0_canister_cycle_balance128(0, &mut balance_after)
+        .unwrap();
+    let balance_after = u128::from_le_bytes(balance_after);
+    assert_eq!(
+        balance_after - balance_before,
+        expected_actually_minted.get()
+    );
+}
+
+#[test]
+fn mint_cycles_very_large_value() {
+    let to_mint = Cycles::from_parts(u64::MAX, 50);
+    common_mint_cycles_128(INITIAL_CYCLES, to_mint, to_mint);
+}
+
+#[test]
+fn mint_cycles_max() {
+    let to_mint = Cycles::from_parts(u64::MAX, u64::MAX);
+    common_mint_cycles_128(Cycles::zero(), to_mint, to_mint);
+}
+
+#[test]
+fn mint_cycles_saturate() {
+    let to_mint = Cycles::from_parts(u64::MAX, u64::MAX);
+    common_mint_cycles_128(INITIAL_CYCLES, to_mint, to_mint - INITIAL_CYCLES);
+}
+
 #[test]
 fn is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
@@ -390,8 +443,8 @@ fn call_increases_cycles_consumed_metric() {
     api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
     api.ic0_call_perform().unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.into_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -473,7 +526,7 @@ fn test_inter_canister_call(
         .unwrap();
 
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,

@@ -114,11 +114,7 @@ fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             &ledger_orchestrator,
             OrchestratorArg::UpgradeArg(UpgradeArg {
                 git_commit_hash: Some("6a8e5fca2c6b4e12966638c444e994e204b42989".to_string()),
-                ledger_compressed_wasm_hash: None,
-                index_compressed_wasm_hash: None,
-                archive_compressed_wasm_hash: None,
-                cycles_management: None,
-                manage_ledger_suites: None,
+                ..Default::default()
             }),
         )
         .await
@@ -255,12 +251,12 @@ async fn install_nns_controlled_canister<'a>(
     canister
 }
 
-async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
+async fn upgrade_ledger_suite_orchestrator_by_nns_proposal(
     logger: &slog::Logger,
     governance_canister: &Canister<'_>,
     root_canister: &Canister<'_>,
     canister_wasm: CanisterModule,
-    orchestrator: &LedgerOrchestratorCanister<'a>,
+    orchestrator: &LedgerOrchestratorCanister<'_>,
     upgrade_arg: OrchestratorArg,
 ) {
     use ic_canister_client::Sender;
@@ -435,7 +431,7 @@ struct LedgerOrchestratorCanister<'a> {
     canister: Canister<'a>,
 }
 
-impl<'a> LedgerOrchestratorCanister<'a> {
+impl LedgerOrchestratorCanister<'_> {
     async fn call_canister_ids(&self, contract: Erc20Contract) -> Option<ManagedCanisterIds> {
         self.canister
             .query_("canister_ids", dfn_candid::candid, (contract,))

@@ -61,11 +61,13 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-bn-lib",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:rand",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
@@ -139,7 +141,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(
@@ -176,11 +181,14 @@ rust_test(
         ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
         "cpu:8",
@@ -223,15 +231,20 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "@bitcoin_core//:bitcoind",
+        "//:bitcoind",
         "@bitcoin_example_canister//file",
         "@btc_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
-        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
+        "BITCOIND_BIN": "$(rootpath //:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
+    tags = [
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )
