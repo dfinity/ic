@@ -1786,7 +1786,7 @@ where
         .call_and_wait()
         .await
         .map_err(|agent_error| match agent_error {
-            AgentError::CertifiedReject(response) | AgentError::UncertifiedReject(response) => {
+            AgentError::CertifiedReject(response) => {
                 response
             }
             _ => panic!("Unexpected error: {:?}", agent_error),
