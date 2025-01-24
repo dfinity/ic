@@ -1,6 +1,5 @@
 [Unit]
 Description=Monitor NVMe SMART log info on a regular basis
-Requires=monitor-nvme.service
 
 [Timer]
 Unit=monitor-nvme.service

@@ -1,6 +1,5 @@
 [Unit]
 Description=nft counter export timer
-Requires=nft-exporter.service
 
 [Timer]
 OnBootSec=60s

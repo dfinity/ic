@@ -1,6 +1,5 @@
 [Unit]
 Description=Collect custom metrics every minute
-Requires=metrics_tool.service
 
 [Timer]
 OnBootSec=60s

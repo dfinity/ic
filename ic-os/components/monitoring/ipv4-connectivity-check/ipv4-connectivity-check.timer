@@ -1,6 +1,5 @@
 [Unit]
 Description=IPv4 connectivity timer
-Requires=ipv4-connectivity-check.service
 
 [Timer]
 OnBootSec=60s
