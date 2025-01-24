@@ -1,0 +1,49 @@
+diff --git a/extensions/wasm_bindgen/MODULE.bazel b/extensions/wasm_bindgen/MODULE.bazel
+index eba0d184..6da4e198 100644
+--- a/extensions/wasm_bindgen/MODULE.bazel
++++ b/extensions/wasm_bindgen/MODULE.bazel
+@@ -54,7 +54,7 @@ use_repo(
+ 
+ register_toolchains(
+     "//:default_wasm_bindgen_toolchain",
+-    "@rules_rust//rust/private/dummy_cc_toolchain:dummy_cc_wasm32_toolchain",
++    #"@rules_rust//rust/private/dummy_cc_toolchain:dummy_cc_wasm32_toolchain",
+     "@rules_rust//rust/private/dummy_cc_toolchain:dummy_cc_wasm64_toolchain",
+ )
+ 
+diff --git a/rust/private/dummy_cc_toolchain/BUILD.bazel b/rust/private/dummy_cc_toolchain/BUILD.bazel
+index df4290af..4a0dfa45 100644
+--- a/rust/private/dummy_cc_toolchain/BUILD.bazel
++++ b/rust/private/dummy_cc_toolchain/BUILD.bazel
+@@ -8,12 +8,12 @@ load(":dummy_cc_toolchain.bzl", "dummy_cc_config", "dummy_cc_toolchain")
+ 
+ dummy_cc_toolchain(name = "dummy_cc_wasm")
+ 
+-toolchain(
+-    name = "dummy_cc_wasm32_toolchain",
+-    target_compatible_with = ["@platforms//cpu:wasm32"],
+-    toolchain = ":dummy_cc_wasm_toolchain_cc",
+-    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+-)
++#toolchain(
++#    name = "dummy_cc_wasm32_toolchain",
++#    target_compatible_with = ["@platforms//cpu:wasm32"],
++#    toolchain = ":dummy_cc_wasm_toolchain_cc",
++#    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
++#)
+ 
+ toolchain(
+     name = "dummy_cc_wasm64_toolchain",
+diff --git a/rust/repositories.bzl b/rust/repositories.bzl
+index 06de237d..09566384 100644
+--- a/rust/repositories.bzl
++++ b/rust/repositories.bzl
+@@ -1218,7 +1218,7 @@ def rust_repository_set(
+     # Register toolchains
+     if register_toolchain:
+         native.register_toolchains(*toolchain_labels)
+-        native.register_toolchains(str(Label("//rust/private/dummy_cc_toolchain:dummy_cc_wasm32_toolchain")))
++        #native.register_toolchains(str(Label("//rust/private/dummy_cc_toolchain:dummy_cc_wasm32_toolchain")))
+         native.register_toolchains(str(Label("//rust/private/dummy_cc_toolchain:dummy_cc_wasm64_toolchain")))
+ 
+     return all_toolchain_details

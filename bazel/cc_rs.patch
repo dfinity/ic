@@ -1,22 +1,17 @@
 diff --git a/src/lib.rs b/src/lib.rs
-index f75b951..4c33934 100644
+index f75b951..0fcd71e 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1937,7 +1937,9 @@ impl Build {
-         target: &TargetInfo<'_>,
-         opt_level: &str,
-     ) -> Result<(), Error> {
-+
-         let raw_target = self.get_raw_target()?;
-+
-         // Non-target flags
-         // If the flag is not conditioned on target variable, it belongs here :)
-         match cmd.family {
-@@ -2091,6 +2093,8 @@ impl Build {
+@@ -2091,6 +2091,13 @@ impl Build {
                          target.versioned_llvm_target(None)
                      };
  
-+                    let llvm_target = llvm_target.split("-").filter(|x| !x.contains("unknown")).collect::<Vec<_>>().join("-");
++                    let llvm_target = match llvm_target.clone() {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => "x86_64-linux-gnu",
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => "wasm32-freestanding-none",
++                        _other => &llvm_target,
++                    };
++
 +
                      // Pass `--target` with the LLVM target to properly
                      // configure Clang even when cross-compiling.

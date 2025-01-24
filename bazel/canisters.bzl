@@ -8,7 +8,7 @@ load("//bazel:candid.bzl", "did_git_test")
 
 def _wasm_rust_transition_impl(_settings, attr):
     return {
-        "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
+        "//command_line_option:platforms": "@rules_rust//rust/platform:wasm32",
         "@rules_rust//:extra_rustc_flags": [
             # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
             # recursive workloads when compiled with 1.78.0+. Hence, we set the new stack size to 3MiB

@@ -1,0 +1,49 @@
+diff --git a/toolchain/private/defs.bzl b/toolchain/private/defs.bzl
+index 716a3a3..33f1993 100644
+--- a/toolchain/private/defs.bzl
++++ b/toolchain/private/defs.bzl
+@@ -49,6 +49,7 @@ def target_structs():
+         for glibc in _GLIBCS:
+             ret.append(_target_linux_gnu(gocpu, zigcpu, glibc))
+     ret.append(_target_wasm())
++    ret.append(_target_wasm_unknown())
+     return ret
+ 
+ def _target_macos(gocpu, zigcpu):
+@@ -222,3 +223,23 @@ def _target_wasm():
+         ld_zig_subcmd = "wasm-ld",
+         artifact_name_patterns = [],
+     )
++
++def _target_wasm_unknown():
++    return struct(
++        gotarget = "wasm32-unknown-unknown",
++        zigtarget = "wasm32-freestanding-none",
++        includes = [
++        ] + _INCLUDE_TAIL,
++        linkopts = [],
++        dynamic_library_linkopts = [],
++        supports_dynamic_linker = False,
++        copts = [],
++        libc = "musl",
++        bazel_target_cpu = "wasm32",
++        constraint_values = [
++            "@platforms//os:none",
++            "@platforms//cpu:wasm32",
++        ],
++        ld_zig_subcmd = "wasm-ld",
++        artifact_name_patterns = [],
++    )
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index d1d59f9..5e2984b 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -283,7 +283,7 @@ fn getRunMode(self_exe: []const u8, self_base_noexe: []const u8) error{BadParent
+         return error.BadParent;
+ 
+     const got_os = it.next() orelse return error.BadParent;
+-    if (mem.indexOf(u8, "linux,macos,windows,wasi", got_os) == null)
++    if (mem.indexOf(u8, "linux,macos,windows,wasi,freestanding", got_os) == null)
+         return error.BadParent;
+ 
+     // ABI triple is too much of a moving target
