@@ -52,7 +52,7 @@ impl<'de> serde::Deserialize<'de> for Leb128EncodedU64 {
     {
         struct LebU64Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for LebU64Visitor {
+        impl serde::de::Visitor<'_> for LebU64Visitor {
             type Value = Leb128EncodedU64;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

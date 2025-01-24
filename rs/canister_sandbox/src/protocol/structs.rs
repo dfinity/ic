@@ -4,7 +4,7 @@ use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     ApiType, ExecutionParameters,
 };
 use ic_types::{methods::FuncRef, NumBytes};
@@ -36,9 +36,15 @@ pub struct SandboxExecInput {
 pub struct SandboxExecOutput {
     pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
-    pub state: Option<StateModifications>,
+    pub state: StateModifications,
     pub execute_total_duration: std::time::Duration,
     pub execute_run_duration: std::time::Duration,
+}
+
+impl SandboxExecOutput {
+    pub fn take_state_modifications(&mut self) -> StateModifications {
+        std::mem::take(&mut self.state)
+    }
 }
 
 /// Describes the memory changes performed by execution.
@@ -48,8 +54,24 @@ pub struct MemoryModifications {
     pub size: NumWasmPages,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Default, Debug, Deserialize, Clone, PartialEq)]
 pub struct StateModifications {
+    /// Modifications in the execution state of the canister.
+    ///
+    /// This field is optional because the state changes might or might not
+    /// be applied depending on the method executed.
+    pub execution_state_modifications: Option<ExecutionStateModifications>,
+
+    /// Modifications in the system state of the canister.
+    ///
+    /// The system state changes contain parts that are always applied
+    /// and parts that are only applied depending on the method executed
+    /// (similarly to `execution_state_modifications`).
+    pub system_state_modifications: SystemStateModifications,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
+pub struct ExecutionStateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,
 
@@ -58,19 +80,15 @@ pub struct StateModifications {
 
     /// Modifications in the stable memory.
     pub stable_memory: MemoryModifications,
-
-    /// Modifications in the system state.
-    pub system_state_changes: SystemStateChanges,
 }
 
-impl StateModifications {
+impl ExecutionStateModifications {
     pub fn new(
         globals: Vec<Global>,
         wasm_memory: &Memory,
         stable_memory: &Memory,
         wasm_memory_delta: &[PageIndex],
         stable_memory_delta: &[PageIndex],
-        system_state_changes: SystemStateChanges,
     ) -> Self {
         let wasm_memory = MemoryModifications {
             page_delta: wasm_memory.page_map.serialize_delta(wasm_memory_delta),
@@ -82,11 +100,10 @@ impl StateModifications {
             size: stable_memory.size,
         };
 
-        StateModifications {
+        ExecutionStateModifications {
             globals,
             wasm_memory,
             stable_memory,
-            system_state_changes,
         }
     }
 }

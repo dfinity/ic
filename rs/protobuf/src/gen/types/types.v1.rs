@@ -1519,6 +1519,23 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdAgreement {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+}
+/// Nested message and enum types in `VetKdAgreement`.
+pub mod vet_kd_agreement {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Agreement {
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        Reject(i32),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
     #[prost(uint64, tag = "1")]
     pub expiry: u64,
@@ -1548,6 +1565,8 @@ pub struct GetIngressMessageInBlockRequest {
     pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
     pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetIngressMessageInBlockResponse {
@@ -1567,6 +1586,8 @@ pub struct StrippedBlockProposal {
 pub struct StrippedIngressMessage {
     #[prost(message, optional, tag = "1")]
     pub stripped: ::core::option::Option<IngressMessageId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1589,4 +1610,33 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VetKdErrorCode {
+    Unspecified = 0,
+    TimedOut = 1,
+    InvalidKey = 2,
+}
+impl VetKdErrorCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            _ => None,
+        }
+    }
 }

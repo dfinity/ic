@@ -4,6 +4,7 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -19,11 +20,12 @@ use ic_nns_governance::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
         },
-        manage_neuron_response::Command as CommandResponse,
         neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        InstallCode, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
-        Proposal,
+        InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
     },
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use maplit::btreemap;
@@ -196,6 +198,8 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
                     install_mode: Some(CanisterInstallMode::Upgrade as i32),
                     arg: Some(vec![4, 5, 6]),
                     skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                    arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
                 })),
                 ..Default::default()
             },

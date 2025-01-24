@@ -74,10 +74,12 @@ pub fn make_registry_cup_from_cup_contents(
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .dkg_id
         .clone();
     let high_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .dkg_id
         .clone();
 

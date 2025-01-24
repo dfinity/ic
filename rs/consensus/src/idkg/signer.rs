@@ -726,7 +726,7 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
     }
 }
 
-impl<'a> ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'a> {
+impl ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'_> {
     fn get_completed_signature(
         &self,
         callback_id: CallbackId,
@@ -832,7 +832,7 @@ impl<'a> Action<'a> {
     }
 }
 
-impl<'a> Debug for Action<'a> {
+impl Debug for Action<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Process(sig_inputs) => {
