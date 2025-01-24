@@ -46,7 +46,9 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
+};
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
@@ -1274,6 +1276,30 @@ fn missing_manifests_are_recomputed() {
         let (_metrics, state_manager) = restart_fn(state_manager, None);
 
         wait_for_checkpoint(&state_manager, height(1));
+    });
+}
+
+#[test]
+fn validate_replicated_state_is_called() {
+    fn validate_was_called(metrics: &MetricsRegistry) -> bool {
+        let request_duration = fetch_histogram_vec_stats(
+            metrics,
+            "state_manager_tip_handler_request_duration_seconds",
+        );
+        for (label, _stats) in request_duration.iter() {
+            if label.get("request") == Some(&"validate_replicated_state".to_string()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    state_manager_test(|metrics, state_manager| {
+        assert!(!validate_was_called(metrics));
+        let (_, tip) = state_manager.take_tip();
+        state_manager.commit_and_certify(tip, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert!(validate_was_called(metrics));
     });
 }
 
