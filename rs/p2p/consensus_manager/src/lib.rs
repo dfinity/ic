@@ -29,7 +29,7 @@ type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
 /// Same order of magnitude as the number of active artifacts.
-const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
+const MAX_IO_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
 pub type AbortableBroadcastReceiver<T> = Receiver<UnvalidatedArtifactMutation<T>>;
@@ -69,15 +69,8 @@ impl AbortableBroadcastChannelBuilder {
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> AbortableBroadcastChannel<Artifact> {
-        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
-        // Making this channel bounded can be problematic since we don't have true multiplexing
-        // of P2P messages.
-        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-        // independent of consensus.
-        #[allow(clippy::disallowed_methods)]
-        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(10000);
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
 
         assert!(uri_prefix::<WireArtifact>()
             .chars()

@@ -488,7 +488,9 @@ where
                 match assemble_result {
                     Ok((artifact, peer_id)) => {
                         let id = artifact.id();
-                        // Send artifact to pool
+                        // Sends artifact to the pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
                         if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).await.is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
@@ -497,7 +499,9 @@ where
                         // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
-                        // Purge from the unvalidated pool
+                        // Purge artifact from the unvalidated pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
                         if sender.send(UnvalidatedArtifactMutation::Remove(id)).await.is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
