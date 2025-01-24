@@ -71,15 +71,10 @@ impl Registry {
 /// The payload of a request to remove Node Operator records from the Registry
 #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize, Hash)]
 pub struct RemoveNodeOperatorsPayload {
+    // Old compatibility field, required for Candid, to be removed in the future
     pub node_operators_to_remove: Vec<Vec<u8>>,
 
-    // In protobuf (specifically proto3), "repeated" fields are not truly "optional"
-    // and cannot directly be marked as optional in addition to "repeated".
-    // Therefore, prost does not directly permit something like
-    // #[prost(message, repeated, optional, tag = "...")] to yield Option<Vec<T>>.
-    // However, for backwards compatibility Candid requires the added fields to be optional
-    // So it's necessary to wrap the repeated field in a separate (sub-)message that
-    // itself can be optional.
+    // New field, where the Node Operator IDs are passed as PrincipalIds instead of Vec<u8>
     pub node_operator_principals_to_remove: Option<NodeOperatorPrincipals>,
 }
 
