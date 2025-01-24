@@ -2513,7 +2513,8 @@ impl StateMachine {
             .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
     }
 
-    /// Certifies the specified time by executing an empty block with that time.
+    /// Certifies the specified time by modifying the time in the replicated state
+    /// and certifying that new state.
     pub fn set_certified_time(&self, time: SystemTime) {
         let t = time
             .duration_since(SystemTime::UNIX_EPOCH)
