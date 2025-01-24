@@ -26,36 +26,36 @@ MINIKUBE_PROFILE="local-rosetta"
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-    --icp-ledger)
-        ICP_LEDGER="$2"
-        shift
-        ;;
-    --icp-symbol)
-        ICP_SYMBOL="$2"
-        shift
-        ;;
-    --icrc1-ledger)
-        ICRC1_LEDGER="$2"
-        shift
-        ;;
-    --local-icp-image-tar)
-        LOCAL_ICP_IMAGE_TAR="$2"
-        shift
-        ;;
-    --local-icrc1-image-tar)
-        LOCAL_ICRC1_IMAGE_TAR="$2"
-        shift
-        ;;
-    --clean) CLEAN=true ;;
-    --stop) STOP=true ;;
-    --help)
-        sed -n '5,14p' "$0"
-        exit 0
-        ;;
-    *)
-        echo "Unknown parameter passed: $1"
-        exit 1
-        ;;
+        --icp-ledger)
+            ICP_LEDGER="$2"
+            shift
+            ;;
+        --icp-symbol)
+            ICP_SYMBOL="$2"
+            shift
+            ;;
+        --icrc1-ledger)
+            ICRC1_LEDGER="$2"
+            shift
+            ;;
+        --local-icp-image-tar)
+            LOCAL_ICP_IMAGE_TAR="$2"
+            shift
+            ;;
+        --local-icrc1-image-tar)
+            LOCAL_ICRC1_IMAGE_TAR="$2"
+            shift
+            ;;
+        --clean) CLEAN=true ;;
+        --stop) STOP=true ;;
+        --help)
+            sed -n '5,14p' "$0"
+            exit 0
+            ;;
+        *)
+            echo "Unknown parameter passed: $1"
+            exit 1
+            ;;
     esac
     shift
 done
