@@ -2641,7 +2641,7 @@ impl StateManagerImpl {
         self.tip_channel
             .send(TipRequest::ValidateReplicatedState {
                 checkpoint_layout: cp_layout.clone(),
-                reference_state: state.clone(),
+                reference_state: Arc::clone(&state),
                 own_subnet_type: self.own_subnet_type,
                 fd_factory: self.fd_factory.clone(),
             })
