@@ -444,7 +444,7 @@ type ListNeurons = record {
 };
 
 type NeuronSubaccount = record {
-subaccount : blob;
+  subaccount : blob;
 };
 
 type ListNeuronsResponse = record {
