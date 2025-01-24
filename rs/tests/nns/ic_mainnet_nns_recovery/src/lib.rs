@@ -312,7 +312,7 @@ fn support_snses(
         recovered_nns_public_key.clone(),
     );
 
-    let _ = new_subnet_node
+    new_subnet_node
         .await_status_is_healthy()
         .expect("New subnet node should become healthy.");
 
