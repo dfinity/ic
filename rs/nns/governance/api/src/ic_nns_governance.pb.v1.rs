@@ -3526,7 +3526,7 @@ pub struct ListNeurons {
     pub neuron_subaccounts: Vec<list_neurons::NeuronSubaccount>,
 }
 
-mod list_neurons {
+pub mod list_neurons {
     /// A type for the request to list neurons.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]

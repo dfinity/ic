@@ -1109,7 +1109,6 @@ pub mod nns {
                         page_number: None,
                         page_size: None,
                         neuron_subaccounts: vec![],
-                        p
                     })
                     .unwrap(),
                 )

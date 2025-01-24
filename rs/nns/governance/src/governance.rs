@@ -2266,10 +2266,22 @@ impl Governance {
             BTreeSet::new()
         };
 
+        let mut neurons_by_subaccount: BTreeSet<NeuronId> = neuron_subaccounts
+            .into_iter()
+            .flat_map(|neuron_subaccount| {
+                Self::bytes_to_subaccount(&neuron_subaccount.subaccount)
+                    .ok()
+                    .and_then(|subaccount| {
+                        self.neuron_store.get_neuron_id_for_subaccount(subaccount)
+                    })
+            })
+            .collect();
+
         // Concatenate (explicit and implicit)-ly included neurons.
         let mut requested_neuron_ids: BTreeSet<NeuronId> =
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
+        requested_neuron_ids.append(&mut neurons_by_subaccount);
 
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
