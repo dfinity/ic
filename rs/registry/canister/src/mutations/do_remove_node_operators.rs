@@ -100,14 +100,23 @@ impl RemoveNodeOperatorsPayload {
     }
 
     pub fn principal_ids_to_remove(&self) -> Vec<PrincipalId> {
-        self.node_operators_to_remove
-            .iter()
-            .filter_map(|bytes| PrincipalId::try_from(bytes.clone()).ok())
-            .chain(
-                self.node_operator_principals_to_remove
-                    .as_ref()
-                    .map_or_else(Vec::new, |principals| principals.principals.clone()),
-            )
-            .collect()
+        // Request from Max:
+        // Ensure only one of the fields is set to avoid confusing semantics.
+        // If the new field is present, panic if the old field is also set.
+        // This approach encourages clients to use the new field and allows for
+        // eventual deprecation of the old field.
+        match &self.node_operator_principals_to_remove {
+            Some(principals) if self.node_operators_to_remove.is_empty() => {
+                principals.principals.clone()
+            }
+            Some(_) => {
+                panic!("Cannot specify both node_operators_to_remove and node_operator_principals_to_remove");
+            }
+            None => self
+                .node_operators_to_remove
+                .iter()
+                .filter_map(|bytes| PrincipalId::try_from(bytes.clone()).ok())
+                .collect(),
+        }
     }
 }
