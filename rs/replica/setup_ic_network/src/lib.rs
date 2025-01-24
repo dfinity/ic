@@ -62,7 +62,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 use tokio::sync::{
-    mpsc::{unbounded_channel, Sender, UnboundedSender},
+    mpsc::{unbounded_channel, UnboundedSender},
     watch,
 };
 use tower_http::trace::TraceLayer;
