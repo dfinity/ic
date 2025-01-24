@@ -135,12 +135,14 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     native.alias(
         name = name,
         actual = name + ".wasm",
+        visibility = visibility,
     )
 
     # DID service related targets
     native.alias(
         name = name + ".didfile",
         actual = service_file,
+        visibility = visibility,
     )
     did_git_test(
         name = name + "_did_git_test",
