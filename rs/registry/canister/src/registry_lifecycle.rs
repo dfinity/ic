@@ -66,14 +66,10 @@ fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation>
     let mut mutations = Vec::new();
 
     for (id, record) in get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter() {
-        println!("Processing node {}", id);
-        println!("Reward is {:?}", record.node_reward_type);
         if record.node_reward_type.is_none() {
             let reward_type = missing_node_types_map
                 .get(id.as_str())
                 .map(|t| NodeRewardType::from(t.to_string()));
-
-            println!("New reward type is {:?}", reward_type);
 
             if let Some(reward_type) = reward_type {
                 if reward_type != NodeRewardType::Unspecified {
