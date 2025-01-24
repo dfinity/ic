@@ -29,6 +29,7 @@ use ic_nns_common::{
     types::NeuronId,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
 use ic_nns_governance_api::pb::v1::ListNeurons;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
@@ -530,6 +531,57 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     })
 }
 
+fn list_neurons_by_subaccount_benchmark() -> BenchResult {
+    let neurons = (0..100)
+        .map(|id| {
+            (id, {
+                let mut neuron: NeuronProto = make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                )
+                .into_proto(&VotingPowerEconomics::DEFAULT, 123_456_789);
+                neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
+                neuron
+            })
+        })
+        .collect::<BTreeMap<u64, NeuronProto>>();
+
+    let subaccounts = neurons
+        .iter()
+        .map(|(_, neuron)| NeuronSubaccount {
+            subaccount: neuron.account.clone(),
+        })
+        .collect();
+
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..GovernanceProto::default()
+    };
+
+    let governance = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let request = ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: false,
+        include_empty_neurons_readable_by_caller: Some(false),
+        include_public_neurons_in_full_neurons: None,
+        page_number: None,
+        page_size: None,
+        neuron_subaccounts: subaccounts,
+    };
+
+    bench_fn(|| {
+        governance.list_neurons(&request, PrincipalId::new_user_test_id(1));
+    })
+}
+
 fn list_neurons_benchmark() -> BenchResult {
     let neurons = (0..100)
         .map(|id| {
@@ -587,6 +639,22 @@ fn list_neurons_heap() -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     list_neurons_benchmark()
+}
+
+/// Benchmark list_neurons
+#[bench(raw)]
+fn list_neurons_by_subaccount_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    list_neurons_by_subaccount_benchmark()
+}
+
+/// Benchmark list_neurons
+#[bench(raw)]
+fn list_neurons_by_subaccount_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    list_neurons_by_subaccount_benchmark()
 }
 
 fn create_service_nervous_system_action_with_large_payload() -> CreateServiceNervousSystem {
