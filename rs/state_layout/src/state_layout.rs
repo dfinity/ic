@@ -1594,12 +1594,22 @@ impl CheckpointLayout<ReadOnly> {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
-        sync_and_mark_files_readonly(&self.log, &self.raw_path(), &self.metrics, thread_pool)
+        if let Some(ref state_layout) = self.0.state_layout {
+            sync_and_mark_files_readonly(
+                &state_layout.log,
+                &self.raw_path(),
+                &state_layout.metrics,
+                thread_pool,
+            )
             .map_err(|err| LayoutError::IoError {
                 path: self.raw_path().to_path_buf(),
-                message: format!("Could not sync and mark readonly for checkpoint {}", height),
+                message: format!(
+                    "Could not sync and mark readonly for checkpoint {}",
+                    self.height()
+                ),
                 io_err: err,
             })?;
+        }
         if !marker.exists() {
             return Ok(());
         }

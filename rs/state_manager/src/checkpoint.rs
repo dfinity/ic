@@ -127,7 +127,7 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
             checkpoint_layout,
             reference_state,
             own_subnet_type,
-            thread_pool,
+            &mut thread_pool,
             fd_factory,
             metrics,
         );
@@ -421,7 +421,7 @@ pub fn validate_eq_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
-    thread_pool: Option<&mut scoped_threadpool::Pool>,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) {
@@ -448,7 +448,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
-    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    mut thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
