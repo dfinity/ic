@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
   If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+- New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
 
 ### Changed
 - The default IP address to which the PocketIC server and HTTP gateway bind is [::1] instead of 127.0.0.1.
