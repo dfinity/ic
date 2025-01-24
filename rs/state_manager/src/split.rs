@@ -1,7 +1,8 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{
-        load_checkpoint, make_checkpoint, validate_checkpoint_and_remove_unverified_marker,
+        load_checkpoint, make_unvalidated_checkpoint,
+        validate_checkpoint_and_remove_unverified_marker,
     },
     flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
@@ -80,7 +81,7 @@ pub fn split(
     let (cp, state) = read_checkpoint(
         &state_layout,
         &mut thread_pool,
-        fd_factory.clone(),
+        Arc::clone(&fd_factory),
         &metrics,
     )?;
 
@@ -100,8 +101,8 @@ pub fn split(
         state_layout,
         &cp,
         &mut thread_pool,
-        fd_factory,
         &config,
+        Arc::clone(&fd_factory),
         &metrics,
         log,
     )
@@ -179,8 +180,8 @@ fn write_checkpoint(
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     config: &Config,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &StateManagerMetrics,
     log: ReplicaLogger,
 ) -> Result<(), String> {
@@ -214,18 +215,23 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
     );
 
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
-        thread_pool,
-        fd_factory,
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
-    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(thread_pool))
-        .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
+    validate_checkpoint_and_remove_unverified_marker(
+        &cp_layout,
+        None,
+        SubnetType::Application,
+        fd_factory.clone(),
+        &metrics.checkpoint_metrics,
+        Some(thread_pool),
+    )
+    .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
 
     Ok(())
 }
