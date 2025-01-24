@@ -10956,6 +10956,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-utils-ni-dkg",
+ "ic-icp-index",
  "ic-icrc1",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",

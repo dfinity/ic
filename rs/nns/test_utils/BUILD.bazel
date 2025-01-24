@@ -15,6 +15,7 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/utils/ni_dkg",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icp/index:ic-icp-index",
     "//rs/ledger_suite/icrc1",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
