@@ -17,4 +17,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
+### Backfill node_reward_type for existing nodes
+
+A one-time migration to fill in the `node_reward_type` field for existing nodes was added.  This will
+be used for the upcoming work to calculate node rewards based on useful work.
+
 ## Security
