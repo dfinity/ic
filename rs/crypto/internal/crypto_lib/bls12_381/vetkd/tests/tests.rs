@@ -431,7 +431,7 @@ fn test_protocol_execution() {
         shares.shuffle(rng);
 
         let combined = proto.combine_valid(&shares);
-        assert!(combined.is_ok(), "Combination succeeded");
+        assert!(combined.is_ok(), "Combination unexpectedly failed");
 
         let k = setup
             .transport_sk
