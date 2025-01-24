@@ -113,8 +113,8 @@ pub(crate) enum TipRequest {
     },
     /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
     SerializeToTip {
-        height: Height,
-        replicated_state: Box<ReplicatedState>,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        replicated_state: Arc<ReplicatedState>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: *
@@ -314,7 +314,7 @@ pub(crate) fn spawn_tip_thread(
                             );
                         }
                         TipRequest::SerializeToTip {
-                            height,
+                            checkpoint_layout,
                             replicated_state,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
@@ -323,24 +323,34 @@ pub(crate) fn spawn_tip_thread(
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
-                            tip_state = TipState::Serialized(height);
+                            tip_state = TipState::Serialized(checkpoint_layout.height());
+                            fn rw_cp(
+                                _t: &mut TipHandler,
+                                path: PathBuf,
+                                height: Height,
+                            ) -> CheckpointLayout<RwPolicy<TipHandler>>
+                            {
+                                CheckpointLayout::new_untracked(path, height).unwrap()
+                            }
                             serialize_to_tip(
                                 &log,
                                 &replicated_state,
-                                &tip_handler.tip(height).unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to get tip @{} to serialize to: {}",
-                                        height,
-                                        err
-                                    );
-                                }),
+                                &rw_cp(
+                                    &mut tip_handler,
+                                    checkpoint_layout.raw_path().to_path_buf(),
+                                    checkpoint_layout.height(),
+                                ),
                                 &mut thread_pool,
                                 &metrics.storage_metrics,
                                 &lsmt_config,
                             )
                             .unwrap_or_else(|err| {
-                                fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
+                                fatal!(
+                                    log,
+                                    "Failed to serialize to tip @{}: {}",
+                                    checkpoint_layout.height(),
+                                    err
+                                );
                             });
                         }
                         TipRequest::ResetTipAndMerge {

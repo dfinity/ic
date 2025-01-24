@@ -2638,6 +2638,21 @@ impl StateManagerImpl {
             );
         }
         let state = Arc::new(state);
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["serialize_to_tip_cloning"])
+                .start_timer();
+            self.tip_channel
+                .send(TipRequest::SerializeToTip {
+                    checkpoint_layout: cp_layout.clone(),
+                    replicated_state: Arc::clone(&state),
+                })
+                .unwrap();
+        }
+
         self.tip_channel
             .send(TipRequest::ValidateReplicatedState {
                 checkpoint_layout: cp_layout.clone(),

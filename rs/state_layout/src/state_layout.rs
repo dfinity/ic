@@ -664,22 +664,12 @@ impl StateLayout {
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
+        _thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
-            |err| LayoutError::IoError {
-                path: scratchpad.to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    height
-                ),
-                io_err: err,
-            },
-        )?;
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -1599,8 +1589,17 @@ impl CheckpointLayout<ReadOnly> {
     /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
     /// However, the removal of the unverified checkpoint marker is allowed as
     /// the marker is not part the checkpoint conceptually.
-    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+    pub fn remove_unverified_checkpoint_marker(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
+        sync_and_mark_files_readonly(&self.log, &self.raw_path(), &self.metrics, thread_pool)
+            .map_err(|err| LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!("Could not sync and mark readonly for checkpoint {}", height),
+                io_err: err,
+            })?;
         if !marker.exists() {
             return Ok(());
         }

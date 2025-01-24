@@ -58,19 +58,6 @@ pub(crate) fn make_unvalidated_checkpoint(
     metrics: &CheckpointMetrics,
     lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["serialize_to_tip_cloning"])
-            .start_timer();
-        tip_channel
-            .send(TipRequest::SerializeToTip {
-                height,
-                replicated_state: Box::new(state.clone()),
-            })
-            .unwrap();
-    }
-
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
@@ -146,7 +133,7 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
         );
     }
     checkpoint_layout
-        .remove_unverified_checkpoint_marker()
+        .remove_unverified_checkpoint_marker(thread_pool)
         .map_err(CheckpointError::from)?;
     Ok(())
 }
