@@ -6,7 +6,7 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use std::fs::{create_dir, File};
 use std::io::Write;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
 use std::str::FromStr;
 use std::time::SystemTime;
@@ -105,7 +105,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .with_ii_subnet()
         .with_application_subnet()
         .with_bitcoind_addr(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             18444,
         ))
         .build();
@@ -130,7 +130,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     .0;
 
     let btc_rpc = Client::new(
-        "http://[::1]:18443",
+        "http://127.0.0.1:18443",
         Auth::UserPass(
             "ic-btc-integration".to_string(),
             "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),

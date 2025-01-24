@@ -1769,7 +1769,7 @@ impl UpgradeSnsControlledCanister {
             canister_upgrade_arg: self.canister_upgrade_arg.clone(),
             mode: self.mode,
             new_canister_wasm: Vec::new(),
-            chunked_canister_wasm: None,
+            chunked_canister_wasm: self.chunked_canister_wasm.clone(),
         }
     }
 }

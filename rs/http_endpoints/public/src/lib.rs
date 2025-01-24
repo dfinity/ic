@@ -302,15 +302,8 @@ pub fn start_server(
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
 ) {
-    let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
-
-    // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
-    // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
-    // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
-    let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
-    addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr, &rt_handle);
+    let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
     let _enter = rt_handle.enter();
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");

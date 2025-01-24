@@ -1780,6 +1780,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "pretty_assertions",
 ]
 
 [[package]]
@@ -6369,6 +6370,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.18.0-alpha.1",
+ "ic0 0.24.0-alpha.1",
+ "serde",
+ "serde_bytes",
+ "thiserror 2.0.11",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6429,6 +6443,19 @@ name = "ic-cdk-macros"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c792bf0d1621c893ccf2bcdeac4ee70121103a03030a1827031a6b3c60488944"
+dependencies = [
+ "candid",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_tokenstream 0.2.2",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -8684,6 +8711,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "once_cell",
+ "parking_lot 0.12.3",
  "prometheus",
  "rand 0.8.5",
  "rstest",
@@ -9681,6 +9709,7 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
+ "test-strategy 0.3.1",
  "tracing",
  "xnet-test",
 ]
@@ -11820,6 +11849,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "candid",
+ "candid-utils",
  "clap 4.5.27",
  "futures",
  "hex",
@@ -13737,6 +13767,11 @@ name = "ic0"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
+
+[[package]]
+name = "ic0"
+version = "0.24.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs?rev=4e287ce51636b0e70768c193da38d2fc5324ea15#4e287ce51636b0e70768c193da38d2fc5324ea15"
 
 [[package]]
 name = "ic_bls12_381"
@@ -18175,12 +18210,13 @@ dependencies = [
  "candid",
  "futures",
  "ic-base-types",
- "ic-cdk 0.16.0",
- "ic-cdk-macros 0.9.0",
+ "ic-cdk 0.18.0-alpha.1",
+ "ic-cdk-macros 0.18.0-alpha.1",
  "ic-error-types",
  "ic-types",
  "rand 0.8.5",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
