@@ -14,18 +14,6 @@ impl NeuronId {
     pub const MIN: Self = Self { id: u64::MIN };
     pub const MAX: Self = Self { id: u64::MAX };
 
-    pub fn from_subaccount(subaccount: &[u8; 32]) -> Self {
-        Self {
-            id: {
-                let mut state = Sha256::new();
-                state.write(subaccount);
-                // TODO(NNS1-192) We should just store the Sha256, but for now
-                // we convert it to a number
-                u64::from_ne_bytes(state.finish()[0..8].try_into().unwrap())
-            },
-        }
-    }
-
     pub fn next(&self) -> Option<NeuronId> {
         self.id.checked_add(1).map(|id| NeuronId { id })
     }

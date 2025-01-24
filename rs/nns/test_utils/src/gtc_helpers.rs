@@ -252,8 +252,13 @@ fn make_neuron(
         )
     };
 
+    let subaccount_hash = Sha256::hash(&subaccount);
+    let neuron_id = NeuronId {
+        id: u64::from_ne_bytes(subaccount_hash[0..8].try_into().unwrap()),
+    };
+
     Neuron {
-        id: Some(NeuronId::from_subaccount(&subaccount)),
+        id: Some(neuron_id),
         account: subaccount.to_vec(),
         controller: Some(GENESIS_TOKEN_CANISTER_ID.get()),
         cached_neuron_stake_e8s: stake_e8s,
