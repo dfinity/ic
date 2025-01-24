@@ -12602,6 +12602,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-testing"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "clap 4.5.27",
+ "ic-nervous-system-integration-tests",
+ "ic-nns-constants",
+ "ic-nns-test-utils",
+ "pocket-ic",
+ "reqwest 0.12.12",
+ "tokio",
+]
+
+[[package]]
 name = "ic-sns-wasm"
 version = "1.0.0"
 dependencies = [
