@@ -1,51 +1,31 @@
-use ic_interfaces::{
-    batch_payload::{PastPayload},
+use core::{convert::From, iter::Iterator};
+use ic_interfaces::batch_payload::PastPayload;
+use ic_interfaces::p2p::consensus::MutablePool;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, VetKdKeyId};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
-use ic_management_canister_types::{MasterPublicKeyId};
-use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::consensus::idkg::{EcdsaSigShare, IDkgMessage, RequestId, SchnorrSigShare};
+use ic_types::crypto::canister_threshold_sig::{ThresholdEcdsaSigShare, ThresholdSchnorrSigShare};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
 use ic_types::{
-    batch::{
-        vetkd_payload_to_bytes,
-        VetKdAgreement, VetKdErrorCode, VetKdPayload,
-    },
+    batch::{vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode, VetKdPayload},
     consensus::idkg::VetKdKeyShare,
-    crypto::{
-        vetkd::{VetKdEncryptedKeyShare},
-    },
-    messages::{CallbackId},
+    crypto::vetkd::VetKdEncryptedKeyShare,
+    crypto::vetkd::VetKdEncryptedKeyShareContent,
+    crypto::{CryptoHash, CryptoHashOf},
+    messages::CallbackId,
+    time::UNIX_EPOCH,
     Height, NumBytes,
 };
-use std::{
-    collections::{BTreeMap},
-    sync::{Arc},
-};
-    use core::{convert::From, iter::Iterator};
-    use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_management_canister_types::{EcdsaKeyId, VetKdKeyId};
-    use ic_registry_subnet_features::KeyConfig;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, SchnorrArguments, VetKdArguments,
-    };
-    use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::consensus::idkg::{EcdsaSigShare, IDkgMessage, RequestId, SchnorrSigShare};
-    use ic_types::crypto::canister_threshold_sig::{
-        ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
-    };
-    use ic_types::crypto::threshold_sig::ni_dkg::{
-        NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
-    };
-    use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-    use ic_types::{
-        crypto::{CryptoHash, CryptoHashOf},
-        time::UNIX_EPOCH,
-    };
-    use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use std::str::FromStr;
-    use strum::EnumCount;
-
+use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+use std::str::FromStr;
+use std::{collections::BTreeMap, sync::Arc};
+use strum::EnumCount;
 
 pub(super) fn make_vetkd_agreements(ids: [u64; 3]) -> BTreeMap<CallbackId, VetKdAgreement> {
     assert_eq!(VetKdAgreement::COUNT, 2);
@@ -97,9 +77,7 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
         max_queue_size: 3,
     };
     let key_config_1 = KeyConfig {
-        key_id: MasterPublicKeyId::VetKd(
-            VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap(),
-        ),
+        key_id: MasterPublicKeyId::VetKd(VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()),
         pre_signatures_to_create_in_advance: 1,
         max_queue_size: 3,
     };
@@ -153,7 +131,9 @@ pub(super) fn fake_signature_request_args(key_id: MasterPublicKeyId) -> Threshol
     }
 }
 
-pub(super) fn fake_signature_request_context(key_id: MasterPublicKeyId) -> SignWithThresholdContext {
+pub(super) fn fake_signature_request_context(
+    key_id: MasterPublicKeyId,
+) -> SignWithThresholdContext {
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id),
@@ -165,7 +145,9 @@ pub(super) fn fake_signature_request_context(key_id: MasterPublicKeyId) -> SignW
     }
 }
 
-pub(super) fn make_contexts(config: &ChainKeyConfig) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+pub(super) fn make_contexts(
+    config: &ChainKeyConfig,
+) -> BTreeMap<CallbackId, SignWithThresholdContext> {
     let mut map = BTreeMap::new();
     for (i, key_id) in config.key_ids().into_iter().enumerate() {
         map.insert(
@@ -176,7 +158,9 @@ pub(super) fn make_contexts(config: &ChainKeyConfig) -> BTreeMap<CallbackId, Sig
     map
 }
 
-pub(super) fn make_shares(contexts: &BTreeMap<CallbackId, SignWithThresholdContext>) -> Vec<IDkgMessage> {
+pub(super) fn make_shares(
+    contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
+) -> Vec<IDkgMessage> {
     let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
     let mut messages = vec![];
     for (&callback_id, context) in contexts {
@@ -193,15 +177,13 @@ pub(super) fn make_shares(contexts: &BTreeMap<CallbackId, SignWithThresholdConte
                         sig_share_raw: vec![],
                     },
                 }),
-                ThresholdArguments::Schnorr(_) => {
-                    IDkgMessage::SchnorrSigShare(SchnorrSigShare {
-                        signer_id,
-                        request_id,
-                        share: ThresholdSchnorrSigShare {
-                            sig_share_raw: vec![],
-                        },
-                    })
-                }
+                ThresholdArguments::Schnorr(_) => IDkgMessage::SchnorrSigShare(SchnorrSigShare {
+                    signer_id,
+                    request_id,
+                    share: ThresholdSchnorrSigShare {
+                        sig_share_raw: vec![],
+                    },
+                }),
                 ThresholdArguments::VetKd(_) => IDkgMessage::VetKdKeyShare(VetKdKeyShare {
                     signer_id,
                     request_id,

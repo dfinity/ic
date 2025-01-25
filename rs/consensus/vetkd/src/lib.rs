@@ -1,11 +1,16 @@
 //! This module provides the component responsible for generating and validating
 //! payloads relevant to VetKd.
 
+use crate::utils::{
+    get_nidkg_chain_key_config_if_enabled, get_valid_keys_and_expiry, group_shares_by_callback_id,
+    invalid_artifact, invalid_artifact_err, parse_past_payload_ids, validation_failed,
+    validation_failed_err,
+};
 use ic_consensus_utils::{crypto::ConsensusCrypto, registry_version_at_height};
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    consensus::{PayloadValidationError},
+    consensus::PayloadValidationError,
     consensus_pool::ConsensusPoolCache,
     idkg::IDkgPool,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
@@ -21,8 +26,8 @@ use ic_replicated_state::{
 };
 use ic_types::{
     batch::{
-        bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse,
-        ValidationContext, VetKdAgreement, VetKdErrorCode, VetKdPayload,
+        bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
+        VetKdAgreement, VetKdErrorCode, VetKdPayload,
     },
     crypto::{
         vetkd::{VetKdArgs, VetKdEncryptedKey},
@@ -35,7 +40,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
 };
-use crate::utils::{get_nidkg_chain_key_config_if_enabled, get_valid_keys_and_expiry, group_shares_by_callback_id, parse_past_payload_ids, invalid_artifact, invalid_artifact_err, validation_failed, validation_failed_err};
 
 #[cfg(test)]
 mod test_utils;
@@ -409,27 +413,24 @@ mod tests {
     use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
     use ic_consensus_mocks::dependencies_with_subnet_records_with_raw_state_manager;
     use ic_consensus_mocks::Dependencies;
-    use ic_interfaces::idkg::IDkgChangeAction;
-    use ic_interfaces::p2p::consensus::MutablePool;
-    use ic_interfaces_state_manager::StateManagerError;
-    use ic_logger::no_op_logger;
-    use ic_management_canister_types::{VetKdKeyId};
-    use ic_registry_subnet_features::KeyConfig;
-    use ic_test_utilities_registry::{SubnetRecordBuilder};
-    use ic_types::consensus::idkg::{IDkgMessage};
-
-    use ic_types::{
-        time::UNIX_EPOCH,
-    };
-    use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use std::str::FromStr;
-    use crate::test_utils::*;
-    use ic_types::RegistryVersion;
-    use ic_interfaces::validation::ValidationError;
     use ic_interfaces::consensus::InvalidPayloadReason;
     use ic_interfaces::consensus::PayloadValidationFailure;
+    use ic_interfaces::idkg::IDkgChangeAction;
+    use ic_interfaces::p2p::consensus::MutablePool;
+    use ic_interfaces::validation::ValidationError;
+    use ic_interfaces_state_manager::StateManagerError;
+    use ic_logger::no_op_logger;
+    use ic_management_canister_types::VetKdKeyId;
+    use ic_registry_subnet_features::KeyConfig;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_types::consensus::idkg::IDkgMessage;
+    use ic_types::time::UNIX_EPOCH;
+    use ic_types::RegistryVersion;
+    use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+    use std::str::FromStr;
 
     use super::*;
+    use crate::test_utils::*;
 
     const CERTIFIED_HEIGHT: u64 = 10;
 

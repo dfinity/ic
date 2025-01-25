@@ -1,25 +1,18 @@
 use ic_interfaces::{
-    batch_payload::{PastPayload},
+    batch_payload::PastPayload,
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     validation::ValidationError,
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{MasterPublicKeyId};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::{
-    batch::{
-        slice_to_messages,
-    },
-    consensus::idkg::VetKdKeyShare,
-    crypto::{
-        vetkd::{VetKdEncryptedKeyShare},
-    },
-    messages::{CallbackId},
-    registry::RegistryClientError,
+    batch::slice_to_messages, consensus::idkg::VetKdKeyShare,
+    crypto::vetkd::VetKdEncryptedKeyShare, messages::CallbackId, registry::RegistryClientError,
     NodeId, RegistryVersion, SubnetId, Time,
 };
 use std::{
@@ -27,12 +20,15 @@ use std::{
     time::Duration,
 };
 
-
-pub(super) fn validation_failed_err(err: VetKdPayloadValidationFailure) -> Result<(), PayloadValidationError> {
+pub(super) fn validation_failed_err(
+    err: VetKdPayloadValidationFailure,
+) -> Result<(), PayloadValidationError> {
     Err(validation_failed(err))
 }
 
-pub(super) fn invalid_artifact_err(reason: InvalidVetKdPayloadReason) -> Result<(), PayloadValidationError> {
+pub(super) fn invalid_artifact_err(
+    reason: InvalidVetKdPayloadReason,
+) -> Result<(), PayloadValidationError> {
     Err(invalid_artifact(reason))
 }
 
