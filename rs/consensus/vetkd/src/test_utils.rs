@@ -1,6 +1,5 @@
 use core::{convert::From, iter::Iterator};
 use ic_interfaces::batch_payload::PastPayload;
-use ic_interfaces::p2p::consensus::MutablePool;
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, VetKdKeyId};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
@@ -27,6 +26,7 @@ use std::str::FromStr;
 use std::{collections::BTreeMap, sync::Arc};
 use strum::EnumCount;
 
+/// Create a map of agreements with all possible types
 pub(super) fn make_vetkd_agreements(ids: [u64; 3]) -> BTreeMap<CallbackId, VetKdAgreement> {
     assert_eq!(VetKdAgreement::COUNT, 2);
     assert_eq!(VetKdErrorCode::COUNT, 2);
@@ -46,6 +46,7 @@ pub(super) fn make_vetkd_agreements(ids: [u64; 3]) -> BTreeMap<CallbackId, VetKd
     ])
 }
 
+/// Create a map of agreements with the same, given type
 pub(super) fn make_vetkd_agreements_with_payload(
     ids: &[u64],
     agreement: VetKdAgreement,
@@ -57,10 +58,12 @@ pub(super) fn make_vetkd_agreements_with_payload(
     map
 }
 
+/// Convert the given agreements payload to bytes, using a maximum size of 1KiB.
 pub(super) fn as_bytes(vetkd_agreements: BTreeMap<CallbackId, VetKdAgreement>) -> Vec<u8> {
     vetkd_payload_to_bytes(VetKdPayload { vetkd_agreements }, NumBytes::new(1024))
 }
 
+/// Turn the given payload bytes into a generic [`PastPayload`]
 pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload {
     PastPayload {
         height: Height::from(0),
@@ -70,6 +73,8 @@ pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload {
     }
 }
 
+/// Create a [`ChainKeyConfig`] with one ECDSA and two VetKD key IDs,
+/// and 1 second request timeout
 pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     let key_config = KeyConfig {
         key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap()),
@@ -145,6 +150,8 @@ pub(super) fn fake_signature_request_context(
     }
 }
 
+/// Create a fake request context for each key ID in the given config.
+/// Callback IDs are assigned sequentially starting at 0.
 pub(super) fn make_contexts(
     config: &ChainKeyConfig,
 ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
@@ -158,6 +165,7 @@ pub(super) fn make_contexts(
     map
 }
 
+/// Create four artifact shares for each request context
 pub(super) fn make_shares(
     contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
 ) -> Vec<IDkgMessage> {

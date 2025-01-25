@@ -19,6 +19,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::{MasterPublicKeyId, Payload, VetKdDeriveEncryptedKeyResult};
+use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
@@ -46,14 +47,14 @@ mod test_utils;
 mod utils;
 
 /// Implementation of the [`BatchPayloadBuilder`] for the VetKd feature.
+/// TODO: Add metrics
 pub struct VetKdPayloadBuilderImpl {
     pool: Arc<RwLock<dyn IDkgPool>>,
     cache: Arc<dyn ConsensusPoolCache>,
-    crypto: Arc<dyn ConsensusCrypto>,
+    _crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
-    // metrics: CanisterHttpPayloadBuilderMetrics,
     log: ReplicaLogger,
 }
 
@@ -66,17 +67,16 @@ impl VetKdPayloadBuilderImpl {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
-        // metrics_registry: &MetricsRegistry,
+        _metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             pool,
             cache,
-            crypto,
+            _crypto: crypto,
             state_reader,
             subnet_id,
             registry,
-            // metrics: CanisterHttpPayloadBuilderMetrics::new(metrics_registry),
             log,
         }
     }
@@ -158,13 +158,13 @@ impl VetKdPayloadBuilderImpl {
                 if let Some(reject) = maybe_reject(&valid_keys, &context, request_expiry_time) {
                     reject
                 } else {
-                    let Some(shares) = grouped_shares.get(callback_id) else {
+                    let Some(_shares) = grouped_shares.get(callback_id) else {
                         continue;
                     };
                     let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                         continue;
                     };
-                    let args = VetKdArgs {
+                    let _args = VetKdArgs {
                         derivation_path: ExtendedDerivationPath {
                             caller: context.request.sender.into(),
                             derivation_path: context.derivation_path.clone(),
@@ -174,7 +174,6 @@ impl VetKdPayloadBuilderImpl {
                         encryption_public_key: ctxt_args.encryption_public_key.clone(),
                     };
                     todo!("Call crypto endpoint to combine shares");
-                    VetKdAgreement::Success(vec![])
                 };
 
             let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
@@ -257,7 +256,7 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::IDkgContext(id));
         };
-        let args = VetKdArgs {
+        let _args = VetKdArgs {
             derivation_path: ExtendedDerivationPath {
                 caller: context.request.sender.into(),
                 derivation_path: context.derivation_path.clone(),
@@ -274,11 +273,10 @@ impl VetKdPayloadBuilderImpl {
                 )))
             }
         };
-        let signature = VetKdEncryptedKey {
+        let _signature = VetKdEncryptedKey {
             encrypted_key: reply.encrypted_key,
         };
-        todo!("Call crypto");
-        Ok(())
+        todo!("Call crypto endpoint to verify combined key");
     }
 }
 
@@ -290,12 +288,6 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        // let _time = self
-        //     .metrics
-        //     .op_duration
-        //     .with_label_values(&["build"])
-        //     .start_timer();
-
         let Ok(config) = self.get_chain_key_config_if_enabled(height) else {
             return vec![];
         };
@@ -322,12 +314,6 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
         payload: &[u8],
         past_payloads: &[PastPayload],
     ) -> Result<(), PayloadValidationError> {
-        // let _time = self
-        //     .metrics
-        //     .op_duration
-        //     .with_label_values(&["validate"])
-        //     .start_timer();
-
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -474,7 +460,7 @@ mod tests {
         config: Option<ChainKeyConfig>,
         contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         shares: Vec<IDkgMessage>,
-        run: impl FnOnce(VetKdPayloadBuilderImpl, Arc<RwLock<IDkgPoolImpl>>) -> T,
+        run: impl FnOnce(VetKdPayloadBuilderImpl) -> T,
     ) -> T {
         let committee = (0..4).map(|id| node_test_id(id as u64)).collect::<Vec<_>>();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -532,10 +518,11 @@ mod tests {
                 state_manager,
                 subnet_test_id(0),
                 registry,
+                &MetricsRegistry::new(),
                 no_op_logger(),
             );
 
-            run(payload_builder, idkg_pool)
+            run(payload_builder)
         })
     }
 
@@ -556,7 +543,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &context,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
 
             // TODO validate payload manually
@@ -598,7 +585,7 @@ mod tests {
             certified_height,
             time: UNIX_EPOCH,
         };
-        test_payload_builder(None, BTreeMap::new(), vec![], |builder, _| {
+        test_payload_builder(None, BTreeMap::new(), vec![], |builder| {
             let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
             assert!(payload.is_empty());
 
@@ -635,7 +622,7 @@ mod tests {
             certified_height: certified_height.increment(),
             time: UNIX_EPOCH,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload = builder.build_payload(height, NumBytes::from(1024), &[], &context);
             assert!(payload.is_empty());
 
@@ -666,7 +653,7 @@ mod tests {
         let config = make_chain_key_config();
         let contexts = make_contexts(&config);
         let certified_height = Height::new(CERTIFIED_HEIGHT);
-        test_payload_builder(Some(config), contexts, vec![], |builder, _| {
+        test_payload_builder(Some(config), contexts, vec![], |builder| {
             let height = certified_height.increment();
             let context = ValidationContext {
                 registry_version: RegistryVersion::new(10),
@@ -697,7 +684,7 @@ mod tests {
         let contexts = make_contexts(&config);
         let shares = make_shares(&contexts);
         let certified_height = Height::new(CERTIFIED_HEIGHT);
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload = builder.build_payload(
                 certified_height.increment(),
                 NumBytes::from(0),
@@ -725,7 +712,7 @@ mod tests {
             certified_height,
             time: UNIX_EPOCH,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload = builder.build_payload(height, NumBytes::from(50), &[], &context);
             let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
             assert_eq!(payload_deserialized.vetkd_agreements.len(), 1);
@@ -764,7 +751,7 @@ mod tests {
             certified_height,
             time: UNIX_EPOCH,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             let payload =
                 builder.build_payload(height, NumBytes::from(1024), &past_payloads, &context);
             assert!(payload.is_empty());
@@ -805,7 +792,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &context,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
             let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
@@ -844,7 +831,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &context,
         };
-        test_payload_builder(Some(config), contexts, shares, |builder, _| {
+        test_payload_builder(Some(config), contexts, shares, |builder| {
             // Payload with agreements for IDKG contexts should be rejected
             let payload = as_bytes(make_vetkd_agreements([0, 1, 2]));
             let validation = builder.validate_payload(height, &proposal_context, &payload, &[]);
@@ -893,7 +880,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &context,
         };
-        test_payload_builder(Some(config), contexts.clone(), shares, |builder, _| {
+        test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
             let serialized_payload =
                 builder.build_payload(height, NumBytes::from(1024), &[], &context);
             let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();
@@ -962,7 +949,7 @@ mod tests {
             proposer: node_test_id(0),
             validation_context: &context,
         };
-        test_payload_builder(Some(config), contexts.clone(), shares, |builder, _| {
+        test_payload_builder(Some(config), contexts.clone(), shares, |builder| {
             let serialized_payload =
                 builder.build_payload(height, NumBytes::from(1024), &[], &context);
             let payload = bytes_to_vetkd_payload(&serialized_payload).unwrap();

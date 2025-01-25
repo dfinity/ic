@@ -40,6 +40,8 @@ pub(super) fn invalid_artifact(reason: InvalidVetKdPayloadReason) -> PayloadVali
     ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(reason))
 }
 
+/// Return the [`ChainKeyConfig`] for the given subnet and registry version,
+/// if it contains any keys that require NiDKG (i.e. VetKD).
 pub(super) fn get_nidkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -65,6 +67,8 @@ pub(super) fn get_nidkg_chain_key_config_if_enabled(
     }
 }
 
+/// Return the set of Key IDs requiring NiDKG in the given config,
+/// and calculate the request expiry time, if a timeout is configured
 pub(super) fn get_valid_keys_and_expiry(
     config: ChainKeyConfig,
     context_time: Time,
