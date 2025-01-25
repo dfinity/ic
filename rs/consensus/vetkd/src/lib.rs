@@ -153,7 +153,7 @@ impl VetKdPayloadBuilderImpl {
             }
 
             let candidate =
-                if let Some(reject) = maybe_reject(&valid_keys, &context, request_expiry_time) {
+                if let Some(reject) = maybe_reject(&valid_keys, context, request_expiry_time) {
                     reject
                 } else {
                     let Some(_shares) = grouped_shares.get(callback_id) else {
@@ -214,7 +214,7 @@ impl VetKdPayloadBuilderImpl {
                 return invalid_artifact_err(InvalidVetKdPayloadReason::IDkgContext(id));
             }
 
-            let expected_reject = maybe_reject(&valid_keys, &context, request_expiry_time);
+            let expected_reject = maybe_reject(&valid_keys, context, request_expiry_time);
 
             match agreement {
                 VetKdAgreement::Success(data) => {
@@ -226,7 +226,7 @@ impl VetKdPayloadBuilderImpl {
                             },
                         );
                     } else {
-                        self.validate_vetkd_agreement(id, &context, data)?
+                        self.validate_vetkd_agreement(id, context, data)?
                     }
                 }
                 reject => {
