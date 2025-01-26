@@ -7,6 +7,8 @@ use rayon::prelude::*;
 const DATA: &str = "rs/memory_tracker/benches/test-data/64KiB.txt";
 const OPS: [usize; 1] = [100];
 const THREADS: [usize; 4] = [1, 2, 4, 8];
+const PAGE_SIZE: usize = 4096;
+const WASM_PAGE_SIZE: usize = 64 * 1024;
 
 fn mmap(file: &File) {
     // Calls `mmap` with `PROT_READ` and `MAP_PRIVATE`.
@@ -27,7 +29,7 @@ fn mmap_mprotect_read(file: &File) {
     let mm = mm.make_mut().unwrap();
     // Reads 64 KiB.
     for i in 0..64 / 4 {
-        let _b = std::hint::black_box(mm[4096 * i]);
+        let _b = std::hint::black_box(mm[PAGE_SIZE * i]);
     }
 }
 
@@ -38,7 +40,7 @@ fn mmap_mprotect_write(file: &File) {
     let mut mm = mm.make_mut().unwrap();
     // Makes 64 KiB copies on write.
     for i in 0..64 / 4 {
-        mm[4096 * i] = 42;
+        mm[PAGE_SIZE * i] = 42;
     }
 }
 
@@ -49,7 +51,7 @@ fn mmap_mprotect_read_write(file: &File) {
     let mut mm = mm.make_mut().unwrap();
     // Reads then makes 64 KiB copies on write.
     for i in 0..64 / 4 {
-        mm[4096 * i] = mm[1 + 4096 * i];
+        mm[PAGE_SIZE * i] = mm[1 + PAGE_SIZE * i];
     }
 }
 
@@ -58,16 +60,15 @@ fn mmap_read_write(file: &File) {
     let mut mm = unsafe { MmapOptions::new().map_copy(file).unwrap() };
     // Reads then makes 64 KiB copies on write.
     for i in 0..64 / 4 {
-        mm[4096 * i] = mm[1 + 4096 * i];
+        mm[PAGE_SIZE * i] = mm[1 + PAGE_SIZE * i];
     }
 }
 
 fn file_read_write(file: &File) {
-    const PAGE_SIZE: usize = 64 * 1024;
-    let mut buf = [0u8; PAGE_SIZE];
+    let mut buf = [0u8; WASM_PAGE_SIZE];
     file.read_exact_at(&mut buf, 0).unwrap();
     for i in 0..64 / 4 {
-        buf[4096 * i] = buf[1 + 4096 * i];
+        buf[PAGE_SIZE * i] = buf[1 + PAGE_SIZE * i];
     }
 }
 
