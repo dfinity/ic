@@ -1,21 +1,18 @@
 use anyhow::{bail, Context};
 use nix::errno::Errno;
 use nix::unistd::Whence;
-use sha2::Digest;
 use std::env;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use xxhash_rust::xxh3;
+use xxhash_rust::xxh3::{xxh3_128, Xxh3};
 
 const BLOCK_LEN: usize = 1024 * 1024;
 const BLOCK_LEN_U64: u64 = BLOCK_LEN as u64;
 
 /// A tool for calculating checksums of files optimized for processing sparse files.
-///
-/// Research paper: https://www.scitepress.org/Papers/2024/127645/127645.pdf
 fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect();
     // The first arg is the own executable path.
@@ -36,14 +33,21 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
-    let mut outer_hasher = xxh3::Xxh3::new();
-    let hole_hash = xxh3::xxh3_128(&vec![0; BLOCK_LEN]).to_le_bytes();
+    // The algorithm works by chunking the input into blocks of `BLOCK_LEN`.
+    // Each such block's hash is calculated separately and combined by outer_hasher.
+    // Since the hash of two matching block is the same, we can precalculate the hash of blocks of
+    // holes (a block with zeros only). We then use the OS's file seek API to avoid actually having
+    // to read the zeros in the holes.
+    //
+    // Research paper: https://www.scitepress.org/Papers/2024/127645/127645.pdf
+    let mut outer_hasher = Xxh3::new();
+    let hole_hash = xxh3_128(&vec![0; BLOCK_LEN]).to_le_bytes();
     iterate_blocks(file, |block| match block {
         Block::Hole => {
             outer_hasher.update(&hole_hash);
         }
         Block::Data(bytes) => {
-            outer_hasher.update(&xxh3::xxh3_128(bytes).to_le_bytes());
+            outer_hasher.update(&xxh3_128(bytes).to_le_bytes());
         }
     })?;
 
@@ -151,7 +155,7 @@ fn seek_data(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
 mod tests {
     use super::*;
     use rand::rngs::StdRng;
-    use rand::{Rng, RngCore, SeedableRng};
+    use rand::{RngCore, SeedableRng};
     use std::io::Write;
     use tempfile::tempfile;
 
@@ -163,7 +167,7 @@ mod tests {
         #[test]
         fn file_system_supports_sparse_files() {
             let mut file = tempfile().unwrap();
-            file.seek(SeekFrom::Start(6_000_000)).unwrap();
+            file.seek(SeekFrom::Start(BLOCK_LEN_U64)).unwrap();
             writeln!(&mut file, "hello").unwrap();
 
             file.rewind().unwrap();
@@ -184,8 +188,9 @@ mod tests {
         #[test]
         fn no_holes_prime_bytes() {
             let mut file = tempfile().unwrap();
-            let rng = StdRng::seed_from_u64(0);
-            let data: Vec<u8> = rng.random_iter().take(26205239).collect();
+            let mut rng = StdRng::seed_from_u64(0);
+            let mut data = vec![0u8; 26205239];
+            rng.fill_bytes(&mut data);
 
             file.write_all(&data).unwrap();
 
@@ -211,7 +216,7 @@ mod tests {
             let mut data = vec![0u8; 26205239];
             rng.fill_bytes(&mut data);
 
-            file.seek(SeekFrom::Current(131357)).unwrap();
+            file.seek(SeekFrom::Current(9590653)).unwrap();
             file.write_all(&data).unwrap();
 
             file.seek(SeekFrom::Current(26205239)).unwrap();
@@ -281,8 +286,8 @@ mod tests {
         write!(&mut file1, "hello").unwrap();
         write!(&mut file2, "hello").unwrap();
 
-        file1.write_all(&vec![0; 131357]).unwrap();
-        file2.seek(SeekFrom::Current(131357)).unwrap();
+        file1.write_all(&vec![0; 9590653]).unwrap();
+        file2.seek(SeekFrom::Current(9590653)).unwrap();
 
         write!(&mut file1, "foo").unwrap();
         write!(&mut file2, "foo").unwrap();
@@ -298,8 +303,8 @@ mod tests {
         let mut file1 = tempfile().unwrap();
         let mut file2 = tempfile().unwrap();
 
-        file1.write_all(&vec![0; 131357]).unwrap();
-        file2.set_len(131357).unwrap();
+        file1.write_all(&vec![0; 9590653]).unwrap();
+        file2.set_len(9590653).unwrap();
 
         assert_eq!(
             calculate_digest(&mut file1).unwrap(),

@@ -263,7 +263,7 @@ version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -275,10 +275,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if 1.0.0",
- "getrandom 0.2.15",
+ "getrandom",
  "once_cell",
  "version_check",
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -952,7 +952,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
 dependencies = [
  "futures-core",
- "getrandom 0.2.15",
+ "getrandom",
  "instant",
  "pin-project-lite",
  "rand 0.8.5",
@@ -4155,18 +4155,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
-name = "fast-digest"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "nix 0.29.0",
- "rand 0.9.0-beta.3",
- "sha2 0.10.8",
- "tempfile",
- "xxhash-rust",
-]
-
-[[package]]
 name = "fastcopy"
 version = "0.1.0"
 dependencies = [
@@ -4559,23 +4547,8 @@ dependencies = [
  "cfg-if 1.0.0",
  "js-sys",
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "getrandom"
-version = "0.3.0-rc.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a78f88e84d239c7f2619ae8b091603c26208e1cb322571f5a29d6806f56ee5e"
-dependencies = [
- "cfg-if 1.0.0",
- "js-sys",
- "libc",
- "rustix",
- "wasi 0.13.3+wasi-0.2.2",
- "wasm-bindgen",
- "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -7090,7 +7063,7 @@ dependencies = [
 name = "ic-crypto-getrandom-for-wasm"
 version = "0.9.0"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
 ]
 
 [[package]]
@@ -13527,7 +13500,7 @@ dependencies = [
 name = "ic-vetkd-utils"
 version = "0.1.0"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
  "hex",
  "ic_bls12_381",
  "lazy_static",
@@ -14129,6 +14102,17 @@ dependencies = [
  "candid",
  "futures",
  "icrc1-test-env",
+]
+
+[[package]]
+name = "icsum"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nix 0.24.3",
+ "rand 0.8.5",
+ "tempfile",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -15676,7 +15660,7 @@ checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "log",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "windows-sys 0.48.0",
 ]
 
@@ -15688,7 +15672,7 @@ checksum = "2886843bf800fba2e3377cff24abf6379b4c4d5c6681eaf9ea5b0d15090450bd"
 dependencies = [
  "libc",
  "log",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "windows-sys 0.52.0",
 ]
 
@@ -17402,7 +17386,7 @@ version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -17870,7 +17854,7 @@ dependencies = [
  "libc",
  "once_cell",
  "raw-cpuid",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "web-sys",
  "winapi 0.3.9",
 ]
@@ -17924,7 +17908,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2fe5ef3495d7d2e377ff17b1a8ce2ee2ec2a18cde8b6ad6619d65d0701c135d"
 dependencies = [
  "bytes",
- "getrandom 0.2.15",
+ "getrandom",
  "rand 0.8.5",
  "ring 0.17.8",
  "rustc-hash 2.1.0",
@@ -18006,17 +17990,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand"
-version = "0.9.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fccbfebb3972a41a31c605a59207d9fba5489b9a87d9d87024cb6df73a32ec7"
-dependencies = [
- "rand_chacha 0.9.0-beta.1",
- "rand_core 0.9.0-beta.1",
- "zerocopy 0.8.14",
-]
-
-[[package]]
 name = "rand_chacha"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18034,16 +18007,6 @@ checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_chacha"
-version = "0.9.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f16da77124f4ee9fabd55ce6540866e9101431863b4876de58b68797f331adf2"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.9.0-beta.1",
 ]
 
 [[package]]
@@ -18067,17 +18030,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.15",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.9.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a98fa0b8309344136abe6244130311e76997e546f76fae8054422a7539b43df7"
-dependencies = [
- "getrandom 0.3.0-rc.0",
- "zerocopy 0.8.14",
+ "getrandom",
 ]
 
 [[package]]
@@ -18254,7 +18207,7 @@ dependencies = [
  "anyhow",
  "candid",
  "candid_parser",
- "getrandom 0.2.15",
+ "getrandom",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -18362,7 +18315,7 @@ version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
  "libredox",
  "thiserror 1.0.69",
 ]
@@ -18713,7 +18666,7 @@ checksum = "c17fa4cb658e3583423e915b9f3acc01cceaee1860e33d59ebae66adc3a2dc0d"
 dependencies = [
  "cc",
  "cfg-if 1.0.0",
- "getrandom 0.2.15",
+ "getrandom",
  "libc",
  "spin 0.9.8",
  "untrusted 0.9.0",
@@ -20739,7 +20692,7 @@ checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
 dependencies = [
  "cfg-if 1.0.0",
  "fastrand",
- "getrandom 0.2.15",
+ "getrandom",
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
@@ -21766,7 +21719,7 @@ version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04f903f293d11f31c0c29e4148f6dc0d033a7f80cebc0282bea147611667d289"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
  "rand 0.8.5",
  "web-time",
 ]
@@ -21943,7 +21896,7 @@ version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
  "serde",
 ]
 
@@ -22124,15 +22077,6 @@ name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
-
-[[package]]
-name = "wasi"
-version = "0.13.3+wasi-0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26816d2e1a4a36a2940b96c5296ce403917633dff8f3440e9b236ed6f6bacad2"
-dependencies = [
- "wit-bindgen-rt",
-]
 
 [[package]]
 name = "wasm-bindgen"
@@ -22910,15 +22854,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
-name = "wit-bindgen-rt"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
-dependencies = [
- "bitflags 2.6.0",
-]
-
-[[package]]
 name = "wit-parser"
 version = "0.221.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23129,16 +23064,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
  "byteorder",
- "zerocopy-derive 0.7.35",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a367f292d93d4eab890745e75a778da40909cab4d6ff8173693812f79c4a2468"
-dependencies = [
- "zerocopy-derive 0.8.14",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -23146,17 +23072,6 @@ name = "zerocopy-derive"
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
-dependencies = [
- "proc-macro2 1.0.92",
- "quote 1.0.37",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3931cb58c62c13adec22e38686b559c86a30565e16ad6e8510a337cedc611e1"
 dependencies = [
  "proc-macro2 1.0.92",
  "quote 1.0.37",

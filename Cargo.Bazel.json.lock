@@ -1,5 +1,5 @@
 {
-  "checksum": "194342fc37fdddbf3dceb1e96cdf4ce10a63ff4ec17867d1a241e3e034c1ad0c",
+  "checksum": "afaed18755f5e7dbde19607dc8387d7e7b215efb59b82a5b48137e97a9014f5b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19439,6 +19439,10 @@
             {
               "id": "x509-parser 0.16.0",
               "target": "x509_parser"
+            },
+            {
+              "id": "xxhash-rust 0.8.15",
+              "target": "xxhash_rust"
             },
             {
               "id": "yansi 0.5.1",
@@ -84962,6 +84966,50 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "xxhash-rust 0.8.15": {
+      "name": "xxhash-rust",
+      "version": "0.8.15",
+      "package_url": "https://github.com/DoumanAsh/xxhash-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/xxhash-rust/0.8.15/download",
+          "sha256": "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "xxhash_rust",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "xxhash_rust",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "xxh3"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.15"
+      },
+      "license": "BSL-1.0",
+      "license_ids": [
+        "BSL-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "xz2 0.1.7": {
       "name": "xz2",
       "version": "0.1.7",
@@ -87428,6 +87476,7 @@
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
+    "xxhash-rust 0.8.15",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.2"

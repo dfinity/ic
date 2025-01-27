@@ -180,6 +180,17 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup component add clippy
 RUN rm -rf /tmp/rust-version
 
+RUN cargo --version
+
+RUN mkdir /tmp/icsum
+COPY --chown=ubuntu:ubuntu ./rs/ic_os/build_tools/icsum /tmp/icsum
+
+RUN cd /tmp/icsum && \
+    cargo build --profile release && \
+    mv target/release/icsum /usr/local/bin && \
+    chmod +x /usr/local/bin/icsum && \
+    rm -r /tmp/icsum
+
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.21.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}

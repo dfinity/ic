@@ -11,12 +11,11 @@ trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
 ICOS_TMPDIR="$tmpdir" "$@"
 
 start_time=$(date +%s.%N)
-# Calculate user.sha256sum for every output which is used by Bazel. Calculating it based on the tarred file is much
-# faster than Bazel calculating it based on the non-tarred file. This is because many of our outputs are sparse
-# files.
+# Calculate the checksum for every output created by Bazel. For the calculation, we use icsum which is much
+# faster than Bazel's built-in checksum for sparse files (e.g. disk images).
 for arg in $@; do
-    if [[ -w "$arg" ]] && ! getfattr -n user.sha256sum "$arg" > /dev/null 2>&1; then
-        setfattr -n user.sha256sum -v $(/ic/target/release/fast-digest "$arg") "$arg"
+    if [[ -w "$arg" ]] && ! getfattr -n user.icsum "$arg" > /dev/null 2>&1; then
+        setfattr -n user.icsum -v $(icsum "$arg") "$arg"
     fi
 done
 

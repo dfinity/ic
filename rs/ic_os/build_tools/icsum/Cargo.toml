@@ -1,0 +1,13 @@
+[package]
+name = "icsum"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+nix = { version = "0.29", features = ["fs"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+rand = "0.8"
+tempfile = "3.15"

@@ -1469,6 +1469,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rsa_sig",
                 ],
             ),
+            "xxhash-rust": crate.spec(
+                version = "^0.8",
+                features = [
+                    "xxh3",
+                ],
+            ),
             "x509-cert": crate.spec(
                 version = "^0.2.5",
                 features = [
