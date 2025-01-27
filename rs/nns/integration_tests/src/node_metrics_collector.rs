@@ -103,13 +103,13 @@ async fn test_node_metrics_collector() {
 
     // Validate metrics backfilled for the past RUNTIME_DAYS days
     let application_subnet = pocket_ic.topology().await.get_app_subnets()[0];
-    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet.into()).await;
+    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
 
     assert_eq!(node_metrics.len(), RUNTIME_DAYS as usize);
 
     // Advance time for another RUNTIME_DAYS and validate again
     advance_pocket_ic_time(&pocket_ic, RUNTIME_DAYS).await;
-    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet.into()).await;
+    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
 
     assert_eq!(node_metrics.len(), RUNTIME_DAYS as usize * 2);
 
@@ -119,6 +119,6 @@ async fn test_node_metrics_collector() {
 
     assert_eq!(
         blocks_proposed_day_1 - blocks_proposed_day_0,
-        DAY_HOURS as u64
+        DAY_HOURS
     );
 }
