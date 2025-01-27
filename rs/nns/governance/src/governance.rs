@@ -2343,12 +2343,6 @@ impl Governance {
             let _ignore_when_neuron_not_found = self.with_neuron(neuron_id, |neuron| {
                 // Populate neuron_infos.
                 let neuron_info = neuron.get_neuron_info(self.voting_power_economics(), now, caller);
-
-                // We will be able to get rid of this conversion once we delete
-                // NeuronInfo from governance.proto. That should be possible,
-                // since we do not store NeuronInfo in stable memory.
-                let neuron_info = NeuronInfo::from(neuron_info);
-
                 neuron_infos.insert(neuron_id.id, neuron_info);
 
                 // Populate full_neurons.
