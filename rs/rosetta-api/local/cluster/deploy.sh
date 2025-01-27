@@ -72,7 +72,6 @@ wait_for_ready() {
 
     # wait 2 seconds
     sleep 2
-
     kubectl wait --namespace $namespace --for=condition=Ready $resource_type -l $resource_label --timeout=${timeout}s --context="$MINIKUBE_PROFILE"
 }
 
