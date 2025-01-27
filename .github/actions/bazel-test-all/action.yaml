@@ -49,6 +49,9 @@ runs:
 
           export BUILDEVENT_APIKEY="$(cat /tmp/buildevent_key)"
 
+          echo "test"
+
+          ls -l ./bazel-bep.pb
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
               # only the (more relevant) output from the main bazel command is shown.
