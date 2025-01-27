@@ -618,8 +618,9 @@ impl CanisterManager {
             }
             canister.system_state.memory_allocation = memory_allocation;
         }
-        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            canister.system_state.wasm_memory_threshold = wasm_memory_threshold;
+        if let Some(new_wasm_memory_threshold) = settings.wasm_memory_threshold() {
+            canister.system_state.wasm_memory_threshold = new_wasm_memory_threshold;
+            canister.update_on_low_wasm_memory_hook_condition();
         }
         if let Some(limit) = settings.reserved_cycles_limit() {
             canister.system_state.set_reserved_balance_limit(limit);
@@ -864,12 +865,18 @@ impl CanisterManager {
         );
         match dts_result {
             DtsInstallCodeResult::Finished {
-                canister,
+                mut canister,
                 call_id: _,
                 message: _,
                 instructions_used,
                 result,
-            } => (result, instructions_used, Some(canister)),
+            } => {
+                // This is required to mimic behaviour of execute_install_code
+                // because execute_install_code is updating hook status in
+                // process_install_code result.
+                canister.update_on_low_wasm_memory_hook_condition();
+                (result, instructions_used, Some(canister))
+            }
             DtsInstallCodeResult::Paused {
                 canister: _,
                 paused_execution,

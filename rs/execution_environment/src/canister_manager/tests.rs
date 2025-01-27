@@ -42,11 +42,10 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
+    canister_state::system_state::{wasm_chunk_store, CyclesUseCase, OnLowWasmMemoryHookStatus},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::{self, TestPageAllocatorFileDescriptorImpl},
-    testing::CanisterQueuesTesting,
-    testing::SystemStateTesting,
+    testing::{CanisterQueuesTesting, SystemStateTesting},
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, PageMap,
     ReplicatedState, SystemState,
 };
@@ -3696,7 +3695,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
 
         let sender = canister_test_id(100).get();
         let settings = CanisterSettingsBuilder::new()
-            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(2)).unwrap())
+            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(200)).unwrap())
             .build();
         let canister_id = canister_manager
             .create_canister(
@@ -8088,4 +8087,160 @@ fn node_metrics_history_ingress_query_fails() {
             ErrorCode::CanisterMethodNotFound,
             "Query method node_metrics_history not found.",
         );
+}
+
+fn helper_update_wasm_memory_threshold_updates_hook_status(
+    used_wasm_memory: u64,
+    wasm_memory_limit: Option<NumBytes>,
+    initial_wasm_memory_threshold: Option<NumBytes>,
+    initial_hook_status: OnLowWasmMemoryHookStatus,
+    updated_wasm_memory_threhsold: NumBytes,
+    updated_hook_status: OnLowWasmMemoryHookStatus,
+) {
+    with_setup(|canister_manager, mut state, subnet_id| {
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+            compute_allocation_used: state.total_compute_allocation(),
+        };
+
+        let mut wat = r#"
+        (module
+            (memory $memory "#
+            .to_owned();
+
+        wat.push_str(used_wasm_memory.to_string().as_ref());
+        wat.push_str(
+            r#")
+        )"#,
+        );
+
+        let wasm = wat::parse_str(wat).unwrap();
+
+        let sender = canister_test_id(100).get();
+
+        let initial_settings = CanisterSettings {
+            wasm_memory_limit,
+            wasm_memory_threshold: initial_wasm_memory_threshold,
+            ..Default::default()
+        };
+
+        let canister_id = canister_manager
+            .create_canister(
+                canister_change_origin_from_principal(&sender),
+                subnet_id,
+                *INITIAL_CYCLES,
+                initial_settings,
+                MAX_NUMBER_OF_CANISTERS,
+                &mut state,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                &mut round_limits,
+                ResourceSaturation::default(),
+                &no_op_counter(),
+            )
+            .0
+            .unwrap();
+
+        let res = install_code(
+            &canister_manager,
+            InstallCodeContext {
+                origin: canister_change_origin_from_principal(&sender),
+                canister_id,
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallModeV2::Install,
+            },
+            &mut state,
+            &mut round_limits,
+        );
+        assert!(res.1.is_ok(), "{:?}", res.1);
+
+        let c_state = res.2.unwrap();
+
+        assert_eq!(
+            c_state.system_state.task_queue.peek_hook_status(),
+            initial_hook_status
+        );
+
+        state.put_canister_state(c_state);
+
+        let settings = CanisterSettingsBuilder::new()
+            .with_wasm_memory_threshold(updated_wasm_memory_threhsold)
+            .build();
+
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+
+        assert!(canister_manager
+            .update_settings(
+                Time::from_nanos_since_unix_epoch(777),
+                canister_change_origin_from_principal(&sender),
+                settings,
+                canister,
+                &mut round_limits,
+                ResourceSaturation::default(),
+                SMALL_APP_SUBNET_MAX_SIZE,
+            )
+            .is_ok());
+
+        assert_eq!(
+            state
+                .canister_state_mut(&canister_id)
+                .unwrap()
+                .system_state
+                .task_queue
+                .peek_hook_status(),
+            updated_hook_status
+        );
+    })
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
+    let overhead = 6553600;
+    let used_wasm_memory = 100;
+    let wasm_memory_limit = overhead + used_wasm_memory;
+
+    let initial_wasm_memory_threshold = wasm_memory_limit - used_wasm_memory + 1;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_wasm_memory_threhsold = 1;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    helper_update_wasm_memory_threshold_updates_hook_status(
+        used_wasm_memory,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(initial_wasm_memory_threshold)),
+        initial_hook_status,
+        NumBytes::from(updated_wasm_memory_threhsold),
+        updated_hook_status,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
+    let overhead = 6553600;
+    let used_wasm_memory = 100;
+    let wasm_memory_limit = overhead + used_wasm_memory;
+
+    let initial_wasm_memory_threshold = 1;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_wasm_memory_threhsold = wasm_memory_limit - used_wasm_memory + 1;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    helper_update_wasm_memory_threshold_updates_hook_status(
+        used_wasm_memory,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(initial_wasm_memory_threshold)),
+        initial_hook_status,
+        NumBytes::from(updated_wasm_memory_threhsold),
+        updated_hook_status,
+    );
 }
