@@ -111,6 +111,11 @@ pub(crate) enum TipRequest {
         height: Height,
         page_map_types: Vec<PageMapType>,
     },
+    SerializeWasmBinaries {
+        height: Height,
+        replicated_state: ReplicatedState,
+    },
+
     /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
     SerializeToTip {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -313,6 +318,19 @@ pub(crate) fn spawn_tip_thread(
                                 },
                             );
                         }
+                        TipRequest::SerializeWasmBinaries {
+                            height: Height,
+                            replicated_state: ReplicatedState,
+                        } => {
+                            let _timer = request_timer(&metrics, "serialize_wasm_binaries");
+                            #[cfg(debug_assertions)]
+                            match tip_state {
+                                TipState::ReadyForPageDeltas(h) => {
+                                    debug_assert!(checkpoint_layout.height() >= h)
+                                }
+                                _ => panic!("Unexpected tip state: {:?}", tip_state),
+                            }
+                        }
                         TipRequest::SerializeToTip {
                             checkpoint_layout,
                             replicated_state,
@@ -320,7 +338,9 @@ pub(crate) fn spawn_tip_thread(
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             #[cfg(debug_assertions)]
                             match tip_state {
-                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
+                                TipState::ReadyForPageDeltas(h) => {
+                                    debug_assert!(checkpoint_layout.height() >= h)
+                                }
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
                             tip_state = TipState::Serialized(checkpoint_layout.height());
