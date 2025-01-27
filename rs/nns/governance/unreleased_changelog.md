@@ -57,6 +57,18 @@ the neuron. More precisely,
 
     b. Its influence on proposals goes to 0.
 
+### Migrating Active Neurons to Stable Memory
+
+In this relesae, we turn on 2 features related to migrating active neurons to stable memory:
+
+1. `allow_active_neurons_in_stable_memory`: this allows the canister to look for active neurons in
+   stable memory, while previously the canister always assumes active neurons are always in the heap.
+
+2. `use_stable_memory_following_index`: this lets the canister use the neuron following index in the
+   stable memory, instead of the one in the heap.
+
+No neurons are actually migrated yet.
+
 ## Changed
 
 * `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
