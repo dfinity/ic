@@ -416,15 +416,13 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
-        let now_seconds = self.now();
-
         (
             self.heap_neurons
                 .into_iter()
                 .map(|(id, neuron)| {
                     (
                         id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                        NeuronProto::from(neuron.clone()),
                     )
                 })
                 .collect(),
@@ -470,15 +468,13 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
-        let now_seconds = self.now();
-
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
                 .map(|neuron| {
                     (
                         neuron.id().id,
-                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                        NeuronProto::from(neuron.clone()),
                     )
                 })
                 .collect::<BTreeMap<u64, NeuronProto>>()
@@ -489,9 +485,7 @@ impl NeuronStore {
             .map(|(id, neuron)| {
                 (
                     *id,
-                    neuron
-                        .clone()
-                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    NeuronProto::from(neuron.clone()),
                 )
             })
             .collect::<BTreeMap<u64, NeuronProto>>();

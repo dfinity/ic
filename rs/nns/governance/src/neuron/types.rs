@@ -1185,16 +1185,9 @@ impl Neuron {
     }
 }
 
-impl Neuron {
-    pub fn into_proto(
-        self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-    ) -> NeuronProto {
-        let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power =
-            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
-        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+impl From<Neuron> for NeuronProto {
+    fn from(neuron: Neuron) -> NeuronProto {
+        let visibility = neuron.visibility().map(i32::from);
 
         let Neuron {
             id,
@@ -1220,7 +1213,7 @@ impl Neuron {
             visibility: _,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-        } = self;
+        } = neuron;
 
         let id = Some(id);
         let controller = Some(controller);
@@ -1258,8 +1251,6 @@ impl Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-            deciding_voting_power,
-            potential_voting_power,
         }
     }
 }
@@ -1293,11 +1284,6 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-
-            // Derived Fields (and therefore, no need to transcribe).
-            // --------------
-            deciding_voting_power: _,
-            potential_voting_power: _,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;

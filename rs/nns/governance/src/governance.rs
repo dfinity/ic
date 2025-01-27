@@ -97,7 +97,6 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     pb::v1::{
-        self as api,
         manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
         CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
         ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo,
@@ -2306,13 +2305,7 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    let mut proto = neuron.clone().into_proto(self.voting_power_economics(), now);
-                    // We get the recent_ballots from the neuron itself, because
-                    // we are using a circular buffer to store them.  This solution is not ideal, but
-                    // we need to do a larger refactoring to use the correct API types instead of the internal
-                    // governance proto at this level.
-                    proto.recent_ballots = neuron.sorted_recent_ballots();
-                    full_neurons.push(api::Neuron::from(proto));
+                    full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics()));
                 }
             });
         }
@@ -3689,11 +3682,9 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        let now_seconds = self.env.now();
-
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(|neuron| neuron.into_proto(self.voting_power_economics(), now_seconds))
+            .map(NeuronProto::from)
             .map_err(GovernanceError::from)
     }
 
