@@ -20,14 +20,17 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
-use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::{
+    do_add_node_operator::AddNodeOperatorPayload,
+    do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
 use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the
@@ -123,11 +126,10 @@ fn test_node_operator_records_can_be_added_and_removed() {
             .await
             .unwrap();
 
-        let node_operator_id_1: Vec<u8> = (*TEST_NEURON_1_OWNER_PRINCIPAL.into_vec()).to_vec();
-        let node_operator_id_2: Vec<u8> = (*TEST_NEURON_2_OWNER_PRINCIPAL.into_vec()).to_vec();
-        let proposal_payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![node_operator_id_1, node_operator_id_2],
-        };
+        let proposal_payload = RemoveNodeOperatorsPayload::new(vec![
+            *TEST_NEURON_1_OWNER_PRINCIPAL,
+            *TEST_NEURON_2_OWNER_PRINCIPAL,
+        ]);
 
         let node_operator_record_key_1 =
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).into_bytes();

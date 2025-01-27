@@ -88,7 +88,7 @@ impl NnsInitPayloadsBuilder {
                 governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
-                last_purged_notification: Some(1),
+                last_purged_notification: None,
                 cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),

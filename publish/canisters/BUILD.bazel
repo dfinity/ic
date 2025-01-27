@@ -97,7 +97,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 # amount of growth happens.
 
 NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "cycles-minting-canister.wasm.gz": "5",
+    "cycles-minting-canister.wasm.gz": "6",
     "genesis-token-canister.wasm.gz": "3",
     "governance-canister.wasm.gz": "17",
     "governance-canister_test.wasm.gz": "17",
