@@ -339,6 +339,26 @@ impl UpdateHelper {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
                     };
+
+                    if original.call_or_task
+                        == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory)
+                    {
+                        //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                        // but its was not executed due to error `WasmMemoryLimitExceeded`. To ensure that the hook is executed
+                        // when the error is resolved we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                        // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                        // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                        // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                        canister
+                            .system_state
+                            .task_queue
+                            .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                        canister
+                            .system_state
+                            .task_queue
+                            .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                    }
+
                     return Err(err.into_user_error(&canister.canister_id()));
                 }
             }
