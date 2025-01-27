@@ -1885,7 +1885,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
                 })
             }
 
-            // There is no (known) way to reach this case, since an check
+            // There is no (known) way to reach this case, since a check
             // earlier in this function ensures by this point, memo is not one
             // of the special meaningful values.
             NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
