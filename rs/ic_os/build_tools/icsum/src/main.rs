@@ -56,6 +56,7 @@ fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
     Ok(outer_hasher.digest128())
 }
 
+#[derive(Eq, PartialEq)]
 enum Block<'a> {
     /// A hole of BLOCK_LEN bytes. If the last block is a hole of less than BLOCK_LEN, it will be
     /// represented by a Data block of zero bytes instead.
@@ -176,7 +177,7 @@ mod tests {
 
             let mut holes = 0;
             iterate_blocks(&mut file, |block| {
-                if *block == Block::Hole {
+                if block == Block::Hole {
                     holes += 1;
                 }
             })
