@@ -1424,7 +1424,7 @@ fn cmc_notify_mint_cycles() {
         panic!("notify rejected")
     };
     let result = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
-    if cycles_minting_canister::IS_AUTOMATIC_REFUND_ENABLED {
+    if IS_AUTOMATIC_REFUND_ENABLED {
         let reason = match &result {
             Err(NotifyError::Refunded { reason, block_index: _ }) => reason,
             _ => panic!("{:?}", result),
