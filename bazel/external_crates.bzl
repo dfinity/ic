@@ -266,12 +266,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bit-vec": crate.spec(
                 version = "^0.6.3",
             ),
-            "bitcoin-0-32": crate.spec(
-                package = "bitcoin",
-                version = "^0.32.2",
-                default_features = False,
-            ),
             "bitcoin": crate.spec(
+                version = "^0.32.5",
+                features = [
+                    "default",
+                    "rand",
+                    "serde",
+                ],
+            ),
+            "bitcoin-0-28": crate.spec(
+                package = "bitcoin",
                 version = "^0.28.2",
                 features = [
                     "default",
@@ -280,7 +284,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
-                version = "^0.15.0",
+                version = "^0.19.0",
             ),
             "bitcoind": crate.spec(
                 version = "^0.32.0",
@@ -334,7 +338,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.8",
             ),
             "candid": crate.spec(
-                version = "^0.10.6",
+                version = "^0.10.13",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
@@ -591,6 +595,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-cdk-macros": crate.spec(
                 version = "^0.9.0",
+            ),
+            "ic-cdk-macros-next": crate.spec(
+                package = "ic-cdk-macros",
+                git = "https://github.com/dfinity/cdk-rs.git",
+                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
+            ),
+            "ic-cdk-next": crate.spec(
+                package = "ic-cdk",
+                git = "https://github.com/dfinity/cdk-rs.git",
+                rev = "4e287ce51636b0e70768c193da38d2fc5324ea15",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",

@@ -422,9 +422,13 @@ fn make_nodes_registry(
         .build();
 
     // Insert initial DKG transcripts
+    let mut high_threshold_transcript = ni_dkg_transcript.clone();
+    high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+    let mut low_threshold_transcript = ni_dkg_transcript;
+    low_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
     let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(ni_dkg_transcript.clone().into()),
-        initial_ni_dkg_transcript_low_threshold: Some(ni_dkg_transcript.into()),
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
         ..Default::default()
     };
     registry_data_provider
@@ -2509,6 +2513,26 @@ impl StateMachine {
             .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
     }
 
+    /// Certifies the specified time by modifying the time in the replicated state
+    /// and certifying that new state.
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let t = time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let time = Time::from_nanos_since_unix_epoch(t);
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        replicated_state.metadata.batch_time = time;
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+        self.set_time(time.into());
+        *self.time_of_last_round.write().unwrap() = time;
+    }
+
     /// Returns the current state machine time.
     /// The time of a round executed by this state machine equals its current time
     /// if its current time increased since the last round.
@@ -3591,7 +3615,7 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
-        let size = (data.len() + WASM_PAGE_SIZE_IN_BYTES - 1) / WASM_PAGE_SIZE_IN_BYTES;
+        let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state

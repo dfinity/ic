@@ -82,6 +82,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
+    "@crate_index//:regex",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
@@ -150,7 +151,7 @@ rust_ic_test_suite(
     ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "test_macos",
+        "test_macos_slow",
     ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

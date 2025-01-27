@@ -1,4 +1,5 @@
 use futures::stream::Stream;
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
@@ -264,8 +265,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    outbound_tx: Sender<ArtifactTransmit<SignedIngress>>,
-    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    channel: AbortableBroadcastChannel<SignedIngress>,
     user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
@@ -279,14 +279,15 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
 ) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
+    let inbound_rx_stream =
+        tokio_stream::wrappers::UnboundedReceiverStream::new(channel.inbound_rx);
     let user_ingress_rx_stream =
         tokio_stream::wrappers::UnboundedReceiverStream::new(user_ingress_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        outbound_tx,
+        channel.outbound_tx,
         inbound_rx_stream.merge(user_ingress_rx_stream),
         vec![],
     )
@@ -298,8 +299,7 @@ pub fn create_artifact_handler<
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
     C: PoolMutationsProducer<Pool, Mutations = <Pool as MutablePool<Artifact>>::Mutations> + 'static,
 >(
-    outbound_tx: Sender<ArtifactTransmit<Artifact>>,
-    inbound_rx: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    channel: AbortableBroadcastChannel<Artifact>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
@@ -307,12 +307,13 @@ pub fn create_artifact_handler<
 ) -> Box<dyn JoinGuard> {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
-    let inbound_rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(inbound_rx);
+    let inbound_rx_stream =
+        tokio_stream::wrappers::UnboundedReceiverStream::new(channel.inbound_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        outbound_tx,
+        channel.outbound_tx,
         inbound_rx_stream,
         inital_artifacts,
     )

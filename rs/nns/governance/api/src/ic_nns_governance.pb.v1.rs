@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 
 /// The entity that owns the nodes that run the network.
@@ -1275,6 +1275,166 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
         #[prost(message, tag = "14")]
         RefreshVotingPower(RefreshVotingPowerResponse),
+    }
+
+    // Below, we should remove `manage_neuron_response::`, but that should be
+    // done later, so that the original PR that transplanted this code does not
+    // have "extra" refactoring in it.
+    impl ManageNeuronResponse {
+        pub fn is_err(&self) -> bool {
+            matches!(
+                &self.command,
+                Some(manage_neuron_response::Command::Error(_))
+            )
+        }
+
+        pub fn err_ref(&self) -> Option<&GovernanceError> {
+            match &self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn err(self) -> Option<GovernanceError> {
+            match self.command {
+                Some(manage_neuron_response::Command::Error(err)) => Some(err),
+                _ => None,
+            }
+        }
+
+        pub fn is_ok(&self) -> bool {
+            !self.is_err()
+        }
+
+        pub fn panic_if_error(self, msg: &str) -> Self {
+            if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
+                panic!("{}: {:?}", msg, err);
+            }
+            self
+        }
+
+        // This is generic so that callers can pass either GovernanceError from
+        // the ic_nns_governance crate (notice the lack of "_api" at the end of
+        // the name!), in addition to GovernanceError from this crate.
+        pub fn error<E>(err: E) -> Self
+        where
+            GovernanceError: From<E>,
+        {
+            ManageNeuronResponse {
+                command: Some(Command::Error(GovernanceError::from(err))),
+            }
+        }
+
+        pub fn configure_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Configure(
+                    manage_neuron_response::ConfigureResponse {},
+                )),
+            }
+        }
+
+        pub fn disburse_response(transfer_block_height: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Disburse(
+                    manage_neuron_response::DisburseResponse {
+                        transfer_block_height,
+                    },
+                )),
+            }
+        }
+
+        pub fn spawn_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Spawn(
+                    manage_neuron_response::SpawnResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_maturity_response(response: MergeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MergeMaturity(response)),
+            }
+        }
+
+        pub fn stake_maturity_response(response: StakeMaturityResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::StakeMaturity(response)),
+            }
+        }
+
+        pub fn follow_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Follow(
+                    manage_neuron_response::FollowResponse {},
+                )),
+            }
+        }
+
+        pub fn make_proposal_response(proposal_id: ProposalId, message: String) -> Self {
+            let proposal_id = Some(proposal_id);
+            let message = Some(message);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::MakeProposal(
+                    manage_neuron_response::MakeProposalResponse {
+                        proposal_id,
+                        message,
+                    },
+                )),
+            }
+        }
+
+        pub fn register_vote_response() -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RegisterVote(
+                    manage_neuron_response::RegisterVoteResponse {},
+                )),
+            }
+        }
+
+        pub fn split_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Split(
+                    manage_neuron_response::SplitResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn merge_response(merge_response: manage_neuron_response::MergeResponse) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Merge(merge_response)),
+            }
+        }
+
+        pub fn disburse_to_neuron_response(created_neuron_id: NeuronId) -> Self {
+            let created_neuron_id = Some(created_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseToNeuron(
+                    manage_neuron_response::DisburseToNeuronResponse { created_neuron_id },
+                )),
+            }
+        }
+
+        pub fn claim_or_refresh_neuron_response(refreshed_neuron_id: NeuronId) -> Self {
+            let refreshed_neuron_id = Some(refreshed_neuron_id);
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::ClaimOrRefresh(
+                    manage_neuron_response::ClaimOrRefreshResponse {
+                        refreshed_neuron_id,
+                    },
+                )),
+            }
+        }
+
+        pub fn refresh_voting_power_response(_: ()) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RefreshVotingPower(
+                    manage_neuron_response::RefreshVotingPowerResponse {},
+                )),
+            }
+        }
     }
 }
 
@@ -3320,6 +3480,20 @@ pub struct ListProposalInfoResponse {
 /// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
 /// the list of neuron IDs of neurons for which the caller is the
 /// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3350,6 +3524,15 @@ pub struct ListNeurons {
     /// existing (unmigrated) callers.
     #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
+    /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
+    /// determine how many neurons are returned in each page.
+    #[prost(uint64, optional, tag = "5")]
+    pub page_number: Option<u64>,
+    /// If this is set, we use the page limit provided to determine how large pages will be.
+    /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
+    /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    #[prost(uint64, optional, tag = "6")]
+    pub page_size: Option<u64>,
 }
 /// A response to a `ListNeurons` request.
 ///
@@ -3368,6 +3551,10 @@ pub struct ListNeuronsResponse {
     /// `ManageNeuron` topic).
     #[prost(message, repeated, tag = "2")]
     pub full_neurons: Vec<Neuron>,
+    /// This is returned to tell the caller how many pages of results are available to query.
+    /// If there are fewer than the page_size neurons, this will equal 1.
+    #[prost(uint64, optional, tag = "3")]
+    pub total_pages_available: Option<u64>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

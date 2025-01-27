@@ -187,31 +187,31 @@ impl NodeKeysErrors {
     }
 
     pub fn keys_in_registry_missing_locally(&self) -> bool {
-        self.node_signing_key_error.as_ref().map_or(false, |err| {
+        self.node_signing_key_error.as_ref().is_some_and(|err| {
             err.external_public_key_error.is_none()
                 && err.contains_local_public_or_secret_key_error()
         }) || self
             .committee_signing_key_error
             .as_ref()
-            .map_or(false, |err| {
+            .is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
-            || self.tls_certificate_error.as_ref().map_or(false, |err| {
+            || self.tls_certificate_error.as_ref().is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
             || self
                 .dkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
             || self
                 .idkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })

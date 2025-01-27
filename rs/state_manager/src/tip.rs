@@ -16,6 +16,8 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -38,6 +40,7 @@ use rand::prelude::SliceRandom;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -125,6 +128,9 @@ pub(crate) enum TipRequest {
     /// Crash if diverges.
     ValidateReplicatedState {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
+        reference_state: Arc<ReplicatedState>,
+        own_subnet_type: SubnetType,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -448,9 +454,19 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                        TipRequest::ValidateReplicatedState {
+                            checkpoint_layout,
+                            reference_state,
+                            own_subnet_type,
+                            fd_factory,
+                        } => {
+                            let _timer = request_timer(&metrics, "validate_replicated_state");
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
+                                Some(reference_state.deref()),
+                                own_subnet_type,
+                                Arc::clone(&fd_factory),
+                                &metrics.checkpoint_metrics,
                                 Some(&mut thread_pool),
                             ) {
                                 fatal!(
@@ -847,7 +863,7 @@ fn merge_to_base(
         merge_candidate.is_some()
     });
 
-    return rewritten.iter().any(|b| *b);
+    rewritten.iter().any(|b| *b)
 }
 
 fn serialize_to_tip(
