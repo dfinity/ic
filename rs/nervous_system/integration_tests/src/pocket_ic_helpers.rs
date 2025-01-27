@@ -830,7 +830,7 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
-                        include_empty_neurons_readable_by_caller: None,
+                        include_empty_neurons_readable_by_caller: Some(true),
                         include_public_neurons_in_full_neurons: None,
                         page_number: None,
                         page_size: None
