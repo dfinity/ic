@@ -71,7 +71,7 @@ use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::ops::Range;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
-use std::path::PathBuf;
+use std::path::Path;
 use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
@@ -316,8 +316,8 @@ pub async fn add_wasms_to_sns_wasm(
     })
 }
 
-pub fn load_registry_mutations(local_registry: PathBuf) -> Vec<RegistryMutation> {
-    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(local_registry);
+pub fn load_registry_mutations<P: AsRef<Path>>(path: P) -> Vec<RegistryMutation> {
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(path.as_ref());
     let updates = registry_data_provider
         .get_updates_since(ZERO_REGISTRY_VERSION)
         .unwrap();

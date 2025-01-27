@@ -165,7 +165,7 @@ async fn sync_node_metrics() {
     ic_cdk::println!("Successfully updated trustworthy node metrics");
 }
 
-fn setup_timers() {
+fn setup_update_timers() {
     ic_cdk_timers::set_timer(
         std::time::Duration::from_secs(
             DAY_SECONDS + HR_BUFFER - (ic_cdk::api::time() / 1_000_000_000) % DAY_SECONDS,
@@ -182,12 +182,18 @@ fn setup_timers() {
 
 #[init]
 fn init() {
-    setup_timers();
+    ic_cdk_timers::set_timer(
+        std::time::Duration::from_secs(0),
+        || {
+            ic_cdk::spawn(sync_node_metrics());
+            setup_update_timers();
+        },
+    );
 }
 
 #[post_upgrade]
 fn post_upgrade() {
-    setup_timers();
+    setup_update_timers();
 }
 
 #[query]
