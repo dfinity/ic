@@ -240,9 +240,15 @@ impl IngressWatcher {
                 }
                 // Cancel the tracking of an ingress message.
                 Some(cancellation_handle) = self.cancellations.join_next() => {
-                    if let Ok((_, message_id)) = cancellation_handle {
-                        self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
-                        self.handle_cancellation(&message_id);
+                    match cancellation_handle {
+                        Ok((_, message_id)) => {
+                            self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
+                            self.handle_cancellation(&message_id);
+                        }
+                        // If the task panics we propagate the panic.
+                        Err(join_error) => if join_error.is_panic() {
+                            panic!("Ingress watcher cancellation task panicked.");
+                        }
                     }
                 }
 
