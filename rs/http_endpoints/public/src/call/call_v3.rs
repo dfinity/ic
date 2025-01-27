@@ -298,7 +298,6 @@ async fn call_sync_v3(
         );
     };
 
-    // Log the status of the message.
     let status_label = match parsed_message_status(&tree, &message_id) {
         ParsedMessageStatus::Known(status) => status,
         ParsedMessageStatus::Unknown => "unknown".to_string(),
