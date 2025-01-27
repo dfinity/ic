@@ -8089,12 +8089,15 @@ fn node_metrics_history_ingress_query_fails() {
         );
 }
 
-fn helper_update_wasm_memory_threshold_updates_hook_status(
-    used_wasm_memory: u64,
-    wasm_memory_limit: Option<NumBytes>,
+fn helper_update_settings_updates_hook_status(
+    used_wasm_memory_pages: u64,
+    initial_wasm_memory_limit: Option<NumBytes>,
     initial_wasm_memory_threshold: Option<NumBytes>,
+    initial_memory_allocation: Option<MemoryAllocation>,
     initial_hook_status: OnLowWasmMemoryHookStatus,
-    updated_wasm_memory_threhsold: NumBytes,
+    updated_wasm_memory_limit: Option<NumBytes>,
+    updated_wasm_memory_threhsold: Option<NumBytes>,
+    updated_memory_allocation: Option<MemoryAllocation>,
     updated_hook_status: OnLowWasmMemoryHookStatus,
 ) {
     with_setup(|canister_manager, mut state, subnet_id| {
@@ -8110,7 +8113,7 @@ fn helper_update_wasm_memory_threshold_updates_hook_status(
             (memory $memory "#
             .to_owned();
 
-        wat.push_str(used_wasm_memory.to_string().as_ref());
+        wat.push_str(used_wasm_memory_pages.to_string().as_ref());
         wat.push_str(
             r#")
         )"#,
@@ -8121,8 +8124,9 @@ fn helper_update_wasm_memory_threshold_updates_hook_status(
         let sender = canister_test_id(100).get();
 
         let initial_settings = CanisterSettings {
-            wasm_memory_limit,
+            wasm_memory_limit: initial_wasm_memory_limit,
             wasm_memory_threshold: initial_wasm_memory_threshold,
+            memory_allocation: initial_memory_allocation,
             ..Default::default()
         };
 
@@ -8167,9 +8171,19 @@ fn helper_update_wasm_memory_threshold_updates_hook_status(
 
         state.put_canister_state(c_state);
 
-        let settings = CanisterSettingsBuilder::new()
-            .with_wasm_memory_threshold(updated_wasm_memory_threhsold)
-            .build();
+        let mut settings = CanisterSettingsBuilder::new();
+
+        if let Some(updated_wasm_memory_threhsold) = updated_wasm_memory_threhsold {
+            settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threhsold);
+        }
+
+        if let Some(updated_wasm_memory_limit) = updated_wasm_memory_limit {
+            settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit);
+        }
+
+        if let Some(updated_memory_allocation) = updated_memory_allocation {
+            settings = settings.with_memory_allocation(updated_memory_allocation);
+        }
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
@@ -8177,7 +8191,7 @@ fn helper_update_wasm_memory_threshold_updates_hook_status(
             .update_settings(
                 Time::from_nanos_since_unix_epoch(777),
                 canister_change_origin_from_principal(&sender),
-                settings,
+                settings.build(),
                 canister,
                 &mut round_limits,
                 ResourceSaturation::default(),
@@ -8199,48 +8213,176 @@ fn helper_update_wasm_memory_threshold_updates_hook_status(
 
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
-    let overhead = 6553600;
-    let used_wasm_memory = 100;
-    let wasm_memory_limit = overhead + used_wasm_memory;
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
 
-    let initial_wasm_memory_threshold = wasm_memory_limit - used_wasm_memory + 1;
+    let initial_wasm_memory_threshold = 150;
     // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
     let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
-    let updated_wasm_memory_threhsold = 1;
+    let updated_wasm_memory_threhsold = 50;
     // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
     let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
-    helper_update_wasm_memory_threshold_updates_hook_status(
-        used_wasm_memory,
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
         Some(NumBytes::new(wasm_memory_limit)),
         Some(NumBytes::new(initial_wasm_memory_threshold)),
+        None,
         initial_hook_status,
-        NumBytes::from(updated_wasm_memory_threhsold),
+        None,
+        Some(NumBytes::from(updated_wasm_memory_threhsold)),
+        None,
         updated_hook_status,
     );
 }
 
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
-    let overhead = 6553600;
-    let used_wasm_memory = 100;
-    let wasm_memory_limit = overhead + used_wasm_memory;
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
 
-    let initial_wasm_memory_threshold = 1;
+    let initial_wasm_memory_threshold = 50;
     // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
     let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
-    let updated_wasm_memory_threhsold = wasm_memory_limit - used_wasm_memory + 1;
+    let updated_wasm_memory_threhsold = 150;
     // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
     let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
-    helper_update_wasm_memory_threshold_updates_hook_status(
-        used_wasm_memory,
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
         Some(NumBytes::new(wasm_memory_limit)),
         Some(NumBytes::new(initial_wasm_memory_threshold)),
+        None,
         initial_hook_status,
-        NumBytes::from(updated_wasm_memory_threhsold),
+        None,
+        Some(NumBytes::from(updated_wasm_memory_threhsold)),
+        None,
+        updated_hook_status,
+    );
+}
+
+#[test]
+fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 100;
+
+    let initial_wasm_memory_limit = used_wasm_memory + 150;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_wasm_memory_limit = used_wasm_memory + 50;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(initial_wasm_memory_limit)),
+        Some(NumBytes::new(wasm_memory_threshold)),
+        None,
+        initial_hook_status,
+        Some(NumBytes::from(updated_wasm_memory_limit)),
+        None,
+        None,
+        updated_hook_status,
+    );
+}
+
+#[test]
+fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 100;
+
+    let initial_wasm_memory_limit = used_wasm_memory + 50;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_wasm_memory_limit = used_wasm_memory + 150;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(initial_wasm_memory_limit)),
+        Some(NumBytes::new(wasm_memory_threshold)),
+        None,
+        initial_hook_status,
+        Some(NumBytes::from(updated_wasm_memory_limit)),
+        None,
+        None,
+        updated_hook_status,
+    );
+}
+
+#[test]
+fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 1_000;
+    let wasm_memory_limit = 100_000;
+
+    let initial_memory_allocation = used_wasm_memory + 1_500;
+
+    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
+    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    let updated_memory_allocation = used_wasm_memory + 500;
+    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(wasm_memory_threshold)),
+        Some(MemoryAllocation::Reserved(NumBytes::from(
+            initial_memory_allocation,
+        ))),
+        initial_hook_status,
+        None,
+        None,
+        Some(MemoryAllocation::Reserved(NumBytes::from(
+            updated_memory_allocation,
+        ))),
+        updated_hook_status,
+    );
+}
+
+#[test]
+fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_threshold = 1_000;
+    let wasm_memory_limit = 100_000;
+
+    // wasm_memory_capacity = min(wasm_memory_limit, memory_allocation - used_non_wasm_memory)
+
+    let initial_memory_allocation = used_wasm_memory + 500;
+    // wasm_memory_capacity - used_wasm_memory < wasm_memory_threshold
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
+
+    let updated_memory_allocation = used_wasm_memory + 1_500;
+    // wasm_memory_capacity - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(wasm_memory_threshold)),
+        Some(MemoryAllocation::Reserved(NumBytes::from(
+            initial_memory_allocation,
+        ))),
+        initial_hook_status,
+        None,
+        None,
+        Some(MemoryAllocation::Reserved(NumBytes::from(
+            updated_memory_allocation,
+        ))),
         updated_hook_status,
     );
 }
