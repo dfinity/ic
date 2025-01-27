@@ -7,7 +7,6 @@ use std::{
     },
 };
 
-use prometheus::core::Atomic;
 use tempfile::TempDir;
 
 use crate::{
