@@ -12,11 +12,6 @@ use actix_web::{
     get, post, web, App, HttpResponse, HttpServer,
 };
 
-use prometheus::{
-    register_gauge, register_histogram, register_histogram_vec, register_int_counter,
-    register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
-    IntCounter, IntCounterVec, IntGauge,
-};
 use std::{
     io,
     mem::replace,
@@ -32,68 +27,14 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
-
-use lazy_static::lazy_static;
-
-struct RosettaEndpointsMetrics {
-    request_duration: HistogramVec,
-    rosetta_api_status_total: IntCounterVec,
-}
-
-impl RosettaEndpointsMetrics {
-    pub fn new() -> Self {
-        Self {
-            request_duration: register_histogram_vec!(
-                "http_request_duration",
-                "HTTP request latency in seconds indexed by endpoint",
-                &["endpoint"]
-            )
-            .unwrap(),
-            rosetta_api_status_total: register_int_counter_vec!(
-                "rosetta_api_status_total",
-                "Response status for ic-rosetta-api endpoints",
-                &["status_code"]
-            )
-            .unwrap(),
-        }
-    }
-}
-
-lazy_static! {
-    static ref ENDPOINTS_METRICS: RosettaEndpointsMetrics = RosettaEndpointsMetrics::new();
-    pub static ref VERIFIED_HEIGHT: IntGauge =
-        register_int_gauge!("rosetta_verified_block_height", "Verified block height").unwrap();
-    pub static ref SYNCED_HEIGHT: IntGauge =
-        register_int_gauge!("rosetta_synched_block_height", "Synced block height").unwrap();
-    pub static ref TARGET_HEIGHT: IntGauge =
-        register_int_gauge!("rosetta_target_block_height", "Target height (tip)").unwrap();
-    pub static ref SYNC_ERR_COUNTER: IntCounter = register_int_counter!(
-        "blockchain_sync_errors_total",
-        "Number of times synchronization failed"
-    )
-    .unwrap();
-    pub static ref OUT_OF_SYNC_TIME: Gauge = register_gauge!(
-        "ledger_sync_attempt_duration_seconds",
-        "Number of seconds since the last successful sync"
-    )
-    .unwrap();
-    pub static ref OUT_OF_SYNC_TIME_HIST: Histogram = register_histogram!(
-        "ledger_sync_attempt_duration_seconds_hist",
-        "Number of seconds since last successful sync",
-        vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 10.0, 15.0]
-    )
-    .unwrap();
-}
+use rosetta_core::metrics::RosettaMetrics;
 
 #[post("/account/balance")]
 async fn account_balance(
     msg: web::Json<AccountBalanceRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let _timer = ENDPOINTS_METRICS
-        .request_duration
-        .with_label_values(&["account/balance"])
-        .start_timer();
+    let _timer = RosettaMetrics::start_request_duration_timer("account/balance");
     let res = req_handler.account_balance(msg.into_inner()).await;
     to_rosetta_response(res)
 }
@@ -112,10 +53,7 @@ async fn block(
     msg: web::Json<BlockRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let _timer = ENDPOINTS_METRICS
-        .request_duration
-        .with_label_values(&["block"])
-        .start_timer();
+    let _timer = RosettaMetrics::start_request_duration_timer("block");
     let res = req_handler.block(msg.into_inner()).await;
     to_rosetta_response(res)
 }
@@ -197,10 +135,7 @@ async fn construction_submit(
     msg: web::Json<ConstructionSubmitRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let _timer = ENDPOINTS_METRICS
-        .request_duration
-        .with_label_values(&["construction/submit"])
-        .start_timer();
+    let _timer = RosettaMetrics::start_request_duration_timer("construction/submit");
     let res = req_handler.construction_submit(msg.into_inner()).await;
     to_rosetta_response(res)
 }
@@ -252,9 +187,7 @@ async fn search_transactions(
     msg: web::Json<SearchTransactionsRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let _timer = ENDPOINTS_METRICS
-        .request_duration
-        .with_label_values(&["search/transactions"]);
+    let _timer = RosettaMetrics::start_request_duration_timer("search/transactions");
     let res = req_handler.search_transactions(msg.into_inner()).await;
     to_rosetta_response(res)
 }
@@ -263,19 +196,13 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
     match result {
         Ok(x) => match serde_json::to_string(&x) {
             Ok(resp) => {
-                ENDPOINTS_METRICS
-                    .rosetta_api_status_total
-                    .with_label_values(&["200"])
-                    .inc();
+                RosettaMetrics::inc_api_status_count("200");
                 HttpResponse::Ok()
                     .content_type("application/json")
                     .body(resp)
             }
             Err(_) => {
-                ENDPOINTS_METRICS
-                    .rosetta_api_status_total
-                    .with_label_values(&["700"])
-                    .inc();
+                RosettaMetrics::inc_api_status_count("700");
                 HttpResponse::InternalServerError()
                     .content_type("application/json")
                     .body(Error::serialization_error_json_str())
@@ -286,19 +213,13 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
             match serde_json::to_string(&err) {
                 Ok(resp) => {
                     let err_code = format!("{}", err.0.code);
-                    ENDPOINTS_METRICS
-                        .rosetta_api_status_total
-                        .with_label_values(&[&err_code])
-                        .inc();
+                    RosettaMetrics::inc_api_status_count(&err_code);
                     HttpResponse::InternalServerError()
                         .content_type("application/json")
                         .body(resp)
                 }
                 Err(_) => {
-                    ENDPOINTS_METRICS
-                        .rosetta_api_status_total
-                        .with_label_values(&["700"])
-                        .inc();
+                    RosettaMetrics::inc_api_status_count("700");
                     HttpResponse::InternalServerError()
                         .content_type("application/json")
                         .body(Error::serialization_error_json_str())
@@ -306,17 +227,6 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
             }
         }
     }
-}
-
-#[get("/metrics")]
-async fn rosetta_metrics() -> HttpResponse {
-    let metrics = prometheus::gather();
-    let mut buffer = Vec::<u8>::new();
-    let encoder = prometheus::TextEncoder::new();
-    encoder.encode(&metrics, &mut buffer).unwrap();
-    HttpResponse::Ok()
-        .content_type("text/plain; version=0.0.4; charset=utf-8")
-        .body(String::from_utf8(buffer).unwrap())
 }
 
 #[get("/status")]
@@ -351,8 +261,9 @@ impl RosettaApiServer {
         expose_metrics: bool,
     ) -> io::Result<Self> {
         let stopped = Arc::new(AtomicBool::new(false));
+        let http_metrics_wrapper = RosettaMetrics::http_metrics_wrapper(expose_metrics);
         let server = HttpServer::new(move || {
-            let app = App::new()
+            App::new().wrap(http_metrics_wrapper.clone())
                 .app_data(web::Data::new(
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
@@ -383,12 +294,7 @@ impl RosettaApiServer {
                 .service(network_options)
                 .service(network_status)
                 .service(search_transactions)
-                .service(status);
-            if expose_metrics {
-                app.service(rosetta_metrics)
-            } else {
-                app
-            }
+                .service(status)
         })
         .bind(addr)?;
 
@@ -453,6 +359,7 @@ impl RosettaApiServer {
                 let join_handle = tokio::task::spawn(async move {
                     let mut interval = interval(Duration::from_secs(1));
                     let mut synced_at = std::time::Instant::now();
+                    info!("Starting blockchain sync thread");
                     while !stopped.load(Relaxed) {
                         interval.tick().await;
 
@@ -466,13 +373,13 @@ impl RosettaApiServer {
                                 ""
                             };
                             error!("Error in syncing blocks{}: {:?}", msg_403, err);
-                            SYNC_ERR_COUNTER.inc();
-                            OUT_OF_SYNC_TIME
-                                .set(Instant::now().duration_since(synced_at).as_secs_f64());
+                            RosettaMetrics::inc_sync_errors();
+                            RosettaMetrics::set_out_of_sync_time(
+                                Instant::now().duration_since(synced_at).as_secs_f64(),
+                            );
                         } else {
                             let t = Instant::now().duration_since(synced_at).as_secs_f64();
-                            OUT_OF_SYNC_TIME.set(t);
-                            OUT_OF_SYNC_TIME_HIST.observe(t);
+                            RosettaMetrics::set_out_of_sync_time(t);
                             synced_at = std::time::Instant::now();
                         }
 
