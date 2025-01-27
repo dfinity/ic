@@ -499,6 +499,7 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -524,6 +525,10 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<Account, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // block_index -> block
+    pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
