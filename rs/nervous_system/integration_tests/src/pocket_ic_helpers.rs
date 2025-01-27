@@ -862,6 +862,8 @@ pub mod nns {
                         include_neurons_readable_by_caller: true,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None
                     })
                     .unwrap(),
                 )
@@ -1395,8 +1397,9 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
-        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-        use ic_sns_governance::pb::v1::get_neuron_response;
+        use ic_sns_governance::{
+            governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1::get_neuron_response,
+        };
         use pocket_ic::ErrorCode;
         use sns_pb::UpgradeSnsControlledCanister;
 
