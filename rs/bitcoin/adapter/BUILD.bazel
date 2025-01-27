@@ -85,6 +85,7 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:clap",
         "@crate_index//:hyper-util",
     ],
 )

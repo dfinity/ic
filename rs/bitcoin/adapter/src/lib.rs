@@ -51,7 +51,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use config::{Config, IncomingSource};
+pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,

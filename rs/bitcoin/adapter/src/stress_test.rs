@@ -2,10 +2,12 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
 use clap::Parser;
+use ic_btc_adapter::{address_limits, Config};
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceGetSuccessorsResponse,
 };
+use bitcoin::Network;
 use tokio::{
     net::UnixStream,
     time::{sleep, Instant},
@@ -42,7 +44,6 @@ pub struct Cli {
     pub network: Network,
     pub uds_path: PathBuf,
 }
-
 
 #[tokio::main]
 async fn main() {
