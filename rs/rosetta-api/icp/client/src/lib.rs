@@ -3,6 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_nns_governance_api::pb::v1::Proposal;
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
@@ -34,16 +35,15 @@ use rosetta_core::identifiers::TransactionIdentifier;
 use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::Amount;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
-use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use url::ParseError;
-use ic_nns_governance_api::pb::v1::Proposal;
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -1204,7 +1204,7 @@ impl RosettaClient {
             ))
             .await
             .unwrap();
-    
+
         let pending_proposals: Vec<Proposal> =
             PendingProposalsResponse::try_from(Some(response.result))
                 .unwrap()
@@ -1212,7 +1212,7 @@ impl RosettaClient {
                 .into_iter()
                 .map(|p| p.proposal.unwrap())
                 .collect();
-    
+
         Ok(pending_proposals)
     }
 
