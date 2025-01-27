@@ -58,6 +58,12 @@ runs:
                 cat "$exportout"
               fi
               rm "$exportout"
+          else
+              ls -l bazel-bep.pb || true
+              echo "no bep file or api key"
+              if [ -n "$BUILDEVENT_APIKEY" ]; then
+                  echo "no api key"
+              fi
           fi
 
           # output node name to gihub step summary
