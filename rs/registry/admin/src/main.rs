@@ -77,7 +77,7 @@ use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
     node::v1::{NodeRecord, NodeRewardType},
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -134,6 +134,7 @@ use registry_canister::mutations::{
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
+    do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
@@ -193,7 +194,7 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true)]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app")]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
@@ -701,14 +702,7 @@ impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
 #[async_trait]
 impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
     async fn payload(&self, _: &Agent) -> RemoveNodeOperatorsPayload {
-        RemoveNodeOperatorsPayload {
-            node_operators_to_remove: self
-                .node_operators_to_remove
-                .clone()
-                .iter()
-                .map(|x| x.to_vec())
-                .collect(),
-        }
+        RemoveNodeOperatorsPayload::new(self.node_operators_to_remove.clone())
     }
 }
 
@@ -5989,7 +5983,7 @@ struct GovernanceCanisterClient(NnsCanisterClient);
 struct RootCanisterClient(NnsCanisterClient);
 
 fn is_mainnet(url: &Url) -> bool {
-    url.domain().map_or(false, |domain| {
+    url.domain().is_some_and(|domain| {
         IC_DOMAINS
             .iter()
             .any(|&ic_domain| domain.contains(ic_domain))

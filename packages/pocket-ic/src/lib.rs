@@ -619,6 +619,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
+    }
+
     /// Advance the time on the IC on all subnets by some nanoseconds.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
@@ -1685,6 +1692,9 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 

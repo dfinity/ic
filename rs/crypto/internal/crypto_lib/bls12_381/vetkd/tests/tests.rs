@@ -384,8 +384,7 @@ fn test_protocol_execution() {
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
             let idx = (rng.gen::<usize>() % node_eks_wrong_did.len()) as u32;
-
-            if !shares.iter().map(|x| x.0).any(|x| x == idx) {
+            if !shares.iter().map(|(i, _eks)| *i).any(|x| x == idx) {
                 break idx as usize;
             }
         };
@@ -408,7 +407,7 @@ fn test_protocol_execution() {
         let random_duplicate_idx = loop {
             let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
 
-            if shares.iter().map(|x| x.0).any(|x| x == idx) {
+            if shares.iter().map(|(i, _eks)| *i).any(|x| x == idx) {
                 break idx as usize;
             }
         };
@@ -431,16 +430,25 @@ fn test_protocol_execution() {
         shares.append(&mut random_subset(rng, &node_info_wrong_did, 4));
         shares.shuffle(rng);
 
-        let combined = proto.combine_valid(&shares).expect("Combination worked");
+        let combined = proto.combine_valid(&shares);
+        assert!(combined.is_ok(), "Combination unexpectedly failed");
 
         let k = setup
             .transport_sk
-            .decrypt(&combined, &proto.derived_pk, &proto.did)
+            .decrypt(
+                &combined.expect("Already checked"),
+                &proto.derived_pk,
+                &proto.did,
+            )
             .expect("Decryption failed");
 
         assert_eq!(k, vetkey);
     }
 
+    // Here check that if we add a random duplicate (valid) share to the
+    // list, combine_valid succeeds iff the duplicated share does not
+    // appear in the first `threshold` many shares, since we only look
+    // at that many
     for rec_threshold in threshold..nodes {
         let mut shares = random_subset(rng, &node_info, rec_threshold);
 

@@ -152,6 +152,7 @@ pub struct CanisterQueues {
 
     /// Slot and memory reservation stats. Message count and size stats are
     /// maintained separately in the `MessagePool`.
+    #[validate_eq(CompareWithValidateEq)]
     queue_stats: QueueStats,
 
     /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
@@ -983,7 +984,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
+                .is_some_and(|(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
@@ -1896,7 +1897,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct QueueStats {
     /// Count of guaranteed response memory reservations across input and output
     /// queues. This is equivalent to the number of outstanding (inbound or outbound)

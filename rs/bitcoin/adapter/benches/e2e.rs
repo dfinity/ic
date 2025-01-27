@@ -1,8 +1,8 @@
-use bitcoin::{blockdata::constants::genesis_block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, BlockHash, Network,
+};
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_btc_adapter::config::Config;
-use ic_btc_adapter::config::IncomingSource;
-use ic_btc_adapter::start_server;
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
