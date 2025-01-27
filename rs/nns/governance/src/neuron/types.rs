@@ -12,8 +12,8 @@ use crate::{
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
-        Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote, VotingPowerEconomics,
+        Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Visibility,
+        Vote, VotingPowerEconomics,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
@@ -982,7 +982,10 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
-            known_neuron_data: self.known_neuron_data.clone().map(api::KnownNeuronData::from),
+            known_neuron_data: self
+                .known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from),
             neuron_type: self.neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(

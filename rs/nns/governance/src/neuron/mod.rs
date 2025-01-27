@@ -1,6 +1,4 @@
-use crate::pb::v1::{
-    neuron::DissolveState, Neuron as NeuronProto, NeuronState,
-};
+use crate::pb::v1::{neuron::DissolveState, Neuron as NeuronProto, NeuronState};
 
 pub mod dissolve_state_and_age;
 pub use dissolve_state_and_age::*;
