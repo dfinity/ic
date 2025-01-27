@@ -97,7 +97,7 @@ impl TryFrom<PathBuf> for Wasm {
             Err(err) => {
                 return Err(format!(
                     "Cannot open Wasm file under {}: {}",
-                    path.display().to_string(),
+                    path.display(),
                     err,
                 ));
             }
@@ -109,11 +109,7 @@ impl TryFrom<PathBuf> for Wasm {
 
         // Read the file's content into the buffer
         if let Err(err) = file.read_to_end(&mut bytes) {
-            return Err(format!(
-                "Cannot read Wasm file {}: {}",
-                path.display().to_string(),
-                err,
-            ));
+            return Err(format!("Cannot read Wasm file {}: {}", path.display(), err,));
         }
 
         // Smoke test: Is this a ICP Wasm?
