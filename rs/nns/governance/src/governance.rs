@@ -53,7 +53,7 @@ use crate::{
         GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
         InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
-        NetworkEconomics, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo,
+        NetworkEconomics, Neuron as NeuronProto, NeuronState, NeuronsFundAuditInfo,
         NeuronsFundData, NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
@@ -96,7 +96,7 @@ use ic_nns_governance_api::{
         self as api,
         manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
         CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ManageNeuronResponse,
+        ListNeuronsResponse, ManageNeuronResponse, NeuronInfo,
     },
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -2347,7 +2347,7 @@ impl Governance {
                 // We will be able to get rid of this conversion once we delete
                 // NeuronInfo from governance.proto. That should be possible,
                 // since we do not store NeuronInfo in stable memory.
-                let neuron_info = api::NeuronInfo::from(neuron_info);
+                let neuron_info = NeuronInfo::from(neuron_info);
 
                 neuron_infos.insert(neuron_id.id, neuron_info);
 
