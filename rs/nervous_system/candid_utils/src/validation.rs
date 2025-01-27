@@ -70,32 +70,53 @@ impl CandidServiceArgValidationError {
     }
 }
 
+impl std::fmt::Display for CandidServiceArgValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (kind, message) = self.deconstruct();
+        write!(f, "CandidServiceArgValidationError::{kind}: {message}")
+    }
+}
+
 /// Checks whether `upgrade_args` is a valid argument sequence for `candid_service`.
 ///
-/// Returns the byte encoding of `upgrade_args` in the successful case.
-pub fn validate_upgrade_args(
+/// If `upgrade_args` is None, checks that `candid_service` does not require any arguments.
+///
+/// Example `upgrade_args` with two arguments: "((42 : nat32), opt record { foo = opt bar; })".
+///
+/// Returns the byte encoding of `upgrade_args` (if any; otherwise None) in the successful case.
+pub fn encode_upgrade_args(
     candid_service: String,
-    upgrade_args: String,
-) -> Result<Vec<u8>, CandidServiceArgValidationError> {
+    upgrade_args: Option<String>,
+) -> Result<Option<Vec<u8>>, CandidServiceArgValidationError> {
     let (expected_args_types, (env, _)) =
         instantiate_candid(CandidSource::Text(&candid_service))
             .map_err(|err| CandidServiceArgValidationError::BadService(format!("{err:?}")))?;
 
-    let upgrade_args = parse_idl_args(&upgrade_args)
-        .map_err(|err| CandidServiceArgValidationError::ArgsParseError(format!("{err:?}")))?;
+    let (upgrade_args, args_types) = if let Some(upgrade_args) = upgrade_args {
+        let upgrade_args = parse_idl_args(&upgrade_args)
+            .map_err(|err| CandidServiceArgValidationError::ArgsParseError(format!("{err:?}")))?;
 
-    let args_types = upgrade_args.get_types();
+        let types = upgrade_args.get_types();
+
+        (Some(upgrade_args), types)
+    } else {
+        (None, vec![])
+    };
 
     if args_types.len() != expected_args_types.len() {
         return Err(CandidServiceArgValidationError::WrongArgumentCount(
             format!(
                 "Number of specified upgrade arguments ({}) does not match expected number \
-             of arguments for the target canister ({}).",
+                 of arguments for the target canister ({}).",
                 args_types.len(),
                 expected_args_types.len(),
             ),
         ));
     }
+
+    let Some(upgrade_args) = upgrade_args else {
+        return Ok(None);
+    };
 
     let mut gamma = std::collections::HashSet::new();
 
@@ -123,6 +144,23 @@ pub fn validate_upgrade_args(
             fmt_type_vec(&expected_args_types),
         )));
     }
+
+    let upgrade_args = upgrade_args.to_bytes().map_err(|err| {
+        CandidServiceArgValidationError::ArgsSerializationError(format!("{err:?}"))
+    })?;
+
+    Ok(Some(upgrade_args))
+}
+
+/// Returns the byte encoding of `upgrade_args` in the Ok result.
+///
+/// WARNING. Please use the [encode_upgrade_args] function instead. This function is only
+/// suitable for best-effort upgrades in which the Candid service is not available.
+pub fn encode_upgrade_args_without_service(
+    upgrade_args: String,
+) -> Result<Vec<u8>, CandidServiceArgValidationError> {
+    let upgrade_args = parse_idl_args(&upgrade_args)
+        .map_err(|err| CandidServiceArgValidationError::ArgsParseError(format!("{err:?}")))?;
 
     let upgrade_args = upgrade_args.to_bytes().map_err(|err| {
         CandidServiceArgValidationError::ArgsSerializationError(format!("{err:?}"))
