@@ -5,17 +5,12 @@ use ic_nervous_system_agent::sns::Sns;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-fn get_agent(ic_url: &str) -> Result<Agent> {
+pub fn get_agent(ic_url: &str) -> Result<Agent> {
     Agent::builder()
         .with_url(ic_url)
         .with_verify_query_signatures(false)
         .build()
         .map_err(|e| anyhow!(e))
-}
-
-pub fn get_mainnet_agent() -> Result<Agent> {
-    let ic_url = "https://ic0.app/";
-    get_agent(ic_url)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
