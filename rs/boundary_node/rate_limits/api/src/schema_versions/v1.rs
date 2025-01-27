@@ -28,7 +28,7 @@ pub enum RequestType {
 
 /// Implement serde parser for Action
 struct ActionVisitor;
-impl<'de> de::Visitor<'de> for ActionVisitor {
+impl de::Visitor<'_> for ActionVisitor {
     type Value = Action;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

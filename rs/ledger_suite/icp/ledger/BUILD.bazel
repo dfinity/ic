@@ -133,7 +133,6 @@ rust_ic_test(
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
         "LEDGER_CANISTER_LOW_LIMITS_WASM_PATH": "$(rootpath :ledger-canister-wasm-low-limits)",
     },
-    flaky = True,
     tags = ["cpu:4"],
     deps = [
         # Keep sorted.

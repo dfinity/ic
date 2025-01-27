@@ -138,7 +138,6 @@ impl SchedulerRoundLimits {
 
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
-
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
@@ -222,7 +221,7 @@ impl SchedulerImpl {
             state = new_state;
             ongoing_long_install_code |= state
                 .canister_state(canister_id)
-                .map_or(false, |canister| canister.has_paused_install_code());
+                .is_some_and(|canister| canister.has_paused_install_code());
 
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
@@ -603,24 +602,27 @@ impl SchedulerImpl {
         // are not polluted by canisters that haven't had any messages for a long time.
         for canister_id in &round_filtered_canisters.active_canister_ids {
             let canister_state = state.canister_state(canister_id).unwrap();
-            let canister_age = current_round.get()
-                - canister_state
-                    .scheduler_state
-                    .last_full_execution_round
-                    .get();
-            self.metrics.canister_age.observe(canister_age as f64);
-            // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-            // scheduled.
-            let allocation = Ratio::new(
-                canister_state
-                    .scheduler_state
-                    .compute_allocation
-                    .as_percent(),
-                100,
-            );
-            if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip() {
-                self.metrics.canister_compute_allocation_violation.inc();
-            }
+            // Newly created canisters have `last_full_execution_round` set to zero,
+            // and hence skew the `canister_age` metric.
+            let last_full_execution_round =
+                canister_state.scheduler_state.last_full_execution_round;
+            if last_full_execution_round.get() != 0 {
+                let canister_age = current_round.get() - last_full_execution_round.get();
+                self.metrics.canister_age.observe(canister_age as f64);
+                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
+                // scheduled.
+                let allocation = Ratio::new(
+                    canister_state
+                        .scheduler_state
+                        .compute_allocation
+                        .as_percent(),
+                    100,
+                );
+                if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
+                {
+                    self.metrics.canister_compute_allocation_violation.inc();
+                }
+            };
         }
 
         for (message_id, status) in ingress_execution_results {
@@ -1070,7 +1072,15 @@ impl SchedulerImpl {
     ) -> bool {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
-            if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
+
+            let canister_is_wasm64 = canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|es| es.is_wasm64);
+
+            if let Err(err) = canister
+                .check_invariants(self.exec_env.max_canister_memory_size(canister_is_wasm64))
+            {
                 let msg = format!(
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariant check failed with err: {}",
                     CANISTER_INVARIANT_BROKEN,
@@ -1658,7 +1668,7 @@ impl Scheduler for SchedulerImpl {
 
 ////////////////////////////////////////////////////////////////////////
 /// Filtered Canisters
-
+///
 /// This struct represents a collection of canister IDs.
 struct FilteredCanisters {
     /// Active canisters during the execution of the inner round.
@@ -1823,7 +1833,7 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
-            if instructions_used.map_or(false, |instructions| instructions.get() > 0) {
+            if instructions_used.is_some_and(|instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.
                 executed_canister_ids.insert(new_canister.canister_id());
             }
@@ -2028,12 +2038,6 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    let streams_guaranteed_response_bytes = state
-        .metadata
-        .streams()
-        .guaranteed_responses_size_bytes()
-        .values()
-        .sum();
 
     metrics
         .current_heap_delta
@@ -2105,7 +2109,6 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
-    metrics.observe_streams_response_bytes(streams_guaranteed_response_bytes);
 
     metrics
         .ingress_history_length
@@ -2324,7 +2327,7 @@ fn is_next_method_chosen(
         .system_state
         .task_queue
         .front()
-        .map_or(false, |task| task.is_hook())
+        .is_some_and(|task| task.is_hook())
     {
         return true;
     }
