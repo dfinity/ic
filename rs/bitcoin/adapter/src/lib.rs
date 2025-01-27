@@ -29,7 +29,7 @@ mod blockchainstate;
 mod common;
 /// This module contains the basic configuration struct used to start up an
 /// adapter instance.
-mod config;
+pub mod config;
 /// This module contains code that is used to manage a single connection to a
 /// BTC node.
 mod connection;
