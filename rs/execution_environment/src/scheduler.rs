@@ -1032,6 +1032,12 @@ impl SchedulerImpl {
                             )
                             .map(|_| ())
                             .map_err(|(err, msg)| {
+                                // Spamming a lot of logs even multiple per sec of this kind:
+                                // Inducting Request(Request { receiver: CanisterId(7xpjo-2iaaa-aaaao-a2vxq-cai),
+                                // sender: CanisterId(dtvyz-2iaaa-aaaao-a2xxq-cai), sender_reply_callback: 20791,
+                                // payment: Cycles(0), method_name: "index", method_payload: "10 bytes;4449444c016d7b010000",
+                                // metadata: RequestMetadata { call_tree_depth: 1, call_tree_start_time: Time(1737940399724249864) },
+                                // deadline: CoarseTime(0) }) on same subnet failed with error 'Canister 7xpjo-2iaaa-aaaao-a2vxq-cai is stopped'.
                                 error!(
                                     self.log,
                                     "Inducting {:?} on same subnet failed with error '{}'.",
