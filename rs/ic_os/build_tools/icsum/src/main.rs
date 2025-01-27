@@ -175,9 +175,10 @@ mod tests {
             file.rewind().unwrap();
 
             let mut holes = 0;
-            iterate_blocks(&mut file, |block| match block {
-                Block::Hole => holes += 1,
-                _ => {}
+            iterate_blocks(&mut file, |block| {
+                if *block == Block::Hole {
+                    holes += 1;
+                }
             })
             .unwrap();
 
