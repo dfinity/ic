@@ -44,10 +44,10 @@ thread_local! {
 
     /// State of the messaging that we use to check invariants (e.g., sequence
     /// numbers).
-    static STATE: RefCell<MessagingState> = RefCell::new(Default::default());
+    static STATE: RefCell<MessagingState> = RefCell::default();
 
     /// Various metrics observed by this canister, e.g. message latency distribution.
-    static METRICS: RefCell<Metrics> = RefCell::new(Default::default());
+    static METRICS: RefCell<Metrics> = RefCell::default();
 
     /// The pseudo-random number generator we use to pick the next canister to talk to.
     /// It doesn't need to be cryptographically secure, we just want it to be simple and fast.
