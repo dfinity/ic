@@ -83,6 +83,7 @@ pub fn deliver_batches(
         };
         let Some(tape) = pool.get_random_tape(height) else {
             // Do not deliver batch if we don't have random tape
+            // TODO: Demote it to INFO
             warn!(
                 every_n_seconds => 30,
                 log,

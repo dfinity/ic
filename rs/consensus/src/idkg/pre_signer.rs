@@ -624,6 +624,7 @@ impl IDkgPreSignerImpl {
                 // TODO: currently, transcript creation will be retried the next time, which
                 // will most likely fail again. This should be signaled up so that the bad
                 // transcript params can be acted on
+                // TODO: Too frequent
                 warn!(
                     self.log,
                     "Failed to create dealing: transcript_id = {:?}, type = {:?}, error = {:?}",

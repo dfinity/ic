@@ -2015,6 +2015,7 @@ fn observe_replicated_state_metrics(
             // Log all old call contexts, but not (nearly) every round.
             if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
                 for (origin, origin_time) in &old_call_contexts {
+                    // TODO: Demote it to INFO
                     warn!(
                         logger,
                         "Call context on canister {} with origin {:?} has been open for {:?}",

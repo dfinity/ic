@@ -131,6 +131,7 @@ impl Orchestrator {
             thread::sleep(Duration::from_secs(10 * 60));
             let (ipv4, ipv6) = Self::get_ip_addresses();
 
+            // TODO: demote it to INFO (currently PRIORITY 6) and group all newlines together currently split by newline
             let message = indoc::formatdoc!(
                 r#"
                     Node-id: {node_id}
