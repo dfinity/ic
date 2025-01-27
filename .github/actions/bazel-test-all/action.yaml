@@ -58,7 +58,7 @@ runs:
                 cat "$exportout"
               fi
               rm "$exportout"
-              echo "Exported BEP events to honeycomb"
+              echo "BEP events exported to honeycomb!"
           fi
 
           # output node name to gihub step summary
