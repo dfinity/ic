@@ -117,8 +117,5 @@ async fn test_node_metrics_collector() {
     let blocks_proposed_day_0 = node_metrics[0].node_metrics[0].num_blocks_proposed_total;
     let blocks_proposed_day_1 = node_metrics[1].node_metrics[0].num_blocks_proposed_total;
 
-    assert_eq!(
-        blocks_proposed_day_1 - blocks_proposed_day_0,
-        DAY_HOURS
-    );
+    assert_eq!(blocks_proposed_day_1 - blocks_proposed_day_0, DAY_HOURS);
 }
