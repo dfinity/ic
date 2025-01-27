@@ -13,10 +13,10 @@ use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    send_approval, send_transfer, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD,
-    BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER,
-    NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
-    TOKEN_NAME, TOKEN_SYMBOL,
+    metrics::parse_metric, send_approval, send_transfer, send_transfer_from, AllowanceProvider,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -1636,10 +1636,16 @@ fn test_tx_perf() {
             memo: Some(MEMO.to_vec().into()),
             created_at_time: Some(now),
         };
+        // let bytes = parse_metric(&env, canister_id, "stable_memory_bytes");
         let instructions_tx = send_transfer(&env, canister_id, from.owner, &args).unwrap();
-        if (start + num) % 60_000 == 0 {
-            println!("{}, {instructions_tx}", start + num);
-        }
+        // let pages_after = parse_metric(&env, canister_id, "ledger_stable_memory_pages");
+        // let increase = if pages_after > pages {
+        //     "stable_mem_increased"
+        // } else {
+        //     "no_increase"
+        // };
+        println!("{}, {instructions_tx}", start + num);
+        // println!("{pages}, {pages_after}");
     };
 
     let send_all = |total: u64, batch_size: u64, method_name: &str| {
@@ -1647,8 +1653,7 @@ fn test_tx_perf() {
             let _count = send_batch(method_name, (i * batch_size).into(), batch_size.into());
         }
     };
-
-    let _balances_count = send_all(100_000_000, 10_000, "add_accounts");
+    let _balances_count = send_all(3_000_000, 20_000, "add_accounts");
 
     env.upgrade_canister(canister_id, ledger_wasm(), Encode!().unwrap())
         .expect("Unable to upgrade ledger");

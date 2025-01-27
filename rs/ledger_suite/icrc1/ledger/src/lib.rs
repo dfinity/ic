@@ -38,7 +38,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-// use ic_stable_structures::StableLog;
+use ic_stable_structures::StableLog;
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -1381,6 +1381,7 @@ pub struct StableBlockchain {
 impl ArchivelessBlockchain for StableBlockchain {
     fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<u64, String> {
         BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.insert(index, block.clone()));
+        // BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.append(&block.clone()));
         self.last_hash = Some(
             ic_icrc1::hash::hash_cbor(block.as_slice())
                 .map(HashOf::new)
