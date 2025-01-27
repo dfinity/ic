@@ -1257,7 +1257,7 @@ pub mod sns {
         expected_type_to_change: SnsCanisterType,
     ) -> Result<(), SnsUpgradeError> {
         // Ensure that we are working with knowledge of the latest archive canisters (if there are any).
-        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap();
+        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap().sns;
 
         let (canister_id, controller_id) = match expected_type_to_change {
             SnsCanisterType::Root => (sns.root.canister_id, sns.governance.canister_id),

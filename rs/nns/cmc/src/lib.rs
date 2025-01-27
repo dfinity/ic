@@ -28,6 +28,8 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
 
+pub mod request_impls;
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ExchangeRateCanister {
     /// Enables the exchange rate canister with the given canister ID.
