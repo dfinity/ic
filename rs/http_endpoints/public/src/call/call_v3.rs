@@ -224,16 +224,11 @@ async fn call_sync_v3(
         .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
-        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
-            // TODO: At this point we could return early without submitting the ingress message.
-            Err((
-                "Duplicate request. Message is already being tracked and executed.",
-                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-            ))
-        }
+        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => Err((
+            "Duplicate request. Message is already being tracked and executed.",
+            CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        )),
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
-            // TODO: Send a warning or notification.
-            // This probably means that the ingress watcher panicked.
             error!(
                 every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
@@ -335,8 +330,6 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
         LookupStatus::Found(MixedHashTree::Leaf(status)) => ParsedMessageStatus::Known(
             String::from_utf8(status.clone()).unwrap_or_else(|_| "invalid_utf8_status".to_string()),
         ),
-        // This should never happen. Otherwise the tree is not following the spec.
-        // TODO: Log as error.
         LookupStatus::Found(_) => ParsedMessageStatus::Known("Status not a leaf".to_string()),
         LookupStatus::Absent | LookupStatus::Unknown => ParsedMessageStatus::Unknown,
     }
