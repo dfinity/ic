@@ -24,7 +24,7 @@ mod logs;
 mod providers;
 mod state;
 
-use fetch::{check_no_input_address_is_blocked, FetchEnv, FetchResult, TryFetchResult};
+use fetch::{check_for_blocked_input_addresses, FetchEnv, FetchResult, TryFetchResult};
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, FetchTxStatus, HttpGetTxError};
 
@@ -535,10 +535,7 @@ pub async fn check_fetched_transaction_inputs(txid: Txid) -> CheckTransactionQue
             if let Some(fetch_tx_status) = state::get_fetch_status(txid) {
                 match fetch_tx_status {
                     FetchTxStatus::Fetched(fetched) => {
-                        match check_no_input_address_is_blocked(&fetched) {
-                            Ok(()) => CheckTransactionQueryResponse::Passed,
-                            Err(err) => err.into(),
-                        }
+                        check_for_blocked_input_addresses(&fetched).into()
                     }
                     FetchTxStatus::PendingOutcall
                     | FetchTxStatus::PendingRetry { .. }

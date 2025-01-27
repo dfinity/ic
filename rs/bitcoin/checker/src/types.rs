@@ -112,6 +112,18 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     }
 }
 
+impl<E> From<Result<(), E>> for CheckTransactionResponse
+where
+    E: Into<CheckTransactionResponse>,
+{
+    fn from(result: Result<(), E>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => err.into(),
+        }
+    }
+}
+
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
@@ -132,6 +144,18 @@ pub enum CheckTransactionQueryResponse {
     /// The result is not available, but may be obtainable via a call to the non-query version
     /// of `check_transaction`.
     Unknown,
+}
+
+impl<E> From<Result<(), E>> for CheckTransactionQueryResponse
+where
+    E: Into<CheckTransactionQueryResponse>,
+{
+    fn from(result: Result<(), E>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(err) => err.into(),
+        }
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]

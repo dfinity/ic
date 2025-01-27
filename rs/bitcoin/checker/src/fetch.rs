@@ -183,8 +183,10 @@ pub trait FetchEnv {
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
     async fn check_fetched(&self, txid: Txid, fetched: &FetchedTx) -> CheckTransactionResponse {
-        if let Ok(()) = check_no_input_address_is_blocked(fetched) {
-            return CheckTransactionResponse::Passed;
+        match check_for_blocked_input_addresses(fetched) {
+            // If some input addresses are missing, try to fetch them and try again.
+            Err(CheckTxInputsError::MissingInputAddresses) => (),
+            result => return result.into(),
         }
 
         let mut futures = vec![];
@@ -265,10 +267,7 @@ pub trait FetchEnv {
         }
         // Check again to see if we have completed
         if let Some(FetchTxStatus::Fetched(fetched)) = state::get_fetch_status(txid) {
-            match check_no_input_address_is_blocked(&fetched) {
-                Ok(()) => CheckTransactionResponse::Passed,
-                Err(err) => err.into(),
-            }
+            check_for_blocked_input_addresses(&fetched).into()
         } else {
             CheckTransactionRetriable::Pending.into()
         }
@@ -305,7 +304,7 @@ impl From<CheckTxInputsError> for CheckTransactionQueryResponse {
 
 /// Return `Ok` if no input address is blocked, and an `Err` if either one of the input
 /// addresses is blocked, or one of the input addresses is not available.
-pub fn check_no_input_address_is_blocked(fetched: &FetchedTx) -> Result<(), CheckTxInputsError> {
+pub fn check_for_blocked_input_addresses(fetched: &FetchedTx) -> Result<(), CheckTxInputsError> {
     if fetched.input_addresses.iter().any(|x| x.is_none()) {
         return Err(CheckTxInputsError::MissingInputAddresses);
     }
