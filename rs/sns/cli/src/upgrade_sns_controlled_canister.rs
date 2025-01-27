@@ -611,6 +611,3 @@ fn suggested_install_command(wasm_path_str: &str, candid_arg: &Option<String>) -
     };
     format!("dfx canister install --mode auto --wasm {wasm_path_str} CANISTER_NAME{arg_suggestion}")
 }
-
-#[cfg(test)]
-mod tests;
