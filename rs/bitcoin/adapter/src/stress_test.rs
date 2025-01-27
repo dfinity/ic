@@ -3,7 +3,6 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 use bitcoin::Network;
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
 use clap::Parser;
-use ic_btc_adapter::{address_limits, Config};
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceGetSuccessorsResponse,
@@ -51,11 +50,11 @@ async fn main() {
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
-    let block_0 = genesis_block(config.network);
+    let block_0 = genesis_block(cli.network);
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
-    let mut rpc_client = setup_client(config.uds_path).await;
+    let mut rpc_client = setup_client(cli.uds_path).await;
     let total_timer = Instant::now();
 
     loop {
