@@ -84,7 +84,7 @@ impl std::fmt::Display for CandidServiceArgValidationError {
 /// Example `upgrade_args` with two arguments: "((42 : nat32), opt record { foo = opt bar; })".
 ///
 /// Returns the byte encoding of `upgrade_args` (if any; otherwise None) in the successful case.
-pub fn validate_upgrade_args(
+pub fn encode_upgrade_args(
     candid_service: String,
     upgrade_args: Option<String>,
 ) -> Result<Option<Vec<u8>>, CandidServiceArgValidationError> {
@@ -154,9 +154,9 @@ pub fn validate_upgrade_args(
 
 /// Returns the byte encoding of `upgrade_args` in the Ok result.
 ///
-/// WARNING. Please use the [validate_upgrade_args] function instead. This function is only
+/// WARNING. Please use the [encode_upgrade_args] function instead. This function is only
 /// suitable for best-effort upgrades in which the Candid service is not available.
-pub fn encode_upgrade_args_unsafe(
+pub fn encode_upgrade_args_without_service(
     upgrade_args: String,
 ) -> Result<Vec<u8>, CandidServiceArgValidationError> {
     let upgrade_args = parse_idl_args(&upgrade_args)
