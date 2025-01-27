@@ -2285,11 +2285,8 @@ impl Governance {
             .unwrap_or(MAX_LIST_NEURONS_RESULTS as u64)
             .min(MAX_LIST_NEURONS_RESULTS as u64);
 
-        let include_empty_neurons_readable_by_caller = include_empty_neurons_readable_by_caller
-            // This default is to maintain the previous behavior. (Unlike
-            // protobuf, we do not have a convention that says "the default
-            // value is falsy".)
-            .unwrap_or(true);
+        let include_empty_neurons_readable_by_caller =
+            include_empty_neurons_readable_by_caller.unwrap_or(false);
         let include_public_neurons_in_full_neurons =
             include_public_neurons_in_full_neurons.unwrap_or(false);
 

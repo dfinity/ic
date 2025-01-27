@@ -74,6 +74,10 @@ No neurons are actually migrated yet.
 * `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
   listing proposal. Hashes for existing proposals are backfilled.
 
+* The `list_neurons` behavior is slightly changed: the `include_empty_neurons_readable_by_caller`
+  was default to true before, and now it's default to true. More details can be found at:
+  https://forum.dfinity.org/t/listneurons-api-change-empty-neurons/40311
+
 ## Deprecated
 
 ## Removed
