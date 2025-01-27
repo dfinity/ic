@@ -618,8 +618,8 @@ impl CanisterManager {
             }
             canister.system_state.memory_allocation = memory_allocation;
         }
-        if let Some(new_wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            canister.system_state.wasm_memory_threshold = new_wasm_memory_threshold;
+        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
+            canister.system_state.wasm_memory_threshold = wasm_memory_threshold;
         }
         if let Some(limit) = settings.reserved_cycles_limit() {
             canister.system_state.set_reserved_balance_limit(limit);
