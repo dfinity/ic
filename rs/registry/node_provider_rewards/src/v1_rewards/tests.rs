@@ -147,7 +147,7 @@ fn test_daily_node_metrics() {
         (subnet2, vec![sub2_day3]),
     ]);
 
-    let result = metrics_in_rewarding_period(input_metrics);
+    let result = daily_node_metrics_by_node(input_metrics);
 
     let metrics_node1 = result.get(&node1.into()).expect("Node1 metrics not found");
     assert_eq!(metrics_node1[0].subnet_assigned, subnet1);
@@ -304,7 +304,7 @@ fn test_systematic_fr_calculation() {
         ],
     );
 
-    let result = systematic_fr_per_subnet(&assigned_metrics);
+    let result = daily_subnet_baseline_failure_rates(&assigned_metrics);
 
     let expected: HashMap<(SubnetId, TimestampNanos), Decimal> = HashMap::from([
         ((subnet1, 1), dec!(0.3)),
@@ -345,8 +345,11 @@ fn test_idiosyncratic_daily_fr_correct_values() {
         ((subnet1, 3), dec!(0.1)),
     ]);
 
-    let result =
-        compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result = compute_relative_node_daily_failure_rates(
+        &mut logger,
+        &assigned_metrics,
+        &subnets_systematic_fr,
+    );
 
     let expected = HashMap::from([
         (node1, vec![dec!(0.1), dec!(0.3), dec!(0.749)]), // (0.2 - 0.1), (0.5 - 0.2), (0.849 - 0.1)
@@ -370,7 +373,11 @@ fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 2), dec!(0.1))]);
 
-    compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    compute_relative_node_daily_failure_rates(
+        &mut logger,
+        &assigned_metrics,
+        &subnets_systematic_fr,
+    );
 }
 
 #[test]
@@ -386,8 +393,11 @@ fn test_idiosyncratic_daily_fr_negative_failure_rate() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 1), dec!(0.1))]);
 
-    let result =
-        compute_relative_node_failure_rate(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result = compute_relative_node_daily_failure_rates(
+        &mut logger,
+        &assigned_metrics,
+        &subnets_systematic_fr,
+    );
 
     // Expecting zero due to saturation
     let expected = HashMap::from([(node1, vec![Decimal::ZERO])]);
