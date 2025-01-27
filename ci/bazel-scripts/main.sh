@@ -91,8 +91,6 @@ stream_awk_program='
   # Finally, record the URL
   END { if (stream_url != null) print stream_url > url_out }'
 
-unset BUILDEVENT_APIKEY
-
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 bazel \

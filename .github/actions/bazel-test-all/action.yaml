@@ -39,8 +39,13 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
+          TMPKEY=$BUILDEVENT_APIKEY
+          unset BUILDEVENT_APIKEY
+
           ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
+
+          export BUILDEVENT_APIKEY=$TMPKEY
 
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
