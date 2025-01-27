@@ -1335,7 +1335,11 @@ impl TryFrom<NeuronProto> for Neuron {
 }
 
 impl Neuron {
-    pub fn into_api(self, now_seconds: u64, voting_power_economics: &VotingPowerEconomics) -> api::Neuron {
+    pub fn into_api(
+        self,
+        now_seconds: u64,
+        voting_power_economics: &VotingPowerEconomics,
+    ) -> api::Neuron {
         let visibility = self.visibility().map(i32::from);
         let deciding_voting_power =
             Some(self.deciding_voting_power(voting_power_economics, now_seconds));
@@ -1380,7 +1384,10 @@ impl Neuron {
             Some(voting_power_refreshed_timestamp_seconds);
 
         // Conversions of the form foo.map(api::Foo::from).
-        let recent_ballots = recent_ballots.into_iter().map(api::BallotInfo::from).collect();
+        let recent_ballots = recent_ballots
+            .into_iter()
+            .map(api::BallotInfo::from)
+            .collect();
         let transfer = transfer.map(api::NeuronStakeTransfer::from);
         let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
 
@@ -1390,12 +1397,7 @@ impl Neuron {
 
         let followees = followees
             .into_iter()
-            .map(|(topic_id, followees)| {
-                (
-                    topic_id,
-                    api::neuron::Followees::from(followees),
-                )
-            })
+            .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
 
         api::Neuron {
