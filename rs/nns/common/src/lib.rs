@@ -1,8 +1,7 @@
 use crate::pb::v1::{NeuronId, ProposalId};
-use ic_crypto_sha2::Sha256;
 use ic_stable_structures::{storable::Bound, Storable};
 use num_traits::bounds::{LowerBounded, UpperBounded};
-use std::{borrow::Cow, convert::TryInto};
+use std::borrow::Cow;
 
 pub mod access_control;
 pub mod init;
