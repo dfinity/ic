@@ -247,7 +247,7 @@ impl IngressWatcher {
                         }
                         // If the task panics we propagate the panic.
                         Err(join_error) => if join_error.is_panic() {
-                            panic!("Ingress watcher cancellation task panicked.");
+                            std::panic::resume_unwind(join_error.into_panic());
                         }
                     }
                 }
