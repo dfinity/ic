@@ -19,6 +19,9 @@ rust_binary(
     name = "icsum",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
