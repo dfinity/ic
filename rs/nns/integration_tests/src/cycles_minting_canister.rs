@@ -1426,13 +1426,21 @@ fn cmc_notify_mint_cycles() {
     let result = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
     if IS_AUTOMATIC_REFUND_ENABLED {
         let reason = match &result {
-            Err(NotifyError::Refunded { reason, block_index: _ }) => reason,
+            Err(NotifyError::Refunded {
+                reason,
+                block_index: _,
+            }) => reason,
             _ => panic!("{:?}", result),
         };
 
         let reason = reason.to_lowercase();
         for key_word in ["memo", "transfer", "correspond", "offer"] {
-            assert!(reason.contains(key_word), "{} not in reason of {:?}", key_word, result);
+            assert!(
+                reason.contains(key_word),
+                "{} not in reason of {:?}",
+                key_word,
+                result
+            );
         }
     } else {
         // Legacy behavior.
