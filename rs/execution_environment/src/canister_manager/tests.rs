@@ -8099,6 +8099,7 @@ fn helper_update_settings_updates_hook_status(
     updated_wasm_memory_threhsold: Option<NumBytes>,
     updated_memory_allocation: Option<MemoryAllocation>,
     updated_hook_status: OnLowWasmMemoryHookStatus,
+    pop_front_task_queue: bool,
 ) {
     with_setup(|canister_manager, mut state, subnet_id| {
         let mut round_limits = RoundLimits {
@@ -8162,7 +8163,11 @@ fn helper_update_settings_updates_hook_status(
         );
         assert!(res.1.is_ok(), "{:?}", res.1);
 
-        let c_state = res.2.unwrap();
+        let mut c_state = res.2.unwrap();
+
+        if pop_front_task_queue {
+            c_state.system_state.task_queue.pop_front();
+        }
 
         assert_eq!(
             c_state.system_state.task_queue.peek_hook_status(),
@@ -8235,6 +8240,7 @@ fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
         Some(NumBytes::from(updated_wasm_memory_threhsold)),
         None,
         updated_hook_status,
+        false,
     );
 }
 
@@ -8262,6 +8268,73 @@ fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
         Some(NumBytes::from(updated_wasm_memory_threhsold)),
         None,
         updated_hook_status,
+        false,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+
+    // This will simulate execution of the task.
+    let pop_from_task_queue = true;
+
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    let updated_wasm_memory_threhsold = 50;
+    // wasm_memory_limit - used_wasm_memory > wasm_memory_threshold
+    let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(initial_wasm_memory_threshold)),
+        None,
+        initial_hook_status,
+        None,
+        Some(NumBytes::from(updated_wasm_memory_threhsold)),
+        None,
+        updated_hook_status,
+        pop_from_task_queue,
+    );
+}
+
+#[test]
+fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
+    let used_wasm_memory_pages = 1;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let wasm_memory_limit = used_wasm_memory + 100;
+
+    let initial_wasm_memory_threshold = 150;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+
+    // This will simulate execution of the task.
+    let pop_from_task_queue = true;
+
+    let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    let updated_wasm_memory_threhsold = 149;
+    // wasm_memory_limit - used_wasm_memory < wasm_memory_threshold
+    // Because the hook condition is still satisfied, hook status
+    // should remain `Executed`.
+    let updated_hook_status = OnLowWasmMemoryHookStatus::Executed;
+
+    helper_update_settings_updates_hook_status(
+        used_wasm_memory_pages,
+        Some(NumBytes::new(wasm_memory_limit)),
+        Some(NumBytes::new(initial_wasm_memory_threshold)),
+        None,
+        initial_hook_status,
+        None,
+        Some(NumBytes::from(updated_wasm_memory_threhsold)),
+        None,
+        updated_hook_status,
+        pop_from_task_queue,
     );
 }
 
@@ -8289,6 +8362,7 @@ fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
         None,
         None,
         updated_hook_status,
+        false,
     );
 }
 
@@ -8316,6 +8390,7 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
         None,
         None,
         updated_hook_status,
+        false,
     );
 }
 
@@ -8350,6 +8425,7 @@ fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
             updated_memory_allocation,
         ))),
         updated_hook_status,
+        false,
     );
 }
 
@@ -8384,5 +8460,6 @@ fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
             updated_memory_allocation,
         ))),
         updated_hook_status,
+        false,
     );
 }
