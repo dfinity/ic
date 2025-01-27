@@ -35,10 +35,14 @@ impl SectionTimer {
 
 impl Drop for SectionTimer {
     fn drop(&mut self) {
-        eprintln!(
-            "Executed `{}` in {:?}",
-            self.name,
-            self.start_time.elapsed()
-        );
+        if std::thread::panicking() {
+            eprintln!("Panicked during `{}`", self.name);
+        } else {
+            eprintln!(
+                "Executed `{}` in {:?}",
+                self.name,
+                self.start_time.elapsed()
+            );
+        }
     }
 }

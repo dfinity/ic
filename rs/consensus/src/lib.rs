@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+#![cfg_attr(not(test), deny(missing_docs))]
 //! The consensus crate provides implementations of the consensus algorithm of
 //! the internet computer block chain, a component responsible for executing
 //! distributed key generation using said block chain to hold the state of the

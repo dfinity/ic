@@ -14,7 +14,7 @@ use ic_ledger_suite_state_machine_tests::{
     wait_ledger_ready, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -351,19 +351,18 @@ impl LedgerSuiteConfig {
         // Upgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
-        match self.upgrade_ledger(
+        self.upgrade_ledger(
             state_machine,
             &self.mainnet_wasms.ledger_wasm,
             ExpectMigration::No,
-        ) {
-            Ok(_) => {
-                panic!("should not successfully downgrade ledger");
-            }
-            Err(user_error) => user_error.assert_contains(
-                ErrorCode::CanisterCalledTrap,
-                "Trying to downgrade from incompatible version",
-            ),
-        }
+        )
+        .expect("should downgrade to mainnet ledger version");
+        self.upgrade_ledger(
+            state_machine,
+            &self.mainnet_wasms.ledger_wasm,
+            ExpectMigration::No,
+        )
+        .expect("should downgrade to mainnet ledger version");
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
     }

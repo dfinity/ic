@@ -423,7 +423,7 @@ fn copy() {
     let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
     let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
     // Address can't exceed 4GiB WASM memory
-    let len = (operation.size as usize + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
+    let len = (operation.size as usize).div_ceil(ELEMENT_SIZE);
     assert!(2 * len <= MEMORY_LEN);
     MEMORY.with(|memory| {
         let mut memory_ref = memory.borrow_mut();

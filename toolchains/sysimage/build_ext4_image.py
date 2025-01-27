@@ -123,20 +123,18 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     else:
         commands += f"""chown root:root "{fs_basedir}";\n"""
 
-    subprocess.run(
-        ["fakeroot",
-         "-s",
-         fakeroot_statefile,
-         "bash"],
-        input=commands.encode(), check=True)
+    subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
 
 
 def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
-    parser.add_argument("--extra-files", help="Extra files to inject into the image. "
-                                              "Format: source_path:target_path_in_image:target_permissions", nargs='*')
+    parser.add_argument(
+        "--extra-files",
+        help="Extra files to inject into the image. Format: source_path:target_path_in_image:target_permissions",
+        nargs="*",
+    )
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -203,10 +201,7 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
-    start = time.time()
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
-    elapsed = time.time() - start
-    print(f"PREPARE TOOK {elapsed}")
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     subprocess.run(["sync"], check=True)
 
@@ -225,7 +220,6 @@ def main():
         "clear",
         "-d",
         in_file,
-        # os.path.join(fs_basedir, limit_prefix),
         "-F",
         out_file,
         str(image_size),
@@ -263,12 +257,8 @@ def main():
     e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
-    e2fsdroid_args += [out_file]
-    # e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), out_file]
-    start = time.time()
+    e2fsdroid_args.append(out_file)
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
-    elapsed = time.time() - start
-    print(f"TOOK {elapsed}")
 
     subprocess.run(["sync"], check=True)
 

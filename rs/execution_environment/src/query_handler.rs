@@ -258,7 +258,6 @@ impl InternalHttpQueryHandler {
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.
         let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
-        let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
@@ -273,7 +272,8 @@ impl InternalHttpQueryHandler {
             subnet_available_memory,
             subnet_available_callbacks,
             self.config.canister_guaranteed_callback_quota as u64,
-            max_canister_memory_size,
+            self.config.max_canister_memory_size_wasm32,
+            self.config.max_canister_memory_size_wasm64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,

@@ -251,7 +251,7 @@ impl IDkgPayload {
     pub fn iter_pre_signature_ids<'a>(
         &'a self,
         key_id: &'a IDkgMasterPublicKeyId,
-    ) -> impl Iterator<Item = PreSigId> + '_ {
+    ) -> impl Iterator<Item = PreSigId> + 'a {
         let available_pre_signature_ids = self
             .available_pre_signatures
             .iter()
