@@ -1780,6 +1780,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "pretty_assertions",
 ]
 
 [[package]]
@@ -3128,6 +3129,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "lazy_static",
+ "maplit",
  "on_wire",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -8710,6 +8712,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "once_cell",
+ "parking_lot 0.12.3",
  "prometheus",
  "rand 0.8.5",
  "rstest",
@@ -10635,6 +10638,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types",
  "ic-types-test-utils",
  "ic-xrc-types",
@@ -11847,6 +11851,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "candid",
+ "candid-utils",
  "clap 4.5.27",
  "futures",
  "hex",

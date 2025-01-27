@@ -5,7 +5,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
 use ic_management_canister_types::CanisterStatusType::Stopped;
 pub use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
@@ -808,7 +808,7 @@ impl<'a> Canister<'a> {
             .await;
         stop_res?;
         loop {
-            let status_res: Result<CanisterStatusResult, String> = self
+            let status_res: Result<CanisterStatusResultV2, String> = self
                 .runtime
                 .get_management_canister_with_effective_canister_id(self.canister_id().into())
                 .update_("canister_status", candid, (self.as_record(),))
