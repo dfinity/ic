@@ -17,7 +17,7 @@ inputs:
     required: false
     default: '--output_base=/var/tmp/bazel-output/'
   BUILDEVENT_APIKEY:
-    required: true
+    required: false
   SSH_PRIVATE_KEY:
     required: false
 
@@ -39,13 +39,15 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          TMPKEY=$BUILDEVENT_APIKEY
+          # unset honeycomb api key but use it latter for exporter
+          # TODO: remove exporter when users can use superset
+          echo ${BUILDEVENT_APIKEY:-""} >/tmp/buildevent_key
           unset BUILDEVENT_APIKEY
 
           ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
-          export BUILDEVENT_APIKEY=$TMPKEY
+          export BUILDEVENT_APIKEY="$(cat /tmp/buildevent_key)"
 
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
