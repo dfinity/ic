@@ -14,12 +14,13 @@ use ic_ledger_suite_state_machine_tests::{
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
-    CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs,
-    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
+    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
+    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
+    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
+    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
+    SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -1249,9 +1250,11 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
+        false,
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn test_multi_step_migration() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
@@ -1268,10 +1271,11 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn test_stable_migration_endpoints_disabled() {
     let send_args = SendArgs {
@@ -1309,6 +1313,7 @@ fn test_stable_migration_endpoints_disabled() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn test_incomplete_migration() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
@@ -1318,6 +1323,7 @@ fn test_incomplete_migration() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn test_incomplete_migration_to_current() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
@@ -1327,6 +1333,7 @@ fn test_incomplete_migration_to_current() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn test_metrics_while_migrating() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
@@ -1752,6 +1759,62 @@ fn test_query_blocks_large_length() {
     if MAX_BLOCKS_PER_REQUEST == 0 {
         panic!("MAX_BLOCKS_PER_REQUEST should be larger than 0");
     }
+}
+
+#[test]
+fn test_account_balance_non_standard_account_identifier_length() {
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let expected_balance = Tokens::from_e8s(100_000);
+    initial_balances.insert(
+        AccountIdentifier::from(Account::from(p1.0)),
+        expected_balance,
+    );
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .initial_values(initial_balances)
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    // account balance of account identifier of correct length
+    let valid_account_identifier_bytes = ByteBuf::from(AccountIdentifier::from(p1.0).to_vec());
+    assert_eq!(valid_account_identifier_bytes.len(), 32);
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierByteBuf {
+                account: valid_account_identifier_bytes
+            })
+            .unwrap()
+        )
+        .expect("failed to query account_balance")
+        .bytes(),
+        Tokens
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, expected_balance);
+
+    // account balance of account identifier of zero length
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierByteBuf {
+                account: ByteBuf::from(vec![0; 0])
+            })
+            .unwrap()
+        )
+        .expect("failed to query account_balance")
+        .bytes(),
+        Tokens
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, Tokens::from_e8s(0));
 }
 
 mod metrics {

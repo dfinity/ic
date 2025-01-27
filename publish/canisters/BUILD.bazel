@@ -18,7 +18,6 @@ CANISTERS = {
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
-    "ic-icrc1-index.wasm.gz": "//rs/ledger_suite/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
@@ -30,6 +29,7 @@ CANISTERS = {
     "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
+    "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
@@ -78,8 +78,12 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
-    # Size when constraint addded: 1_655_752 bytes
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": "17",
+    # Size when constraint addded: 1_704_979 bytes
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": "18",
+
+    # -- BN team --
+    # Size when constraint addded: 540_349 bytes
+    "rate-limit-canister.wasm.gz": "7",
 }
 
 # How these limits were chosen:
@@ -93,7 +97,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 # amount of growth happens.
 
 NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "cycles-minting-canister.wasm.gz": "5",
+    "cycles-minting-canister.wasm.gz": "6",
     "genesis-token-canister.wasm.gz": "3",
     "governance-canister.wasm.gz": "17",
     "governance-canister_test.wasm.gz": "17",

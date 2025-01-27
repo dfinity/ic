@@ -18,7 +18,7 @@ use crate::{
     },
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{unbounded, Sender};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -62,8 +62,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
     SubnetId,
 };
-use ic_utils_thread::JoinOnDrop;
-use ic_validate_eq::ValidateEq;
+use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
@@ -329,7 +328,7 @@ impl MergeMetrics {
 // very first metric update should be visible to Prometheus.
 
 impl StateManagerMetrics {
-    fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         let checkpoint_op_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_op_duration_seconds",
             "Duration of checkpoint operations in seconds.",
@@ -794,24 +793,6 @@ impl SharedState {
     }
 }
 
-// We send complex objects to a different thread to free them. This will spread
-// the cost of deallocation over a longer period of time, and avoid long pauses.
-type Deallocation = Box<dyn std::any::Any + Send + 'static>;
-
-struct NotifyWhenDeallocated {
-    channel: Sender<()>,
-}
-
-impl Drop for NotifyWhenDeallocated {
-    fn drop(&mut self) {
-        self.channel.send(()).expect("Failed to notify dellocation");
-    }
-}
-
-// We will not use the deallocation thread when the number of pending
-// deallocation objects goes above the threshold.
-const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
-
 /// The number of archived and diverged states to keep before we start deleting the old ones.
 const MAX_ARCHIVED_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
 
@@ -833,12 +814,11 @@ pub struct StateManagerImpl {
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    deallocation_sender: Sender<Deallocation>,
+    deallocator_thread: DeallocatorThread,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1259,109 +1239,110 @@ fn strip_page_map_deltas(
     }
 }
 
-/// Switches `tip` to the most recent checkpoint file provided by `src`.
+/// Switches `tip` to the most recent checkpoint file provided by `layout`.
 ///
 /// Preconditions:
-/// 1) `tip` and `src` mut have exactly the same set of canisters.
-/// 2) The page deltas must be empty in both states.
+/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 2) The page deltas must be empty in `tip`
 /// 3) The memory sizes must match.
-fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
-    for ((tip_id, tip_canister), (src_id, src_canister)) in tip
-        .canister_states
-        .iter_mut()
-        .zip(src.canister_states.iter())
-    {
-        assert_eq!(tip_id, src_id);
-
+fn switch_to_checkpoint(
+    tip: &mut ReplicatedState,
+    layout: &CheckpointLayout<ReadOnly>,
+    fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        let canister_layout = layout.canister(tip_id).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
             .page_map_mut()
-            .switch_to_checkpoint(src_canister.system_state.wasm_chunk_store.page_map());
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(canister_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
-        assert_eq!(
-            src_canister.execution_state.is_some(),
-            tip_canister.execution_state.is_some()
-        );
-
-        if let (Some(src_execution), Some(tip_execution)) = (
-            src_canister.execution_state.as_ref(),
-            tip_canister.execution_state.as_mut(),
-        ) {
+        if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
             tip_execution
                 .wasm_memory
                 .page_map
-                .switch_to_checkpoint(&src_execution.wasm_memory.page_map);
+                .switch_to_checkpoint(&PageMap::open(
+                    Box::new(canister_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )?);
             tip_execution
                 .stable_memory
                 .page_map
-                .switch_to_checkpoint(&src_execution.stable_memory.page_map);
+                .switch_to_checkpoint(&PageMap::open(
+                    Box::new(canister_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )?);
         }
     }
 
-    for ((tip_id, tip_snapshot), (src_id, src_snapshot)) in tip
-        .canister_snapshots
-        .iter_mut()
-        .zip(src.canister_snapshots.iter())
-    {
+    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(tip_snapshot);
-
-        assert_eq!(tip_id, src_id);
+        let snapshot_layout = layout.snapshot(tip_id).unwrap();
 
         new_snapshot
             .chunk_store_mut()
             .page_map_mut()
-            .switch_to_checkpoint(src_snapshot.chunk_store().page_map());
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
         new_snapshot
             .execution_snapshot_mut()
             .wasm_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().wasm_memory.page_map);
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.vmemory_0()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
         new_snapshot
             .execution_snapshot_mut()
             .stable_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().stable_memory.page_map);
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.stable_memory()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
     }
 
-    for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
-        assert_eq!(
-            tip_canister.system_state.canister_id,
-            src_canister.system_state.canister_id
-        );
-        assert_eq!(
-            tip_canister.execution_state.is_some(),
-            src_canister.execution_state.is_some(),
-            "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
-            tip_canister.system_state.canister_id
-        );
-        if let (Some(tip_state), Some(src_state)) = (
-            &mut tip_canister.execution_state,
-            &src_canister.execution_state,
-        ) {
-            debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
-                src_state.wasm_binary.binary.as_slice()
-            );
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        if let Some(tip_state) = &mut tip_canister.execution_state {
+            let canister_layout = layout.canister(tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            let wasm_binary = canister_layout
+                .wasm()
+                .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
+            debug_assert_eq!(
+                tip_state.wasm_binary.binary.as_slice(),
+                wasm_binary.as_slice()
+            );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
-                    binary: src_state.wasm_binary.binary.clone(),
+                    binary: wasm_binary,
                     embedder_cache,
                 },
             );
 
-            assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
             tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
+    Ok(())
 }
 
 /// Persists metadata after releasing the write lock
@@ -1718,22 +1699,8 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
-        #[allow(clippy::disallowed_methods)]
-        let (deallocation_sender, deallocation_receiver) = unbounded();
-        let _deallocation_handle = JoinOnDrop::new(
-            std::thread::Builder::new()
-                .name("StateDeallocation".to_string())
-                .spawn({
-                    move || {
-                        while let Ok(object) = deallocation_receiver.recv() {
-                            std::mem::drop(object);
-                            // The sleep below is to spread out the load on memory allocator
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                        }
-                    }
-                })
-                .expect("failed to spawn background deallocation thread"),
-        );
+        let deallocator_thread =
+            DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             tip_channel
@@ -1756,10 +1723,9 @@ impl StateManagerImpl {
             verifier,
             own_subnet_id,
             own_subnet_type,
-            deallocation_sender,
+            deallocator_thread,
             latest_state_height,
             latest_certified_height,
-            _deallocation_handle,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -1849,7 +1815,12 @@ impl StateManagerImpl {
                     match StateMetadata::try_from(pb) {
                         Ok(meta) => {
                             if let Some(root_hash) = meta.root_hash() {
-                                info!(log, "Recomputed root hash {:?} when loading state metadata at height {}", root_hash, h);
+                                info!(
+                                    log,
+                                    "Root hash {:?} when loading state metadata at height {}",
+                                    root_hash,
+                                    h
+                                );
                             }
                             map.insert(Height::new(h), meta);
                         }
@@ -2226,12 +2197,7 @@ impl StateManagerImpl {
 
     /// Wait till deallocation queue is empty.
     pub fn flush_deallocation_channel(&self) {
-        let (send, recv) = bounded(1);
-        self.deallocation_sender
-            .send(Box::new(NotifyWhenDeallocated { channel: send }))
-            .expect("Failed to send deallocation request");
-        recv.recv()
-            .expect("Failed to receive deallocation notification");
+        self.deallocator_thread.flush_deallocation_channel();
     }
 
     /// Remove any inmemory state at height h with h < last_height_to_keep
@@ -2309,17 +2275,6 @@ impl StateManagerImpl {
             .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect::<BTreeSet<_>>();
 
-        // Send object to deallocation thread if it has capacity.
-        let deallocate = |x| {
-            if self.deallocation_sender.len() < DEALLOCATION_BACKLOG_THRESHOLD {
-                self.deallocation_sender
-                    .send(x)
-                    .expect("failed to send object to deallocation thread");
-            } else {
-                std::mem::drop(x);
-            }
-        };
-
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
                 && !inmemory_heights_to_keep.contains(&snapshot.height)
@@ -2355,7 +2310,7 @@ impl StateManagerImpl {
             .set(latest_height.get() as i64);
 
         // Send removed snapshot to deallocator thread
-        deallocate(Box::new(removed));
+        self.deallocator_thread.send(Box::new(removed));
 
         for (height, metadata) in states.states_metadata.range(heights_to_remove) {
             if checkpoint_heights_to_keep.contains(height) {
@@ -2382,8 +2337,9 @@ impl StateManagerImpl {
             &mut states.certifications_metadata,
         );
 
-        // Send removed certification metadata to deallocator thread
-        deallocate(Box::new(certifications_metadata));
+        // Send removed certification metadata to deallocator thread.
+        self.deallocator_thread
+            .send(Box::new(certifications_metadata));
 
         let latest_certified_height = states
             .certifications_metadata
@@ -2416,7 +2372,10 @@ impl StateManagerImpl {
             //
             // NOTE: we rely on deallocations happening sequentially, adding more
             // deallocation threads might break the desired behavior.
-            deallocate(Box::new(metadata_to_keep));
+            //
+            // FIXME: Objects are not necessarily deleted in order: if the backlog is too
+            // large, we drop them synchronously.
+            self.deallocator_thread.send(Box::new(metadata_to_keep));
         }
 
         if number_of_checkpoints != states.states_metadata.len() {
@@ -2606,17 +2565,15 @@ impl StateManagerImpl {
             strip_page_map_deltas(&mut state, self.get_fd_factory());
         }
         let result = {
-            checkpoint::make_checkpoint(
+            checkpoint::make_unvalidated_checkpoint(
                 &state,
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
-                &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
-                self.get_fd_factory(),
                 self.lsmt_status,
             )
         };
-        let (cp_layout, checkpointed_state, has_downgrade) = match result {
+        let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
@@ -2626,35 +2583,19 @@ impl StateManagerImpl {
                     height
                 );
 
-                let (cp_verified, checkpointed_state) = self
+                let cp_layout = self
                     .state_layout
                     .checkpoint_in_verification(height)
-                    .map_err(CheckpointError::from)
-                    .and_then(|layout| {
-                        let _timer = self
-                            .metrics
-                            .checkpoint_op_duration
-                            .with_label_values(&["recover"])
-                            .start_timer();
-                        let state = checkpoint::load_checkpoint_and_validate_parallel(
-                            &layout,
-                            self.own_subnet_type,
-                            &self.metrics.checkpoint_metrics,
-                            self.get_fd_factory(),
-                        )?;
-                        Ok((layout, state))
-                    })
                     .unwrap_or_else(|err| {
                         fatal!(
                             self.log,
-                            "Failed to load existing checkpoint @{}: {}",
+                            "Failed to open checkpoint layout #{}: {}",
                             height,
                             err
-                        )
+                        );
                     });
                 (
-                    cp_verified,
-                    checkpointed_state,
+                    cp_layout,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
                 )
@@ -2683,35 +2624,28 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["validate_eq"])
-                .start_timer();
-            if let Err(err) = checkpointed_state.validate_eq(&state) {
-                error!(
-                    self.log,
-                    "{}: Replicated state altered: {}",
-                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
-                    err
-                );
-                self.metrics
-                    .checkpoint_metrics
-                    .replicated_state_altered_after_checkpoint
-                    .inc();
-            }
-        }
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(&mut state, &checkpointed_state);
-            self.tip_channel
-                .send(TipRequest::ValidateReplicatedState {
-                    checkpoint_layout: cp_layout.clone(),
-                })
-                .expect("Failed to send Validate request");
+            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory()).unwrap_or_else(
+                |err| {
+                    fatal!(
+                        self.log,
+                        "Failed to switch to checkpoint for height #{}: {}",
+                        height,
+                        err
+                    );
+                },
+            );
         }
+        let state = Arc::new(state);
+        self.tip_channel
+            .send(TipRequest::ValidateReplicatedState {
+                checkpoint_layout: cp_layout.clone(),
+                reference_state: Arc::clone(&state),
+                own_subnet_type: self.own_subnet_type,
+                fd_factory: self.fd_factory.clone(),
+            })
+            .expect("Failed to send Validate request");
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
@@ -2751,7 +2685,7 @@ impl StateManagerImpl {
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
             // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
+            // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
@@ -2767,7 +2701,7 @@ impl StateManagerImpl {
 
             CreateCheckpointResult {
                 tip_requests,
-                state: Arc::new(state),
+                state,
                 state_metadata: StateMetadata {
                     checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,
@@ -3285,9 +3219,7 @@ impl StateManager for StateManagerImpl {
                 .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
             {
                 if let Some(tree) = certification_metadata.hash_tree.take() {
-                    self.deallocation_sender
-                        .send(Box::new(tree))
-                        .expect("failed to send object to deallocation thread");
+                    self.deallocator_thread.send(Box::new(tree));
                 }
             }
         }

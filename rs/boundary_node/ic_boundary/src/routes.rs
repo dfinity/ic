@@ -43,8 +43,6 @@ use crate::{
     snapshot::{Node, RegistrySnapshot},
 };
 
-// TODO which one to use?
-const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 const METHOD_HTTP: &str = "http_request";
 
@@ -73,8 +71,7 @@ pub enum RateLimitCause {
     Generic,
 }
 
-// Categorized possible causes for request processing failures
-// Not using Error as inner type since it's not cloneable
+/// Categorized possible causes for request processing failures
 #[derive(Clone, Debug, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ErrorCause {
@@ -84,6 +81,7 @@ pub enum ErrorCause {
     UnableToParseCBOR(String),
     UnableToParseHTTPArg(String),
     LoadShed,
+    Forbidden,
     MalformedRequest(String),
     NoRoutingTable,
     SubnetNotFound,
@@ -143,6 +141,7 @@ impl ErrorCause {
             Self::ReplicaTLSErrorOther(_) => ErrorClientFacing::ReplicaError,
             Self::ReplicaTLSErrorCert(_) => ErrorClientFacing::ReplicaError,
             Self::ReplicaErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::Forbidden => ErrorClientFacing::Forbidden,
             Self::RateLimited(_) => ErrorClientFacing::RateLimited,
         }
     }
@@ -169,6 +168,7 @@ pub enum ErrorClientFacing {
     #[strum(serialize = "internal_server_error")]
     Other,
     PayloadTooLarge(usize),
+    Forbidden,
     RateLimited,
     ReplicaError,
     ServiceUnavailable,
@@ -187,6 +187,7 @@ impl ErrorClientFacing {
             Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
             Self::Other => StatusCode::INTERNAL_SERVER_ERROR,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::ReplicaError => StatusCode::SERVICE_UNAVAILABLE,
             Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -205,6 +206,7 @@ impl ErrorClientFacing {
             Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
             Self::Other => "Internal Server Error".to_string(),
             Self::PayloadTooLarge(x) => format!("Payload is too large: maximum body size is {x} bytes."),
+            Self::Forbidden => "Request is forbidden according to currently active policy, it might work later.".to_string(),
             Self::RateLimited => "Rate limit exceeded. Please slow down requests and try again later.".to_string(),
             Self::ReplicaError => "An unexpected error occurred while communicating with the upstream replica node. Please try again later.".to_string(),
             Self::ServiceUnavailable => "The API boundary node is temporarily unable to process the request. Please try again later.".to_string(),
@@ -783,7 +785,6 @@ pub async fn status(
     let health = h.health().await;
 
     let status = HttpStatusResponse {
-        ic_api_version: IC_API_VERSION.to_string(),
         root_key: rk.root_key().await.map(|x| x.into()),
         impl_version: None,
         impl_hash: None,

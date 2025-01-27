@@ -48,7 +48,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bitcoin = { workspace = true }
+bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 flate2 = { workspace = true }
@@ -56,13 +56,13 @@ ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
+ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 proptest = { workspace = true }
-regex = "1.11.0"
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }
 

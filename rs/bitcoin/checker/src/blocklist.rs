@@ -1,3 +1,8 @@
+#[cfg(test)]
+mod tests;
+
+use bitcoin::Address;
+
 /// BTC is not accepted from nor sent to addresses on this list.
 /// NOTE: Keep it sorted!
 pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
@@ -355,7 +360,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "3QnWE5GVfQu3wVav91RuFkqip4Ti4NWqAY",
     "3QrukkUiBrn23rFUKUgasNd1wYWNk7WdSV",
     "3Qw9Fn19gCnga9LfHfpM99aGzuqxBNjR2i",
-    "TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq",
+    // "TUCsTq7TofTCJRRoHk6RvhMoS2mJLm5Yzq", reason: legacy address base58 prefix: invalid legacy address prefix in decoded base58 data 65
     "bc1q05aktddf9ce4p7hh3stgsf253m4vweu7nkhtmw",
     "bc1q202ajnhxgg9d9jjczmg0g4usp6haqldyy2eakl",
     "bc1q237mvl0heyw0r38wd3xz8h5mar96rrwpams8pp",
@@ -437,3 +442,9 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "bc1qx3e2axj3wsfn0ndtvlwmkghmmgm4583nqg8ngk",
     "bc1qx9upga7f09tsetqf78wa3qrmcjar58mkwz6ng6",
 ];
+
+pub fn is_blocked(address: &Address) -> bool {
+    BTC_ADDRESS_BLOCKLIST
+        .binary_search(&address.to_string().as_ref())
+        .is_ok()
+}

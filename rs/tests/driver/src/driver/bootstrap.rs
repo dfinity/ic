@@ -17,8 +17,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::*;
+use crate::k8s::config::LOGS_URL;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
@@ -88,8 +87,8 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = if ic.with_mainnet_config {
-        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
-        read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+        let mainnet_nns_subnet_revisions_path = "mainnet_nns_subnet_revision.txt".to_string();
+        read_dependency_to_string(mainnet_nns_subnet_revisions_path.clone())?
     } else {
         read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
@@ -286,26 +285,22 @@ pub fn setup_and_start_vms(
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
-                    let url = format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config_url"),
-                        CONF_IMG_FNAME
-                    );
-                    info!(
-                        t_env.logger(),
-                        "Uploading image {} to {}",
-                        conf_img_path.clone().display().to_string(),
-                        url.clone()
-                    );
-                    block_on(upload_image(conf_img_path.as_path(), &url))
-                        .expect("Failed to upload config image");
-                    block_on(tnet_node.deploy_config_image(
-                        CONF_IMG_FNAME,
-                        "config",
-                        DataVolumeContentType::Kubevirt,
-                    ))
+                    block_on(
+                        tnet_node.build_oci_config_image(
+                            &conf_img_path,
+                            &tnet_node.name.clone().unwrap(),
+                        ),
+                    )
                     .expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
+                    let node_name = tnet_node.name.unwrap();
+                    info!(t_farm.logger, "starting k8s vm: {}", node_name);
+                    info!(
+                        t_farm.logger,
+                        "vm {} console logs: {}",
+                        node_name.clone(),
+                        LOGS_URL.replace("{job}", &node_name)
+                    );
                 }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
@@ -582,6 +577,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
         domain: node.domain.clone(),
+        node_reward_type: None,
     }
 }
 

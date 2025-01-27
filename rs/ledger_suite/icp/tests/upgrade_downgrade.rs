@@ -22,7 +22,6 @@ use icp_ledger::{
     LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs, DEFAULT_TRANSFER_FEE,
 };
 use maplit::hashmap;
-use pocket_ic::CallError;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::time::Duration;
 
@@ -164,12 +163,9 @@ impl Setup {
                 if should_succeed {
                     panic!("Upgrade should succeed!");
                 } else {
-                    match e {
-                        CallError::Reject(_) => panic!("Expected UserError!"),
-                        CallError::UserError(user_error) => assert!(user_error
-                            .description
-                            .contains("Trying to downgrade from incompatible version")),
-                    };
+                    assert!(e
+                        .reject_message
+                        .contains("Trying to downgrade from incompatible version"));
                 }
             }
         };
@@ -451,7 +447,7 @@ fn should_upgrade_and_downgrade_canister_suite() {
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);

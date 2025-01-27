@@ -120,7 +120,7 @@ impl<'a> CachedChainIterator<'a> {
     }
 }
 
-impl<'a> Iterator for CachedChainIterator<'a> {
+impl Iterator for CachedChainIterator<'_> {
     type Item = Block;
 
     fn next(&mut self) -> Option<Self::Item> {

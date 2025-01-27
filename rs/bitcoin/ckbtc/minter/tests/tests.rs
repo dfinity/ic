@@ -26,14 +26,14 @@ use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
-use regex::Regex;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -675,6 +675,7 @@ impl CkBtcSetup {
             Encode!(&CheckArg::InitArg(CheckerInitArg {
                 btc_network: CheckerBtcNetwork::Mainnet,
                 check_mode: CheckMode::AcceptAll,
+                num_subnet_nodes: 1,
             }))
             .unwrap(),
         )
@@ -1231,8 +1232,16 @@ impl CkBtcSetup {
         .expect("minter self-check failed")
     }
 
-    pub fn check_minter_metrics(self) -> MetricsAssert {
-        MetricsAssert::from_querying_metrics(self.env, self.minter_id)
+    pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
+        MetricsAssert::from_http_query(self)
+    }
+}
+
+impl CanisterHttpQuery<UserError> for CkBtcSetup {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.env
+            .query(self.minter_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 
@@ -2108,70 +2117,4 @@ fn test_retrieve_btc_with_approval_fail() {
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
     );
-}
-
-pub struct MetricsAssert {
-    metrics: Vec<String>,
-}
-
-impl MetricsAssert {
-    pub fn from_querying_metrics(state_machine: StateMachine, canister_id: CanisterId) -> Self {
-        use ic_canisters_http_types::{HttpRequest, HttpResponse};
-        let request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: Default::default(),
-            body: Default::default(),
-        };
-        let response = Decode!(
-            &assert_reply(
-                state_machine
-                    .query(
-                        canister_id,
-                        "http_request",
-                        Encode!(&request).expect("failed to encode HTTP request"),
-                    )
-                    .expect("failed to get metrics")
-            ),
-            HttpResponse
-        )
-        .unwrap();
-        assert_eq!(response.status_code, 200_u16);
-        let metrics = String::from_utf8_lossy(response.body.as_slice())
-            .trim()
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
-        Self { metrics }
-    }
-
-    pub fn assert_contains_metric_matching(self, pattern: &str) -> Self {
-        assert!(
-            !self.find_metrics_matching(pattern).is_empty(),
-            "Expected to find metric matching '{}', but none matched in:\n{:?}",
-            pattern,
-            self.metrics
-        );
-        self
-    }
-
-    pub fn assert_does_not_contain_metric_matching(self, pattern: &str) -> Self {
-        let matches = self.find_metrics_matching(pattern);
-        assert!(
-            matches.is_empty(),
-            "Expected not to find any metric matching '{}', but found the following matches:\n{:?}",
-            pattern,
-            matches
-        );
-        self
-    }
-
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
-        let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {}", pattern));
-        self.metrics
-            .iter()
-            .filter(|line| regex.is_match(line))
-            .cloned()
-            .collect()
-    }
 }

@@ -19,8 +19,8 @@ use futures::{
 };
 use ic_agent::{
     agent::{
-        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::reqwest, CallResponse, EnvelopeContent, RejectCode,
+        RejectResponse,
     },
     export::Principal,
     identity::BasicIdentity,
@@ -29,7 +29,7 @@ use ic_agent::{
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_management_canister_types::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -813,9 +813,7 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder
-        .build()
-        .map_err(|err| AgentError::TransportError(Box::new(err)))?;
+    let client = builder.build().map_err(AgentError::TransportError)?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -824,11 +822,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?
-        .with_use_call_v3_endpoint()
-        .with_max_tcp_errors_retries(MAX_TCP_ERROR_RETRIES);
     let a = Agent::builder()
-        .with_transport(transport)
+        .with_url(url)
+        .with_http_client(client)
         .with_identity(identity)
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
@@ -843,7 +839,7 @@ pub async fn agent_with_client_identity(
         // too further in the future, i.e. greater than x+MAX_INGRESS_TTL in this case. To tolerate
         // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
         // expiry_time of ingresses accordingly.
-        .with_ingress_expiry(Some(MAX_INGRESS_TTL - std::time::Duration::from_secs(30)))
+        .with_ingress_expiry(MAX_INGRESS_TTL - std::time::Duration::from_secs(30))
         .build()
         .unwrap();
     a.fetch_root_key().await?;
@@ -1241,7 +1237,7 @@ pub async fn get_balance_via_canister(
         )
         .await
         .map(|res| {
-            Decode!(res.as_slice(), CanisterStatusResult)
+            Decode!(res.as_slice(), CanisterStatusResultV2)
                 .unwrap()
                 .cycles()
                 .into()

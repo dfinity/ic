@@ -21,12 +21,15 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
-    Time,
+    messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
+    NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -47,6 +50,7 @@ pub struct HypervisorMetrics {
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
+    compilation_cache_size: IntGaugeVec,
 }
 
 impl HypervisorMetrics {
@@ -121,6 +125,8 @@ impl HypervisorMetrics {
                 decimal_buckets_with_zero(0,8),
                 &["api_type", "memory_type"]
             ),
+            compilation_cache_size: metrics_registry.int_gauge_vec("hypervisor_compilation_cache_size", "Bytes in memory and on disk used by the compilation cache.", &["location"],
+            ),
         }
     }
 
@@ -181,7 +187,12 @@ impl HypervisorMetrics {
         }
     }
 
-    fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
+    fn observe_compilation_metrics(
+        &self,
+        compilation_result: &CompilationResult,
+        cache_memory_size: usize,
+        cache_disk_size: usize,
+    ) {
         let CompilationResult {
             largest_function_instruction_count,
             compilation_time,
@@ -191,6 +202,12 @@ impl HypervisorMetrics {
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
+        self.compilation_cache_size
+            .with_label_values(&["memory"])
+            .set(cache_memory_size as i64);
+        self.compilation_cache_size
+            .with_label_values(&["disk"])
+            .set(cache_disk_size as i64);
     }
 }
 
@@ -252,8 +269,11 @@ impl Hypervisor {
         match creation_result {
             Ok((execution_state, compilation_cost, compilation_result)) => {
                 if let Some(compilation_result) = compilation_result {
-                    self.metrics
-                        .observe_compilation_metrics(&compilation_result);
+                    self.metrics.observe_compilation_metrics(
+                        &compilation_result,
+                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.disk_bytes(),
+                    );
                 }
                 round_limits.instructions -= as_round_instructions(
                     compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
@@ -277,6 +297,9 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        // TODO(EXC-1821): Create a temp dir in this directory for use in the
+        // compilation cache.
+        _temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -290,6 +313,7 @@ impl Hypervisor {
                     &embedder_config,
                     Arc::clone(&fd_factory),
                     Arc::clone(&state_reader),
+                    true,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -304,7 +328,6 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -312,7 +335,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
+            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -392,8 +415,8 @@ impl Hypervisor {
             network_topology,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
-                (slice, output, system_state_changes)
+            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
+                (slice, output, system_state_modifications)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -413,6 +436,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)
     }
@@ -482,8 +506,11 @@ impl Hypervisor {
             execution_state,
         );
         if let Some(compilation_result) = compilation_result {
-            self.metrics
-                .observe_compilation_metrics(&compilation_result);
+            self.metrics.observe_compilation_metrics(
+                &compilation_result,
+                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.disk_bytes(),
+            );
         }
         self.metrics.observe(&execution_result, api_type_str);
 
@@ -508,11 +535,11 @@ impl Hypervisor {
             if let Err(err) = &mut result.wasm_result {
                 let can_view = match &system_state.log_visibility {
                     LogVisibilityV2::Controllers => {
-                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                        caller.is_some_and(|c| system_state.controllers.contains(&c))
                     }
                     LogVisibilityV2::Public => true,
                     LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.map_or(false, |c| allowed.get().contains(&c))
+                        caller.is_some_and(|c| allowed.get().contains(&c))
                     }
                 };
                 if !can_view {

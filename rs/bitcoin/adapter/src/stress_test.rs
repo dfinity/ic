@@ -59,8 +59,11 @@ async fn main() {
 
     loop {
         let mut request = tonic::Request::new(BtcServiceGetSuccessorsRequest {
-            processed_block_hashes: processed_block_hashes.iter().map(|h| h.to_vec()).collect(),
-            anchor: current_anchor.to_vec(),
+            processed_block_hashes: processed_block_hashes
+                .iter()
+                .map(|h| h[..].to_vec())
+                .collect(),
+            anchor: current_anchor[..].to_vec(),
         });
         request.set_timeout(request_timeout_ms);
 
@@ -81,7 +84,11 @@ async fn main() {
             let block_hashes = inner
                 .blocks
                 .iter()
-                .map(|b| Block::consensus_decode(b.as_slice()).unwrap().block_hash())
+                .map(|b| {
+                    Block::consensus_decode(&mut b.as_slice())
+                        .unwrap()
+                        .block_hash()
+                })
                 .collect::<Vec<_>>();
 
             current_anchor = *block_hashes.last().expect("failed to get last block hash");

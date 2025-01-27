@@ -1,10 +1,11 @@
-#![warn(missing_docs)]
+#![cfg_attr(not(test), warn(missing_docs))]
 
 //! The Bitcoin adapter interacts with the Bitcoin P2P network to obtain blocks
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use bitcoin::p2p::message::NetworkMessage;
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{

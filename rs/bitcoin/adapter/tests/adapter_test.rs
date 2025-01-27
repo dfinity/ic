@@ -189,7 +189,7 @@ fn start_adapter_and_client(
         .unwrap();
     if let AdapterState::Active = adapter_state {
         // We send this request to make sure the adapter is not idle.
-        let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
+        let _ = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
     }
 
     res
@@ -376,7 +376,9 @@ fn sync_blocks_at_once(
 }
 
 fn get_blackhole_address() -> Address {
-    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn").unwrap()
+    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
+        .unwrap()
+        .assume_checked()
 }
 
 fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
@@ -398,8 +400,14 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
         .create_wallet("bob", None, None, None, None)
         .unwrap();
 
-    let alice_address = alice_client.get_new_address(None, None).unwrap();
-    let bob_address = bob_client.get_new_address(None, None).unwrap();
+    let alice_address = alice_client
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
+    let bob_address = bob_client
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
 
     (alice_client, bob_client, alice_address, bob_address)
 }
@@ -408,7 +416,7 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap()
-        .as_btc();
+        .to_btc();
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -523,7 +531,7 @@ fn test_receives_blocks() {
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    let address = client.get_new_address(None, None).unwrap();
+    let address = client.get_new_address(None, None).unwrap().assume_checked();
 
     client.generate_to_address(150, &address).unwrap();
 
@@ -706,7 +714,7 @@ fn test_receives_new_3rd_party_txs() {
     let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
-    assert!(blocks[0].txdata.iter().any(|tx| tx.txid() == txid));
+    assert!(blocks[0].txdata.iter().any(|tx| tx.compute_txid() == txid));
 }
 
 /// Ensures the client (replica) can send a transaction (1 BTC from Alice to Bob) using the gRPC service.
@@ -818,13 +826,19 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_new_address(None, None).unwrap();
+    let address1 = client1
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     client1.generate_to_address(25, &address1).unwrap();
 
     wait_for_blocks(&client1, 25);
     wait_for_blocks(&client2, 25);
 
-    let address2 = client2.get_new_address(None, None).unwrap();
+    let address2 = client2
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     client2.generate_to_address(25, &address2).unwrap();
 
     wait_for_blocks(&client1, 50);
@@ -886,7 +900,10 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_new_address(None, None).unwrap();
+    let address1 = client1
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
 
     wait_for_blocks(&client1, 5);
@@ -902,7 +919,10 @@ fn test_bfs_order() {
 
     let fork1 = client1.generate_to_address(15, &address1).unwrap();
 
-    let address2 = client2.get_new_address(None, None).unwrap();
+    let address2 = client2
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     let fork2 = client2.generate_to_address(15, &address2).unwrap();
 
     wait_for_blocks(&client1, 20);

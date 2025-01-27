@@ -50,6 +50,15 @@ BUILD_DEPENDENCIES = [
     "@crate_index//:build-info-build",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types_test_utils",
+    "@crate_index//:candid_parser",
+    "@crate_index//:futures",
+    "@crate_index//:maplit",
+    "@crate_index//:serde_bytes",
+]
+
 ALIASES = {}
 
 cargo_build_script(
@@ -86,7 +95,7 @@ rust_canister(
 rust_test(
     name = "cmc_test",
     crate = ":cmc",
-    deps = DEPENDENCIES + ["@crate_index//:futures"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(
@@ -96,10 +105,5 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },
-    deps = [
-        # Keep sorted.
-        "//rs/types/types_test_utils",
-        "@crate_index//:candid_parser",
-        "@crate_index//:futures",
-    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

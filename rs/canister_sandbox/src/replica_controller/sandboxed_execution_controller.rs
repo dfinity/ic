@@ -3,14 +3,14 @@ use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
 use crate::protocol::sbxsvc::MemorySerialization;
-use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput};
+use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput, StateModifications};
 use crate::sandbox_service::SandboxService;
 use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
-    SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, ExecutionStateChanges,
+    PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, StoredCompilation,
@@ -673,6 +673,8 @@ pub struct SandboxedExecutionController {
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    /// A channel to communicate with the `monitoring_and_evict` thread.
+    /// Send `true` to stop monitoring, `false` to trigger the monitoring.
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
@@ -1150,6 +1152,7 @@ impl SandboxedExecutionController {
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        spawn_monitor_thread: bool,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
@@ -1168,17 +1171,19 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
-        std::thread::spawn(move || {
-            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
-                logger_copy,
-                backends_copy,
-                metrics_copy,
-                max_sandbox_count,
-                max_sandbox_idle_time,
-                rx,
-                state_reader_copy,
-            );
-        });
+        if spawn_monitor_thread {
+            std::thread::spawn(move || {
+                SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+                    logger_copy,
+                    backends_copy,
+                    metrics_copy,
+                    max_sandbox_count,
+                    max_sandbox_idle_time,
+                    rx,
+                    state_reader_copy,
+                );
+            });
+        }
 
         let exit_watcher = Arc::new(ExitWatcher {
             logger: logger.clone(),
@@ -1233,6 +1238,8 @@ impl SandboxedExecutionController {
             let sandbox_processes = get_sandbox_process_stats(&backends);
             #[allow(unused_mut)] // for MacOS
             let mut sandbox_processes_rss = Vec::with_capacity(sandbox_processes.len());
+            let mut active_last_used = Vec::with_capacity(sandbox_processes.len());
+            let mut evicted_last_used = Vec::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
             {
@@ -1273,14 +1280,10 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
@@ -1308,17 +1311,23 @@ impl SandboxedExecutionController {
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
                     match status {
                         SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            active_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
+                            evicted_last_used.push(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
+            }
+            for o in active_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_active_last_used
+                    .observe(o);
+            }
+            for o in evicted_last_used {
+                metrics
+                    .sandboxed_execution_subprocess_evicted_last_used
+                    .observe(o);
             }
 
             {
@@ -1570,22 +1579,31 @@ impl SandboxedExecutionController {
         next_stable_memory_id: MemoryId,
         canister_id: CanisterId,
         sandbox_process: Arc<SandboxProcess>,
-    ) -> Option<CanisterStateChanges> {
+    ) -> CanisterStateChanges {
         // If the execution has failed, then we don't apply any changes.
         if exec_output.wasm.wasm_result.is_err() {
-            return None;
+            return CanisterStateChanges::default();
         }
-        match exec_output.state.take() {
-            None => None,
-            Some(state_modifications) => {
+
+        let StateModifications {
+            execution_state_modifications,
+            system_state_modifications,
+        } = exec_output.take_state_modifications();
+
+        match execution_state_modifications {
+            None => CanisterStateChanges {
+                execution_state_changes: None,
+                system_state_modifications,
+            },
+            Some(execution_state_modifications) => {
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
                 let mut wasm_memory = execution_state.wasm_memory.clone();
                 wasm_memory
                     .page_map
-                    .deserialize_delta(state_modifications.wasm_memory.page_delta);
-                wasm_memory.size = state_modifications.wasm_memory.size;
+                    .deserialize_delta(execution_state_modifications.wasm_memory.page_delta);
+                wasm_memory.size = execution_state_modifications.wasm_memory.size;
                 wasm_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
                     &sandbox_process,
                     next_wasm_memory_id,
@@ -1605,8 +1623,8 @@ impl SandboxedExecutionController {
                 let mut stable_memory = execution_state.stable_memory.clone();
                 stable_memory
                     .page_map
-                    .deserialize_delta(state_modifications.stable_memory.page_delta);
-                stable_memory.size = state_modifications.stable_memory.size;
+                    .deserialize_delta(execution_state_modifications.stable_memory.page_delta);
+                stable_memory.size = execution_state_modifications.stable_memory.size;
                 stable_memory.sandbox_memory = SandboxMemory::synced(wrap_remote_memory(
                     &sandbox_process,
                     next_stable_memory_id,
@@ -1623,12 +1641,14 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-                Some(CanisterStateChanges {
-                    globals: state_modifications.globals,
-                    wasm_memory,
-                    stable_memory,
-                    system_state_changes: state_modifications.system_state_changes,
-                })
+                CanisterStateChanges {
+                    execution_state_changes: Some(ExecutionStateChanges {
+                        globals: execution_state_modifications.globals,
+                        wasm_memory,
+                        stable_memory,
+                    }),
+                    system_state_modifications,
+                }
             }
         }
     }
@@ -2084,6 +2104,7 @@ mod tests {
 
     fn sandboxed_execution_controller_dir_and_path(
         max_sandbox_count: usize,
+        spawn_monitor_thread: bool,
     ) -> (SandboxedExecutionController, TempDir, PathBuf) {
         let tempdir = tempfile::tempdir().unwrap();
         let log_path = tempdir.path().join("log");
@@ -2106,18 +2127,16 @@ mod tests {
             },
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
+            spawn_monitor_thread,
         )
         .unwrap();
-        // Stop the background monitoring thread to avoid race conditions with the tests.
-        while controller.stop_monitoring_thread.send(true).is_ok() {
-            thread::sleep(Duration::from_millis(10));
-        }
         (controller, tempdir, log_path)
     }
 
     #[test]
     fn sandbox_history_logged_on_sandbox_crash() {
-        let (controller, _dir, log_path) = sandboxed_execution_controller_dir_and_path(usize::MAX);
+        let (controller, _dir, log_path) =
+            sandboxed_execution_controller_dir_and_path(usize::MAX, false);
 
         let wat = "(module)";
         let canister_module = CanisterModule::new(wat::parse_str(wat).unwrap());
@@ -2227,7 +2246,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2269,7 +2289,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2316,7 +2337,8 @@ mod tests {
         let active = SANDBOX_PROCESSES_TO_EVICT * 2;
         let evicted = 3;
         let empty = 2;
-        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, false);
 
         add_controller_backends(&mut controller, 0, active, evicted, empty);
         let partitioned_backends = get_active_evicted_empty_backends(&controller);
@@ -2357,5 +2379,113 @@ mod tests {
             partitioned_backends.1.len()
         );
         assert_eq!(0, partitioned_backends.2.len());
+    }
+
+    #[test]
+    fn monitor_and_evict_thread_is_spawned() {
+        let active = 1;
+        let spawn_monitor_thread = true;
+        let (controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        assert!(controller.stop_monitoring_thread.send(true).is_ok());
+
+        let spawn_monitor_thread = false;
+        let (controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        assert!(controller.stop_monitoring_thread.send(true).is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn monitor_and_evict_thread_collects_rss() {
+        let active = 1;
+        let spawn_monitor_thread = false;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        add_controller_backends(&mut controller, 0, active, 0, 0);
+        let stats = get_sandbox_process_stats(&controller.backends);
+        assert_eq!(stats.len(), active);
+        assert_ne!(stats[0].1.pid, 0);
+        assert!(stats[0].2.last_used <= Instant::now());
+        assert!(stats[0].2.last_used >= Instant::now() - Duration::from_secs(1_000));
+        assert_eq!(stats[0].2.rss, DEFAULT_SANDBOX_PROCESS_RSS);
+
+        let spawn_monitor_thread = true;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
+        add_controller_backends(&mut controller, 0, active, 0, 0);
+
+        // Trigger the monitoring and wait for the monitoring results.
+        let _ = controller.stop_monitoring_thread.send(false);
+        for _ in 0..10_000 {
+            let stats = get_sandbox_process_stats(&controller.backends);
+            if stats[0].2.rss != DEFAULT_SANDBOX_PROCESS_RSS {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let stats = get_sandbox_process_stats(&controller.backends);
+        assert!(stats[0].2.rss < DEFAULT_SANDBOX_PROCESS_RSS);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn monitor_and_evict_thread_collects_metrics() {
+        let active = 1;
+        let evicted = 1;
+        let spawn_monitor_thread = true;
+        let (mut controller, _dir, _path) =
+            sandboxed_execution_controller_dir_and_path(active + evicted, spawn_monitor_thread);
+        let m = &controller.metrics;
+        let metric = &m.sandboxed_execution_subprocess_anon_rss;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        assert_eq!(m.sandboxed_execution_subprocess_rss.get_sample_count(), 0);
+        assert_eq!(m.sandboxed_execution_subprocess_rss.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_active_last_used;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_evicted_last_used;
+        assert_eq!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_anon_rss_total;
+        assert_eq!(metric.get(), 0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss_total;
+        assert_eq!(metric.get(), 0);
+
+        add_controller_backends(&mut controller, 0, active, evicted, 0);
+
+        // Trigger the monitoring twice and wait for the monitoring results.
+        let _ = controller.stop_monitoring_thread.send(false);
+        let _ = controller.stop_monitoring_thread.send(false);
+        for _ in 0..10_000 {
+            let m = &controller.metrics;
+            if m.sandboxed_execution_subprocess_anon_rss.get_sample_count() > 1 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let m = &controller.metrics;
+        let metric = &m.sandboxed_execution_subprocess_anon_rss;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_ne!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_eq!(metric.get_sample_sum(), 0.0); // no memfd.
+        assert_ne!(m.sandboxed_execution_subprocess_rss.get_sample_count(), 0);
+        assert_ne!(m.sandboxed_execution_subprocess_rss.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_active_last_used;
+        assert_ne!(metric.get_sample_count(), 0);
+        assert_ne!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_evicted_last_used;
+        assert_eq!(metric.get_sample_count(), 0); // no eviction.
+        assert_eq!(metric.get_sample_sum(), 0.0);
+        let metric = &m.sandboxed_execution_subprocess_anon_rss_total;
+        assert_ne!(metric.get(), 0);
+        let metric = &m.sandboxed_execution_subprocess_memfd_rss_total;
+        assert_eq!(metric.get(), 0); // no memfd.
     }
 }

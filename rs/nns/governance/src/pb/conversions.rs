@@ -1,4 +1,5 @@
 use crate::pb::v1 as pb;
+use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
@@ -1316,361 +1317,6 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
     }
 }
 
-impl From<pb::ManageNeuronResponse> for pb_api::ManageNeuronResponse {
-    fn from(item: pb::ManageNeuronResponse) -> Self {
-        Self {
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::ManageNeuronResponse> for pb::ManageNeuronResponse {
-    fn from(item: pb_api::ManageNeuronResponse) -> Self {
-        Self {
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::ConfigureResponse>
-    for pb_api::manage_neuron_response::ConfigureResponse
-{
-    fn from(_: pb::manage_neuron_response::ConfigureResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::ConfigureResponse>
-    for pb::manage_neuron_response::ConfigureResponse
-{
-    fn from(_: pb_api::manage_neuron_response::ConfigureResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::DisburseResponse>
-    for pb_api::manage_neuron_response::DisburseResponse
-{
-    fn from(item: pb::manage_neuron_response::DisburseResponse) -> Self {
-        Self {
-            transfer_block_height: item.transfer_block_height,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::DisburseResponse>
-    for pb::manage_neuron_response::DisburseResponse
-{
-    fn from(item: pb_api::manage_neuron_response::DisburseResponse) -> Self {
-        Self {
-            transfer_block_height: item.transfer_block_height,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::SpawnResponse>
-    for pb_api::manage_neuron_response::SpawnResponse
-{
-    fn from(item: pb::manage_neuron_response::SpawnResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::SpawnResponse>
-    for pb::manage_neuron_response::SpawnResponse
-{
-    fn from(item: pb_api::manage_neuron_response::SpawnResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::MergeMaturityResponse>
-    for pb_api::manage_neuron_response::MergeMaturityResponse
-{
-    fn from(item: pb::manage_neuron_response::MergeMaturityResponse) -> Self {
-        Self {
-            merged_maturity_e8s: item.merged_maturity_e8s,
-            new_stake_e8s: item.new_stake_e8s,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MergeMaturityResponse>
-    for pb::manage_neuron_response::MergeMaturityResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MergeMaturityResponse) -> Self {
-        Self {
-            merged_maturity_e8s: item.merged_maturity_e8s,
-            new_stake_e8s: item.new_stake_e8s,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::StakeMaturityResponse>
-    for pb_api::manage_neuron_response::StakeMaturityResponse
-{
-    fn from(item: pb::manage_neuron_response::StakeMaturityResponse) -> Self {
-        Self {
-            maturity_e8s: item.maturity_e8s,
-            staked_maturity_e8s: item.staked_maturity_e8s,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::StakeMaturityResponse>
-    for pb::manage_neuron_response::StakeMaturityResponse
-{
-    fn from(item: pb_api::manage_neuron_response::StakeMaturityResponse) -> Self {
-        Self {
-            maturity_e8s: item.maturity_e8s,
-            staked_maturity_e8s: item.staked_maturity_e8s,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::RefreshVotingPowerResponse>
-    for pb_api::manage_neuron_response::RefreshVotingPowerResponse
-{
-    fn from(_item: pb::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::RefreshVotingPowerResponse>
-    for pb::manage_neuron_response::RefreshVotingPowerResponse
-{
-    fn from(_item: pb_api::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::FollowResponse>
-    for pb_api::manage_neuron_response::FollowResponse
-{
-    fn from(_: pb::manage_neuron_response::FollowResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::FollowResponse>
-    for pb::manage_neuron_response::FollowResponse
-{
-    fn from(_: pb_api::manage_neuron_response::FollowResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::MakeProposalResponse>
-    for pb_api::manage_neuron_response::MakeProposalResponse
-{
-    fn from(item: pb::manage_neuron_response::MakeProposalResponse) -> Self {
-        Self {
-            proposal_id: item.proposal_id,
-            message: item.message,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MakeProposalResponse>
-    for pb::manage_neuron_response::MakeProposalResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MakeProposalResponse) -> Self {
-        Self {
-            proposal_id: item.proposal_id,
-            message: item.message,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::RegisterVoteResponse>
-    for pb_api::manage_neuron_response::RegisterVoteResponse
-{
-    fn from(_: pb::manage_neuron_response::RegisterVoteResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::RegisterVoteResponse>
-    for pb::manage_neuron_response::RegisterVoteResponse
-{
-    fn from(_: pb_api::manage_neuron_response::RegisterVoteResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::SplitResponse>
-    for pb_api::manage_neuron_response::SplitResponse
-{
-    fn from(item: pb::manage_neuron_response::SplitResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::SplitResponse>
-    for pb::manage_neuron_response::SplitResponse
-{
-    fn from(item: pb_api::manage_neuron_response::SplitResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::MergeResponse>
-    for pb_api::manage_neuron_response::MergeResponse
-{
-    fn from(item: pb::manage_neuron_response::MergeResponse) -> Self {
-        Self {
-            source_neuron: item.source_neuron.map(|x| x.into()),
-            target_neuron: item.target_neuron.map(|x| x.into()),
-            source_neuron_info: item.source_neuron_info.map(|x| x.into()),
-            target_neuron_info: item.target_neuron_info.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MergeResponse>
-    for pb::manage_neuron_response::MergeResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MergeResponse) -> Self {
-        Self {
-            source_neuron: item.source_neuron.map(|x| x.into()),
-            target_neuron: item.target_neuron.map(|x| x.into()),
-            source_neuron_info: item.source_neuron_info.map(|x| x.into()),
-            target_neuron_info: item.target_neuron_info.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::DisburseToNeuronResponse>
-    for pb_api::manage_neuron_response::DisburseToNeuronResponse
-{
-    fn from(item: pb::manage_neuron_response::DisburseToNeuronResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::DisburseToNeuronResponse>
-    for pb::manage_neuron_response::DisburseToNeuronResponse
-{
-    fn from(item: pb_api::manage_neuron_response::DisburseToNeuronResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::ClaimOrRefreshResponse>
-    for pb_api::manage_neuron_response::ClaimOrRefreshResponse
-{
-    fn from(item: pb::manage_neuron_response::ClaimOrRefreshResponse) -> Self {
-        Self {
-            refreshed_neuron_id: item.refreshed_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::ClaimOrRefreshResponse>
-    for pb::manage_neuron_response::ClaimOrRefreshResponse
-{
-    fn from(item: pb_api::manage_neuron_response::ClaimOrRefreshResponse) -> Self {
-        Self {
-            refreshed_neuron_id: item.refreshed_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_response::Command {
-    fn from(item: pb::manage_neuron_response::Command) -> Self {
-        match item {
-            pb::manage_neuron_response::Command::Error(v) => {
-                pb_api::manage_neuron_response::Command::Error(v.into())
-            }
-            pb::manage_neuron_response::Command::Configure(v) => {
-                pb_api::manage_neuron_response::Command::Configure(v.into())
-            }
-            pb::manage_neuron_response::Command::Disburse(v) => {
-                pb_api::manage_neuron_response::Command::Disburse(v.into())
-            }
-            pb::manage_neuron_response::Command::Spawn(v) => {
-                pb_api::manage_neuron_response::Command::Spawn(v.into())
-            }
-            pb::manage_neuron_response::Command::Follow(v) => {
-                pb_api::manage_neuron_response::Command::Follow(v.into())
-            }
-            pb::manage_neuron_response::Command::MakeProposal(v) => {
-                pb_api::manage_neuron_response::Command::MakeProposal(v.into())
-            }
-            pb::manage_neuron_response::Command::RegisterVote(v) => {
-                pb_api::manage_neuron_response::Command::RegisterVote(v.into())
-            }
-            pb::manage_neuron_response::Command::Split(v) => {
-                pb_api::manage_neuron_response::Command::Split(v.into())
-            }
-            pb::manage_neuron_response::Command::DisburseToNeuron(v) => {
-                pb_api::manage_neuron_response::Command::DisburseToNeuron(v.into())
-            }
-            pb::manage_neuron_response::Command::ClaimOrRefresh(v) => {
-                pb_api::manage_neuron_response::Command::ClaimOrRefresh(v.into())
-            }
-            pb::manage_neuron_response::Command::MergeMaturity(v) => {
-                pb_api::manage_neuron_response::Command::MergeMaturity(v.into())
-            }
-            pb::manage_neuron_response::Command::Merge(v) => {
-                pb_api::manage_neuron_response::Command::Merge(v.into())
-            }
-            pb::manage_neuron_response::Command::StakeMaturity(v) => {
-                pb_api::manage_neuron_response::Command::StakeMaturity(v.into())
-            }
-            pb::manage_neuron_response::Command::RefreshVotingPower(v) => {
-                pb_api::manage_neuron_response::Command::RefreshVotingPower(v.into())
-            }
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_response::Command {
-    fn from(item: pb_api::manage_neuron_response::Command) -> Self {
-        match item {
-            pb_api::manage_neuron_response::Command::Error(v) => {
-                pb::manage_neuron_response::Command::Error(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Configure(v) => {
-                pb::manage_neuron_response::Command::Configure(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Disburse(v) => {
-                pb::manage_neuron_response::Command::Disburse(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Spawn(v) => {
-                pb::manage_neuron_response::Command::Spawn(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Follow(v) => {
-                pb::manage_neuron_response::Command::Follow(v.into())
-            }
-            pb_api::manage_neuron_response::Command::MakeProposal(v) => {
-                pb::manage_neuron_response::Command::MakeProposal(v.into())
-            }
-            pb_api::manage_neuron_response::Command::RegisterVote(v) => {
-                pb::manage_neuron_response::Command::RegisterVote(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Split(v) => {
-                pb::manage_neuron_response::Command::Split(v.into())
-            }
-            pb_api::manage_neuron_response::Command::DisburseToNeuron(v) => {
-                pb::manage_neuron_response::Command::DisburseToNeuron(v.into())
-            }
-            pb_api::manage_neuron_response::Command::ClaimOrRefresh(v) => {
-                pb::manage_neuron_response::Command::ClaimOrRefresh(v.into())
-            }
-            pb_api::manage_neuron_response::Command::MergeMaturity(v) => {
-                pb::manage_neuron_response::Command::MergeMaturity(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Merge(v) => {
-                pb::manage_neuron_response::Command::Merge(v.into())
-            }
-            pb_api::manage_neuron_response::Command::StakeMaturity(v) => {
-                pb::manage_neuron_response::Command::StakeMaturity(v.into())
-            }
-            pb_api::manage_neuron_response::Command::RefreshVotingPower(v) => {
-                pb::manage_neuron_response::Command::RefreshVotingPower(v.into())
-            }
-        }
-    }
-}
-
 impl From<pb::GovernanceError> for pb_api::GovernanceError {
     fn from(item: pb::GovernanceError) -> Self {
         Self {
@@ -2896,22 +2542,12 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
 
 impl From<pb::InstallCode> for pb_api::InstallCode {
     fn from(item: pb::InstallCode) -> Self {
-        let wasm_module_hash = item
-            .wasm_module
-            .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
-        let arg = item.arg.unwrap_or_default();
-        let arg_hash = if arg.is_empty() {
-            Some(vec![])
-        } else {
-            Some(super::calculate_hash(&arg).to_vec())
-        };
-
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
-            wasm_module_hash,
-            arg_hash,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
         }
     }
 }
@@ -2925,17 +2561,39 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
             // canister_init.
             wasm_module: None,
             arg: None,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
         }
     }
 }
 impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
     fn from(item: pb_api::InstallCodeRequest) -> Self {
+        let wasm_module_hash = item
+            .wasm_module
+            .as_ref()
+            .map(|wasm_module| Sha256::hash(wasm_module).to_vec());
+        let arg_hash = match item.arg.as_ref() {
+            Some(arg) => {
+                // We could calculate the hash of an empty arg, but it would be confusing for the
+                // proposal reviewers, since the arg_hash is the only thing they can see, and it would
+                // not be obvious that the arg is empty.
+                if arg.is_empty() {
+                    Some(vec![])
+                } else {
+                    Some(Sha256::hash(arg).to_vec())
+                }
+            }
+            None => Some(vec![]),
+        };
+
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
             wasm_module: item.wasm_module,
             arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            wasm_module_hash,
+            arg_hash,
         }
     }
 }
@@ -3060,6 +2718,7 @@ impl From<pb::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -3075,6 +2734,7 @@ impl From<pb_api::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -3753,52 +3413,6 @@ impl From<pb_api::ListProposalInfoResponse> for pb::ListProposalInfoResponse {
     fn from(item: pb_api::ListProposalInfoResponse) -> Self {
         Self {
             proposal_info: item.proposal_info.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-
-impl From<pb::ListNeurons> for pb_api::ListNeurons {
-    fn from(item: pb::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-impl From<pb_api::ListNeurons> for pb::ListNeurons {
-    fn from(item: pb_api::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-
-impl From<pb::ListNeuronsResponse> for pb_api::ListNeuronsResponse {
-    fn from(item: pb::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-impl From<pb_api::ListNeuronsResponse> for pb::ListNeuronsResponse {
-    fn from(item: pb_api::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
         }
     }
 }

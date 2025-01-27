@@ -141,7 +141,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(
@@ -251,6 +254,11 @@ rust_test(
         "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    tags = ["test_macos"],
+    tags = [
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )

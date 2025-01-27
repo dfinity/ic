@@ -47,6 +47,7 @@ fn initialize_execution_test(
     }
 
     let mut test = ExecutionTestBuilder::new()
+        .with_query_caching_disabled()
         .with_install_code_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
@@ -56,7 +57,7 @@ fn initialize_execution_test(
     if is_wasm64 {
         test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
-        test = test.with_max_wasm_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
+        test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
     let mut test = test.build();
 
