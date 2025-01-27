@@ -573,14 +573,13 @@ fn make_router(
         GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
 
     let base_router = Router::new()
-        // TODO this is 303 instead of 302
         .route(
             "/",
-            get(|| async { Redirect::to(DashboardService::route()) }),
+            get(|| async { Redirect::temporary(DashboardService::route()) }),
         )
         .route(
             "/_/",
-            get(|| async { Redirect::to(DashboardService::route()) }),
+            get(|| async { Redirect::temporary(DashboardService::route()) }),
         )
         .fallback(|| async {
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
