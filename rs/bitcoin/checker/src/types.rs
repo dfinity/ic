@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::Txid;
 use serde::Serialize;
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
@@ -37,8 +37,28 @@ impl TryFrom<CheckTransactionStrArgs> for Txid {
     type Error = String;
 
     fn try_from(args: CheckTransactionStrArgs) -> Result<Self, Self::Error> {
-        use std::str::FromStr;
         Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string())
+    }
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum CheckTransactionQueryArgs {
+    Blob(Vec<u8>),
+    Text(String),
+}
+
+impl TryFrom<CheckTransactionQueryArgs> for Txid {
+    type Error = String;
+
+    fn try_from(args: CheckTransactionQueryArgs) -> Result<Self, Self::Error> {
+        match args {
+            CheckTransactionQueryArgs::Blob(bytes) => {
+                Txid::try_from(bytes.as_ref()).map_err(|err| err.to_string())
+            }
+            CheckTransactionQueryArgs::Text(string) => {
+                Txid::from_str(&string).map_err(|err| err.to_string())
+            }
+        }
     }
 }
 
@@ -92,15 +112,6 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     }
 }
 
-impl From<Result<(), Vec<String>>> for CheckTransactionResponse {
-    fn from(result: Result<(), Vec<String>>) -> Self {
-        match result {
-            Ok(()) => Self::Passed,
-            Err(err) => Self::Failed(err),
-        }
-    }
-}
-
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
@@ -118,39 +129,9 @@ pub enum CheckTransactionQueryResponse {
     /// When check finishes and one or more input addresses failed.
     /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed(Vec<String>),
-    /// Unknown case where it is unable to give a final answer of Passed or Failed.
-    /// The caller should examine the status and decide how to handle it.
-    Unknown(CheckTransactionQueryStatus),
-}
-
-#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
-pub enum CheckTransactionQueryStatus {
-    /// The result is not available, but may be obtained via a call to the non-query version
+    /// The result is not available, but may be obtainable via a call to the non-query version
     /// of `check_transaction`.
-    HttpOutcallRequired,
-    /// The result is unknown due to an irrecoverable error.
-    Error(CheckTransactionIrrecoverableError),
-}
-
-impl From<CheckTransactionIrrecoverableError> for CheckTransactionQueryResponse {
-    fn from(err: CheckTransactionIrrecoverableError) -> CheckTransactionQueryResponse {
-        CheckTransactionQueryResponse::Unknown(CheckTransactionQueryStatus::Error(err))
-    }
-}
-
-impl From<CheckTransactionQueryStatus> for CheckTransactionQueryResponse {
-    fn from(status: CheckTransactionQueryStatus) -> CheckTransactionQueryResponse {
-        CheckTransactionQueryResponse::Unknown(status)
-    }
-}
-
-impl From<Result<(), Vec<String>>> for CheckTransactionQueryResponse {
-    fn from(result: Result<(), Vec<String>>) -> Self {
-        match result {
-            Ok(()) => Self::Passed,
-            Err(err) => Self::Failed(err),
-        }
-    }
+    Unknown,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]

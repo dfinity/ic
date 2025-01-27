@@ -3,7 +3,7 @@ use candid::Nat;
 use ic_btc_checker::{
     blocklist::is_blocked, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionQueryResponse, CheckTransactionQueryStatus, CheckTransactionResponse,
+    CheckTransactionQueryArgs, CheckTransactionQueryResponse, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     RETRY_MAX_RESPONSE_BYTES,
@@ -118,10 +118,10 @@ async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactio
 /// TXID and all of its inputs are available in the heap memory cache, meaning no HTTP outcalls are
 /// performed. Returns `Unknown` if the transaction cannot be checked with only cached information.
 #[ic_cdk::query]
-async fn check_transaction_query(args: CheckTransactionArgs) -> CheckTransactionQueryResponse {
+async fn check_transaction_query(args: CheckTransactionQueryArgs) -> CheckTransactionQueryResponse {
     match Txid::try_from(args) {
         Ok(txid) => check_fetched_transaction_inputs(txid).await,
-        Err(err) => CheckTransactionIrrecoverableError::InvalidTransactionId(err).into(),
+        Err(err) => panic!("Invalid transaction ID: {}", err),
     }
 }
 
@@ -526,18 +526,27 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
 
 /// Check the input addresses of a transaction given its txid without performing any HTTP outcalls.
 /// A `Pass` or `Fail` status will only be returned if the txid and all of its inputs were already
-/// fetched and available in heap memory. Otherwise, `HttpOutcallRequired` is returned.
+/// fetched and available in heap memory. Otherwise, `Unknown` is returned.
 pub async fn check_fetched_transaction_inputs(txid: Txid) -> CheckTransactionQueryResponse {
     match BtcCheckerCanisterEnv.config().check_mode {
         CheckMode::AcceptAll => CheckTransactionQueryResponse::Passed,
         CheckMode::RejectAll => CheckTransactionQueryResponse::Failed(Vec::new()),
         CheckMode::Normal => {
-            if let Some(FetchTxStatus::Fetched(fetched)) = state::get_fetch_status(txid) {
-                if let Some(response) = check_no_input_address_is_blocked(&fetched) {
-                    return response.into();
+            if let Some(fetch_tx_status) = state::get_fetch_status(txid) {
+                match fetch_tx_status {
+                    FetchTxStatus::Fetched(fetched) => {
+                        match check_no_input_address_is_blocked(&fetched) {
+                            Ok(()) => CheckTransactionQueryResponse::Passed,
+                            Err(err) => err.into(),
+                        }
+                    }
+                    FetchTxStatus::PendingOutcall
+                    | FetchTxStatus::PendingRetry { .. }
+                    | FetchTxStatus::Error(_) => CheckTransactionQueryResponse::Unknown,
                 }
+            } else {
+                CheckTransactionQueryResponse::Unknown
             }
-            CheckTransactionQueryStatus::HttpOutcallRequired.into()
         }
     }
 }

@@ -8,8 +8,8 @@ use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_checker::{
     blocklist::is_blocked, get_tx_cycle_cost, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
+    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::log;
@@ -183,8 +183,8 @@ pub trait FetchEnv {
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
     async fn check_fetched(&self, txid: Txid, fetched: &FetchedTx) -> CheckTransactionResponse {
-        if let Some(result) = check_no_input_address_is_blocked(fetched) {
-            return result.into();
+        if let Ok(()) = check_no_input_address_is_blocked(fetched) {
+            return CheckTransactionResponse::Passed;
         }
 
         let mut futures = vec![];
@@ -264,29 +264,60 @@ pub trait FetchEnv {
             return err;
         }
         // Check again to see if we have completed
-        match state::get_fetch_status(txid).and_then(|result| match result {
-            FetchTxStatus::Fetched(fetched) => {
-                check_no_input_address_is_blocked(&fetched).map(|result| result.into())
+        if let Some(FetchTxStatus::Fetched(fetched)) = state::get_fetch_status(txid) {
+            match check_no_input_address_is_blocked(&fetched) {
+                Ok(()) => CheckTransactionResponse::Passed,
+                Err(err) => err.into(),
             }
-            _ => None,
-        }) {
-            Some(result) => result,
-            None => CheckTransactionRetriable::Pending.into(),
+        } else {
+            CheckTransactionRetriable::Pending.into()
         }
     }
 }
 
-/// Return `Ok` if no input address is blocked, and an `Err` containing the first blocked address
-/// otherwise. If any of the input transactions is `None`, returns `None`.
-pub fn check_no_input_address_is_blocked(fetched: &FetchedTx) -> Option<Result<(), Vec<String>>> {
-    if fetched.input_addresses.iter().any(|x| x.is_none()) {
-        return None;
+#[derive(Debug, Clone)]
+pub enum CheckTxInputsError {
+    MissingInputAddresses,
+    BlockedInputAddresses(Vec<String>),
+}
+
+impl From<CheckTxInputsError> for CheckTransactionResponse {
+    fn from(error: CheckTxInputsError) -> Self {
+        match error {
+            CheckTxInputsError::MissingInputAddresses => CheckTransactionRetriable::Pending.into(),
+            CheckTxInputsError::BlockedInputAddresses(blocked) => {
+                CheckTransactionResponse::Failed(blocked)
+            }
+        }
     }
-    fetched
+}
+
+impl From<CheckTxInputsError> for CheckTransactionQueryResponse {
+    fn from(error: CheckTxInputsError) -> Self {
+        match error {
+            CheckTxInputsError::MissingInputAddresses => CheckTransactionQueryResponse::Unknown,
+            CheckTxInputsError::BlockedInputAddresses(blocked) => {
+                CheckTransactionQueryResponse::Failed(blocked)
+            }
+        }
+    }
+}
+
+/// Return `Ok` if no input address is blocked, and an `Err` if either one of the input
+/// addresses is blocked, or one of the input addresses is not available.
+pub fn check_no_input_address_is_blocked(fetched: &FetchedTx) -> Result<(), CheckTxInputsError> {
+    if fetched.input_addresses.iter().any(|x| x.is_none()) {
+        return Err(CheckTxInputsError::MissingInputAddresses);
+    }
+    match fetched
         .input_addresses
         .iter()
         .flatten()
         .find(|address| is_blocked(address))
-        .map(|blocked| Err(vec![blocked.to_string()]))
-        .or(Some(Ok(())))
+    {
+        None => Ok(()),
+        Some(blocked) => Err(CheckTxInputsError::BlockedInputAddresses(vec![
+            blocked.to_string()
+        ])),
+    }
 }
