@@ -1423,10 +1423,24 @@ fn cmc_notify_mint_cycles() {
     else {
         panic!("notify rejected")
     };
-    assert_matches!(
-        Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap(),
-        Err(NotifyError::InvalidTransaction(_))
-    );
+    let result = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
+    if cycles_minting_canister::IS_AUTOMATIC_REFUND_ENABLED {
+        let reason = match &result {
+            Err(NotifyError::Refunded { reason, block_index: _ }) => reason,
+            _ => panic!("{:?}", result),
+        };
+
+        let reason = reason.to_lowercase();
+        for key_word in ["memo", "transfer", "correspond", "offer"] {
+            assert!(reason.contains(key_word), "{} not in reason of {:?}", key_word, result);
+        }
+    } else {
+        // Legacy behavior.
+        match result {
+            Err(NotifyError::InvalidTransaction(_)) => (), // ok
+            _ => panic!("{:?}", result),
+        }
+    }
 
     // double notify
     let transfer_args = TransferArgs {
