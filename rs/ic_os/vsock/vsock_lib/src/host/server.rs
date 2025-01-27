@@ -35,7 +35,6 @@ fn process_connection(stream: &mut VsockStream) -> Result<()> {
             return Err(err);
         }
     };
-    // TODO: demote it to INFO
     println!("Received vsock request: {}", request);
 
     if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
