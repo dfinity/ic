@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use candid::{CandidType, Encode, Nat, Principal};
 use candid_utils::{
     printing,
-    validation::{encode_upgrade_args_unsafe, validate_upgrade_args},
+    validation::{encode_upgrade_args, encode_upgrade_args_without_service},
 };
 use clap::Parser;
 use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
@@ -174,7 +174,7 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
 
         print!("Validating the upgrade arg against the Candid service definition ... ");
         std::io::stdout().flush().unwrap();
-        let candid_arg_bytes = validate_upgrade_args(candid_service, args).unwrap();
+        let candid_arg_bytes = encode_upgrade_args(candid_service, args).unwrap();
         println!("✔️");
 
         candid_arg_bytes
@@ -190,7 +190,7 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
         );
 
         // Proceed with whatever argument the user has specified without validation.
-        args.map(|args| encode_upgrade_args_unsafe(args).unwrap())
+        args.map(|args| encode_upgrade_args_without_service(args).unwrap())
     };
 
     std::io::stdout().flush().unwrap();
