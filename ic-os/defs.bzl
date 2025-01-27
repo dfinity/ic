@@ -159,6 +159,7 @@ def icos_build(
     ]
     ext4_image(
         name = "partition-root-unsigned.tzst",
+        testonly = malicious,
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
