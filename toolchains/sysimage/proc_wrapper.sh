@@ -10,7 +10,6 @@ tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
 ICOS_TMPDIR="$tmpdir" "$@"
 
-start_time=$(date +%s.%N)
 # Calculate the checksum for every output created by Bazel. For the calculation, we use icsum which is much
 # faster than Bazel's built-in checksum for sparse files (e.g. disk images).
 for arg in $@; do
