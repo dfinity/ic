@@ -412,5 +412,6 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
+          export CARGO_TERM_COLOR=always # ensure output has colors
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
