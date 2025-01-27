@@ -75,18 +75,18 @@ async fn fetch_metrics(
                 (contract,),
                 0_u128,
             )
-                .map(move |result| {
-                    result
-                        .map_err(|(code, msg)| {
-                            anyhow::anyhow!(
+            .map(move |result| {
+                result
+                    .map_err(|(code, msg)| {
+                        anyhow::anyhow!(
                         "Error when calling management canister for subnet {}:\n Code:{:?}\nMsg:{}",
                         subnet_id,
                         code,
                         msg
                     )
-                        })
-                        .map(|(node_metrics,)| (subnet_id, node_metrics))
-                });
+                    })
+                    .map(|(node_metrics,)| (subnet_id, node_metrics))
+            });
 
         subnets_node_metrics.push(node_metrics);
     }
@@ -172,23 +172,19 @@ fn setup_update_timers() {
         ),
         || {
             ic_cdk::spawn(sync_node_metrics());
-            ic_cdk_timers::set_timer_interval(
-                std::time::Duration::from_secs(DAY_SECONDS),
-                || ic_cdk::spawn(sync_node_metrics()),
-            );
+            ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(DAY_SECONDS), || {
+                ic_cdk::spawn(sync_node_metrics())
+            });
         },
     );
 }
 
 #[init]
 fn init() {
-    ic_cdk_timers::set_timer(
-        std::time::Duration::from_secs(0),
-        || {
-            ic_cdk::spawn(sync_node_metrics());
-            setup_update_timers();
-        },
-    );
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(0), || {
+        ic_cdk::spawn(sync_node_metrics());
+        setup_update_timers();
+    });
 }
 
 #[post_upgrade]

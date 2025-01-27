@@ -3,6 +3,7 @@ use canister_test::Wasm;
 use futures::stream;
 use futures::StreamExt;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError};
 use ic_nervous_system_agent::sns::Sns;
@@ -36,6 +37,8 @@ use ic_nns_test_utils::{
         build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_sns_governance::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
@@ -70,11 +73,8 @@ use pocket_ic::{
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::ops::Range;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
 use std::path::Path;
-use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_transport::pb::v1::registry_mutation::Type;
+use std::{collections::BTreeMap, fmt::Write, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
