@@ -871,9 +871,6 @@ impl CanisterManager {
                 instructions_used,
                 result,
             } => {
-                // This is required to mimic behaviour of execute_install_code
-                // because execute_install_code is updating hook status in
-                // process_install_code result.
                 canister.update_on_low_wasm_memory_hook_condition();
                 (result, instructions_used, Some(canister))
             }
