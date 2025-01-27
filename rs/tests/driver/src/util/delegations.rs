@@ -124,7 +124,7 @@ pub struct AgentWithDelegation<'a> {
     pub polling_timeout: Duration,
 }
 
-impl<'a> AgentWithDelegation<'a> {
+impl AgentWithDelegation<'_> {
     async fn send_http_request(
         &self,
         method: &str,

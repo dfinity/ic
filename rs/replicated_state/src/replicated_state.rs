@@ -1,16 +1,15 @@
 use super::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        IngressHistoryState, Stream, StreamMap, SystemMetadata,
+    },
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
-    },
-    metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
-        StreamMap,
     },
     CanisterQueues,
 };
@@ -438,18 +437,44 @@ impl ReplicatedState {
         epoch_query_stats: RawQueryStats,
         canister_snapshots: CanisterSnapshots,
     ) -> Self {
-        let mut res = Self {
+        Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
-        };
-        res.update_stream_guaranteed_responses_size_bytes();
-        res
+        }
     }
 
+    /// References into _all_ fields.
+    pub fn component_refs(
+        &self,
+    ) -> (
+        &BTreeMap<CanisterId, CanisterState>,
+        &SystemMetadata,
+        &CanisterQueues,
+        &Vec<ConsensusResponse>,
+        &RawQueryStats,
+        &CanisterSnapshots,
+    ) {
+        let ReplicatedState {
+            ref canister_states,
+            ref metadata,
+            ref subnet_queues,
+            ref consensus_queue,
+            ref epoch_query_stats,
+            ref canister_snapshots,
+        } = self;
+        (
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
+        )
+    }
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
         self.canister_states.get(canister_id)
     }
@@ -910,16 +935,6 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of guaranteed responses in streams for each canister.
-    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
-        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
-            if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
-            }
-        }
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
-    }
-
     /// Returns the number of canisters in this `ReplicatedState`.
     pub fn num_canisters(&self) -> usize {
         self.canister_states.len()
@@ -1252,8 +1267,6 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
-
-        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1282,33 +1295,31 @@ pub trait ReplicatedStateMessageRouting {
     fn streams(&self) -> &StreamMap;
 
     /// Removes the streams from this `ReplicatedState`.
-    fn take_streams(&mut self) -> Streams;
+    fn take_streams(&mut self) -> StreamMap;
 
     /// Atomically replaces the streams.
-    fn put_streams(&mut self, streams: Streams);
+    fn put_streams(&mut self, streams: StreamMap);
 }
 
 impl ReplicatedStateMessageRouting for ReplicatedState {
     fn streams(&self) -> &StreamMap {
-        self.metadata.streams.streams()
+        &self.metadata.streams
     }
 
-    fn take_streams(&mut self) -> Streams {
+    fn take_streams(&mut self) -> StreamMap {
         std::mem::take(Arc::make_mut(&mut self.metadata.streams))
     }
 
-    fn put_streams(&mut self, streams: Streams) {
-        // Should never replace a non-empty Streams via `put_streams()`.
-        assert!(self.metadata.streams.streams().is_empty());
+    fn put_streams(&mut self, streams: StreamMap) {
+        // Should never replace a non-empty StreamMap via `put_streams()`.
+        assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
 pub mod testing {
     use super::*;
-    use crate::metadata_state::testing::StreamsTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1353,7 +1364,7 @@ pub mod testing {
 
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             let mut streams = self.take_streams();
-            streams.modify_streams(f);
+            f(&mut streams);
             self.put_streams(streams);
         }
 

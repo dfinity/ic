@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -628,12 +628,7 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
     let res = pic
         .query_call(canister_id, Principal::anonymous(), "read", vec![])
         .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            assert_eq!(u32::from_le_bytes(data.try_into().unwrap()), expected_ctr);
-        }
-        _ => panic!("Unexpected update call response"),
-    };
+    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
 }
 
 /// Tests that the PocketIC topology and canister states

@@ -3032,7 +3032,7 @@ fn large_wasm64_stable_read_write_test() {
     config.feature_flags.wasm64 = FlagStatus::Enabled;
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
-    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+    config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -3118,14 +3118,14 @@ fn wasm64_saturate_fun_index() {
         .build();
     let _res = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
 
-    let system_state_changes = instance
+    let system_state_modifications = instance
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .take_system_state_changes();
+        .take_system_state_modifications();
 
     // call_perform should trigger one callback update
-    let callback_update = system_state_changes
+    let callback_update = system_state_modifications
         .callback_updates
         .first()
         .unwrap()

@@ -60,6 +60,7 @@ mkdir -p "$(dirname "${AWS_CREDS}")"
 # add aws credentials file if it's set
 if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
     echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+    unset AWS_SHARED_CREDENTIALS_CONTENT
 fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then

@@ -1,7 +1,7 @@
 //! A parser for the command line flags and configuration file.
-use crate::config::{address_limits, Config};
 use clap::Parser;
 use http::Uri;
+use ic_btc_adapter::{address_limits, Config};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -54,7 +54,7 @@ impl Cli {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::config::IncomingSource;
+    use crate::IncomingSource;
     use bitcoin::Network;
     use std::io::Write;
     use std::path::PathBuf;
