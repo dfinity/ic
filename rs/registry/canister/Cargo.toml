@@ -47,6 +47,7 @@ idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
 ipnet = "2.5.0"
+maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
@@ -73,7 +74,6 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = { workspace = true }
-maplit = "1.0"
 rand = { workspace = true }
 rand_distr = "0.4.0"
 serde_json = { workspace = true }
