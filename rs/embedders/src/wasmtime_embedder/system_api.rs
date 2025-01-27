@@ -1037,6 +1037,38 @@ pub fn syscalls<
         })
         .unwrap();
 
+    linker
+        .func_wrap("ic0", "subnet_self_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_self_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::SUBNET_SELF_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_subnet_self_copy(dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, size)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
     match main_memory_type {
         WasmMemoryType::Wasm32 => {
             linker
