@@ -122,20 +122,18 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     else:
         commands += f"""chown root:root "{fs_basedir}";\n"""
 
-    subprocess.run(
-        ["fakeroot",
-         "-s",
-         fakeroot_statefile,
-         "bash"],
-        input=commands.encode(), check=True)
+    subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
 
 
 def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
-    parser.add_argument("--extra-files", help="Extra files to inject into the image. "
-                                              "Format: source_path:target_path_in_image:target_permissions", nargs='*')
+    parser.add_argument(
+        "--extra-files",
+        help="Extra files to inject into the image. Format: source_path:target_path_in_image:target_permissions",
+        nargs="*",
+    )
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
