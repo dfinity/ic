@@ -174,7 +174,7 @@ async fn test_get_upgrade_journal() {
     }
 
     // State 3: Advance the target version via proposal.
-    sns::governance::propose_to_advance_sns_target_version(&pocket_ic, sns.governance)
+    sns::governance::propose_to_advance_sns_target_version(&pocket_ic, sns.governance.canister_id)
         .await
         .unwrap();
 
