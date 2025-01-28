@@ -43,8 +43,8 @@ impl TryFrom<CheckTransactionStrArgs> for Txid {
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckTransactionQueryArgs {
-    Blob(Vec<u8>),
-    Text(String),
+    TxIdBin(Vec<u8>),
+    TxIdStr(String),
 }
 
 impl TryFrom<CheckTransactionQueryArgs> for Txid {
@@ -52,10 +52,10 @@ impl TryFrom<CheckTransactionQueryArgs> for Txid {
 
     fn try_from(args: CheckTransactionQueryArgs) -> Result<Self, Self::Error> {
         match args {
-            CheckTransactionQueryArgs::Blob(bytes) => {
+            CheckTransactionQueryArgs::TxIdBin(bytes) => {
                 Txid::try_from(bytes.as_ref()).map_err(|err| err.to_string())
             }
-            CheckTransactionQueryArgs::Text(string) => {
+            CheckTransactionQueryArgs::TxIdStr(string) => {
                 Txid::from_str(&string).map_err(|err| err.to_string())
             }
         }

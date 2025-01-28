@@ -12,8 +12,8 @@ type CheckTransactionArgs = record { txid : blob };
 type CheckTransactionStrArgs = record { txid : text };
 
 type CheckTransactionQueryArgs = variant { 
-    Text : text;
-    Blob : blob; 
+    TxIdStr : text;
+    TxIdBin : blob; 
 };
 
 // The result of a check_transaction call.
