@@ -12,6 +12,9 @@ use std::sync::{Arc, RwLock};
 use crate::ledger::{LedgerAccess, LedgerData};
 use ic_ledger_core::block::EncodedBlock;
 
+/// 10 trillion cycles.
+pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
+
 fn default_cycles_for_archive_creation() -> u64 {
     0
 }
@@ -169,7 +172,9 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
             num_archived_blocks: 0,
             trigger_threshold: options.trigger_threshold,
             num_blocks_to_archive: options.num_blocks_to_archive,
-            cycles_for_archive_creation: options.cycles_for_archive_creation.unwrap_or(0),
+            cycles_for_archive_creation: options
+                .cycles_for_archive_creation
+                .unwrap_or(DEFAULT_CYCLES_FOR_ARCHIVE_CREATION),
             max_transactions_per_response: options.max_transactions_per_response,
             archiving_in_progress: false,
             _marker: PhantomData,
