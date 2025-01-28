@@ -12608,11 +12608,17 @@ dependencies = [
  "candid",
  "canister-test",
  "clap 4.5.27",
+ "ic-base-types",
+ "ic-cdk 0.16.0",
+ "ic-nervous-system-agent",
  "ic-nervous-system-integration-tests",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
+ "ic-sns-swap",
  "pocket-ic",
  "reqwest 0.12.12",
+ "serde",
  "tokio",
 ]
 

@@ -1,13 +1,23 @@
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    add_wasms_to_sns_wasm, install_canister_with_controllers, NnsInstaller,
+use ic_base_types::CanisterId;
+use ic_nervous_system_agent::sns::Sns;
+use ic_nervous_system_integration_tests::{
+    create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::{
+        add_wasms_to_sns_wasm, install_canister_on_subnet, install_canister_with_controllers,
+        nns::governance::propose_to_deploy_sns_and_wait,
+        sns::swap::{await_swap_lifecycle, smoke_test_participate_and_finalize},
+        NnsInstaller,
+    },
 };
+use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
+use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::nonblocking::PocketIc;
 
 pub async fn bootstrap_nns(pocket_ic: &PocketIc) {
@@ -128,4 +138,56 @@ async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
         vec![ROOT_CANISTER_ID.get()],
     )
     .await;
+}
+
+// TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
+// We should extract it into a separate crate and reuse in both canister and this crates.
+#[derive(CandidType)]
+pub struct TestCanisterInitArgs {
+    pub greeting: Option<String>,
+}
+
+pub async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs) -> CanisterId {
+    let topology = pocket_ic.topology().await;
+    let application_subnet_ids = topology.get_app_subnets();
+    let application_subnet_id = application_subnet_ids
+        .first()
+        .expect("No Application subnet found");
+    let features = &[];
+    let test_canister_wasm =
+        Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
+    install_canister_on_subnet(
+        pocket_ic,
+        *application_subnet_id,
+        Encode!(&args).unwrap(),
+        Some(test_canister_wasm),
+        vec![ROOT_CANISTER_ID.get()],
+    )
+    .await
+}
+
+pub async fn create_sns(
+    pocket_ic: &PocketIc,
+    dapp_canister_ids: Vec<CanisterId>,
+) -> (Sns, ProposalId) {
+    let sns_proposal_id = "1";
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
+        .neurons_fund_participation(true)
+        .with_dapp_canisters(dapp_canister_ids)
+        .build();
+    let swap_parameters = create_service_nervous_system
+        .swap_parameters
+        .clone()
+        .unwrap();
+    let (sns, proposal_id) =
+        propose_to_deploy_sns_and_wait(pocket_ic, create_service_nervous_system, sns_proposal_id)
+            .await;
+    await_swap_lifecycle(pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .expect("Expecting the swap to be open after creation");
+    smoke_test_participate_and_finalize(pocket_ic, sns.swap.canister_id, swap_parameters).await;
+    await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Committed)
+        .await
+        .expect("Expecting the swap to be commited after creation and swap completion");
+    (sns, proposal_id)
 }
