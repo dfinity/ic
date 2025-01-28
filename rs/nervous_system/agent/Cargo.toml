@@ -18,7 +18,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 registry-canister = { path = "../../registry/canister" }
 ic-sns-root = { path = "../../sns/root" }

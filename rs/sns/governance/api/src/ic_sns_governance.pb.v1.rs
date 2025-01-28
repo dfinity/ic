@@ -11,7 +11,16 @@ pub struct NeuronPermission {
 /// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
 /// (the account that holds the neuron's staked tokens).
 #[derive(
-    Default, candid::CandidType, candid::Deserialize, Debug, Eq, std::hash::Hash, Clone, PartialEq,
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
 )]
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
@@ -587,6 +596,7 @@ pub mod governance_error {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ErrorType {
@@ -2380,6 +2390,7 @@ pub struct Account {
     Hash,
     PartialOrd,
     Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum NeuronPermissionType {

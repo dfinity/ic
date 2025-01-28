@@ -38,7 +38,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
@@ -72,6 +72,9 @@ use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, ops::Range, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
+
+/// How frequently the canister should attempt to refresh the cached_upgrade_steps
+pub(crate) const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 pub fn fmt_bytes(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, x| {
@@ -564,7 +567,7 @@ pub async fn install_sns_directly_with_snsw_versions(
         index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
     };
 
-    governance.deployed_version = Some(deployed_version);
+    governance.deployed_version = Some(deployed_version.into());
 
     install_canister(
         root_canister_id,
@@ -1121,6 +1124,7 @@ pub mod nns {
         use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
         use ic_sns_wasm::pb::v1::{
             GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            SnsVersion,
         };
 
         pub async fn get_deployed_sns_by_proposal_id(
@@ -1182,10 +1186,25 @@ pub mod nns {
                 .cloned()
                 .expect("No upgrade steps found")
                 .version
-                .expect("No version found")
-                .into();
+                .expect("No version found");
 
-            latest_version
+            let SnsVersion {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            } = latest_version;
+
+            Version {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            }
         }
 
         /// Modify the WASM for a given canister type and add it to SNS-W.
@@ -1367,8 +1386,11 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
-        use ic_sns_governance::{
-            governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1::get_neuron_response,
+        use ic_sns_governance_api::pb::v1::{
+            get_neuron_response,
+            neuron::DissolveState,
+            upgrade_journal_entry::{self, Event},
+            Neuron,
         };
         use pocket_ic::ErrorCode;
         use sns_pb::UpgradeSnsControlledCanister;
@@ -1376,6 +1398,30 @@ pub mod sns {
         pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
         pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
             UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS + 10;
+
+        pub fn redact_human_readable(event: Event) -> Event {
+            match event {
+                Event::UpgradeOutcome(upgrade_outcome) => {
+                    Event::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: None,
+                        ..upgrade_outcome
+                    })
+                }
+                Event::UpgradeStepsReset(upgrade_steps_reset) => {
+                    Event::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: None,
+                        ..upgrade_steps_reset
+                    })
+                }
+                Event::TargetVersionReset(target_version_reset) => {
+                    Event::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
+                        human_readable: None,
+                        ..target_version_reset
+                    })
+                }
+                event => event,
+            }
+        }
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
         async fn manage_neuron(
@@ -1386,14 +1432,14 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             command: sns_pb::manage_neuron::Command,
         ) -> sns_pb::ManageNeuronResponse {
-            let sub_account = neuron_id.subaccount().unwrap();
+            let subaccount = neuron_id.id.to_vec();
             let result = pocket_ic
                 .update_call(
                     canister_id.into(),
                     sender.into(),
                     "manage_neuron",
                     Encode!(&sns_pb::ManageNeuron {
-                        subaccount: sub_account.to_vec(),
+                        subaccount,
                         command: Some(command),
                     })
                     .unwrap(),
@@ -1529,6 +1575,16 @@ pub mod sns {
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
+        pub fn dissolve_delay_seconds(neuron: &Neuron, now_seconds: u64) -> u64 {
+            match neuron.dissolve_state {
+                Some(DissolveState::DissolveDelaySeconds(d)) => d,
+                Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
+                    ts.saturating_sub(now_seconds)
+                }
+                None => 0,
+            }
+        }
+
         /// Searches for the ID and controller principal of an SNS neuron that can submit proposals,
         /// i.e., a neuron whose `dissolve_delay_seconds` is greater that or equal 6 months.
         pub async fn find_neuron_with_majority_voting_power(
@@ -1539,7 +1595,7 @@ pub mod sns {
             sns_neurons
                 .iter()
                 .find(|neuron| {
-                    neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                    dissolve_delay_seconds(neuron, neuron.created_timestamp_seconds)
                         >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
@@ -1592,7 +1648,7 @@ pub mod sns {
                 },
             )
             .await
-            .map_err(|err| err.to_string())
+            .map_err(|err| format!("{err:?}"))
         }
 
         // Upgrade; one canister at a time.
@@ -1781,11 +1837,8 @@ pub mod sns {
                 };
                 assert!(actual.timestamp_seconds.is_some());
                 assert_eq!(
-                    &actual
-                        .event
-                        .clone()
-                        .map(|event| event.redact_human_readable()),
-                    &Some(expected.clone().redact_human_readable()),
+                    &actual.event.clone().map(redact_human_readable),
+                    &Some(redact_human_readable(expected.clone())),
                     "Upgrade journal entry at index {} does not match",
                     index
                 );
