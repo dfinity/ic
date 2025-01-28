@@ -65,7 +65,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "ic-icrc1-ledger-u256.wasm.gz": "7",
     # Size when constraint addded: 841_234 bytes
     "ledger-canister.wasm.gz": "9",
-    # Size when constraint addded: 847_186 bytes
+    # Size when constraint addded: 906_940 bytes
     "ledger-canister_notify-method.wasm.gz": "10",
 
     # -- XC team --
