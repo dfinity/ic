@@ -112,6 +112,7 @@ type ListSnsCanistersResponse = record {
 type LogVisibility = variant {
   controllers;
   public;
+  allowed_viewers: vec principal;
 };
 
 type ManageDappCanisterSettingsRequest = record {
