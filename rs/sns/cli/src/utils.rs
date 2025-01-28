@@ -1,3 +1,4 @@
+use crate::MAINNET_NETWORK;
 use anyhow::{anyhow, Result};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
@@ -11,6 +12,10 @@ pub fn get_agent(ic_url: &str) -> Result<Agent> {
         .with_verify_query_signatures(false)
         .build()
         .map_err(|e| anyhow!(e))
+}
+
+pub fn get_mainnet_agent() -> Result<Agent> {
+    get_agent(MAINNET_NETWORK)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -45,6 +45,8 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
+pub const MAINNET_NETWORK: &str = "https://ic0.app";
+
 /// We use a giant tail to avoid colliding with/stomping on identity that a user
 /// might have created for themselves.
 const TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME: &str =
@@ -61,15 +63,14 @@ pub struct CliArgs {
     pub sub_command: SubCommand,
 
     /// Override the compute network to connect to. By default, the local network is used.
-    /// A valid URL (starting with `http:` or `https:`) can be used here, and a special ephemeral
-    /// network will be created specifically for this request. E.g. "http://localhost:12345/"
-    /// is a valid network name.
-    // TODO: Remove this arguments once we can inherit the same data from dfx_core.
-    #[clap(long, aliases = ["ic-url"], default_value = "https://ic0.app")]
+    /// A valid URL (starting with `http:` or `https:`) can be used here,
+    /// e.g., "http://localhost:8000" is a valid network name.
+    // TODO[NNS1-3569]: Remove this argument once we can inherit the same data from dfx_core.
+    #[clap(long, aliases = ["ic-url"], default_value = MAINNET_NETWORK)]
     pub network: Option<String>,
 
     /// Path to the PEM file of an identity to run this command as.
-    // TODO: Remove this arguments once we can inherit the same data from dfx_core.
+    // TODO[NNS1-3569]: Remove this argument once we can inherit the same data from dfx_core.
     #[clap(long)]
     pub pem: Option<String>,
 }
@@ -102,14 +103,13 @@ pub enum SubCommand {
 
 impl CliArgs {
     pub async fn agent(&self) -> Result<Agent> {
-        const MAINNET_NETWORK: &str = "https://ic0.app";
         let mut agent = match &self.network {
             Some(network) if !network.contains(MAINNET_NETWORK) => {
                 let agent = crate::utils::get_agent(network)?;
                 agent.fetch_root_key().await?;
                 agent
             }
-            None | Some(_) => crate::utils::get_agent(MAINNET_NETWORK)?,
+            None | Some(_) => crate::utils::get_mainnet_agent()?,
         };
 
         if let Some(pem) = &self.pem {

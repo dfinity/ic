@@ -33,7 +33,7 @@ use std::{
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
 const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 
-// TODO
+// TODO: Compute more precisely the cycles amount needed for the store canister.
 // The cycle fee for create request is 0.1T cycles.
 pub const CANISTER_CREATE_FEE: u128 = 100_000_000_000_u128;
 
@@ -113,9 +113,7 @@ impl TryFrom<PathBuf> for Wasm {
         }
 
         // Smoke test: Is this a ICP Wasm?
-        if bytes.len() < 4
-            || bytes[..4] != RAW_WASM_HEADER[..] && bytes[..3] != GZIPPED_WASM_HEADER[..]
-        {
+        if !bytes.starts_with(&RAW_WASM_HEADER) && !bytes.starts_with(&GZIPPED_WASM_HEADER) {
             return Err("The file does not look like a valid ICP Wasm module.".to_string());
         }
 
@@ -441,58 +439,58 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     .collect();
     println!("✔️");
 
-    if let Some(sns) = &sns {
-        print!("Forming SNS proposal to upgrade target canister ... ");
-        std::io::stdout().flush().unwrap();
-        let sns_governance = sns::governance::GovernanceCanister {
-            canister_id: sns.governance.canister_id,
-        };
-        let proposal = Proposal {
-            title: format!(
-                "Upgrade SNS-controlled canister {}",
-                target_canister_id.get()
-            ),
-            summary,
-            url: proposal_url.to_string(),
-            action: Some(Action::UpgradeSnsControlledCanister(
-                UpgradeSnsControlledCanister {
-                    canister_id: Some(target_canister_id.get()),
-                    new_canister_wasm: vec![],
-                    canister_upgrade_arg,
-                    mode: Some(CanisterInstallMode::Upgrade as i32),
-                    chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                        wasm_module_hash: wasm.module_hash().to_vec(),
-                        store_canister_id: Some(store_canister_id.get()),
-                        chunk_hashes_list,
-                    }),
-                },
-            )),
-        };
-
-        if let Some(sns_neuron_id) = sns_neuron_id {
-            let proposal_id = sns_governance
-                .submit_proposal(agent, sns_neuron_id.0, proposal)
-                .await?;
-            println!("✔️");
-
-            let proposal_url = format!(
-                "https://nns.ic0.app/proposal/?u={}&proposal={}",
-                sns.root.canister_id, proposal_id.id,
-            );
-            println!(
-                "Successfully proposed to upgrade SNS-controlled canister, see details here:\n\
-                 {proposal_url}",
-            );
-        } else {
-            println!("✔️");
-            let proposal_str = printing::pretty(&proposal).unwrap();
-            println!("{proposal_str}");
-        }
-    } else {
+    let Some(sns) = &sns else {
         unimplemented!(
             "Direct canister upgrades are not implemented yet. Please use DFX:\n{}",
             suggested_install_command(&wasm.path(), &candid_arg)
         );
+    };
+
+    print!("Forming SNS proposal to upgrade target canister ... ");
+    std::io::stdout().flush().unwrap();
+    let sns_governance = sns::governance::GovernanceCanister {
+        canister_id: sns.governance.canister_id,
+    };
+    let proposal = Proposal {
+        title: format!(
+            "Upgrade SNS-controlled canister {}",
+            target_canister_id.get()
+        ),
+        summary,
+        url: proposal_url.to_string(),
+        action: Some(Action::UpgradeSnsControlledCanister(
+            UpgradeSnsControlledCanister {
+                canister_id: Some(target_canister_id.get()),
+                new_canister_wasm: vec![],
+                canister_upgrade_arg,
+                mode: Some(CanisterInstallMode::Upgrade as i32),
+                chunked_canister_wasm: Some(ChunkedCanisterWasm {
+                    wasm_module_hash: wasm.module_hash().to_vec(),
+                    store_canister_id: Some(store_canister_id.get()),
+                    chunk_hashes_list,
+                }),
+            },
+        )),
+    };
+
+    if let Some(sns_neuron_id) = sns_neuron_id {
+        let proposal_id = sns_governance
+            .submit_proposal(agent, sns_neuron_id.0, proposal)
+            .await?;
+        println!("✔️");
+
+        let proposal_url = format!(
+            "https://nns.ic0.app/proposal/?u={}&proposal={}",
+            sns.root.canister_id, proposal_id.id,
+        );
+        println!(
+            "Successfully proposed to upgrade SNS-controlled canister, see details here:\n\
+                {proposal_url}",
+        );
+    } else {
+        println!("✔️");
+        let proposal_str = printing::pretty(&proposal).unwrap();
+        println!("{proposal_str}");
     }
 
     Ok(())
