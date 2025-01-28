@@ -35,7 +35,7 @@ CONFIG="${CONFIG:=/var/lib/libvirt/guestos.xml}"
 write_tty1_log() {
     local message=$1
 
-    echo "${SCRIPT} ${message}" > /dev/tty1
+    echo "${SCRIPT} ${message}" >/dev/tty1
 
     logger -t "${SCRIPT}" "${message}"
 }
@@ -67,7 +67,7 @@ function start_guestos() {
     else
         # Attempt to start; if it fails, dump logs.
         if ! virsh start guestos; then
-            # The sleep below gives QEMU time to clear/reinitialize its console 
+            # The sleep below gives QEMU time to clear/reinitialize its console
             # so that error messages won't be immediately overwritten. This helps
             # ensure the logs and troubleshooting info remain visible on the host console.
             sleep 10
@@ -77,7 +77,7 @@ function start_guestos() {
             write_tty1_log "#################################################"
             write_tty1_log "###      LOGGING GUESTOS.SERVICE LOGS...      ###"
             write_tty1_log "#################################################"
-            journalctl -u guestos.service > /dev/tty1
+            journalctl -u guestos.service >/dev/tty1
 
             write_tty1_log "#################################################"
             write_tty1_log "###          TROUBLESHOOTING INFO...          ###"
