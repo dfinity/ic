@@ -20,7 +20,7 @@ pub enum SubmitProposalError<C: Error> {
     #[error("Failed to call SNS Governance")]
     CallGovernanceError(#[source] C),
     #[error("SNS Governance returned an error")]
-    GovernanceError(GovernanceError),
+    GovernanceError(#[source] GovernanceError),
     #[error("SNS Governance did not confirm that the proposal was made: {0:?}")]
     ProposalNotMade(ManageNeuronResponse),
 }
