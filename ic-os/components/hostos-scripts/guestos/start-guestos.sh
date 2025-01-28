@@ -84,7 +84,7 @@ function start_guestos() {
             write_tty1_log "###          TROUBLESHOOTING INFO...          ###"
             write_tty1_log "#################################################"
             host_ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS 2>/dev/null)"
-            write_tty1_log "Host ipv6 address: $host_ipv6_address"
+            write_tty1_log "Host IPv6 address: $host_ipv6_address"
 
             if [ -f /var/log/libvirt/qemu/guestos-serial.log ]; then
                 write_tty1_log "#################################################"
@@ -107,7 +107,7 @@ function start_guestos() {
         write_tty1_log "GuestOS virtual machine launched"
         write_tty1_log "IF ONBOARDING, please wait for up to 10 MINUTES for a 'Join request successful!' message"
         host_ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS 2>/dev/null)"
-        write_tty1_log "Host ipv6 address: $host_ipv6_address"
+        write_tty1_log "Host IPv6 address: $host_ipv6_address"
         write_tty1_log "#################################################"
 
         write_log "Starting GuestOS virtual machine."
