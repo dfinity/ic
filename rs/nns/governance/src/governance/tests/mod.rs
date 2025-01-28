@@ -1517,25 +1517,25 @@ fn topic_min_max_test() {
 #[cfg(feature = "test")]
 #[test]
 fn test_update_neuron_errors_out_expectedly() {
-    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
-        NeuronProto {
+    fn new_neuron(account: Vec<u8>) -> api::Neuron {
+        api::Neuron {
             account,
             id: Some(NeuronId { id: 1 }),
             controller: Some(PrincipalId::new_user_test_id(1)),
             followees: hashmap! {
-                2 => Followees {
+                2 => api::neuron::Followees {
                     followees: vec![NeuronId { id : 3}]
                 }
             },
             aging_since_timestamp_seconds: 1,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(42)),
             ..Default::default()
         }
     }
 
     let neuron1_subaccount_blob = vec![1; 32];
     let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
-    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neuron1 = NeuronProto::from(new_neuron(neuron1_subaccount_blob.clone()));
     let neurons = btreemap! { 1 => neuron1 };
     let governance_proto = GovernanceProto {
         neurons,
@@ -1549,7 +1549,7 @@ fn test_update_neuron_errors_out_expectedly() {
     );
 
     assert_eq!(
-        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        governance.update_neuron(new_neuron(vec![0; 32])),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!(

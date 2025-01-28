@@ -1334,6 +1334,15 @@ impl TryFrom<NeuronProto> for Neuron {
     }
 }
 
+impl TryFrom<api::Neuron> for Neuron {
+    type Error = String;
+
+    fn try_from(neuron: api::Neuron) -> Result<Self, Self::Error> {
+        let neuron = NeuronProto::from(neuron);
+        Neuron::try_from(neuron)
+    }
+}
+
 impl Neuron {
     pub fn into_api(
         self,

@@ -2083,7 +2083,7 @@ impl Governance {
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
     #[cfg(feature = "test")]
-    pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
+    pub fn update_neuron(&mut self, neuron: api::Neuron) -> Result<(), GovernanceError> {
         // Converting from API type to internal type.
         let new_neuron = Neuron::try_from(neuron).expect("Neuron must be valid");
 
