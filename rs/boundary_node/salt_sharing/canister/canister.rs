@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::storage::{Timestamp, LAST_SALT_NS, SALT, SALT_SIZE};
 use crate::time::delay_till_next_month;
 use getrandom::getrandom;
@@ -6,11 +8,14 @@ use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::set_timer;
 use salt_api::{GetSaltResponse, InitArg, SaltGenerationStrategy, SaltResponse};
 
+const TIME_DELTA: Duration = Duration::from_secs(5);
+
 // Sets an execution timer (delayed future task) and returns immediately.
 fn reschedule_salt_generation(strategy: SaltGenerationStrategy) {
     match strategy {
         SaltGenerationStrategy::StartOfMonth => {
-            let delay = delay_till_next_month(time());
+            // Add a small time delta to ensure execution starts after the month started
+            let delay = delay_till_next_month(time()) + TIME_DELTA;
             set_timer(delay, || {
                 regenerate_salt();
                 // Function is called recursively to schedule next execution
