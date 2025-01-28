@@ -7037,6 +7037,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-types",
  "ic-types-test-utils",
+ "ic-vetkd-utils",
  "k256",
  "maplit",
  "mockall",
