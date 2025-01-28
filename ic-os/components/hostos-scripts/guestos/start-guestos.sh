@@ -68,9 +68,8 @@ function start_guestos() {
         write_log "Starting GuestOS virtual machine."
         # Attempt to start; if it fails, dump logs.
         if ! virsh start guestos; then
-            # The sleep below gives QEMU time to clear/reinitialize its console
-            # so that error messages won't be immediately overwritten. This helps
-            # ensure the logs and troubleshooting info remain visible on the host console.
+            # The sleep below gives QEMU time to clear the console so that
+            # error messages won't be immediately overwritten.
             sleep 10
 
             write_tty1_log "ERROR: Failed to start GuestOS virtual machine.\n\n\n"
