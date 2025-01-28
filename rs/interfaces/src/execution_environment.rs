@@ -1181,13 +1181,17 @@ pub trait SystemApi {
         -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of an inter-canister call,
-    /// i.e., `ic0.call_perform`
+    /// i.e., `ic0.call_perform`.
+    ///
+    /// The cost is determined by the byte length of the method name and the
+    /// length of the encoded payload.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
     fn ic0_cost_call(
         &self,
-        num_req_bytes: u64,
+        method_name_size: u64,
+        payload_size: u64,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
@@ -1202,18 +1206,26 @@ pub trait SystemApi {
     /// This system call indicates the cycle cost of making an http outcall,
     /// i.e., the management canister's `http_request`.
     ///
+    /// `request_size` is the sum of the lengths of the variable request parts, as
+    /// documented in the interface specification.
+    /// `max_res_bytes` is the maximum number of response bytes the caller wishes to
+    /// accept.
+    ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
     fn ic0_cost_http_request(
         &self,
-        num_req_bytes: u64,
-        num_res_bytes: u64,
+        request_size: u64,
+        max_res_bytes: u64,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with ecdsa,
-    /// i.e., the management canister's `sign_with_ecdsa`.
+    /// i.e., the management canister's `sign_with_ecdsa`, for the key
+    /// with name given by `src` + `size`.
+    ///
+    /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
@@ -1226,7 +1238,10 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with schnorr,
-    /// i.e., the management canister's `sign_with_schnorr`.
+    /// i.e., the management canister's `sign_with_schnorr` for the key
+    /// with name given by `src` + `size`.
+    ///
+    /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
@@ -1239,7 +1254,10 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with ecdsa,
-    /// i.e., the management canister's `vetkd_encrypted_key`.
+    /// i.e., the management canister's `vetkd_encrypted_key` for the key
+    /// with name given by `src` + `size`.
+    ///
+    /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
