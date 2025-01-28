@@ -52,8 +52,8 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::InconsistentAlgorithms { .. } => true,
             // true, as the set of supported algorithms is stable (bound to code version)
             CryptoError::AlgorithmNotSupported { .. } => true,
-            // false, as the result may change if the DKG transcript is reloaded.
-            CryptoError::ThresholdSigDataNotFound { .. } => false,
+            // true, as the result will not change upon retrying, unless the correct DKG transcript is loaded.
+            CryptoError::ThresholdSigDataNotFound { .. } => true,
             CryptoError::RegistryClient(registry_client_error) => {
                 registry_client_error.is_reproducible()
             }
@@ -434,6 +434,8 @@ impl ErrorReproducibility for VetKdKeyShareVerificationError {
 
         match self {
             Self::VerificationError(crypto_error) => crypto_error.is_reproducible(),
+            // true, as the result will not change upon retrying, unless the correct DKG transcript is loaded.
+            Self::ThresholdSigDataNotFound(_) => true,
         }
     }
 }

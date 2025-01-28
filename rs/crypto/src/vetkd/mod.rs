@@ -81,7 +81,7 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
         &self,
         signer: NodeId,
         key_share: &VetKdEncryptedKeyShare,
-        _args: &VetKdArgs,
+        args: &VetKdArgs,
     ) -> Result<(), VetKdKeyShareVerificationError> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -96,10 +96,12 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = verify_encrypted_key_share_internal(
+            &self.lockable_threshold_sig_data_store,
             self.registry_client.as_ref(),
             &self.csp,
             key_share,
             signer,
+            args,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::VetKd,
@@ -201,10 +203,14 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
     args: VetKdArgs,
     self_node_id: NodeId,
 ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
-    let pub_coeffs_from_store = lockable_threshold_sig_data_store
+    let (pub_coeffs_from_store, registry_version_from_store) = lockable_threshold_sig_data_store
         .read()
         .transcript_data(&args.ni_dkg_id)
-        .map(|data| data.public_coefficients().clone())
+        .map(|transcript_data| {
+            let pub_coeffs = transcript_data.public_coefficients().clone();
+            let registry_version = transcript_data.registry_version();
+            (pub_coeffs, registry_version)
+        })
         .ok_or_else(|| {
             VetKdKeyShareCreationError::ThresholdSigDataNotFound(
                 ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
@@ -217,7 +223,7 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
             VetKdKeyShareCreationError::KeyIdInstantiationError(msg)
         }
     })?;
-    let master_public_key = match pub_coeffs_from_store {
+    let master_public_key = match &pub_coeffs_from_store {
         PublicCoefficients::Bls12_381(pub_coeffs) => pub_coeffs
             .coefficients
             .iter()
@@ -246,9 +252,8 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
         registry,
         &encrypted_key_share,
         self_node_id,
-        // TODO(CRP-2670): Store registry version in ThresholdSigDataStore when loading transcript and then use it here instead get_latest_version
         // TODO(CRP-2666): Cleanup: Remove registry_version from BasicSigner::sign_basic API
-        registry.get_latest_version(),
+        registry_version_from_store,
     )
     .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
 
@@ -280,11 +285,25 @@ fn vetkd_key_share_creation_error_from_vault_error(
 }
 
 fn verify_encrypted_key_share_internal<S: CspSigner>(
+    lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     registry: &dyn RegistryClient,
     csp_signer: &S,
     key_share: &VetKdEncryptedKeyShare,
     signer: NodeId,
+    args: &VetKdArgs,
 ) -> Result<(), VetKdKeyShareVerificationError> {
+    let registry_version_from_store = lockable_threshold_sig_data_store
+        .read()
+        .transcript_data(&args.ni_dkg_id)
+        .map(|transcript_data| transcript_data.registry_version())
+        .ok_or_else(|| {
+            VetKdKeyShareVerificationError::ThresholdSigDataNotFound(
+                ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
+                    dkg_id: args.ni_dkg_id.clone(),
+                },
+            )
+        })?;
+
     let signature = BasicSigOf::new(BasicSig(key_share.node_signature.clone()));
     BasicSigVerifierInternal::verify_basic_sig(
         csp_signer,
@@ -292,8 +311,7 @@ fn verify_encrypted_key_share_internal<S: CspSigner>(
         &signature,
         &key_share.encrypted_key_share,
         signer,
-        // TODO(CRP-2670): Store registry version in ThresholdSigDataStore when loading transcript and then use it here
-        registry.get_latest_version(),
+        registry_version_from_store,
     )
     .map_err(VetKdKeyShareVerificationError::VerificationError)
 }

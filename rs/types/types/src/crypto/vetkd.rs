@@ -100,6 +100,7 @@ impl_display_using_debug!(VetKdKeyShareCreationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareVerificationError {
+    ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     VerificationError(CryptoError),
 }
 impl_display_using_debug!(VetKdKeyShareVerificationError);
