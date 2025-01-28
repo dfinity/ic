@@ -2490,6 +2490,14 @@ impl MasterPublicKeyId {
             Self::VetKd(_) => false,
         }
     }
+
+    pub fn get_key_name(&self) -> &str {
+        match self {
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId { name, .. }) => name,
+            MasterPublicKeyId::Schnorr(SchnorrKeyId { name, .. }) => name,
+            MasterPublicKeyId::VetKd(VetKdKeyId { name, .. }) => name,
+        }
+    }
 }
 
 impl FromStr for MasterPublicKeyId {

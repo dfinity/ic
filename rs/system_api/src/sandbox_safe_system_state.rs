@@ -576,7 +576,7 @@ pub struct SandboxSafeSystemState {
     reserved_balance_limit: Option<Cycles>,
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
-    cycles_account_manager: CyclesAccountManager,
+    pub(super) cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
@@ -593,6 +593,7 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
+    pub(super) network_topology: NetworkTopology,
 }
 
 impl SandboxSafeSystemState {
@@ -627,6 +628,7 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
         is_wasm64_execution: bool,
+        network_topology: NetworkTopology,
     ) -> Self {
         Self {
             canister_id,
@@ -662,6 +664,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             is_wasm64_execution,
+            network_topology,
         }
     }
 
@@ -776,6 +779,7 @@ impl SandboxSafeSystemState {
             caller,
             system_state.canister_log.next_idx(),
             is_wasm64_execution,
+            network_topology.clone(),
         )
     }
 
