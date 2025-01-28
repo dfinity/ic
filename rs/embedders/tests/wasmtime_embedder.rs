@@ -3118,14 +3118,14 @@ fn wasm64_saturate_fun_index() {
         .build();
     let _res = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
 
-    let system_state_changes = instance
+    let system_state_modifications = instance
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .take_system_state_changes();
+        .take_system_state_modifications();
 
     // call_perform should trigger one callback update
-    let callback_update = system_state_changes
+    let callback_update = system_state_modifications
         .callback_updates
         .first()
         .unwrap()

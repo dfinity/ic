@@ -24,6 +24,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod list_neurons;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;

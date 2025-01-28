@@ -12,6 +12,9 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
+// TODO(NNS1-3566): Delete this.
+pub const IS_AUTOMATIC_REFUND_ENABLED: bool = true;
+
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
@@ -25,6 +28,8 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
+
+pub mod request_impls;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ExchangeRateCanister {
@@ -313,9 +318,22 @@ pub struct CyclesLedgerDepositResult {
     pub block_index: Nat,
 }
 
+// When a user sends us ICP, they indicate via memo (or icrc1_memo) what
+// operation they want to perform.
+//
+// We promise that we will NEVER use 0 as one of these values. (This would be
+// very bad, because then, we would have no way to disambiguate between "the
+// user wanted X" vs. "the user made an oversight".)
+//
+// Note to developers: If you add new values, update MEANINGFUL_MEMOS.
 pub const MEMO_CREATE_CANISTER: Memo = Memo(0x41455243); // == 'CREA'
 pub const MEMO_TOP_UP_CANISTER: Memo = Memo(0x50555054); // == 'TPUP'
 pub const MEMO_MINT_CYCLES: Memo = Memo(0x544e494d); // == 'MINT'
+
+// New values might be added to this later. Do NOT assume that values won't be
+// added to this array later.
+pub const MEANINGFUL_MEMOS: [Memo; 3] =
+    [MEMO_CREATE_CANISTER, MEMO_TOP_UP_CANISTER, MEMO_MINT_CYCLES];
 
 pub fn create_canister_txn(
     amount: Tokens,
