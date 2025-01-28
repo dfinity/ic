@@ -430,7 +430,7 @@ impl BlockchainManager {
         };
 
         let time_taken = request.sent_at.map(|i| i.elapsed()).unwrap_or_default();
-        trace!(
+        info!(
             self.logger,
             "Received block message from {} : Took {:?}sec. Block {:?}",
             addr,
@@ -439,7 +439,10 @@ impl BlockchainManager {
         );
 
         match self.blockchain.lock().unwrap().add_block(block.clone()) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                info!(self.logger, "Added block: {}", block_hash);
+                Ok(())
+            },
             Err(err) => {
                 warn!(
                     self.logger,
@@ -538,6 +541,7 @@ impl BlockchainManager {
         // Remove the requests that have timed out.
         // If they are not removed, then all peers could be fully saturated and we can't send any requests.
         for block_hash in retry_queue.iter() {
+            info!(self.logger, "Retrying getdata request for block: {}", block_hash);
             self.getdata_request_info.remove(block_hash);
         }
 
@@ -549,7 +553,7 @@ impl BlockchainManager {
         let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
 
         if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
-            debug!(
+            info!(
                 self.logger,
                 "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
             );
@@ -573,7 +577,9 @@ impl BlockchainManager {
         });
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
+        info!(self.logger, "sync_blocks: retry queue size: {}, sync queue {}:", retry_queue.len(), self.block_sync_queue.len());
         for peer in peer_info {
+            info!(self.logger, "trying from peer: {}, requests: {}", peer.socket, requests_per_peer.get(&peer.socket).unwrap_or(&0));
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
@@ -598,7 +604,7 @@ impl BlockchainManager {
                 continue;
             }
 
-            trace!(
+            info!(
                 self.logger,
                 "Sending getdata to {} : Inventory {:?}",
                 peer.socket,
