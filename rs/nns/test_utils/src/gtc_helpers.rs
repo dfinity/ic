@@ -254,6 +254,7 @@ fn make_neuron(
 
     let subaccount_hash = Sha256::hash(&subaccount);
     let neuron_id = NeuronId {
+        // We just need a unique ID for the neuron, so we use the first 8 bytes to create a u64.
         id: u64::from_ne_bytes(subaccount_hash[0..8].try_into().unwrap()),
     };
 
