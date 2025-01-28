@@ -20,8 +20,8 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_management_canister_types::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
 };
 use ic_types::{

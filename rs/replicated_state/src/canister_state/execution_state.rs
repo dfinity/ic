@@ -796,8 +796,7 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
     }
 }
 
-/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
-/// can charge cycles accordingly.
+/// Keeps track of how a canister is executing.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum WasmExecutionMode {
     Wasm32,

@@ -23,9 +23,9 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
+    CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{

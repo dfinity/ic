@@ -21,10 +21,10 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_management_canister_types::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        execution_state::NextScheduledMethod, execution_state::WasmExecutionMode,
+        system_state::CyclesUseCase, NextExecution,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,

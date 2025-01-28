@@ -18,8 +18,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallOrigin,
+    CanisterState,
+};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,

@@ -15,8 +15,7 @@ use ic_management_canister_types::{
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
     Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{execution_state::WasmExecutionMode, NextExecution};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };

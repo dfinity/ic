@@ -48,8 +48,8 @@ use ic_management_canister_types::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{

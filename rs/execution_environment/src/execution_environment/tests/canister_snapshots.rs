@@ -11,10 +11,12 @@ use ic_management_canister_types::{
     UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
-    canister_state::{execution_state::WasmBinary, system_state::CyclesUseCase},
+    canister_state::{
+        execution_state::WasmBinary, execution_state::WasmExecutionMode,
+        system_state::CyclesUseCase,
+    },
     CanisterState, ExecutionState, SchedulerState,
 };
 use ic_test_utilities_execution_environment::{

@@ -6,8 +6,8 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::CyclesUseCase, testing::SystemStateTesting, SystemState,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;

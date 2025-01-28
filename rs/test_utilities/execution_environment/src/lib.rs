@@ -39,9 +39,10 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::{execution_state::SandboxMemory, NextExecution},
+    canister_state::{
+        execution_state::SandboxMemory, execution_state::WasmExecutionMode, NextExecution,
+    },
     page_map::{
         test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
         PAGE_SIZE,

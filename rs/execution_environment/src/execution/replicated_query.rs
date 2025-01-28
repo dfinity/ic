@@ -12,8 +12,10 @@ use crate::execution::common::{
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use crate::metrics::CallTreeMetricsNoOp;
 use ic_error_types::{ErrorCode, UserError};
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
+    CanisterState,
+};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{
