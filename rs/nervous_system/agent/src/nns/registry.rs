@@ -1,8 +1,9 @@
+use crate::CallCanisters;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use registry_canister::pb::v1::GetSubnetForCanisterRequest;
 
-use crate::CallCanisters;
+pub mod requests;
 
 pub async fn get_subnet_for_canister<C: CallCanisters>(
     agent: &C,

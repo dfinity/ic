@@ -9771,7 +9771,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
- "ic-sns-governance",
+ "ic-sns-governance-api",
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
