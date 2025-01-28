@@ -12,7 +12,7 @@ use xxhash_rust::xxh3::{xxh3_128, Xxh3};
 const BLOCK_LEN: usize = 1024 * 1024;
 const BLOCK_LEN_U64: u64 = BLOCK_LEN as u64;
 
-/// icsum [filename]
+/// `icsum [filename]`
 /// A tool for quickly calculating file checksums. This tool is much
 /// faster than common checksum tools when run on sparse files.
 fn main() -> anyhow::Result<()> {
@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
-    // The algorithm works by chunking the input into blocks of `BLOCK_LEN`.
+    // The algorithm works by chunking the input into blocks of [BLOCK_LEN].
     // Each such block's hash is calculated separately and combined by outer_hasher.
     // Since the hash of two equal blocks is the same, we can precalculate the hash of blocks of
     // holes (a block with zeros only). We then use the OS's file seek API to avoid actually having
@@ -58,10 +58,11 @@ fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
 
 #[derive(Eq, PartialEq)]
 enum Block<'a> {
-    /// A hole of BLOCK_LEN bytes. If the last block is a hole of less than BLOCK_LEN, it will be
-    /// represented by a Data block of zero bytes instead.
+    /// A hole of [BLOCK_LEN] bytes. If the last block is a hole of less than [BLOCK_LEN], it will
+    /// be represented by a [Block::Data] block containing zeros instead.
     Hole,
-    /// Data block. This is always BLOCK_LEN long, except in the last block.
+    /// Data block. This is always [BLOCK_LEN] long, except in the last block where it may be
+    /// shorter.
     Data(&'a [u8]),
 }
 
@@ -99,7 +100,7 @@ fn iterate_blocks(file: &mut File, mut callback: impl FnMut(Block)) -> std::io::
         }
     }
 
-    // Handle remaining data that doesn't fit into a full block.
+    // Handle remaining data at the end of file that may be shorter than a full block.
     buf.clear();
     file.seek(SeekFrom::Start(file_len / BLOCK_LEN_U64 * BLOCK_LEN_U64))?;
     file.read_to_end(&mut buf)?;
@@ -141,7 +142,7 @@ fn seek_hole(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
     }
 }
 
-/// See `seek_hole` above for documentation.
+/// See [seek_hole] for documentation.
 fn seek_data(file: &mut File, from: u64) -> std::io::Result<Option<u64>> {
     // NOTE: u64 does not fully fit in i64, but i64::MAX is 9_223_372_036_854_775_807
     // (8 exbibytes) and we won't be seeing files this large any time soon.
