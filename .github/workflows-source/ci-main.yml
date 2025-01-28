@@ -94,7 +94,7 @@ jobs:
     name: Bazel Test All
     <<: *dind-large-setup
     runs-on:
-      group: zh1
+      group: ln1
       labels: dind-large
     env:
       AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
