@@ -84,9 +84,9 @@ use ic_nns_governance::{
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
         KnownNeuron, KnownNeuronData, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
-        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType,
+        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
+        Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -103,7 +103,7 @@ use ic_nns_governance_api::{
         self as api,
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ManageNeuronResponse,
+        ListNeuronsResponse, ManageNeuronResponse, NeuronState,
     },
     proposal_validation::validate_proposal_title,
 };
@@ -121,7 +121,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
@@ -129,7 +129,7 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
     ops::{Deref, Div},
@@ -2332,10 +2332,6 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
     assert_eq!(neuron_info.visibility, None);
     assert_eq!(full_neuron.visibility, None);
 
-    // This conversion will not be needed if/when we get rid of the definition
-    // of NeuronInfo from governance.proto.
-    let neuron_info = api::NeuronInfo::from(neuron_info);
-
     assert_eq!(
         list_neurons_response,
         ListNeuronsResponse {
@@ -2343,6 +2339,7 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2391,10 +2388,6 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
     assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
 
-    // This conversion will not be needed if/when we get rid of the definition
-    // of NeuronInfo from governance.proto.
-    let neuron_info = api::NeuronInfo::from(neuron_info);
-
     assert_eq!(
         list_neurons_response,
         ListNeuronsResponse {
@@ -2402,6 +2395,7 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
                 1 => neuron_info,
             },
             full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2586,7 +2580,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 2 }, principal(2))
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -2624,7 +2618,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 3 }, principal(3),)
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -4477,24 +4471,21 @@ fn test_get_neuron_ids_by_principal() {
         driver.get_fake_cmc(),
     );
 
-    let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
-    principal2_neuron_ids.sort_unstable();
-
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal1),
-        vec![NeuronId { id: 1 }]
+        btreeset![NeuronId { id: 1 }]
     );
     assert_eq!(
-        principal2_neuron_ids,
-        vec![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+        gov.get_neuron_ids_by_principal(&principal2),
+        btreeset![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal3),
-        Vec::<NeuronId>::new()
+        BTreeSet::<NeuronId>::new()
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal4),
-        vec![NeuronId { id: 4 }]
+        btreeset![NeuronId { id: 4 }]
     );
 }
 
@@ -4656,7 +4647,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), btreeset![id]);
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -5799,10 +5790,8 @@ fn test_neuron_split() {
         parent_neuron.voting_power_refreshed_timestamp_seconds,
     );
 
-    let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
-    neuron_ids.sort_unstable();
-    let mut expected_neuron_ids = vec![id, child_nid];
-    expected_neuron_ids.sort_unstable();
+    let neuron_ids = governance.get_neuron_ids_by_principal(&from);
+    let expected_neuron_ids = btreeset![id, child_nid];
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
@@ -10807,6 +10796,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
             // This should have no effect.
             include_empty_neurons_readable_by_caller: Some(true),
+
+            page_number: None,
+            page_size: None,
         },
         caller,
     );
@@ -14864,16 +14856,8 @@ fn test_neuron_info_private_enforcement() {
             let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
 
             // Step 2.1: Call get_neuron_info.
-            let get_neuron_info = |requester| {
-                let neuron_info = governance.get_neuron_info(&neuron_id, requester).unwrap();
-
-                // We would like to get rid of the definition of NeuronInfo
-                // in governance.proto. When we get rid of that definition,
-                // this conversion will no longer be needed. Getting rid of
-                // the definition should be possible, since we do not store
-                // NeuronInfo in stable memory (AFAIK).
-                api::NeuronInfo::from(neuron_info)
-            };
+            let get_neuron_info =
+                |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
             let controller_get_result = get_neuron_info(controller);
             let hot_key_get_result = get_neuron_info(hot_key);
             let random_principal_get_result = get_neuron_info(random_principal_id);
@@ -14886,6 +14870,8 @@ fn test_neuron_info_private_enforcement() {
                         include_neurons_readable_by_caller: false,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None,
                     },
                     requester,
                 )

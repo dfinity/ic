@@ -51,49 +51,6 @@ impl From<pb_api::BallotInfo> for pb::BallotInfo {
     }
 }
 
-impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
-    fn from(item: pb::NeuronInfo) -> Self {
-        Self {
-            retrieved_at_timestamp_seconds: item.retrieved_at_timestamp_seconds,
-            state: item.state,
-            age_seconds: item.age_seconds,
-            dissolve_delay_seconds: item.dissolve_delay_seconds,
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            voting_power: item.voting_power,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            stake_e8s: item.stake_e8s,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-            deciding_voting_power: item.deciding_voting_power,
-            potential_voting_power: item.potential_voting_power,
-        }
-    }
-}
-impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
-    fn from(item: pb_api::NeuronInfo) -> Self {
-        Self {
-            retrieved_at_timestamp_seconds: item.retrieved_at_timestamp_seconds,
-            state: item.state,
-            age_seconds: item.age_seconds,
-            dissolve_delay_seconds: item.dissolve_delay_seconds,
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            voting_power: item.voting_power,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            stake_e8s: item.stake_e8s,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-            deciding_voting_power: item.deciding_voting_power,
-            potential_voting_power: item.potential_voting_power,
-        }
-    }
-}
-
 impl From<pb::NeuronStakeTransfer> for pb_api::NeuronStakeTransfer {
     fn from(item: pb::NeuronStakeTransfer) -> Self {
         Self {

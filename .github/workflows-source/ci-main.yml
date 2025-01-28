@@ -94,7 +94,7 @@ jobs:
     name: Bazel Test All
     <<: *dind-large-setup
     runs-on:
-      group: zh1
+      group: ln1
       labels: dind-large
     env:
       AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
@@ -202,7 +202,6 @@ jobs:
           BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${CI_RUN_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
       - name: Purge Bazel Output
         if: always()
@@ -222,7 +221,6 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
@@ -237,7 +235,6 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
 
   python-ci-tests:
@@ -284,13 +281,11 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
+          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
         env:
           BAZEL_COMMAND: "build"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
@@ -379,12 +374,10 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
@@ -412,9 +405,7 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              cargo build --release --locked
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          cargo build --release --locked
