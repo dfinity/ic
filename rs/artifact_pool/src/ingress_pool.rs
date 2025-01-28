@@ -20,7 +20,8 @@ use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
+    consensus::ReplicaSignedIngress,
+    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
 };
 use prometheus::IntCounter;
@@ -236,16 +237,16 @@ impl IngressPool for IngressPoolImpl {
     }
 }
 
-impl MutablePool<SignedIngress> for IngressPoolImpl {
+impl MutablePool<ReplicaSignedIngress> for IngressPoolImpl {
     type Mutations = Mutations;
 
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
-    fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
-        let peer_id = artifact.peer_id;
-        let ingress_pool_obj = IngressPoolObject::new(peer_id, artifact.message);
+    fn insert(&mut self, artifact: UnvalidatedArtifact<ReplicaSignedIngress>) {
+        let ingress_pool_obj = IngressPoolObject::new(artifact.message);
         let timestamp = artifact.timestamp;
         let size = ingress_pool_obj.count_bytes();
+        let peer_id = ingress_pool_obj.signed_ingress.signature.signer;
 
         debug!(
             self.log,
@@ -273,7 +274,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ReplicaSignedIngress> {
         let mut transmits = vec![];
         for change_action in change_set {
             match change_action {
@@ -317,7 +318,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     transmits.extend(
                         self.validated
                             .purge_below(expiry)
-                            .map(|i| (&i.msg.signed_ingress).into())
+                            .map(|i| IngressMessageId::from(&i.msg.signed_ingress.content))
                             .map(ArtifactTransmit::Abort),
                     );
                     let _unused = self.unvalidated.purge_below(expiry);
@@ -332,12 +333,12 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     }
 }
 
-impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
-    fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
+impl ValidatedPoolReader<ReplicaSignedIngress> for IngressPoolImpl {
+    fn get(&self, id: &IngressMessageId) -> Option<ReplicaSignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = ReplicaSignedIngress>> {
         Box::new(std::iter::empty())
     }
 }

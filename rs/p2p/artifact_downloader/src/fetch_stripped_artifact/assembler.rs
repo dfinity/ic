@@ -15,7 +15,7 @@ use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage},
+    consensus::{BlockProposal, ConsensusMessage, ReplicaSignedIngress},
     messages::SignedIngress,
     CountBytes, NodeId,
 };
@@ -81,7 +81,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 #[derive(Clone)]
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    ingress_pool: ValidatedPoolReaderRef<ReplicaSignedIngress>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
@@ -93,7 +93,7 @@ impl FetchStrippedConsensusArtifact {
         log: ReplicaLogger,
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
-        ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+        ingress_pool: ValidatedPoolReaderRef<ReplicaSignedIngress>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
@@ -250,7 +250,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// it.
 async fn get_or_fetch<P: Peers>(
     signed_ingress_id: SignedIngressId,
-    ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    ingress_pool: ValidatedPoolReaderRef<ReplicaSignedIngress>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
     full_consensus_message_id: ConsensusMessageId,
@@ -267,8 +267,8 @@ async fn get_or_fetch<P: Peers>(
     {
         // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
         // uniquely identify ingress messages, we thus need to perform an extra check.
-        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-            return (ingress_message, node_id);
+        if SignedIngressId::from(&ingress_message.content) == signed_ingress_id {
+            return (ingress_message.content, node_id);
         }
     }
 

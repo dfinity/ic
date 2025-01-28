@@ -8,6 +8,7 @@ use crate::{
     signature::*,
     *,
 };
+use artifact::IngressMessageId;
 use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
 #[cfg(test)]
@@ -17,6 +18,8 @@ use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
     proxy::{try_from_option_field, ProxyDecodeError},
 };
+use messages::SignedIngress;
+use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
 use std::convert::TryInto;
@@ -924,11 +927,36 @@ impl IdentifiableArtifact for ConsensusMessage {
     }
 }
 
+impl IdentifiableArtifact for ReplicaSignedIngress {
+    const NAME: &'static str = "replicasignedingress";
+    type Id = IngressMessageId;
+
+    fn id(&self) -> Self::Id {
+        IngressMessageId::from(&self.content)
+    }
+}
+
 impl PbArtifact for ConsensusMessage {
     type PbId = ic_protobuf::types::v1::ConsensusMessageId;
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
+}
+
+// FIXME:
+impl PbArtifact for ReplicaSignedIngress {
+    type PbId = ic_protobuf::types::v1::IngressMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = Bytes;
+    type PbMessageError = ProxyDecodeError;
+}
+
+impl TryFrom<Bytes> for ReplicaSignedIngress {
+    type Error = ProxyDecodeError;
+
+    fn try_from(_value: Bytes) -> Result<Self, Self::Error> {
+        todo!()
+    }
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -1817,3 +1845,5 @@ impl ConsensusMessageHashable for ConsensusMessage {
         }
     }
 }
+
+pub type ReplicaSignedIngress = Signed<SignedIngress, BasicSignature<IngressMessageId>>;

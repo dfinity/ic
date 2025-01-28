@@ -11,7 +11,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, messages::SignedIngress};
+use ic_types::{artifact::*, consensus::ReplicaSignedIngress, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
     pin::Pin,
@@ -263,16 +263,16 @@ fn process_messages<
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 pub fn create_ingress_handlers<
-    PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
+    PoolIngress: MutablePool<ReplicaSignedIngress> + Send + Sync + ValidatedPoolReader<ReplicaSignedIngress> + 'static,
 >(
-    channel: AbortableBroadcastChannel<SignedIngress>,
-    user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    channel: AbortableBroadcastChannel<ReplicaSignedIngress>,
+    user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
         dyn PoolMutationsProducer<
                 PoolIngress,
-                Mutations = <PoolIngress as MutablePool<SignedIngress>>::Mutations,
+                Mutations = <PoolIngress as MutablePool<ReplicaSignedIngress>>::Mutations,
             > + Send
             + Sync,
     >,
@@ -377,23 +377,23 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
+pub(crate) struct IngressProcessor<P: MutablePool<ReplicaSignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
+        dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations>
             + Send
             + Sync,
     >,
 }
 
-impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
+impl<P: MutablePool<ReplicaSignedIngress>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
+            dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations>
                 + Send
                 + Sync,
         >,
@@ -405,7 +405,7 @@ impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
     }
 }
 
-impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<SignedIngress>
+impl<P: MutablePool<ReplicaSignedIngress> + Send + Sync + 'static> ArtifactProcessor<ReplicaSignedIngress>
     for IngressProcessor<P>
 {
     /// The method processes changes in the ingress pool.
@@ -413,8 +413,8 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactMutation<SignedIngress>>,
-    ) -> ArtifactTransmits<SignedIngress> {
+        artifact_events: Vec<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
+    ) -> ArtifactTransmits<ReplicaSignedIngress> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {

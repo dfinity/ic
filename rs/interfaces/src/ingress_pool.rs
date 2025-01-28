@@ -1,9 +1,8 @@
 //! The ingress pool public interface.
 use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
-    artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress},
-    CountBytes, NodeId, Time,
+    artifact::IngressMessageId, consensus::ReplicaSignedIngress, messages::MessageId, CountBytes,
+    NodeId, Time,
 };
 
 // tag::interface[]
@@ -14,29 +13,23 @@ use ic_types::{
 #[derive(Clone)]
 pub struct IngressPoolObject {
     /// The received ingress message
-    pub signed_ingress: SignedIngress,
+    pub signed_ingress: ReplicaSignedIngress,
 
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
-
-    // TODO: Once/if we start signing ingress messages, determine the `originator_id` by extracting
-    // the signer from the signature.
-    /// Which the ingress message originates from.
-    pub originator_id: NodeId,
 
     /// Byte size of the ingress message.
     byte_size: usize,
 }
 
 impl IngressPoolObject {
-    pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
-        let message_id = signed_ingress.id();
-        let byte_size = signed_ingress.count_bytes();
+    pub fn new(signed_ingress: ReplicaSignedIngress) -> Self {
+        let message_id = signed_ingress.content.id();
+        let byte_size = signed_ingress.content.count_bytes();
 
         Self {
             signed_ingress,
             message_id,
-            originator_id,
             byte_size,
         }
     }
@@ -50,7 +43,10 @@ impl CountBytes for IngressPoolObject {
 
 impl From<&IngressPoolObject> for IngressMessageId {
     fn from(obj: &IngressPoolObject) -> IngressMessageId {
-        IngressMessageId::new(obj.signed_ingress.expiry_time(), obj.message_id.clone())
+        IngressMessageId::new(
+            obj.signed_ingress.content.expiry_time(),
+            obj.message_id.clone(),
+        )
     }
 }
 

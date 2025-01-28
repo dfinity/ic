@@ -17,7 +17,7 @@ use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::ConsensusMessageId,
-    consensus::{BlockPayload, ConsensusMessage},
+    consensus::{BlockPayload, ConsensusMessage, ReplicaSignedIngress},
     messages::{SignedIngress, SignedRequestBytes},
     NodeId,
 };
@@ -41,7 +41,7 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 #[derive(Clone)]
 pub(super) struct Pools {
     pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
-    pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    pub(super) ingress_pool: ValidatedPoolReaderRef<ReplicaSignedIngress>,
     pub(super) metrics: IngressSenderMetrics,
 }
 
@@ -70,9 +70,9 @@ impl Pools {
         if let Some(ingress_message) = self.ingress_pool.read().unwrap().get(ingress_message_id) {
             // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
             // uniquely identify ingress messages, we thus need to perform an extra check.
-            if SignedIngressId::from(&ingress_message) == *signed_ingress_id {
+            if SignedIngressId::from(&ingress_message.content) == *signed_ingress_id {
                 self.metrics.ingress_messages_in_ingress_pool.inc();
-                return Ok(ingress_message.into());
+                return Ok(ingress_message.content.into());
             }
         }
 

@@ -40,16 +40,19 @@ impl PeerCounters {
     }
 
     pub(super) fn observe(&mut self, ingress_message: &IngressPoolObject) {
-        self.message_counters.add(ingress_message.originator_id, 1);
+        let signer = ingress_message.signed_ingress.signature.signer;
+
+        self.message_counters.add(signer, 1);
         self.bytes_counters
-            .add(ingress_message.originator_id, ingress_message.count_bytes());
+            .add(signer, ingress_message.count_bytes());
     }
 
     pub(super) fn forget(&mut self, ingress_message: &IngressPoolObject) {
-        self.message_counters
-            .subtract(ingress_message.originator_id, 1);
+        let signer = ingress_message.signed_ingress.signature.signer;
+
+        self.message_counters.subtract(signer, 1);
         self.bytes_counters
-            .subtract(ingress_message.originator_id, ingress_message.count_bytes());
+            .subtract(signer, ingress_message.count_bytes());
     }
 
     pub(super) fn count_total_bytes(&self) -> usize {

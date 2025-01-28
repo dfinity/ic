@@ -118,7 +118,7 @@ impl IngressSelector for IngressManager {
 
         for artifact in artifacts {
             let pool_obj = canister_queues
-                .entry(artifact.msg.signed_ingress.canister_id())
+                .entry(artifact.msg.signed_ingress.content.canister_id())
                 .or_default();
             pool_obj.msgs.push(artifact);
         }
@@ -163,8 +163,8 @@ impl IngressSelector for IngressManager {
                 while let Some(msg) = queue.msgs.last() {
                     let ingress = &msg.msg.signed_ingress;
                     let result = self.validate_ingress(
-                        IngressMessageId::from(ingress),
-                        ingress,
+                        IngressMessageId::from(&ingress.content),
+                        &ingress.content,
                         &state,
                         context,
                         &settings,
@@ -244,7 +244,8 @@ impl IngressSelector for IngressManager {
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
+            let payload =
+                IngressPayload::from_iter(messages_in_payload.iter().map(|msg| &msg.content));
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;

@@ -188,7 +188,7 @@ impl Bouncers {
 }
 
 struct AbortableBroadcastChannels {
-    ingress: AbortableBroadcastChannel<SignedIngress>,
+    ingress: AbortableBroadcastChannel<ReplicaSignedIngress>,
     consensus: AbortableBroadcastChannel<ConsensusMessage>,
     certifier: AbortableBroadcastChannel<CertificationMessage>,
     dkg: AbortableBroadcastChannel<dkg::Message>,
@@ -501,7 +501,7 @@ fn start_consensus(
     time_source: Arc<dyn TimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();

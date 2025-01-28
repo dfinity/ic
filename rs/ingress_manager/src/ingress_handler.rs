@@ -69,7 +69,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
                 // unvalidated ingress messages in the pool.
                 // Since we plan(IC-1718) to have only one section in the Ingress Pool and to
                 // validate ingress messages on-the-fly, this problem will eventually go away.
-                if pool.exceeds_limit(&ingress_object.originator_id) {
+                if pool.exceeds_limit(&ingress_object.signed_ingress.signature.signer) {
                     return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
                 }
 
@@ -181,7 +181,7 @@ impl IngressManager {
         // in order to be consistent with expiry_range, which imposes
         // a precondition that all messages processed here are in range.
         if let Err(err) = self.request_validator.validate_request(
-            ingress_object.signed_ingress.as_ref(),
+            ingress_object.signed_ingress.content.as_ref(),
             consensus_time,
             &self.registry_root_of_trust_provider(registry_version),
         ) {
