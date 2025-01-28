@@ -55,7 +55,7 @@ function read_config_variables() {
 }
 
 function construct_hostname() {
-    if [ -n "${config_hostname}" ] ; then
+    if [ -n "${config_hostname}" ]; then
         HOSTNAME=${config_hostname}
         write_log "Using manually configured hostname: ${HOSTNAME}"
     elif [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
