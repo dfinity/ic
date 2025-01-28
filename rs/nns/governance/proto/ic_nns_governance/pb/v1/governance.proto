@@ -210,62 +210,6 @@ enum Visibility {
   VISIBILITY_PUBLIC = 2;
 }
 
-// The result of querying for the state of a single neuron.
-message NeuronInfo {
-  // The exact time at which this data was computed. This means, for
-  // example, that the exact time that this neuron will enter the
-  // dissolved state, assuming it is currently dissolving, is given
-  // by `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
-  uint64 retrieved_at_timestamp_seconds = 1;
-  // The current state of the neuron. See [NeuronState] for a
-  // description of the different states.
-  NeuronState state = 2;
-  // The current age of the neuron. See [Neuron::age_seconds]
-  // for details on how it is computed.
-  uint64 age_seconds = 3;
-  // The current dissolve delay of the neuron. See
-  // [Neuron::dissolve_delay_seconds] for details on how it is
-  // computed.
-  uint64 dissolve_delay_seconds = 4;
-  // See [Neuron::recent_ballots] for a description.
-  repeated BallotInfo recent_ballots = 5;
-  // Current voting power of the neuron.
-  uint64 voting_power = 6;
-  // When the Neuron was created. A neuron can only vote on proposals
-  // submitted after its creation date.
-  uint64 created_timestamp_seconds = 7;
-  // Current stake of the neuron, in e8s.
-  uint64 stake_e8s = 8;
-  // Timestamp when this neuron joined the community fund.
-  optional uint64 joined_community_fund_timestamp_seconds = 9;
-  // If this neuron is a known neuron, this is data associated
-  // with it, including the neuron's name and (optionally) a description.
-  optional KnownNeuronData known_neuron_data = 10;
-  // The type of the Neuron. See [NeuronType] for a description
-  // of the different states.
-  optional NeuronType neuron_type = 11;
-  // See the Visibility enum.
-  optional Visibility visibility = 12;
-  // The last time that voting power was "refreshed". There are two ways to
-  // refresh the voting power of a neuron: set following, or vote directly. In
-  // the future, there will be a dedicated API for refreshing. Note that direct
-  // voting implies that refresh also occurs when a proposal is created, because
-  // direct voting is part of proposal creation.
-  //
-  // Effect: When this becomes > 6 months ago, the amount of voting power that
-  // this neuron can exercise decreases linearly down to 0 over the course of 1
-  // month. After that, following is cleared, except for ManageNeuron proposals.
-  //
-  // This will always be populated. If the underlying neuron was never
-  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
-  // after the UNIX epoch).
-  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
-  // See the analogous field in Nueron.
-  optional uint64 deciding_voting_power = 14;
-  // See the analogous field in Neuron.
-  optional uint64 potential_voting_power = 15;
-}
-
 // A transfer performed from some account to stake a new neuron.
 message NeuronStakeTransfer {
   // When the transfer arrived at the governance canister.

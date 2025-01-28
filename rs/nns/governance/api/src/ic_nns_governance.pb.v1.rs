@@ -120,6 +120,17 @@ pub struct NeuronInfo {
     #[prost(uint64, optional, tag = "15")]
     pub potential_voting_power: Option<u64>,
 }
+
+impl NeuronInfo {
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
+}
+
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]

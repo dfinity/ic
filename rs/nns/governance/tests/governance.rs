@@ -84,9 +84,9 @@ use ic_nns_governance::{
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
         KnownNeuron, KnownNeuronData, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
-        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType,
+        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
+        Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -103,7 +103,7 @@ use ic_nns_governance_api::{
         self as api,
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ManageNeuronResponse,
+        ListNeuronsResponse, ManageNeuronResponse, NeuronState,
     },
     proposal_validation::validate_proposal_title,
 };
@@ -2332,10 +2332,6 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
     assert_eq!(neuron_info.visibility, None);
     assert_eq!(full_neuron.visibility, None);
 
-    // This conversion will not be needed if/when we get rid of the definition
-    // of NeuronInfo from governance.proto.
-    let neuron_info = api::NeuronInfo::from(neuron_info);
-
     assert_eq!(
         list_neurons_response,
         ListNeuronsResponse {
@@ -2391,10 +2387,6 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
     // Step 3: Inspect results.
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
     assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
-
-    // This conversion will not be needed if/when we get rid of the definition
-    // of NeuronInfo from governance.proto.
-    let neuron_info = api::NeuronInfo::from(neuron_info);
 
     assert_eq!(
         list_neurons_response,
@@ -2588,7 +2580,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 2 }, principal(2))
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -2626,7 +2618,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 3 }, principal(3),)
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -14864,16 +14856,8 @@ fn test_neuron_info_private_enforcement() {
             let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
 
             // Step 2.1: Call get_neuron_info.
-            let get_neuron_info = |requester| {
-                let neuron_info = governance.get_neuron_info(&neuron_id, requester).unwrap();
-
-                // We would like to get rid of the definition of NeuronInfo
-                // in governance.proto. When we get rid of that definition,
-                // this conversion will no longer be needed. Getting rid of
-                // the definition should be possible, since we do not store
-                // NeuronInfo in stable memory (AFAIK).
-                api::NeuronInfo::from(neuron_info)
-            };
+            let get_neuron_info =
+                |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
             let controller_get_result = get_neuron_info(controller);
             let hot_key_get_result = get_neuron_info(hot_key);
             let random_principal_get_result = get_neuron_info(random_principal_id);
