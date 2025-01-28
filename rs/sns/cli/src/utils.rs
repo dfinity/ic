@@ -1,3 +1,4 @@
+use crate::MAINNET_NETWORK;
 use anyhow::{anyhow, Result};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
@@ -5,7 +6,7 @@ use ic_nervous_system_agent::sns::Sns;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-fn get_agent(ic_url: &str) -> Result<Agent> {
+pub fn get_agent(ic_url: &str) -> Result<Agent> {
     Agent::builder()
         .with_url(ic_url)
         .with_verify_query_signatures(false)
@@ -14,8 +15,7 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
 }
 
 pub fn get_mainnet_agent() -> Result<Agent> {
-    let ic_url = "https://ic0.app/";
-    get_agent(ic_url)
+    get_agent(MAINNET_NETWORK)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
