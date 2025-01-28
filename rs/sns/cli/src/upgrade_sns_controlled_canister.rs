@@ -16,7 +16,7 @@ use ic_nervous_system_agent::{
     CallCanisters, Request,
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, ChunkedCanisterWasm, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
