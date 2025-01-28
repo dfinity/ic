@@ -41,19 +41,15 @@ type SaltGenerationStrategy = variant {
   // Generates a new salt at 00:00:00 UTC on the first day of the next calendar month
   // Handles calendar edge cases including: transitions between months (December-January), leap years
   StartOfMonth;
-  // Generates a new salt at fixed intervals from an unspecified reference point
-  FixedIntervalSecs: nat64;
 };
 
 // Initialization arguments used when installing/upgrading/reinstalling the canister
 type InitArgs = record {
+    // If true salt is regenerated immediately and subsequently based on the chosen strategy
+    regenerate_now: bool;
     // Strategy defining salt generation
-    // If specified: 
-    //  - salt is regenerated immediately
-    //  - subsequent strategy is based on the variant
-    // If not specified:
-    //  - preserve previously configured strategy
-    //  - no immediate salt regeneration
+    // If specified: newly provided strategy is used
+    // If not specified: salt is not regenerated
     salt_generation_strategy: opt SaltGenerationStrategy;
     // Interval (in seconds) for polling API boundary node IDs from the registry
     // The first polling operation occurs immediately

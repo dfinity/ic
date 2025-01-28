@@ -1,0 +1,25 @@
+[package]
+name = "salt"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = { workspace = true }
+rand_chacha = { workspace = true }
+getrandom = { version = "0.2", features = ["custom"] }
+salt-api = { path = "./api" }
+time = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+path = "canister/lib.rs"
