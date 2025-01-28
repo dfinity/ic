@@ -531,20 +531,17 @@ pub async fn check_fetched_transaction_inputs(txid: Txid) -> CheckTransactionQue
     match BtcCheckerCanisterEnv.config().check_mode {
         CheckMode::AcceptAll => CheckTransactionQueryResponse::Passed,
         CheckMode::RejectAll => CheckTransactionQueryResponse::Failed(Vec::new()),
-        CheckMode::Normal => {
-            if let Some(fetch_tx_status) = state::get_fetch_status(txid) {
-                match fetch_tx_status {
-                    FetchTxStatus::Fetched(fetched) => {
-                        check_for_blocked_input_addresses(&fetched).into()
-                    }
-                    FetchTxStatus::PendingOutcall
-                    | FetchTxStatus::PendingRetry { .. }
-                    | FetchTxStatus::Error(_) => CheckTransactionQueryResponse::Unknown,
-                }
-            } else {
-                CheckTransactionQueryResponse::Unknown
+        CheckMode::Normal => match state::get_fetch_status(txid) {
+            Some(FetchTxStatus::Fetched(fetched)) => {
+                check_for_blocked_input_addresses(&fetched).into()
             }
-        }
+            Some(
+                FetchTxStatus::PendingOutcall
+                | FetchTxStatus::PendingRetry { .. }
+                | FetchTxStatus::Error(_),
+            )
+            | None => CheckTransactionQueryResponse::Unknown,
+        },
     }
 }
 
