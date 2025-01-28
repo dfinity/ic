@@ -1,15 +1,20 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
+use crate::get_successors_handler::GetSuccessorsResponse;
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
 use bitcoin::{
     block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
 };
-use std::fs::OpenOptions;
+use ic_btc_service::BtcServiceGetSuccessorsResponse;
+use prost::bytes::buf;
+use std::hash;
+use std::{fs::OpenOptions, time::Instant};
 use std::io::Write;
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
 use thiserror::Error;
+use prost::Message;
 
 use bitcoin::Work;
 
@@ -275,7 +280,47 @@ impl BlockchainState {
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
         let height = self.header_cache.get(&block_hash).unwrap().height;
 
-        writeln!(self.block_file, "[{}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size()).unwrap();
+        let block_height = self.header_cache.get(&block_hash).unwrap().height;
+        let mut duration = 0;
+        let total_size = block.total_size();
+
+        let times = 2_000_000 / total_size;
+
+        if block_height == 26671 {
+            let mut total_duration = 0;
+            for i in 0..10 {
+                let start = Instant::now();
+        
+                let mut next = vec![];
+        
+                for i in 0..100 {
+                    let hash = block.block_hash();
+                    let header = self.get_cached_header(&hash).unwrap();
+                    next.push(header.header.clone());
+                }
+        
+                let mut blocks = vec![];
+                for i in 0..times {
+                    blocks.push(block.clone());
+                }
+        
+                let mock_response = GetSuccessorsResponse {
+                    blocks,
+                    next    
+                };
+        
+                let response = BtcServiceGetSuccessorsResponse::try_from(mock_response).unwrap();
+        
+                let mut buf = Vec::new();
+        
+                response.encode(&mut buf).unwrap();
+        
+                total_duration += start.elapsed().as_millis();
+            }
+            duration = total_duration / 10;
+        }
+
+        writeln!(self.block_file, "[{}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size(), duration, times).unwrap();
 
         self.block_cache.insert(block_hash, block);
         self.prune_blocks_below_height(height);
@@ -287,7 +332,7 @@ impl BlockchainState {
         self.metrics
             .block_cache_elements
             .set(self.block_cache.len() as i64);
-        println!("{}, {}, {}", height, self.get_block_cache_size(), self.block_cache.len());
+        //println!("{}, {}, {}", height, self.get_block_cache_size(), self.block_cache.len());
         if false && self.block_cache.len() > 1 {
             println!("found more blocks in cache:");
             for (hash, _block) in self.block_cache.iter() {
