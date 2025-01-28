@@ -83,10 +83,10 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
-        KnownNeuron, KnownNeuronData, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType,
-        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
-        Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        KnownNeuron, KnownNeuronData, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType, NeuronsFundData,
+        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
+        ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -102,8 +102,10 @@ use ic_nns_governance_api::{
     pb::v1::{
         self as api,
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
-        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
-        ListNeuronsResponse, ManageNeuronResponse, NeuronState,
+        proposal::Action as ApiAction,
+        Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+        ListNeurons, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
+        NeuronState,
     },
     proposal_validation::validate_proposal_title,
 };
@@ -4473,23 +4475,23 @@ fn test_get_neuron_ids_by_principal() {
 
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal1),
-        btreeset![NeuronId { id: 1 }]
+        btreeset! { NeuronId { id: 1 } }
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal2),
-        btreeset![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+        btreeset! { NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 } }
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal3),
         BTreeSet::<NeuronId>::new()
     );
+    assert_eq!(gov.get_neuron_ids_by_principal(&principal3), btreeset! {});
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal4),
-        btreeset![NeuronId { id: 4 }]
+        btreeset! { NeuronId { id: 4 } }
     );
 }
 
-/// *Test fixture for general tests*
 fn empty_fixture() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
@@ -4647,7 +4649,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), btreeset![id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), btreeset! { id });
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -5791,7 +5793,7 @@ fn test_neuron_split() {
     );
 
     let neuron_ids = governance.get_neuron_ids_by_principal(&from);
-    let expected_neuron_ids = btreeset![id, child_nid];
+    let expected_neuron_ids = btreeset! { id, child_nid };
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
@@ -7344,7 +7346,12 @@ fn test_manage_and_reward_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -7695,7 +7702,12 @@ fn test_manage_and_reward_multiple_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -8157,7 +8169,7 @@ fn test_get_proposal_info() {
     let action = result.proposal.unwrap().action.unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
     );
 }
 
@@ -8195,7 +8207,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8233,7 +8245,7 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu)
+        ApiAction::ExecuteNnsFunction(eu)
         if eu.payload.len() ==
             EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
     );
@@ -8268,7 +8280,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8927,7 +8939,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -8939,7 +8951,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                2 => Ballot {
+                2 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 2,
                 },
@@ -8951,7 +8963,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -9101,7 +9113,7 @@ fn test_omit_large_fields() {
     );
 
     fn get_logo(list_proposals_response: ListProposalInfoResponse) -> Option<Image> {
-        let Action::CreateServiceNervousSystem(create_service_nervous_system) =
+        let ApiAction::CreateServiceNervousSystem(create_service_nervous_system) =
             list_proposals_response.proposal_info[0]
                 .proposal
                 .clone()
@@ -9205,8 +9217,9 @@ async fn test_max_number_of_proposals_with_ballots() {
         .unwrap();
     }
     assert_eq!(
+        gov.get_pending_proposals(&PrincipalId::new_anonymous())
+            .len(),
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        gov.get_pending_proposals_data().count()
     );
     // Let's try one more. It should be rejected.
     assert_matches!(gov.make_proposal(
@@ -12022,8 +12035,8 @@ async fn test_known_neurons() {
     assert_eq!(
         gov.get_proposal_info(&principal(3), failed_proposal_id)
             .unwrap()
-            .status(),
-        ProposalStatus::Failed
+            .status,
+        ProposalStatus::Failed as i32
     );
 
     // Check that the state is the same as before the last proposal.
