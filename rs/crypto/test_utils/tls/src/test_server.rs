@@ -29,7 +29,6 @@ impl ServerBuilder {
         self
     }
 
-
     pub fn build(self, registry: Arc<FakeRegistryClient>) -> Server {
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("failed to bind");
         let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id);
@@ -68,12 +67,9 @@ impl Server {
     pub async fn run(&self) -> Result<AuthenticatedPeer, TlsTestServerRunError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
-        let server_config = self
-            .crypto
-            .server_config( REG_V1)
-            .map_err(|e| {
-                TlsTestServerRunError(format!("handshake error when creating config: {e}"))
-            })?;
+        let server_config = self.crypto.server_config(REG_V1).map_err(|e| {
+            TlsTestServerRunError(format!("handshake error when creating config: {e}"))
+        })?;
 
         let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
         let tls_stream = tls_acceptor
@@ -157,5 +153,4 @@ impl Server {
     pub fn cert(&self) -> X509PublicKeyCert {
         self.cert.to_proto()
     }
-
 }

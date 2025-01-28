@@ -743,8 +743,7 @@ pub mod internal {
             &self,
             registry_version: RegistryVersion,
         ) -> Result<ServerConfig, TlsConfigError> {
-            self.crypto_component
-                .server_config( registry_version)
+            self.crypto_component.server_config(registry_version)
         }
 
         fn server_config_without_client_auth(
