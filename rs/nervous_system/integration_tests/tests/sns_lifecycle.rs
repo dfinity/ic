@@ -24,10 +24,8 @@ use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
     CreateServiceNervousSystem, Neuron,
 };
-use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{self as sns_pb, NeuronPermissionType},
-};
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
