@@ -1575,7 +1575,7 @@ pub mod sns {
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
-        fn dissolve_delay_seconds(neuron: &Neuron, now_seconds: u64) -> u64 {
+        pub fn dissolve_delay_seconds(neuron: &Neuron, now_seconds: u64) -> u64 {
             match neuron.dissolve_state {
                 Some(DissolveState::DissolveDelaySeconds(d)) => d,
                 Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
