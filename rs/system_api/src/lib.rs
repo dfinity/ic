@@ -3550,7 +3550,14 @@ impl SystemApi for SystemApiImpl {
         size: usize,
         heap: &[u8],
     ) -> HypervisorResult<u32> {
-        todo!()
+        let msg_bytes = valid_subslice("ic0_replication_factor", src, size, heap)?;
+        let subnet_id = PrincipalId::try_from(msg_bytes)
+            .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)))?;
+        self.sandbox_safe_system_state
+            .network_topology
+            .get_subnet_size(&subnet_id.into())
+            .map(|x| x as u32)
+            .ok_or(HypervisorError::SubnetNotFound)
     }
 
     fn ic0_cost_call(
