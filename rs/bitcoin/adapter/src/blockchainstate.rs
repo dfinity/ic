@@ -286,6 +286,8 @@ impl BlockchainState {
 
         let times = 2_000_000 / total_size;
 
+        let mut buf_size = 0;
+
         if block_height == 26671 {
             let mut total_duration = 0;
             for i in 0..10 {
@@ -303,7 +305,7 @@ impl BlockchainState {
                 for i in 0..times {
                     blocks.push(block.clone());
                 }
-        
+         
                 let mock_response = GetSuccessorsResponse {
                     blocks,
                     next    
@@ -314,13 +316,15 @@ impl BlockchainState {
                 let mut buf = Vec::new();
         
                 response.encode(&mut buf).unwrap();
+
+                buf_size = buf.len();
         
                 total_duration += start.elapsed().as_millis();
             }
             duration = total_duration / 10;
         }
 
-        writeln!(self.block_file, "[{}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size(), duration, times).unwrap();
+        writeln!(self.block_file, "[{}, {}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size(), duration, times, buf_size).unwrap();
 
         self.block_cache.insert(block_hash, block);
         self.prune_blocks_below_height(height);
