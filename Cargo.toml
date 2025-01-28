@@ -216,7 +216,6 @@ members = [
     "rs/nns/handlers/root/interface",
     "rs/nns/identity",
     "rs/nns/init",
-    "rs/nns/inspector",
     "rs/nns/integration_tests",
     "rs/nns/nns-ui",
     "rs/nns/test_utils",

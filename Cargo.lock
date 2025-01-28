@@ -10561,26 +10561,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-nns-inspector"
-version = "0.1.0"
-dependencies = [
- "clap 4.5.27",
- "csv",
- "hex",
- "ic-base-types",
- "ic-ledger-canister-core",
- "ic-nns-constants",
- "ic-nns-governance-api",
- "ic-nns-gtc",
- "icp-ledger",
- "ledger-canister",
- "prost 0.13.4",
- "serde",
- "serde_cbor",
- "stable_reader",
-]
-
-[[package]]
 name = "ic-nns-integration-tests"
 version = "0.9.0"
 dependencies = [
