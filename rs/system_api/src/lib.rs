@@ -3571,8 +3571,13 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
-        // find own subnet repl factor; get fee, write to dst.
-        todo!()
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .cycles_account_manager
+            .canister_creation_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        Ok(())
     }
 
     fn ic0_cost_http_request(
