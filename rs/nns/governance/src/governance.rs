@@ -44,6 +44,7 @@ use crate::{
                 ClaimOrRefresh, Command, NeuronIdOrSubaccount,
             },
             neuron::Followees,
+
             neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
             proposal::Action,
             reward_node_provider::{RewardMode, RewardToAccount},
@@ -51,20 +52,20 @@ use crate::{
             settle_neurons_fund_participation_response::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
-            swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron as NeuronProto,
-            NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
-            NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
-            NeuronsFundParticipation as NeuronsFundParticipationPb,
-            NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
-            ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
-            RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
-            WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+            swap_background_information,
+            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
+            ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+            NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb, NeuronsFundParticipation as
+            NeuronsFundParticipationPb, NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction,
+            NodeProvider, Proposal, ProposalData, ProposalRewardStatus, ProposalStatus,
+            RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+            SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+            StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider,
+            Visibility, Vote, VotingPowerEconomics, WaitForQuietState, XdrConversionRate as
+            XdrConversionRatePb,
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
@@ -97,6 +98,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     pb::v1::{
+        self as api,
         manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
         CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
         ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo,
@@ -3667,7 +3669,7 @@ impl Governance {
         &self,
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
-    ) -> Result<NeuronProto, GovernanceError> {
+    ) -> Result<api::Neuron, GovernanceError> {
         let neuron_id = self.find_neuron_id(by)?;
         self.get_full_neuron(&neuron_id, caller)
     }
@@ -3681,11 +3683,15 @@ impl Governance {
         &self,
         id: &NeuronId,
         caller: &PrincipalId,
-    ) -> Result<NeuronProto, GovernanceError> {
-        self.neuron_store
+    ) -> Result<api::Neuron, GovernanceError> {
+        let native_neuron = self
+            .neuron_store
             .get_full_neuron(*id, *caller)
-            .map(NeuronProto::from)
-            .map_err(GovernanceError::from)
+            .map_err(GovernanceError::from)?;
+
+        let now_seconds = self.env.now();
+        let voting_power_economics = self.voting_power_economics();
+        Ok(native_neuron.into_api(now_seconds, voting_power_economics))
     }
 
     // Returns the set of currently registered node providers.

@@ -735,7 +735,6 @@ fn get_full_neuron_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             &caller(),
         )
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
