@@ -1,3 +1,6 @@
+// TODO: EXC-1841
+#![allow(static_mut_refs)]
+
 use dfn_core::api::print;
 use dfn_macro::{query, update};
 use std::ptr::{addr_of, addr_of_mut};

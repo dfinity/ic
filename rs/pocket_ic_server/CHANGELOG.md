@@ -13,12 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
-  If an optional caller is provided and a corresponding read state request for the status of the same update call
-  signed by that specified caller was rejected because the update call was submitted by a different caller, then an error is returned.
+  If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+- New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
 
 ### Fixed
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
   are created on an arbitrary subnet.
+
+### Changed
+- The response type `RawSubmitIngressResult` is replaced by `Result<RawMessageId, RejectResponse>`.
+- The response types `RawWasmResult` and `UserError` in `RawCanisterResult` are replaced by `Vec<u8>` and `RejectResponse`.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/execute_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/update/await_ingress_message`
+  to submit and then await an ingress message instead.
 
 
 

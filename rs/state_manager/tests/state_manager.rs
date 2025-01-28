@@ -46,7 +46,9 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
+};
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
@@ -1274,6 +1276,30 @@ fn missing_manifests_are_recomputed() {
         let (_metrics, state_manager) = restart_fn(state_manager, None);
 
         wait_for_checkpoint(&state_manager, height(1));
+    });
+}
+
+#[test]
+fn validate_replicated_state_is_called() {
+    fn validate_was_called(metrics: &MetricsRegistry) -> bool {
+        let request_duration = fetch_histogram_vec_stats(
+            metrics,
+            "state_manager_tip_handler_request_duration_seconds",
+        );
+        for (label, _stats) in request_duration.iter() {
+            if label.get("request") == Some(&"validate_replicated_state".to_string()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    state_manager_test(|metrics, state_manager| {
+        assert!(!validate_was_called(metrics));
+        let (_, tip) = state_manager.take_tip();
+        state_manager.commit_and_certify(tip, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+        assert!(validate_was_called(metrics));
     });
 }
 
@@ -6201,6 +6227,7 @@ fn can_merge_unexpected_number_of_files() {
                 .vmemory_0();
             let existing_overlays = pm_layout.existing_overlays().unwrap();
             assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
+            state_manager.flush_tip_channel();
 
             // Copy each shard for heights 1..HEIGHT; now each file is beyond the hard limit,
             // triggering forced merge for all shards back to one overlay.
@@ -7519,8 +7546,12 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 }
 
 proptest! {
-// We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(5))]
+#![proptest_config(ProptestConfig {
+    // Fork to prevent flaky timeouts due to closed sandbox fds
+    fork: true,
+    // We go for fewer, but longer runs
+    ..ProptestConfig::with_cases(5)
+})]
 
 #[test]
 fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {

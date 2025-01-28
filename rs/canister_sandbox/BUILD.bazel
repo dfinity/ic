@@ -96,7 +96,6 @@ rust_binary(
         # Keep sorted.
         ":backend_lib",
         ":build_script",
-        "@crate_index//:libc",
     ],
 )
 

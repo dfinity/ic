@@ -2,11 +2,12 @@ use crate::{
     deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
+    upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
-use ic_agent::Agent;
+use ic_agent::{identity::Secp256k1Identity, Agent};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -38,10 +39,13 @@ pub mod prepare_canisters;
 pub mod propose;
 mod table;
 pub mod unit_helpers;
+pub mod upgrade_sns_controlled_canister;
 mod utils;
 
 #[cfg(test)]
 mod tests;
+
+pub const MAINNET_NETWORK: &str = "https://ic0.app";
 
 /// We use a giant tail to avoid colliding with/stomping on identity that a user
 /// might have created for themselves.
@@ -57,6 +61,18 @@ const TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME: &str =
 pub struct CliArgs {
     #[clap(subcommand)]
     pub sub_command: SubCommand,
+
+    /// Override the compute network to connect to. By default, the local network is used.
+    /// A valid URL (starting with `http:` or `https:`) can be used here,
+    /// e.g., "http://localhost:8000" is a valid network name.
+    // TODO[NNS1-3569]: Remove this argument once we can inherit the same data from dfx_core.
+    #[clap(long, aliases = ["ic-url"], default_value = MAINNET_NETWORK)]
+    pub network: Option<String>,
+
+    /// Path to the PEM file of an identity to run this command as.
+    // TODO[NNS1-3569]: Remove this argument once we can inherit the same data from dfx_core.
+    #[clap(long)]
+    pub pem: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -80,11 +96,28 @@ pub enum SubCommand {
     List(list::ListArgs),
     /// Check SNSes for warnings and errors.
     Health(HealthArgs),
+    /// Uploads a given Wasm to a (newly deployed) store canister and submits a proposal to upgrade
+    /// using that Wasm.
+    UpgradeSnsControlledCanister(UpgradeSnsControlledCanisterArgs),
 }
 
 impl CliArgs {
-    pub fn agent(&self) -> Result<Agent> {
-        crate::utils::get_mainnet_agent()
+    pub async fn agent(&self) -> Result<Agent> {
+        let mut agent = match &self.network {
+            Some(network) if !network.contains(MAINNET_NETWORK) => {
+                let agent = crate::utils::get_agent(network)?;
+                agent.fetch_root_key().await?;
+                agent
+            }
+            None | Some(_) => crate::utils::get_mainnet_agent()?,
+        };
+
+        if let Some(pem) = &self.pem {
+            let identity = Secp256k1Identity::from_pem(pem.as_bytes())?;
+            agent.set_identity(identity);
+        }
+
+        Ok(agent)
     }
 }
 
@@ -509,6 +542,8 @@ impl NnsGovernanceCanister {
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
+        // TODO: Jira ticket NNS1-3555
+        #[allow(non_local_definitions)]
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
@@ -599,13 +634,13 @@ enum RunCommandError<'a> {
     },
 }
 
-impl<'a> Display for RunCommandError<'a> {
+impl Display for RunCommandError<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(formatter, "{}", self.new_report())
     }
 }
 
-impl<'a> RunCommandError<'a> {
+impl RunCommandError<'_> {
     fn new_report(&self) -> String {
         match self {
             RunCommandError::UnableToRunCommand { command, error } => {

@@ -196,9 +196,9 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // amount of time.
 thread_local! {
 
-    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
@@ -209,9 +209,9 @@ thread_local! {
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
-    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 
     static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }

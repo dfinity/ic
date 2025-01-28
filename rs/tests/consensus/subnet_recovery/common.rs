@@ -573,7 +573,7 @@ fn halt_subnet(
                     message.cursor
                 ),
             );
-            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
                 Ok(())
             } else {
                 bail!("Did not find log entry that consensus is halted.")
@@ -660,7 +660,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
                     message.cursor
                 ),
             );
-            if res.map_or(false, |r| r.trim().parse::<i32>().unwrap() > 0) {
+            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
                 Ok(())
             } else {
                 bail!("Did not find log entry that cup is corrupted.")
