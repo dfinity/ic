@@ -1637,7 +1637,8 @@ async fn test_sns_lifecycle(
 
                     // Finally, check that the SNS Ledger balances add up.
                     {
-                        let subaccount = sns_neuron.id.to_vec();
+                        let subaccount = sns_neuron.id.unwrap().id.try_into().unwrap();
+
                         let observed_balance_e8s = sns::ledger::icrc1_balance_of(
                             &pocket_ic,
                             sns.ledger.canister_id,

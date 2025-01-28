@@ -262,7 +262,7 @@ async fn test_get_upgrade_journal() {
                 sns_pb::upgrade_journal_entry::UpgradeStarted {
                     current_version: Some(new_sns_version_1.clone()),
                     expected_version: Some(new_sns_version_2.clone()),
-                    reason: todo!(),
+                    reason: Some(upgrade_started::Reason::BehindTargetVersion(Empty {})),
                 },
             ),
         );
