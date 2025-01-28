@@ -535,6 +535,12 @@ impl BlockchainManager {
             }
         }
 
+        // Remove the requests that have timed out.
+        // If they are not removed, then all peers could be fully saturated and we can't send any requests.
+        for block_hash in retry_queue.iter() {
+            self.getdata_request_info.remove(block_hash);
+        }
+
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
@@ -589,7 +595,7 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                break;
+                continue;
             }
 
             trace!(
@@ -753,20 +759,20 @@ impl BlockchainManager {
     }
 }
 
+// Prioritizes elements in sync_queue (as elements in retry_queue are vety likely bad blocks).
 fn get_next_block_hash_to_sync(
     is_cache_full: bool,
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-    if !retry_queue.is_empty() {
-        return retry_queue.pop_front();
-    }
-
     if is_cache_full {
         return None;
     }
 
-    sync_queue.pop_front()
+    if !sync_queue.is_empty() {
+        return sync_queue.pop_front();
+    }
+    retry_queue.pop_front()
 }
 
 #[cfg(test)]

@@ -4,7 +4,6 @@ use std::{
 };
 
 use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
-use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
@@ -30,6 +29,12 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 const MAX_BLOCKS_LENGTH: usize = 100;
 
 const BLOCK_HEADER_SIZE: usize = 80;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+// The number of blokcs outside of hte main chain easily exceeds 100 currently.
+// Setting this to 100 would prevent the adapter from making progress,
+// as it gets stuck on these blocks, whose requests timeout indefinitely.
+const MAX_IN_FLIGHT_BLOCKS: usize = 1000;
 
 // The maximum number of bytes the `next` field in a response can take.
 const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
@@ -97,7 +102,7 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let response = {
+        let (blocks, next) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -116,17 +121,24 @@ impl GetSuccessorsHandler {
                 &request.processed_block_hashes,
                 &blocks,
             );
-            GetSuccessorsResponse { blocks, next }
+            (blocks, next)
         };
+        //extract the first MAX_NEXT_BLOCK_HEADERS_LENGTH and return them to the caller
+        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        let response = GetSuccessorsResponse {
+            blocks,
+            next: response_next.to_vec(),
+        };
+
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
 
-        if !response.next.is_empty() {
+        if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    response.next.clone(),
+                    next.clone(),
                 ))
                 .ok();
         }
@@ -169,7 +181,6 @@ fn get_successor_blocks(
             // Retrieve the block from the cache.
             match state.get_block(block_hash) {
                 Some(block) => {
-                    let block_size = block.total_size();
                     let block_size = block.total_size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
@@ -221,7 +232,7 @@ fn get_next_headers(
 
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
+        if next_headers.len() >= MAX_IN_FLIGHT_BLOCKS {
             break;
         }
 
