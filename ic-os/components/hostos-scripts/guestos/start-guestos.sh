@@ -48,8 +48,8 @@ function define_guestos() {
             "GuestOS virtual machine define state" \
             "gauge"
     else
-        virsh define ${CONFIG}
         write_log "Defining GuestOS virtual machine."
+        virsh define ${CONFIG}
         write_metric "hostos_guestos_service_define" \
             "1" \
             "GuestOS virtual machine define state" \
@@ -65,6 +65,7 @@ function start_guestos() {
             "GuestOS virtual machine start state" \
             "gauge"
     else
+        write_log "Starting GuestOS virtual machine."
         # Attempt to start; if it fails, dump logs.
         if ! virsh start guestos; then
             # The sleep below gives QEMU time to clear/reinitialize its console
