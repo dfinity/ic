@@ -17,6 +17,7 @@ pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 pub const LABEL_CALL_V3_CERTIFICATE_STATUS: &str = "status";
 
 // Call v3 labels
+// !!! Be careful to update alert queries in k8s repo if changing these constants.!!!
 pub const LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER: &str = "trigger";
 pub const CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str = "ingress_watcher_not_running";
 pub const CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
@@ -24,6 +25,8 @@ pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_time
 pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
 pub const CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
+pub const CALL_V3_STATUS_IS_NOT_LEAF: &str = "not_leaf";
+pub const CALL_V3_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";

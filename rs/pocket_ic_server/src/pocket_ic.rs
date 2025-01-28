@@ -1166,29 +1166,52 @@ pub struct SetTime {
     pub time: Time,
 }
 
-impl Operation for SetTime {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Time is kept in sync across subnets, so one can take any subnet.
-        let current_time: SystemTime = pic.any_subnet().time();
-        let set_time: SystemTime = self.time.into();
-        match current_time.cmp(&set_time) {
-            std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
-                systemtime_to_unix_epoch_nanos(current_time),
-                systemtime_to_unix_epoch_nanos(set_time),
-            ))),
-            std::cmp::Ordering::Equal => OpOut::NoOutput,
-            std::cmp::Ordering::Less => {
-                // Sets the time on all subnets.
-                for subnet in pic.subnets.get_all() {
+fn set_time(pic: &PocketIc, time: Time, certified: bool) -> OpOut {
+    // Time is kept in sync across subnets, so one can take any subnet.
+    let current_time: SystemTime = pic.any_subnet().time();
+    let set_time: SystemTime = time.into();
+    match current_time.cmp(&set_time) {
+        std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
+            systemtime_to_unix_epoch_nanos(current_time),
+            systemtime_to_unix_epoch_nanos(set_time),
+        ))),
+        std::cmp::Ordering::Equal => OpOut::NoOutput,
+        std::cmp::Ordering::Less => {
+            // Sets the time on all subnets.
+            for subnet in pic.subnets.get_all() {
+                if certified {
+                    subnet.state_machine.set_certified_time(set_time);
+                } else {
                     subnet.state_machine.set_time(set_time);
                 }
-                OpOut::NoOutput
             }
+            OpOut::NoOutput
         }
+    }
+}
+
+impl Operation for SetTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, false)
     }
 
     fn id(&self) -> OpId {
         OpId(format!("set_time_{}", self.time))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SetCertifiedTime {
+    pub time: Time,
+}
+
+impl Operation for SetCertifiedTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, true)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("set_certified_time_{}", self.time))
     }
 }
 
@@ -1305,6 +1328,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
+                    socks_proxy_addrs: vec![],
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -1472,6 +1496,7 @@ fn process_mock_canister_https_response(
                     timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
+                    socks_proxy_addrs: vec![],
                 })
                 .unwrap();
             let response = loop {

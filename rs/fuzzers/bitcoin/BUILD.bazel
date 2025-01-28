@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:bitcoin",
+    "@crate_index//:bitcoin_0_28",
     "@crate_index//:libfuzzer-sys",
 ]
 
