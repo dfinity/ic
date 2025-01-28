@@ -102,9 +102,13 @@ function start_guestos() {
         fi
 
         sleep 10
-        write_tty1_log "GuestOS virtual machine successfully launched.\nIf onboarding, please wait for up to 10 minutes for a 'Join request successful!' message\n\n\n"
+        write_tty1_log ""
+        write_tty1_log "#################################################"
+        write_tty1_log "GuestOS virtual machine launched"
+        write_tty1_log "IF ONBOARDING, please wait for up to 10 MINUTES for a 'Join request successful!' message"
         host_ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS 2>/dev/null)"
-        write_tty1_log "Host ipv6 address: $host_ipv6_address\n"
+        write_tty1_log "Host ipv6 address: $host_ipv6_address"
+        write_tty1_log "#################################################"
 
         write_log "Starting GuestOS virtual machine."
         write_metric "hostos_guestos_service_start" \
