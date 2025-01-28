@@ -360,16 +360,10 @@ pub fn build_merge_neurons_response(
             .into_proto(voting_power_economics, now_seconds),
     ));
 
-    let source_neuron_info = Some(api::NeuronInfo::from(source.get_neuron_info(
-        voting_power_economics,
-        now_seconds,
-        requester,
-    )));
-    let target_neuron_info = Some(api::NeuronInfo::from(target.get_neuron_info(
-        voting_power_economics,
-        now_seconds,
-        requester,
-    )));
+    let source_neuron_info =
+        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
+    let target_neuron_info =
+        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
 
     MergeResponse {
         source_neuron,
