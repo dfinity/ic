@@ -28,10 +28,9 @@ use icp_ledger::{
 };
 use std::time::Instant;
 
-/// The number of instructions that can be executed in a single canister upgrade.
-/// The limit (<https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits>)
-/// is actually 300B, but in the ledger implementation we use a slightly lower limit of 250B.
-const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 250_000_000_000;
+/// The number of instructions that can be executed in a single canister upgrade as per
+/// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
+const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 300_000_000_000;
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
