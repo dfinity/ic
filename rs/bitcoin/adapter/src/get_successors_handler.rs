@@ -19,7 +19,7 @@ use crate::{
 //
 // NOTE: Should be = the `MAX_RESPONSE_SIZE` defined in `replicated_state/bitcoin.rs`
 // for pagination on the replica side to work as expected.
-const MAX_RESPONSE_SIZE: usize = 2_000_000;
+const MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;

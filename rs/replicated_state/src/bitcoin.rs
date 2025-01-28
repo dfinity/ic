@@ -12,12 +12,12 @@ use ic_types::{
 use std::cmp::min;
 
 // The maximum size a response can have without applying pagination.
-// This number is slightly less than the maximum payload size a canister can send (2MiB)
-// to leave a small buffer for the additional space that candid encoding may need.
+// This number is less than the maximum payload size a canister can send (2MiB)
+// because serialization could take more than 50ms which is the current timeout limit in consensus.
 //
 // NOTE: This constant should be = the `MAX_RESPONSE_SIZE` defined in the bitcoin adapter's
 // `get_successors_handler.rs`.
-const MAX_RESPONSE_SIZE: usize = 2_000_000;
+const MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 /// Pushes a response from the Bitcoin Adapter into the state.
 pub fn push_response(
