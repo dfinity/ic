@@ -72,7 +72,7 @@ function start_guestos() {
             # error messages won't be immediately overwritten.
             sleep 10
 
-            write_tty1_log "ERROR: Failed to start GuestOS virtual machine.\n\n\n"
+            write_tty1_log "ERROR: Failed to start GuestOS virtual machine."
 
             write_tty1_log "#################################################"
             write_tty1_log "###      LOGGING GUESTOS.SERVICE LOGS...      ###"
