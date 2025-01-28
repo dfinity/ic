@@ -123,7 +123,7 @@ fn create_key_shares_and_verify_and_combine<C: CryptoComponentRng>(
         crypto_components,
     );
     crypto_for(creators_and_combiner.combiner, crypto_components)
-        .combine_encrypted_key_shares(&key_shares, &vetkd_args)
+        .combine_encrypted_key_shares(&key_shares, vetkd_args)
         .expect("failed to combine signature shares")
 }
 
