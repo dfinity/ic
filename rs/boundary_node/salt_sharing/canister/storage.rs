@@ -11,7 +11,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 pub type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 
 const MEMORY_ID_SALT: MemoryId = MemoryId::new(0);
-const MEMORY_ID_LAST_SALT_MS: MemoryId = MemoryId::new(1);
+const MEMORY_ID_LAST_SALT_NS: MemoryId = MemoryId::new(1);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -27,6 +27,6 @@ thread_local! {
     // Allows to track last updates, ensuring it is refreshed periodically to maintain security.
     // Stored in stable memory for persistency across upgrades.
     pub static LAST_SALT_NS: RefCell<StableMap<(), Timestamp>> = RefCell::new(StableMap::init(
-        MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_LAST_SALT_MS)),
+        MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_LAST_SALT_NS)),
     ));
 }
