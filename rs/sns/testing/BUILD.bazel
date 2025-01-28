@@ -1,13 +1,18 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/pocket-ic",
+    "//rs/nervous_system/agent",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nns/common",
     "//rs/nns/test_utils",
     "//rs/nns/constants",
+    "//rs/sns/swap:swap",
     "//rs/rust_canisters/canister_test",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:reqwest",
@@ -35,6 +40,7 @@ DEV_DATA = [
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
+    ":sns_testing_canister",
     "@nns_dapp_canister//file",
     "@sns_aggregator//file",
     "@ii_dev_canister//file",
@@ -60,14 +66,15 @@ DEV_ENV = {
     "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
     "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
     "INTERNET_IDENTITY_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
 }
 
 rust_binary(
     name = "cli",
     testonly = True,
     srcs = ["src/main.rs"],
-    env = DEV_ENV,
     data = DEV_DATA,
+    env = DEV_ENV,
     deps = DEPENDENCIES + [
         ":sns_testing",
     ],
@@ -88,5 +95,17 @@ rust_test(
     env = DEV_ENV,
     deps = DEPENDENCIES + [
         ":sns_testing",
+    ],
+)
+
+rust_canister(
+    name = "sns_testing_canister",
+    testonly = True,
+    srcs = ["canister/canister.rs"],
+    service_file = ":canister/test.did",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
     ],
 )
