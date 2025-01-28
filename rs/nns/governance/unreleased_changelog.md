@@ -1,39 +1,29 @@
 # How This File Is Used
 
-1. When there is a user-visible behavior change to this canister, add an entry
-   to this file (in the "Next Upgrade Proposal" section) in the same PR.
-
-2. When making an NNS proposal to upgrade this canister, copy entries to the
-   proposal's summary.
-
-3. After the proposal is executed, move the entries from this file to a new
-   section in the adjacent CHANGELOG.md file.
-
-If your new code is not active in release builds (because it is behind a feature
-flag, or it is simply not called yet), then do NOT add an entry to this file,
-because this new function has no user-visible behavior change yet. Wait until it
-is active (e.g. the feature flag is flipped to "enable") before adding an entry
-to this file.
-
-
-# How to Write a Good Entry
-
-The intended audience here is people who vote (with their neurons) in NNS, not
-necessarily engineers who develop this canister.
-
-If there is a motion proposal and/or forum thread where a feature (or bug fix)
-was proposed, link to it.
-
-
-# The Origin of This Process
-
-This process is modeled after the process used by nns-dapp. nns-dapp in turn
-links to keepachangelog.com as its source of inspiration.
+In general, upcoming/unreleased behavior changes are described here. For details
+on the process that this file is part of, see
+`rs/nervous_system/changelog_process.md`.
 
 
 # Next Upgrade Proposal
 
 ## Added
+
+### List Neurons Paging
+
+Two new fields are added to the request, and one to the response.
+
+The request now supports `page_size` and `page_number`.  If `page_size` is greater than 
+`MAX_LIST_NEURONS_RESULTS` (currently 500), the API will treat it as `MAX_LIST_NEURONS_RESULTS`, and
+continue procesisng the request.  If `page_number` is None, the API will treat it as Some(0)
+
+In the response, a field `total_pages_available` is available to tell the user how many
+additional requests need to be made.
+
+This will only affect neuron holders with more than 500 neurons, which is a small minority.
+
+This allows neuron holders with many neurons to list all of their neurons, whereas before, 
+responses could be too large to be sent by the protocol.
 
 ### Periodic Confirmation
 
@@ -67,7 +57,26 @@ the neuron. More precisely,
 
     b. Its influence on proposals goes to 0.
 
+### Migrating Active Neurons to Stable Memory
+
+In this relesae, we turn on 2 features related to migrating active neurons to stable memory:
+
+1. `allow_active_neurons_in_stable_memory`: this allows the canister to look for active neurons in
+   stable memory, while previously the canister always assumes active neurons are always in the heap.
+
+2. `use_stable_memory_following_index`: this lets the canister use the neuron following index in the
+   stable memory, instead of the one in the heap.
+
+No neurons are actually migrated yet.
+
 ## Changed
+
+* `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
+  listing proposal. Hashes for existing proposals are backfilled.
+
+* The `list_neurons` behavior is slightly changed: the `include_empty_neurons_readable_by_caller`
+  was default to true before, and now it's default to true. More details can be found at:
+  https://forum.dfinity.org/t/listneurons-api-change-empty-neurons/40311
 
 ## Deprecated
 

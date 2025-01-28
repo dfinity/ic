@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender},
         watch,
     },
 };
@@ -28,37 +28,57 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub struct ConsensusManagerBuilder {
+/// Same order of magnitude as the number of active artifacts.
+const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
+
+pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
+pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
+
+pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
+    pub outbound_tx: AbortableBroadcastSender<T>,
+    pub inbound_rx: AbortableBroadcastReceiver<T>,
+}
+
+pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
-    clients: Vec<StartConsensusManagerFn>,
+    managers: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
 }
 
-impl ConsensusManagerBuilder {
+impl AbortableBroadcastChannelBuilder {
     pub fn new(log: ReplicaLogger, rt_handle: Handle, metrics_registry: MetricsRegistry) -> Self {
         Self {
             log,
             metrics_registry,
             rt_handle,
-            clients: Vec::new(),
+            managers: Vec::new(),
             router: None,
         }
     }
 
-    pub fn add_client<
+    /// Creates a channel for the corresponding artifact. The channel is used to broadcast artifacts within the subnet.
+    pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
         F: FnOnce(Arc<dyn Transport>) -> D + 'static,
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
-        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
-    ) {
+    ) -> AbortableBroadcastChannel<Artifact> {
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
+        // Making this channel bounded can be problematic since we don't have true multiplexing
+        // of P2P messages.
+        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
+        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
+        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
+        // independent of consensus.
+        #[allow(clippy::disallowed_methods)]
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
+
         assert!(uri_prefix::<WireArtifact>()
             .chars()
             .all(char::is_alphabetic));
@@ -73,9 +93,9 @@ impl ConsensusManagerBuilder {
                 log,
                 &metrics_registry,
                 rt_handle,
-                outbound_artifacts_rx,
+                outbound_rx,
                 adverts_from_peers_rx,
-                inbound_artifacts_tx,
+                inbound_tx,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -91,21 +111,25 @@ impl ConsensusManagerBuilder {
                 .merge(assembler_router),
         );
 
-        self.clients.push(Box::new(builder));
+        self.managers.push(Box::new(builder));
+        AbortableBroadcastChannel {
+            outbound_tx,
+            inbound_rx,
+        }
     }
 
-    pub fn router(&mut self) -> Router {
-        self.router.take().unwrap_or_default()
+    pub fn router(&self) -> Router {
+        self.router.clone().unwrap_or_default()
     }
 
-    pub fn run(
+    pub fn start(
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) -> Vec<Shutdown> {
         let mut ret = vec![];
-        for client in self.clients {
-            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
+        for m in self.managers {
+            ret.append(&mut m(transport.clone(), topology_watcher.clone()));
         }
         ret
     }

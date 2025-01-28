@@ -156,7 +156,7 @@ impl ReplicatedStateFixture {
     fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
-            streams.push(SUBNET_ID, msg);
+            streams.entry(SUBNET_ID).or_default().push(msg);
         }
         self.state.put_streams(streams);
     }
@@ -335,30 +335,6 @@ fn memory_taken_by_subnet_queues() {
         .push_subnet_output_response(response.clone().into());
 
     // Memory used by response only.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(response.count_bytes(), &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-}
-
-#[test]
-fn memory_taken_by_stream_responses() {
-    let mut fixture = ReplicatedStateFixture::new();
-
-    // Zero memory used initially.
-    assert_execution_memory_taken(0, &fixture);
-    assert_message_memory_taken(0, &fixture);
-    assert_canister_history_memory_taken(0, &fixture);
-    assert_wasm_custom_sections_memory_taken(0, &fixture);
-
-    // Push a request and a response into a stream.
-    let response = response_to(OTHER_CANISTER_ID);
-    fixture.push_to_streams(vec![
-        request_to(OTHER_CANISTER_ID).into(),
-        response.clone().into(),
-    ]);
-
-    // Memory only used by response, not request.
     assert_execution_memory_taken(0, &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
     assert_canister_history_memory_taken(0, &fixture);
@@ -998,223 +974,294 @@ fn compatibility_for_input_source() {
     );
 }
 
-proptest! {
-    #[test]
-    fn peek_and_next_consistent(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5))
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
+#[test_strategy::proptest]
+fn peek_and_next_consistent(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
-        let mut num_requests = 0;
-        while let Some(msg) = output_iter.peek() {
-            num_requests += 1;
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
-        }
+    let mut output_iter = replicated_state.output_into_iter();
 
-        drop(output_iter);
-        prop_assert_eq!(total_requests, num_requests);
-        prop_assert_eq!(replicated_state.output_message_count(), 0);
+    let mut num_requests = 0;
+    while let Some(msg) = output_iter.peek() {
+        num_requests += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
 
-    /// Replicated state with multiple canisters, each with multiple output queues
-    /// of size 1. Some messages are consumed, some (size 1) queues are excluded.
-    ///
-    /// Expect consumed + excluded to equal initial size. Expect the messages in
-    /// excluded queues to be left in the state.
-    #[test]
-    fn peek_and_next_consistent_with_exclude_queue(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
+    drop(output_iter);
+    prop_assert_eq!(total_requests, num_requests);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+/// Replicated state with multiple canisters, each with multiple output queues
+/// of size 1. Some messages are consumed, some (size 1) queues are excluded.
+///
+/// Expect consumed + excluded to equal initial size. Expect the messages in
+/// excluded queues to be left in the state.
+#[test_strategy::proptest]
+fn peek_and_next_consistent_with_exclude_queue(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] exclude_step: i32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut i = start;
+    let mut excluded = 0;
+    let mut consumed = 0;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
+            output_iter.exclude_queue();
+            excluded += 1;
+        } else {
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+            consumed += 1;
+        }
+    }
+
+    drop(output_iter);
+    prop_assert_eq!(total_requests, excluded + consumed);
+    prop_assert_eq!(replicated_state.output_message_count(), excluded);
+}
+
+#[test_strategy::proptest]
+fn iter_yields_correct_elements(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, mut raw_requests, _total_requests) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    for msg in &mut output_iter {
+        let mut requests = raw_requests.pop_front().unwrap();
+        while requests.is_empty() {
+            requests = raw_requests.pop_front().unwrap();
+        }
+
+        if let Some(raw_msg) = requests.pop_front() {
+            prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+        } else {
+            prop_assert!(
+                false,
+                "Pop yielded an element that was not contained in the respective queue"
+            );
+        }
+
+        raw_requests.push_back(requests);
+    }
+
+    drop(output_iter);
+    // Ensure that actually all elements have been consumed.
+    prop_assert_eq!(
+        raw_requests
+            .iter()
+            .map(|requests| requests.len())
+            .sum::<usize>(),
+        0
+    );
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn iter_with_exclude_queue_yields_correct_elements(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] ignore_step: i32,
+) {
+    let (mut replicated_state, mut raw_requests, total_requests) = state_and_queues;
+
+    let mut consumed = 0;
+    let mut ignored_requests = Vec::new();
+    // Check whether popping elements with ignores in between yields the expected messages
+    {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut i = start;
-        let mut excluded = 0;
-        let mut consumed = 0;
         while let Some(msg) = output_iter.peek() {
-            i += 1;
-            if i % exclude_step == 0 {
-                output_iter.exclude_queue();
-                excluded += 1;
-            } else {
-                prop_assert_eq!(Some(msg.clone()), output_iter.next());
-                consumed += 1;
-            }
-        }
-
-        drop(output_iter);
-        prop_assert_eq!(total_requests, excluded + consumed);
-        prop_assert_eq!(replicated_state.output_message_count(), excluded);
-    }
-
-    #[test]
-    fn iter_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        for msg in &mut output_iter {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
             }
 
+            i += 1;
+            if i % ignore_step == 0 {
+                // Popping the front of the requests will amount to the same as ignoring as
+                // we use queues of size one in this test.
+                let popped = requests.pop_front().unwrap();
+                prop_assert_eq!(msg, &popped);
+                output_iter.exclude_queue();
+                ignored_requests.push(popped);
+                // We push the queue to the front as the canister gets another chance if one
+                // of its queues are ignored in the current implementation.
+                raw_requests.push_front(requests);
+                continue;
+            }
+
+            let msg = output_iter.next().unwrap();
             if let Some(raw_msg) = requests.pop_front() {
-                prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+                consumed += 1;
+                prop_assert_eq!(
+                    &msg,
+                    &raw_msg,
+                    "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.",
+                    msg,
+                    raw_msg
+                );
             } else {
-                prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
+                prop_assert!(
+                    false,
+                    "Pop yielded an element that was not contained in the respective queue"
+                );
             }
 
             raw_requests.push_back(requests);
         }
-
-        drop(output_iter);
-        // Ensure that actually all elements have been consumed.
-        prop_assert_eq!(raw_requests.iter().map(|requests| requests.len()).sum::<usize>(), 0);
-        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 
-    #[test]
-    fn iter_with_exclude_queue_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None),
-        start in 0..=1,
-        ignore_step in 2..=5,
-    ) {
-        let mut consumed = 0;
-        let mut ignored_requests = Vec::new();
-        // Check whether popping elements with ignores in between yields the expected messages
+    let remaining_output = replicated_state.output_message_count();
+
+    prop_assert_eq!(remaining_output, total_requests - consumed);
+    prop_assert_eq!(remaining_output, ignored_requests.len());
+
+    for raw in ignored_requests {
+        let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender())
         {
-            let mut output_iter = replicated_state.output_into_iter();
+            canister.system_state.queues_mut()
+        } else {
+            replicated_state.subnet_queues_mut()
+        };
 
-            let mut i = start;
-            while let Some(msg) = output_iter.peek() {
-
-                let mut requests = raw_requests.pop_front().unwrap();
-                while requests.is_empty() {
-                    requests = raw_requests.pop_front().unwrap();
-                }
-
-                i += 1;
-                if i % ignore_step == 0 {
-                    // Popping the front of the requests will amount to the same as ignoring as
-                    // we use queues of size one in this test.
-                    let popped = requests.pop_front().unwrap();
-                    prop_assert_eq!(msg, &popped);
-                    output_iter.exclude_queue();
-                    ignored_requests.push(popped);
-                    // We push the queue to the front as the canister gets another chance if one
-                    // of its queues are ignored in the current implementation.
-                    raw_requests.push_front(requests);
-                    continue;
-                }
-
-                let msg = output_iter.next().unwrap();
-                if let Some(raw_msg) = requests.pop_front() {
-                    consumed += 1;
-                    prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
-                } else {
-                    prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
-                }
-
-                raw_requests.push_back(requests);
-            }
-        }
-
-        let remaining_output = replicated_state.output_message_count();
-
-        prop_assert_eq!(remaining_output, total_requests - consumed);
-        prop_assert_eq!(remaining_output, ignored_requests.len());
-
-        for raw in ignored_requests {
-            let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender()) {
-                canister.system_state.queues_mut()
-            } else {
-                replicated_state.subnet_queues_mut()
-            };
-
-            let msg = queues.pop_canister_output(&raw.receiver()).unwrap();
-            prop_assert_eq!(raw, msg);
-        }
-
-        prop_assert_eq!(replicated_state.output_message_count(), 0);
+        let msg = queues.pop_canister_output(&raw.receiver()).unwrap();
+        prop_assert_eq!(raw, msg);
     }
 
-    #[test]
-    fn ignore_leaves_state_untouched(
-        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-    ) {
-        let expected_state = replicated_state.clone();
-        {
-            let mut output_iter = replicated_state.output_into_iter();
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
 
-            while output_iter.peek().is_some() {
-                output_iter.exclude_queue();
-            }
-        }
+#[test_strategy::proptest]
+fn ignore_leaves_state_untouched(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, _, _) = state_and_queues;
 
-        prop_assert_eq!(expected_state, replicated_state);
-    }
-
-    #[test]
-    fn peek_next_loop_with_exclude_queue_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-        start in 0..=1,
-        ignore_step in 2..=5,
-    ) {
+    let expected_state = replicated_state.clone();
+    {
         let mut output_iter = replicated_state.output_into_iter();
 
-        let mut i = start;
         while output_iter.peek().is_some() {
-            i += 1;
-            if i % ignore_step == 0 {
-                output_iter.exclude_queue();
-                continue;
-            }
-            output_iter.next();
+            output_iter.exclude_queue();
         }
     }
 
-    #[test]
-    fn iter_with_stale_entries_terminates(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-        batch_time_seconds in any::<u32>(),
-    ) {
-        const NANOS_PER_SEC: u64 = 1_000_000_000;
-        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-        let timed_out_messages = replicated_state.time_out_messages();
+    prop_assert_eq!(expected_state, replicated_state);
+}
 
-        // Just consume all output messages.
-        //
-        // We cannot check the exact ordering because timing out some messages messes it
-        // up, both across canisters and across a cainster's output queues.
-        let output_messages = replicated_state.output_into_iter().count();
+#[test_strategy::proptest]
+fn peek_next_loop_with_exclude_queue_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] ignore_step: i32,
+) {
+    let (mut replicated_state, _, _) = state_and_queues;
 
-        // All messages have either been timed out or output.
-        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
-        prop_assert_eq!(replicated_state.output_message_count(), 0);
-    }
+    let mut output_iter = replicated_state.output_into_iter();
 
-    #[test]
-    fn peek_next_loop_with_stale_entries_terminates(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-        batch_time in any::<u32>(),
-    ) {
-        const NANOS_PER_SEC: u64 = 1_000_000_000;
-        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time as u64 * NANOS_PER_SEC);
-        let timed_out_messages = replicated_state.time_out_messages();
-
-        let mut output_iter = replicated_state.output_into_iter();
-
-        let mut output_messages = 0;
-        while let Some(msg) = output_iter.peek() {
-            output_messages += 1;
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+    let mut i = start;
+    while output_iter.peek().is_some() {
+        i += 1;
+        if i % ignore_step == 0 {
+            output_iter.exclude_queue();
+            continue;
         }
-        drop(output_iter);
-
-        // All messages have either been timed out or output.
-        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
-        prop_assert_eq!(replicated_state.output_message_count(), 0);
+        output_iter.next();
     }
+}
+
+#[test_strategy::proptest]
+fn iter_with_stale_entries_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(any::<u32>())] batch_time_seconds: u32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    const NANOS_PER_SEC: u64 = 1_000_000_000;
+    replicated_state.metadata.batch_time =
+        Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+    let timed_out_messages = replicated_state.time_out_messages();
+
+    // Just consume all output messages.
+    //
+    // We cannot check the exact ordering because timing out some messages messes it
+    // up, both across canisters and across a cainster's output queues.
+    let output_messages = replicated_state.output_into_iter().count();
+
+    // All messages have either been timed out or output.
+    prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn peek_next_loop_with_stale_entries_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(any::<u32>())] batch_time_seconds: u32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    const NANOS_PER_SEC: u64 = 1_000_000_000;
+    replicated_state.metadata.batch_time =
+        Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+    let timed_out_messages = replicated_state.time_out_messages();
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut output_messages = 0;
+    while let Some(msg) = output_iter.peek() {
+        output_messages += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
+    }
+    drop(output_iter);
+
+    // All messages have either been timed out or output.
+    prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
 }
