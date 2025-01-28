@@ -3556,7 +3556,6 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => {
                 let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
-                println!("subnet_id: {:?}", subnet_id);
                 Ok(subnet_id.get_ref().as_slice().len())
             }
         };
@@ -3590,7 +3589,6 @@ impl SystemApi for SystemApiImpl {
                 let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
 
-                println!("subnet_id: {:?}", subnet_id);
                 Ok(())
             }
         };

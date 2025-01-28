@@ -77,6 +77,9 @@ mod ic0 {
         pub fn in_replicated_execution() -> u32;
 
         pub fn cycles_burn128(amount_high: u64, amount_low: u64, dst: u32) -> ();
+
+        pub fn subnet_self_size() -> u32;
+        pub fn subnet_self_copy(dst: u32, offset: u32, size: u32) -> ();
     }
 }
 
@@ -195,6 +198,16 @@ pub fn id() -> Vec<u8> {
     let mut bytes = vec![0; len as usize];
     unsafe {
         ic0::canister_self_copy(bytes.as_mut_ptr() as u32, 0, len);
+    }
+    bytes
+}
+
+/// Returns the subnet id of the canister as a blob.
+pub fn subnet_id() -> Vec<u8> {
+    let len: u32 = unsafe { ic0::subnet_self_size() };
+    let mut bytes = vec![0; len as usize];
+    unsafe {
+        ic0::subnet_self_copy(bytes.as_mut_ptr() as u32, 0, len);
     }
     bytes
 }
