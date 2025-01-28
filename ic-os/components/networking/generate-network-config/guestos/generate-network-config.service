@@ -2,6 +2,8 @@
 Description=Generate network config
 After=bootstrap-ic-node.service
 Requires=bootstrap-ic-node.service
+After=update-config.service
+Wants=update-config.service
 Before=systemd-networkd.service
 
 [Install]
