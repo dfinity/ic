@@ -1569,7 +1569,7 @@ fn test_compute_ballots_for_new_proposal() {
         let controller = PrincipalId::new_user_test_id(i);
         let d = i / 10_u64.pow(i.ilog10());
 
-        NeuronBuilder::new(
+        let neuron = NeuronBuilder::new(
             NeuronId { id: i },
             Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
             controller,
@@ -1580,11 +1580,9 @@ fn test_compute_ballots_for_new_proposal() {
             CREATED_TIMESTAMP_SECONDS,
         )
         .with_cached_neuron_stake_e8s(i * E8)
-        .build()
-        .into_proto(
-            &VotingPowerEconomics::DEFAULT,
-            CREATED_TIMESTAMP_SECONDS + 999,
-        )
+        .build();
+
+        NeuronProto::from(neuron)
     }
 
     let mut neuron_10 = new_neuron(10);
