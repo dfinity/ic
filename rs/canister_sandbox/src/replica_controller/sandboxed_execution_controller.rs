@@ -24,7 +24,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
-    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
+    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
@@ -1101,7 +1101,7 @@ impl WasmExecutor for SandboxedExecutionController {
             metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            wasm_execution_mode: serialized_module.is_wasm64().into(),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
         };
 
         Ok((

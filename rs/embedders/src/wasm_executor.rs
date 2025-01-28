@@ -2,9 +2,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
+    ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -321,7 +323,7 @@ impl WasmExecutor for WasmExecutorImpl {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            wasm_execution_mode: serialized_module.is_wasm64().into(),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
         };
 
         Ok((

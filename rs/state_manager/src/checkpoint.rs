@@ -9,8 +9,9 @@ use ic_replicated_state::canister_snapshots::{
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::{storage::verify, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageMap, CanisterMetrics,
+    CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
@@ -438,7 +439,9 @@ pub fn load_canister_state(
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
                 next_scheduled_method: execution_state_bits.next_scheduled_method,
-                wasm_execution_mode: execution_state_bits.is_wasm64.into(),
+                wasm_execution_mode: WasmExecutionMode::from_is_wasm64(
+                    execution_state_bits.is_wasm64,
+                ),
             })
         }
         None => None,

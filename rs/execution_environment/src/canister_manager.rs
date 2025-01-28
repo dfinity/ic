@@ -966,7 +966,9 @@ impl CanisterManager {
             };
         }
 
-        let is_wasm64_execution = self.check_if_wasm64_module(context.wasm_source.clone());
+        let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
+            self.check_if_wasm64_module(context.wasm_source.clone()),
+        );
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -983,7 +985,7 @@ impl CanisterManager {
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
                     reveal_top_up,
-                    is_wasm64_execution.into(),
+                    wasm_execution_mode,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -1015,7 +1017,7 @@ impl CanisterManager {
             sender: context.sender(),
             canister_id: canister.canister_id(),
             log_dirty_pages,
-            wasm_execution_mode: is_wasm64_execution.into(),
+            wasm_execution_mode,
         };
 
         let round = RoundContext {

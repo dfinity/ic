@@ -803,21 +803,18 @@ pub enum WasmExecutionMode {
     Wasm64,
 }
 
-impl From<bool> for WasmExecutionMode {
-    fn from(is_wasm64: bool) -> Self {
+impl WasmExecutionMode {
+    pub fn is_wasm64(&self) -> bool {
+        match self {
+            WasmExecutionMode::Wasm32 => false,
+            WasmExecutionMode::Wasm64 => true,
+        }
+    }
+    pub fn from_is_wasm64(is_wasm64: bool) -> Self {
         if is_wasm64 {
             WasmExecutionMode::Wasm64
         } else {
             WasmExecutionMode::Wasm32
-        }
-    }
-}
-
-impl From<WasmExecutionMode> for bool {
-    fn from(mode: WasmExecutionMode) -> bool {
-        match mode {
-            WasmExecutionMode::Wasm32 => false,
-            WasmExecutionMode::Wasm64 => true,
         }
     }
 }
