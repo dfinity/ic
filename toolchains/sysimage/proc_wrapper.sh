@@ -12,8 +12,8 @@ ICOS_TMPDIR="$tmpdir" "$@"
 
 # Calculate the checksum for every output created by Bazel. For the calculation, we use icsum which is much
 # faster than Bazel's built-in checksum for sparse files (e.g. disk images).
-for arg in $@; do
-    if [[ -w "$arg" ]] && ! getfattr -n user.icsum "$arg" >/dev/null 2>&1; then
+for arg in ${@:2}; do
+    if [[ -f "$arg" ]] && [[ -w "$arg" ]] && ! getfattr -n user.icsum "$arg" >/dev/null 2>&1; then
         setfattr -n user.icsum -v $(icsum "$arg") "$arg"
     fi
 done
