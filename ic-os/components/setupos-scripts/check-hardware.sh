@@ -217,9 +217,12 @@ function verify_memory() {
 # Disk Verification
 ###############################################################################
 
-function verify_gen1_disks() {
+function verify_disks_helper() {
+    local min_disk_size="${1}"
+    local min_aggregate_disk_size="${2}"
     local aggregate_size=0
     local large_drives=($(get_large_drives))
+
     for drive in "${large_drives[@]}"; do
         echo "* Verifying disk ${drive}"
 
@@ -234,57 +237,29 @@ function verify_gen1_disks() {
             '.[][] | select(.name==$logicalname) | .size')
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${disk_size}" -gt "${GEN1_MINIMUM_DISK_SIZE}" ]; then
+        if [ "${disk_size}" -gt "${min_disk_size}" ]; then
             echo "Disk size (${disk_size} bytes) meets system requirements."
         else
-            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN1_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
+            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${min_disk_size}) does NOT meet system requirements."
         fi
+
         aggregate_size=$((aggregate_size + disk_size))
     done
-    if [ "${aggregate_size}" -gt "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
+
+    if [ "${aggregate_size}" -gt "${min_aggregate_disk_size}" ]; then
         echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
-        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
+        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${min_aggregate_disk_size}) does NOT meet system requirements."
     fi
 }
 
-function verify_gen2_disks() {
-    local aggregate_size=0
-    local large_drives=($(get_large_drives))
-    for drive in "${large_drives[@]}"; do
-        echo "* Verifying disk ${drive}"
-
-        test -b "/dev/${drive}"
-        log_and_halt_installation_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
-
-        local disk="$(lsblk --bytes --json /dev/${drive})"
-        log_and_halt_installation_on_error "${?}" "Unable to fetch disk information."
-
-        local disk_size=$(echo "${disk}" | jq -r \
-            --arg logicalname "${drive}" \
-            '.[][] | select(.name==$logicalname) | .size')
-        log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
-
-        if [ "${disk_size}" -gt "${GEN2_MINIMUM_DISK_SIZE}" ]; then
-            echo "Disk size (${disk_size} bytes) meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN2_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
-        fi
-        aggregate_size=$((aggregate_size + disk_size))
-    done
-    if [ "${aggregate_size}" -gt "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
-        echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
-    else
-        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
-    fi
-}
 
 function verify_disks() {
     echo "* Verifying disks..."
     if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
-        verify_gen1_disks
+        verify_disks_helper "${GEN1_MINIMUM_DISK_SIZE}" "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}"
     else
-        verify_gen2_disks
+        verify_disks_helper "${GEN2_MINIMUM_DISK_SIZE}" "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}"
     fi
 }
 
