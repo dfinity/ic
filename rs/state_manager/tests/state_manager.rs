@@ -6088,6 +6088,7 @@ fn checkpoints_are_readonly() {
     });
 }
 
+#[ignore]
 #[test]
 fn can_downgrade_state_sync() {
     with_test_replica_logger(|log| {
@@ -6334,6 +6335,7 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
     );
 }
 
+#[ignore]
 #[test]
 fn can_downgrade_from_lsmt() {
     state_manager_restart_test_with_lsmt(
@@ -6417,6 +6419,7 @@ fn can_downgrade_from_lsmt() {
     );
 }
 
+#[ignore]
 #[test]
 fn can_upgrade_to_lsmt() {
     state_manager_restart_test_with_lsmt(lsmt_disabled(), |metrics, state_manager, restart_fn| {

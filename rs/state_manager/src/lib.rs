@@ -2564,6 +2564,20 @@ impl StateManagerImpl {
                 .start_timer();
             strip_page_map_deltas(&mut state, self.get_fd_factory());
         }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["serialize_wasm_binaries"])
+                .start_timer();
+            self.tip_channel
+                .send(TipRequest::SerializeWasmBinaries {
+                    height,
+                    replicated_state: Box::new(state.clone()),
+                })
+                .unwrap();
+        }
         let result = {
             checkpoint::make_unvalidated_checkpoint(
                 &state,
@@ -3548,7 +3562,7 @@ impl StateManager for StateManagerImpl {
                 .states_metadata
                 .entry(height)
                 .or_insert(state_metadata);
-            debug_assert!(self.tip_channel.len() <= 1);
+            debug_assert!(self.tip_channel.len() <= 2);
             if metadata.bundled_manifest.is_none() {
                 self.tip_channel
                     .send(compute_manifest_request)

@@ -113,9 +113,8 @@ pub(crate) enum TipRequest {
     },
     SerializeWasmBinaries {
         height: Height,
-        replicated_state: ReplicatedState,
+        replicated_state: Box<ReplicatedState>,
     },
-
     /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
     SerializeToTip {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -319,31 +318,35 @@ pub(crate) fn spawn_tip_thread(
                             );
                         }
                         TipRequest::SerializeWasmBinaries {
-                            height: Height,
-                            replicated_state: ReplicatedState,
-                        } => {
-                            let _timer = request_timer(&metrics, "serialize_wasm_binaries");
-                            #[cfg(debug_assertions)]
-                            match tip_state {
-                                TipState::ReadyForPageDeltas(h) => {
-                                    debug_assert!(checkpoint_layout.height() >= h)
-                                }
-                                _ => panic!("Unexpected tip state: {:?}", tip_state),
-                            }
-                        }
-                        TipRequest::SerializeToTip {
-                            checkpoint_layout,
+                            height,
                             replicated_state,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => {
-                                    debug_assert!(checkpoint_layout.height() >= h)
+                                    debug_assert!(height >= h)
                                 }
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
-                            tip_state = TipState::Serialized(checkpoint_layout.height());
+                            tip_state = TipState::Serialized(height);
+                            serialize_wasm_binaries(
+                                &log,
+                                &replicated_state,
+                                &tip_handler.tip(height).unwrap(),
+                                &mut thread_pool,
+                                &metrics.storage_metrics,
+                                &lsmt_config,
+                            )
+                            .unwrap_or_else(|err| {
+                                fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
+                            });
+                        }
+                        TipRequest::SerializeToTip {
+                            checkpoint_layout,
+                            replicated_state,
+                        } => {
+                            let _timer = request_timer(&metrics, "serialize_to_tip");
                             fn rw_cp(
                                 _t: &mut TipHandler,
                                 path: PathBuf,
@@ -896,6 +899,25 @@ fn merge_to_base(
     rewritten.iter().any(|b| *b)
 }
 
+fn serialize_wasm_binaries(
+    log: &ReplicaLogger,
+    state: &ReplicatedState,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_wasm_binary(log, canister_state, tip, metrics, lsmt_config)
+    });
+
+    for result in results.into_iter() {
+        result?;
+    }
+
+    Ok(())
+}
+
 fn serialize_to_tip(
     log: &ReplicaLogger,
     state: &ReplicatedState,
@@ -966,6 +988,59 @@ fn serialize_to_tip(
         result?;
     }
 
+    Ok(())
+}
+
+fn serialize_wasm_binary(
+    log: &ReplicaLogger,
+    canister_state: &CanisterState,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let canister_id = canister_state.canister_id();
+    let canister_layout = tip.canister(&canister_id)?;
+
+    match &canister_state.execution_state {
+        Some(execution_state) => {
+            let wasm_binary = &execution_state.wasm_binary.binary;
+            match wasm_binary.file() {
+                Some(path) => {
+                    let wasm = canister_layout.wasm();
+                    // This if should always be false, as we reflink copy the entire checkpoint to the tip
+                    // It is left in mainly as defensive programming
+                    if !wasm.raw_path().exists() {
+                        ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
+                            |io_err| CheckpointError::IoError {
+                                path: path.to_path_buf(),
+                                message: "failed to copy Wasm file".to_string(),
+                                io_err: io_err.to_string(),
+                            },
+                        )?;
+                    }
+                }
+                None => {
+                    // Canister was installed/upgraded. Persist the new wasm binary.
+                    canister_layout
+                        .wasm()
+                        .serialize(&execution_state.wasm_binary.binary)?;
+                }
+            }
+            assert!(execution_state.wasm_memory.page_map.page_delta_is_empty());
+            assert!(execution_state.stable_memory.page_map.page_delta_is_empty());
+        }
+        None => {
+            canister_layout.vmemory_0().delete_files()?;
+            canister_layout.stable_memory().delete_files()?;
+            canister_layout.wasm().try_delete_file()?;
+        }
+    }
+
+    assert!(canister_state
+        .system_state
+        .wasm_chunk_store
+        .page_map()
+        .page_delta_is_empty());
     Ok(())
 }
 
