@@ -1,4 +1,5 @@
 use anyhow::{bail, Context};
+use blake3::{Hash, Hasher};
 use nix::errno::Errno;
 use nix::unistd::Whence;
 use std::env;
@@ -7,7 +8,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use xxhash_rust::xxh3::{xxh3_128, Xxh3};
 
 const BLOCK_LEN: usize = 1024 * 1024;
 const BLOCK_LEN_U64: u64 = BLOCK_LEN as u64;
@@ -29,31 +29,49 @@ fn main() -> anyhow::Result<()> {
     let hash = calculate_digest(&mut File::open(Path::new(path)).context("Could not open file")?)
         .context("Hash calculation failed")?;
 
-    println!("{:x}", hash);
+    println!("{}", hash.to_hex());
 
     Ok(())
 }
 
-fn calculate_digest(file: &mut File) -> std::io::Result<u128> {
+fn calculate_digest(file: &mut File) -> std::io::Result<Hash> {
+    const HASH_TAG: &[u8] = b"icsum-hash";
     // The algorithm works by chunking the input into blocks of [BLOCK_LEN].
     // Each such block's hash is calculated separately and combined by outer_hasher.
     // Since the hash of two equal blocks is the same, we can precalculate the hash of blocks of
     // holes (a block with zeros only). We then use the OS's file seek API to avoid actually having
     // to read the zeros from holes.
     //
+    // Outer hash:
+    //   hash = blake3(len(HASH_TAG) || HASH_TAG || len(file) || h_block_0 || .. || h_block_n)
+    // Block hash:
+    //   h_block_n = blake3(len(BLOCK_TAG) || BLOCK_TAG || block_n)
+    //
     // Research paper: https://www.scitepress.org/Papers/2024/127645/127645.pdf
-    let mut outer_hasher = Xxh3::new();
-    let hole_hash = xxh3_128(&vec![0; BLOCK_LEN]).to_le_bytes();
+    let mut outer_hasher = Hasher::new();
+    outer_hasher.update(&HASH_TAG.len().to_be_bytes());
+    outer_hasher.update(HASH_TAG);
+    outer_hasher.update(&file.metadata()?.len().to_be_bytes());
+    let hole_hash = block_hash(vec![0; BLOCK_LEN].as_slice());
     iterate_blocks(file, |block| match block {
         Block::Hole => {
-            outer_hasher.update(&hole_hash);
+            outer_hasher.update(hole_hash.as_bytes());
         }
         Block::Data(bytes) => {
-            outer_hasher.update(&xxh3_128(bytes).to_le_bytes());
+            outer_hasher.update(block_hash(bytes).as_bytes());
         }
     })?;
 
-    Ok(outer_hasher.digest128())
+    Ok(outer_hasher.finalize())
+}
+
+fn block_hash(block: &[u8]) -> Hash {
+    const BLOCK_TAG: &[u8] = b"icsum-block";
+    let mut hasher = Hasher::new();
+    hasher.update(&BLOCK_TAG.len().to_be_bytes());
+    hasher.update(BLOCK_TAG);
+    hasher.update(block);
+    hasher.finalize()
 }
 
 #[derive(Eq, PartialEq)]

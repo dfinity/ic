@@ -10,8 +10,8 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 nix = { version = "0.29", features = ["fs"] }
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
+blake3 = "1.5.5"
 
 [dev-dependencies]
-rand = "0.8"
+rand = "0.9"
 tempfile = "3.15"
