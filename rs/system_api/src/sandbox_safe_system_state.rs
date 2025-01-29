@@ -1366,7 +1366,9 @@ mod tests {
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
+    use ic_replicated_state::{
+        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
@@ -1479,6 +1481,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         );
         sandbox_state.msg_deadline()
     }
@@ -1529,6 +1532,7 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NetworkTopology::default(),
         )
     }
 
