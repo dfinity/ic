@@ -512,6 +512,8 @@ type MakingSnsProposal = record {
   proposer_id : opt NeuronId;
 };
 
+// Not to be confused with ManageNeuronRequest. (Yes, this is very structurally
+// similar to that, but not actually exactly equivalent.)
 type ManageNeuron = record {
   id : opt NeuronId;
   command : opt Command;
@@ -537,13 +539,22 @@ type ManageNeuronCommandRequest = variant {
   // KEEP THIS IN SYNC WITH COMMAND!
 };
 
+// Parameters of the manage_neuron method.
 type ManageNeuronRequest = record {
-  id : opt NeuronId;
-  command : opt ManageNeuronCommandRequest;
+  // Which neuron to operate on.
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
+
+  // What operation to perform on the neuron.
+  command : opt ManageNeuronCommandRequest;
+
+  // Deprecated. Use neuron_id_or_subaccount instead.
+  id : opt NeuronId;
 };
 
+// Output of the manage_neuron method.
 type ManageNeuronResponse = record {
+  // Corresponds to the command field in ManageNeuronRequest, which determines
+  // what operation was performed.
   command : opt Command_1;
 };
 
