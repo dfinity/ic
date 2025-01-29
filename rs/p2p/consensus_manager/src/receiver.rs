@@ -179,7 +179,7 @@ pub(crate) struct ConsensusManagerReceiver<
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
 
-    // Receive side:0
+    // Receive side:
     slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     artifact_assembler: Assembler,
