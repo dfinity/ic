@@ -81,7 +81,7 @@ function detect_hardware_generation() {
                 log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
             fi
         else
-            log_and_halt_installation_on_error "2" "CPU Model does NOT meet system requirements."
+            log_and_halt_installation_on_error "1" "CPU Model does NOT meet system requirements."
         fi
     done
 
@@ -128,7 +128,7 @@ function verify_model_and_capabilities_for_all_sockets() {
                 --arg socket "${socket_id}" \
                 --arg capability "${capability_name}" \
                 '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Capability '${capability_name}' does NOT meet system requirements.."
+            log_and_halt_installation_on_error "$?" "Failed to query CPU capabilities"
 
             if [[ ${capability} =~ .*true.* ]]; then
                 echo "Capability '${capability_name}' meets system requirements."
@@ -196,7 +196,7 @@ function verify_memory() {
     local size=$(echo "${memory}" | jq -r '.[] | select(.id=="memory") | .size')
     log_and_halt_installation_on_error "${?}" "Unable to extract memory size."
 
-    if [ "${size}" -gt "${MINIMUM_MEMORY_SIZE}" ]; then
+    if [ "${size}" -ge "${MINIMUM_MEMORY_SIZE}" ]; then
         echo "Memory size (${size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Memory size (${size} bytes/${MINIMUM_MEMORY_SIZE}) does NOT meet system requirements."
@@ -227,7 +227,7 @@ function verify_disks_helper() {
             '.[][] | select(.name==$logicalname) | .size')
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${disk_size}" -gt "${min_disk_size}" ]; then
+        if [ "${disk_size}" -ge "${min_disk_size}" ]; then
             echo "Disk size (${disk_size} bytes) meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${min_disk_size}) does NOT meet system requirements."
@@ -236,13 +236,12 @@ function verify_disks_helper() {
         aggregate_size=$((aggregate_size + disk_size))
     done
 
-    if [ "${aggregate_size}" -gt "${min_aggregate_disk_size}" ]; then
+    if [ "${aggregate_size}" -ge "${min_aggregate_disk_size}" ]; then
         echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${min_aggregate_disk_size}) does NOT meet system requirements."
     fi
 }
-
 
 function verify_disks() {
     echo "* Verifying disks..."
