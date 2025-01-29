@@ -179,7 +179,12 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use std::io::Write;
-    use tempfile::tempfile;
+    use std::path::PathBuf;
+
+    fn create_tempfile() -> File {
+        let tempdir = env::var_os("TEST_TMPDIR").map_or(env::temp_dir(), PathBuf::from);
+        tempfile::tempfile_in(tempdir).expect("Could not create tempfile")
+    }
 
     mod iterate_blocks {
         use super::*;
@@ -188,7 +193,7 @@ mod tests {
         /// This test ensures that the test environment supports sparse files.
         /// Otherwise, the rest of the test cases would be useless.
         fn file_system_supports_sparse_files() {
-            let mut file = tempfile().unwrap();
+            let mut file = create_tempfile();
             file.seek(SeekFrom::Start(BLOCK_LEN_U64)).unwrap();
             writeln!(&mut file, "hello").unwrap();
 
@@ -210,7 +215,7 @@ mod tests {
 
         #[test]
         fn no_holes_prime_bytes() {
-            let mut file = tempfile().unwrap();
+            let mut file = create_tempfile();
             let mut rng = StdRng::seed_from_u64(0);
             let mut data = vec![0u8; 26205239];
             rng.fill_bytes(&mut data);
@@ -222,7 +227,7 @@ mod tests {
 
         #[test]
         fn no_holes_32mb() {
-            let mut file = tempfile().unwrap();
+            let mut file = create_tempfile();
             let mut rng = StdRng::seed_from_u64(0);
             let mut data = vec![0u8; 32 * 1024 * 1024];
             rng.fill_bytes(&mut data);
@@ -234,7 +239,7 @@ mod tests {
 
         #[test]
         fn prime_holes_and_sizes() {
-            let mut file = tempfile().unwrap();
+            let mut file = create_tempfile();
             let mut rng = StdRng::seed_from_u64(0);
             let mut data = vec![0u8; 26205239];
             rng.fill_bytes(&mut data);
@@ -249,36 +254,36 @@ mod tests {
         }
 
         #[test]
-        fn _8mb_holes_and_sizes() {
-            let _8mb = (8 * 1024 * 1024) as i64;
-            let mut file = tempfile().unwrap();
+        fn power_of_2_holes_and_sizes() {
+            let eight_mb = (8 * 1024 * 1024) as i64;
+            let mut file = create_tempfile();
             let mut rng = StdRng::seed_from_u64(0);
-            let mut data = vec![0u8; _8mb as usize];
+            let mut data = vec![0u8; eight_mb as usize];
             rng.fill_bytes(&mut data);
 
-            file.seek(SeekFrom::Current(_8mb)).unwrap();
+            file.seek(SeekFrom::Current(eight_mb)).unwrap();
             file.write_all(&data).unwrap();
 
-            file.seek(SeekFrom::Current(_8mb)).unwrap();
+            file.seek(SeekFrom::Current(eight_mb)).unwrap();
             file.write_all(&data).unwrap();
 
             verify_file(file);
         }
 
         #[test]
-        fn _8mb_hole_at_end() {
-            let _8mb = (8 * 1024 * 1024) as i64;
-            let mut file = tempfile().unwrap();
+        fn power_of_2_mb_hole_at_end() {
+            let eight_mb = (8 * 1024 * 1024) as i64;
+            let mut file = create_tempfile();
             let mut rng = StdRng::seed_from_u64(0);
-            let mut data = vec![0u8; _8mb as usize];
+            let mut data = vec![0u8; eight_mb as usize];
             rng.fill_bytes(&mut data);
 
             file.write_all(&data).unwrap();
 
-            file.seek(SeekFrom::Current(_8mb)).unwrap();
+            file.seek(SeekFrom::Current(eight_mb)).unwrap();
             file.write_all(&data).unwrap();
 
-            file.set_len(_8mb as u64 * 8).unwrap();
+            file.set_len(eight_mb as u64 * 8).unwrap();
 
             verify_file(file);
         }
@@ -303,8 +308,8 @@ mod tests {
 
     #[test]
     fn zeros_have_same_digest_as_hole() {
-        let mut file1 = tempfile().unwrap();
-        let mut file2 = tempfile().unwrap();
+        let mut file1 = create_tempfile();
+        let mut file2 = create_tempfile();
 
         write!(&mut file1, "hello").unwrap();
         write!(&mut file2, "hello").unwrap();
@@ -323,8 +328,8 @@ mod tests {
 
     #[test]
     fn only_zeros_have_same_digest_as_hole() {
-        let mut file1 = tempfile().unwrap();
-        let mut file2 = tempfile().unwrap();
+        let mut file1 = create_tempfile();
+        let mut file2 = create_tempfile();
 
         file1.write_all(&vec![0; 9590653]).unwrap();
         file2.set_len(9590653).unwrap();

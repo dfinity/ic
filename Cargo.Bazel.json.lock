@@ -1,5 +1,5 @@
 {
-  "checksum": "b53ae96f307101119b1aacfe4cce407d00d5ca5a917949a4d72b59ae11659892",
+  "checksum": "b6a812f36ad8264c09beaa2d4739ad501453c502bed65913d798247ecac4a54f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2471,6 +2471,44 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "arrayref 0.3.9": {
+      "name": "arrayref",
+      "version": "0.3.9",
+      "package_url": "https://github.com/droundy/arrayref",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/arrayref/0.3.9/download",
+          "sha256": "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "arrayref",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "arrayref",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.3.9"
+      },
+      "license": "BSD-2-Clause",
+      "license_ids": [
+        "BSD-2-Clause"
+      ],
+      "license_file": "LICENSE"
     },
     "arrayvec 0.5.2": {
       "name": "arrayvec",
@@ -7873,6 +7911,106 @@
         "MIT"
       ],
       "license_file": "LICENSE.txt"
+    },
+    "blake3 1.5.5": {
+      "name": "blake3",
+      "version": "1.5.5",
+      "package_url": "https://github.com/BLAKE3-team/BLAKE3",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/blake3/1.5.5/download",
+          "sha256": "b8ee0c1824c4dea5b5f81736aff91bae041d2c07ee1192bec91054e10e3e601e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "blake3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "blake3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arrayref 0.3.9",
+              "target": "arrayref"
+            },
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            },
+            {
+              "id": "blake3 1.5.5",
+              "target": "build_script_build"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "constant_time_eq 0.3.1",
+              "target": "constant_time_eq"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.5.5"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.1.37",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0",
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE_A2"
     },
     "block-buffer 0.9.0": {
       "name": "block-buffer",
@@ -13725,6 +13863,46 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "constant_time_eq 0.3.1": {
+      "name": "constant_time_eq",
+      "version": "0.3.1",
+      "package_url": "https://github.com/cesarb/constant_time_eq",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/constant_time_eq/0.3.1/download",
+          "sha256": "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "constant_time_eq",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "constant_time_eq",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.3.1"
+      },
+      "license": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "CC0-1.0",
+        "MIT-0"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "convert_case 0.4.0": {
       "name": "convert_case",
       "version": "0.4.0",
@@ -18363,6 +18541,10 @@
               "target": "bitflags"
             },
             {
+              "id": "blake3 1.5.5",
+              "target": "blake3"
+            },
+            {
               "id": "bs58 0.5.0",
               "target": "bs58"
             },
@@ -19532,10 +19714,6 @@
             {
               "id": "x509-parser 0.16.0",
               "target": "x509_parser"
-            },
-            {
-              "id": "xxhash-rust 0.8.15",
-              "target": "xxhash_rust"
             },
             {
               "id": "yansi 0.5.1",
@@ -85472,50 +85650,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "xxhash-rust 0.8.15": {
-      "name": "xxhash-rust",
-      "version": "0.8.15",
-      "package_url": "https://github.com/DoumanAsh/xxhash-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/xxhash-rust/0.8.15/download",
-          "sha256": "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "xxhash_rust",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "xxhash_rust",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "xxh3"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.15"
-      },
-      "license": "BSL-1.0",
-      "license_ids": [
-        "BSL-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "xz2 0.1.7": {
       "name": "xz2",
       "version": "0.1.7",
@@ -87695,6 +87829,7 @@
     "bitcoincore-rpc 0.19.0",
     "bitcoind 0.32.0",
     "bitflags 1.3.2",
+    "blake3 1.5.5",
     "bs58 0.5.0",
     "build-info 0.0.27",
     "build-info-build 0.0.27",
@@ -87998,7 +88133,6 @@
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
-    "xxhash-rust 0.8.15",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.2"

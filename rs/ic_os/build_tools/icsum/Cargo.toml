@@ -10,7 +10,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 nix = { version = "0.29", features = ["fs"] }
-blake3 = "1.5.5"
+blake3 = "1.5"
 
 [dev-dependencies]
 rand = "0.9"
