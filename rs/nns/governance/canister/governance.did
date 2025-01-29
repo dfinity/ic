@@ -760,14 +760,26 @@ type NeuronInFlightCommand = record {
   timestamp : nat64;
 };
 
-// In general, this is a subset of Neuron.
+// A limit view of Neuron that allows some aspects of all neurons to be read by
+// anyone (i.e. without having to be the neuron's controller nor one of its
+// hotkeys).
+//
+// As such, the meaning of each field in this type is generally the same as the
+// one of the same (or at least similar) name in Neuron.
 type NeuronInfo = record {
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
   neuron_type : opt int32;
   created_timestamp_seconds : nat64;
   state : int32;
+
+  // The amount of ICP (and staked maturity) locked in this neuron.
+  //
+  // This is the foundation of the neuron's voting power.
+  //
+  // cached_neuron_stake_e8s - neuron_fees_e8s + staked_maturity_e8s_equivalent
   stake_e8s : nat64;
+
   joined_community_fund_timestamp_seconds : opt nat64;
   retrieved_at_timestamp_seconds : nat64;
   visibility : opt int32;
@@ -782,6 +794,7 @@ type NeuronInfo = record {
   // Now that this is set to deciding_voting_power, this actually does get
   // zeroed out.
   voting_power : nat64;
+
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
