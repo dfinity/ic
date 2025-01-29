@@ -55,86 +55,6 @@ pub struct BallotInfo {
     #[prost(enumeration = "Vote", tag = "2")]
     pub vote: i32,
 }
-/// The result of querying for the state of a single neuron.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct NeuronInfo {
-    /// The exact time at which this data was computed. This means, for
-    /// example, that the exact time that this neuron will enter the
-    /// dissolved state, assuming it is currently dissolving, is given
-    /// by `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
-    #[prost(uint64, tag = "1")]
-    pub retrieved_at_timestamp_seconds: u64,
-    /// The current state of the neuron. See \[NeuronState\] for a
-    /// description of the different states.
-    #[prost(enumeration = "NeuronState", tag = "2")]
-    pub state: i32,
-    /// The current age of the neuron. See \[Neuron::age_seconds\]
-    /// for details on how it is computed.
-    #[prost(uint64, tag = "3")]
-    pub age_seconds: u64,
-    /// The current dissolve delay of the neuron. See
-    /// \[Neuron::dissolve_delay_seconds\] for details on how it is
-    /// computed.
-    #[prost(uint64, tag = "4")]
-    pub dissolve_delay_seconds: u64,
-    /// See \[Neuron::recent_ballots\] for a description.
-    #[prost(message, repeated, tag = "5")]
-    pub recent_ballots: ::prost::alloc::vec::Vec<BallotInfo>,
-    /// Current voting power of the neuron.
-    #[prost(uint64, tag = "6")]
-    pub voting_power: u64,
-    /// When the Neuron was created. A neuron can only vote on proposals
-    /// submitted after its creation date.
-    #[prost(uint64, tag = "7")]
-    pub created_timestamp_seconds: u64,
-    /// Current stake of the neuron, in e8s.
-    #[prost(uint64, tag = "8")]
-    pub stake_e8s: u64,
-    /// Timestamp when this neuron joined the community fund.
-    #[prost(uint64, optional, tag = "9")]
-    pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
-    /// If this neuron is a known neuron, this is data associated
-    /// with it, including the neuron's name and (optionally) a description.
-    #[prost(message, optional, tag = "10")]
-    pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
-    /// The type of the Neuron. See \[NeuronType\] for a description
-    /// of the different states.
-    #[prost(enumeration = "NeuronType", optional, tag = "11")]
-    pub neuron_type: ::core::option::Option<i32>,
-    /// See the Visibility enum.
-    #[prost(enumeration = "Visibility", optional, tag = "12")]
-    pub visibility: ::core::option::Option<i32>,
-    /// The last time that voting power was "refreshed". There are two ways to
-    /// refresh the voting power of a neuron: set following, or vote directly. In
-    /// the future, there will be a dedicated API for refreshing. Note that direct
-    /// voting implies that refresh also occurs when a proposal is created, because
-    /// direct voting is part of proposal creation.
-    ///
-    /// Effect: When this becomes > 6 months ago, the amount of voting power that
-    /// this neuron can exercise decreases linearly down to 0 over the course of 1
-    /// month. After that, following is cleared, except for ManageNeuron proposals.
-    ///
-    /// This will always be populated. If the underlying neuron was never
-    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
-    /// after the UNIX epoch).
-    #[prost(uint64, optional, tag = "13")]
-    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
-    /// See the analogous field in Nueron.
-    #[prost(uint64, optional, tag = "14")]
-    pub deciding_voting_power: ::core::option::Option<u64>,
-    /// See the analogous field in Neuron.
-    #[prost(uint64, optional, tag = "15")]
-    pub potential_voting_power: ::core::option::Option<u64>,
-}
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
     candid::CandidType,
@@ -2167,73 +2087,6 @@ pub struct WaitForQuietState {
     #[prost(uint64, tag = "1")]
     pub current_deadline_timestamp_seconds: u64,
 }
-/// This is a view of the ProposalData returned by API queries and is NOT used
-/// for storage. The ballots are restricted to those of the caller's neurons and
-/// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ProposalInfo {
-    /// The unique id for this proposal.
-    #[prost(message, optional, tag = "1")]
-    pub id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
-    /// The ID of the neuron that made this proposal.
-    #[prost(message, optional, tag = "2")]
-    pub proposer: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    /// The amount of ICP in E8s to be charged to the proposer if the proposal is
-    /// rejected.
-    #[prost(uint64, tag = "3")]
-    pub reject_cost_e8s: u64,
-    /// The proposal originally submitted.
-    #[prost(message, optional, tag = "4")]
-    pub proposal: ::core::option::Option<Proposal>,
-    /// The timestamp, in seconds from the Unix epoch, when this proposal was made.
-    #[prost(uint64, tag = "5")]
-    pub proposal_timestamp_seconds: u64,
-    /// See \[ProposalData::ballots\].
-    #[prost(map = "fixed64, message", tag = "6")]
-    pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// See \[ProposalData::latest_tally\].
-    #[prost(message, optional, tag = "7")]
-    pub latest_tally: ::core::option::Option<Tally>,
-    /// See \[ProposalData::decided_timestamp_seconds\].
-    #[prost(uint64, tag = "8")]
-    pub decided_timestamp_seconds: u64,
-    /// See \[ProposalData::executed_timestamp_seconds\].
-    #[prost(uint64, tag = "12")]
-    pub executed_timestamp_seconds: u64,
-    /// See \[ProposalData::failed_timestamp_seconds\].
-    #[prost(uint64, tag = "13")]
-    pub failed_timestamp_seconds: u64,
-    /// See \[ProposalData::failure_reason\].
-    #[prost(message, optional, tag = "18")]
-    pub failure_reason: ::core::option::Option<GovernanceError>,
-    /// See \[ProposalData::reward_event_round\].
-    #[prost(uint64, tag = "14")]
-    pub reward_event_round: u64,
-    /// Derived - see \[Topic\] for more information
-    #[prost(enumeration = "Topic", tag = "15")]
-    pub topic: i32,
-    /// Derived - see \[ProposalStatus\] for more information
-    #[prost(enumeration = "ProposalStatus", tag = "16")]
-    pub status: i32,
-    /// Derived - see \[ProposalRewardStatus\] for more information
-    #[prost(enumeration = "ProposalRewardStatus", tag = "17")]
-    pub reward_status: i32,
-    #[prost(uint64, optional, tag = "19")]
-    pub deadline_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(message, optional, tag = "20")]
-    pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
-    /// See \[ProposalData::total_potential_voting_power\].
-    #[prost(uint64, optional, tag = "21")]
-    pub total_potential_voting_power: ::core::option::Option<u64>,
-}
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
@@ -3668,19 +3521,6 @@ pub struct ListProposalInfo {
     /// request doesn't exceed the message size limit.
     #[prost(bool, optional, tag = "7")]
     pub omit_large_fields: ::core::option::Option<bool>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListProposalInfoResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub proposal_info: ::prost::alloc::vec::Vec<ProposalInfo>,
 }
 /// A response to "ListKnownNeurons"
 #[derive(

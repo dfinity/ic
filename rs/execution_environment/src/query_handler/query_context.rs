@@ -24,7 +24,8 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
+    CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -1086,15 +1087,14 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
-        let is_wasm64_execution = canister
+        let wasm_execution_mode = canister
             .execution_state
             .as_ref()
-            .is_some_and(|es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
 
-        let max_canister_memory_size = if is_wasm64_execution {
-            self.max_canister_memory_size_wasm64
-        } else {
-            self.max_canister_memory_size_wasm32
+        let max_canister_memory_size = match wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => self.max_canister_memory_size_wasm32,
+            WasmExecutionMode::Wasm64 => self.max_canister_memory_size_wasm64,
         };
 
         ExecutionParameters {

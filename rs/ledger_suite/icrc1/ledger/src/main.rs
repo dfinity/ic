@@ -21,7 +21,7 @@ use ic_icrc1_ledger::{
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction_no_trimming, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -670,7 +670,7 @@ fn execute_transfer_not_async(
             )
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
     })
 }
@@ -867,7 +867,7 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
             memo: arg.memo,
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, expected_fee_tokens)
+        let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match err.try_into() {
