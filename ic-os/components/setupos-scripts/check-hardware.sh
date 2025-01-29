@@ -94,92 +94,83 @@ function detect_hardware_generation() {
 ###############################################################################
 
 function check_num_cpus() {
-    local required_sockets="$1"
+    local cpu_json="$1"
+    local required_sockets="$2"
 
-    local cpu_json="$(get_cpu_info_json)"
     local num_cpu_sockets=$(echo "${cpu_json}" | jq -r '.[].id' | wc -l)
     log_and_halt_installation_on_error "$?" "Unable to extract CPU sockets from CPU JSON."
 
-    if [ "${num_cpu_sockets}" -ne "${required_sockets}" ]; then
+    if [ "${num_cpu_sockets}" -lt "${required_sockets}" ]; then
         log_and_halt_installation_on_error "1" "Number of CPU sockets (${num_cpu_sockets}) does NOT meet system requirements (expected ${required_sockets})."
     fi
+}
+
+# Verifies that all CPU sockets match a required model pattern and have certain capabilities.
+function verify_model_and_capabilities_for_all_sockets() {
+    local cpu_json="$1"
+    local required_model="$2"
+    shift 2
+    local required_capabilities=("$@")
+
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        local unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
+
+        echo "* Verifying CPU socket ${unit}..."
+        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
+        if [[ ${model} =~ .*${required_model}.* ]]; then
+            echo "Model meets system requirements."
+        else
+            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
+        fi
+
+        echo "* Verifying CPU capabilities..."
+        for capability_name in "${required_capabilities[@]}"; do
+            local capability=$(echo "${cpu_json}" | jq -r \
+                --arg socket "${socket_id}" \
+                --arg capability "${capability_name}" \
+                '.[] | select(.id==$socket) | .capabilities[$capability]')
+            log_and_halt_installation_on_error "$?" "Capability '${capability_name}' does NOT meet system requirements.."
+
+            if [[ ${capability} =~ .*true.* ]]; then
+                echo "Capability '${capability_name}' meets system requirements."
+            else
+                log_and_halt_installation_on_error "$?" "Capability '${capability_name}' does NOT meet system requirements.."
+            fi
+        done
+    done
 }
 
 function verify_gen1_cpu() {
     local cpu_json="$(get_cpu_info_json)"
 
-    check_num_cpus "${GEN1_CPU_SOCKETS}"
+    check_num_cpus "${cpu_json}" "${GEN1_CPU_SOCKETS}"
 
-    for i in $(echo "${cpu_json}" | jq -r '.[].id'); do
-        local unit=$(echo "${i}" | awk -F ':' '{ print $2 }')
-        echo "* Verifying CPU socket ${unit}..."
+    verify_model_and_capabilities_for_all_sockets \
+        "${cpu_json}" \
+        "${GEN1_CPU_MODEL}" \
+        "${GEN1_CPU_CAPABILITIES[@]}"
 
-        local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            echo "Model meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
-        fi
-
-        echo "* Verifying CPU capabilities..."
-        for c in "${GEN1_CPU_CAPABILITIES[@]}"; do
-            local capability=$(echo "${cpu_json}" | jq -r \
-                --arg socket "${i}" \
-                --arg capability "${c}" \
-                '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-
-            if [[ ${capability} =~ .*true.* ]]; then
-                echo "Capability '${c}' meets system requirements."
-            else
-                log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-            fi
-        done
-
-        local num_threads=$(nproc)
-        if [ "${num_threads}" -eq "${GEN1_CPU_THREADS}" ]; then
-            echo "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
-        fi
-    done
+    local num_threads=$(nproc)
+    if [ "${num_threads}" -eq "${GEN1_CPU_THREADS}" ]; then
+        echo "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
+    else
+        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
+    fi
 }
 
 function verify_gen2_cpu() {
     local cpu_json="$(get_cpu_info_json)"
 
-    check_num_cpus "${GEN2_MINIMUM_CPU_SOCKETS}"
+    check_num_cpus "${cpu_json}" "${GEN2_MINIMUM_CPU_SOCKETS}"
 
-    for i in $(echo "${cpu_json}" | jq -r '.[].id'); do
-        local unit=$(echo "${i}" | awk -F ':' '{ print $2 }')
-        echo "* Verifying CPU socket ${unit}..."
-
-        local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            echo "Model meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
-        fi
-
-        echo "* Verifying CPU capabilities..."
-        for c in "${GEN2_CPU_CAPABILITIES[@]}"; do
-            local capability=$(echo "${cpu_json}" | jq -r \
-                --arg socket "${i}" \
-                --arg capability "${c}" \
-                '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-
-            if [[ ${capability} =~ .*true.* ]]; then
-                echo "Capability '${c}' meets system requirements."
-            else
-                log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-            fi
-        done
-    done
+    verify_model_and_capabilities_for_all_sockets \
+        "${cpu_json}" \
+        "${GEN2_CPU_MODEL}" \
+        "${GEN2_CPU_CAPABILITIES[@]}"
 
     local num_threads=$(nproc)
     if [ "${num_threads}" -lt "${GEN2_MINIMUM_CPU_THREADS}" ]; then
-        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}) does NOT meet system requirements (${GEN2_MINIMUM_CPU_THREADS})"
+        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}) does NOT meet system requirements (${GEN2_MINIMUM_CPU_THREADS})."
     fi
 }
 
