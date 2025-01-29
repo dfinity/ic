@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 use prost::Message;
 
+use std::sync::Arc;
 use bitcoin::Work;
 
 /// Contains the necessary information about a tip.
@@ -100,7 +101,7 @@ pub struct BlockchainState {
     header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Block>,
+    block_cache: HashMap<BlockHash, Arc<Block>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -282,38 +283,53 @@ impl BlockchainState {
 
         let block_height = self.header_cache.get(&block_hash).unwrap().height;
         let mut duration = 0;
+        let mut cloning_duration = 0;
         let total_size = block.total_size();
 
-        let times = 2_000_000 / total_size;
+        let times = 200.min(2_000_000 / total_size);
 
         let mut buf_size = 0;
+        let experiments = 1;
+        let mut value = std::sync::Arc::new(block);
 
-        if block_height == 26671 {
+        if true || block_height == 1098 {
             let mut total_duration = 0;
-            for i in 0..10 {
+            let mut total_cloning_duration = 0;
+            for i in 0..experiments {
                 let start = Instant::now();
         
                 let mut next = vec![];
         
                 for i in 0..100 {
-                    let hash = block.block_hash();
+                    let hash = value.block_hash();
                     let header = self.get_cached_header(&hash).unwrap();
                     next.push(header.header.clone());
                 }
+                //write!(self.block_file, "after next: {},", start.elapsed().as_millis()).unwrap();
         
+                //TODO(mihailjianu): blocks can actually be references, we don't need to own / clone them.
                 let mut blocks = vec![];
                 for i in 0..times {
-                    blocks.push(block.clone());
+                    blocks.push(value.clone());
+                 //   write!(self.block_file, "{},", start.elapsed().as_millis()).unwrap();
                 }
+                //write!(self.block_file, "after blocks: {},", start.elapsed().as_millis()).unwrap();
+
          
                 let mock_response = GetSuccessorsResponse {
                     blocks,
                     next    
                 };
+
+                //write!(self.block_file, "after response: {},", start.elapsed().as_millis()).unwrap();
         
                 let response = BtcServiceGetSuccessorsResponse::try_from(mock_response).unwrap();
+
+                //write!(self.block_file, "after try_from: {},", start.elapsed().as_millis()).unwrap();
         
                 let mut buf = Vec::new();
+
+                total_cloning_duration += start.elapsed().as_millis();
         
                 response.encode(&mut buf).unwrap();
 
@@ -321,12 +337,13 @@ impl BlockchainState {
         
                 total_duration += start.elapsed().as_millis();
             }
-            duration = total_duration / 10;
+            duration = total_duration / experiments;
+            cloning_duration = total_cloning_duration / experiments;
         }
 
-        writeln!(self.block_file, "[{}, {}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, block.header.difficulty_float(), block.total_size(), duration, times, buf_size).unwrap();
+        writeln!(self.block_file, "[{}, {}, {}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, value.header.difficulty_float(), value.total_size(), duration, cloning_duration, times, buf_size).unwrap();
 
-        self.block_cache.insert(block_hash, block);
+        self.block_cache.insert(block_hash, value.clone());
         self.prune_blocks_below_height(height);
 
 
@@ -416,8 +433,8 @@ impl BlockchainState {
 
     /// This method takes a list of block hashes as input.
     /// For each block hash, if the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
-        self.block_cache.get(block_hash)
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
+        self.block_cache.get(block_hash).cloned()
     }
 
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.

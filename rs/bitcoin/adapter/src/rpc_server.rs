@@ -57,11 +57,14 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
         for block in response.blocks.iter() {
+            let start = Instant::now();
             let mut encoded_block = vec![];
             block
                 .consensus_encode(&mut encoded_block)
                 .map_err(|_| Status::unknown("Failed to encode block!"))?;
+//            print!("consensus_encode: {:?}", start.elapsed().as_micros());
             blocks.push(encoded_block);
+  //          print!("push : {:?}", start.elapsed().as_micros());
         }
 
         let mut next = vec![];

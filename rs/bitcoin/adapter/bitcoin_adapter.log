@@ -1,4 +1,4 @@
-Jan 28 14:26:11.009 INFO s:/n:/ic_btc_adapter/ic_btc_adapter Starting the adapter with config: {
+Jan 29 14:23:09.802 INFO s:/n:/ic_btc_adapter/ic_btc_adapter Starting the adapter with config: {
   "network": "testnet4",
   "dns_seeds": [
     "seed.testnet4.bitcoin.sprovoost.nl",
@@ -24,141 +24,96 @@ Jan 28 14:26:11.009 INFO s:/n:/ic_btc_adapter/ic_btc_adapter Starting the adapte
     1000
   ]
 }
-Jan 28 14:26:11.296 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:df6:7280::92:206]:48333 and no socks proxy available.
-Jan 28 14:26:11.296 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:df6:7280::92:206]:48333 ::: Connection refused (os error 111)
-Jan 28 14:26:11.296 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:df6:7280::92:202]:48333 and no socks proxy available.
-Jan 28 14:26:11.296 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:df6:7280::92:202]:48333 ::: Connection refused (os error 111)
-Jan 28 14:26:11.608 INFO s:/n:/ic_btc_adapter/addressbook Added 259 address(es) from [2001:df6:7280::92:207]:48333.
-Jan 28 14:26:11.608 INFO s:/n:/ic_btc_adapter/connectionmanager Adapter has discovered enough addresses: 259
-Jan 28 14:26:11.807 INFO s:/n:/ic_btc_adapter/addressbook Added 270 address(es) from [2401:b140:2::92:211]:48333.
-Jan 28 14:26:11.814 INFO s:/n:/ic_btc_adapter/addressbook Added 242 address(es) from [2001:df6:7280::92:214]:48333.
-Jan 28 14:26:11.815 INFO s:/n:/ic_btc_adapter/addressbook Added 256 address(es) from [2001:df6:7280::92:212]:48333.
-Jan 28 14:26:11.815 INFO s:/n:/ic_btc_adapter/addressbook Added 249 address(es) from [2001:df6:7280::92:203]:48333.
-Jan 28 14:26:11.838 INFO s:/n:/ic_btc_adapter/addressbook Added 268 address(es) from [2001:df6:7280::92:208]:48333.
-Jan 28 14:26:11.939 INFO s:/n:/ic_btc_adapter/addressbook Added 269 address(es) from [2001:df6:7280::92:211]:48333.
-Jan 28 14:26:12.495 INFO s:/n:/ic_btc_adapter/addressbook Added 141 address(es) from [2401:b140::92:201]:48333.
-Jan 28 14:26:14.949 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a02:ff0:220:da4a:80fb:9125:21e4:40f5]:48333 and no socks proxy available.
-Jan 28 14:26:14.949 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:ff0:220:da4a:80fb:9125:21e4:40f5]:48333 ::: No route to host (os error 113)
-Jan 28 14:26:16.914 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:1::92:205]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:16.914 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:646:8783:e190:88b6:7f87:4464:1247]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:17.014 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2406:7400:c1:0:1915:f789:1edd:228d]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:17.513 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:18f:1080:2360::1a8d]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:20.014 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6213:1250::1d3:43]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:22.014 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:4900:8841:3ee2:7c90:d04d:6d1c:729f]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:22.015 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:c22:35e7:311c:26c7:4e68:7050:9f0a]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:22.112 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:4f8:1c1c:84c3::1]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:22.152 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a02:2f0e:5c06:7000:c575:49b3:ed50:6d32]:48333 and no socks proxy available.
-Jan 28 14:26:22.152 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:2f0e:5c06:7000:c575:49b3:ed50:6d32]:48333 ::: Connection refused (os error 111)
-Jan 28 14:26:22.614 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac1:76a0:28::1d3:3c]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:25.114 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2607:fb90:5022:a2c::5c87]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:25.956 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:229:54:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:26:25.956 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:229:54:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
-Jan 28 14:26:26.543 INFO s:/n:/ic_btc_adapter/addressbook Added 270 address(es) from [2401:b140:2::92:211]:48333.
-Jan 28 14:26:27.923 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 2000, Active chain's tip = 00000000e8ca04ea9cc45f31650f2f79582a7644168721ed647a911aca26d19e
-Jan 28 14:26:27.956 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:d6fe:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
-Jan 28 14:26:27.956 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:646:8783:e190:88d6:2d41:17c5:b93a]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:27.956 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6210:1246::1d2:94]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:28.445 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 4000, Active chain's tip = 000000001ad4cb83ac630ce327922439a51adf2ca7dfb48668ec1b3002772b66
-Jan 28 14:26:28.985 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 6000, Active chain's tip = 000000000302f0aadaf70036296603f8e6faa1fe8bc62ae04fbc08df8f3654ec
-Jan 28 14:26:29.020 INFO s:/n:/ic_btc_adapter/addressbook Added 269 address(es) from [2001:df6:7280::92:211]:48333.
-Jan 28 14:26:29.566 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 8000, Active chain's tip = 00000000001116b0a2de5da24cfee9a37e9d896fee3d2960fd3b0465c31d260f
-Jan 28 14:26:30.099 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 10000, Active chain's tip = 000000000037079ff4c37eed57d00eb9ddfde8737b559ffa4101b11e76c97466
-Jan 28 14:26:30.213 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6211:1173::1bd:eb]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:30.601 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 12000, Active chain's tip = 00000000000c148aede7d51e7488a203cc2e6ff36142032c277e6931af6eb76b
-Jan 28 14:26:30.649 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:df6:7280::92:206]:48333 and no socks proxy available.
-Jan 28 14:26:30.649 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:df6:7280::92:206]:48333 ::: Connection refused (os error 111)
-Jan 28 14:26:31.164 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 14000, Active chain's tip = 000000000003fed2c6688a2a9e2862397f3efcb4cac1db92d92452b6ab02670f
-Jan 28 14:26:31.769 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 16000, Active chain's tip = 000000000000910e5cee8668c1cef4954b260599814953fd12ce70cfb1425215
-Jan 28 14:26:32.288 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 18000, Active chain's tip = 000000000000f2e03a86f39a5d0e36baa6977d1015c122651ac3d70f30a5359c
-Jan 28 14:26:32.958 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a0c:5a87:8401:7500:3aa6:1bfb:1f6e:ce15]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:32.959 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:3::92:205]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:32.964 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 20000, Active chain's tip = 0000000000003a28386161143be8e7cdc3d857021986c4d0ee140d852a155b59
-Jan 28 14:26:33.438 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 22000, Active chain's tip = 0000000000000a77905eaa0e0d9c35f9833c5c23c65ea29787b652a7bf0037d5
-Jan 28 14:26:33.957 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 24000, Active chain's tip = 00000000000002ed40bff5de3b44af3d0f391fe5c5a3d224e8de5eae5581735b
-Jan 28 14:26:34.498 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 26000, Active chain's tip = 0000000000000064ce066d01dcd1f4601acf30b5960368cea42dceaee603dab5
-Jan 28 14:26:34.592 INFO s:/n:/ic_btc_adapter/addressbook Added 168 address(es) from [2a01:4f9:3080:3496::2]:48333.
-Jan 28 14:26:35.035 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 28000, Active chain's tip = 0000000000287e756dfb036bbd41a09d59533ecc3b73674cf1fd7ffae2d2207d
-Jan 28 14:26:35.580 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 30000, Active chain's tip = 000000000000000095a56b41da7618b40949a3aef84059732ff1b045cb44fbbf
-Jan 28 14:26:35.713 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:646:8783:e190:915:1463:5911:2941]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:36.207 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 32000, Active chain's tip = 00000000a4350556fc2954810a44877103779d3b249f4963b67fd603fd704cde
-Jan 28 14:26:36.796 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 34000, Active chain's tip = 00000000000000053295ff04b36acc4540703bbb49caff562ca20d02516b84b2
-Jan 28 14:26:37.342 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 36000, Active chain's tip = 00000000000000244c03f453698f3193e260b2740360daadc67d611f5ab15ef2
-Jan 28 14:26:37.884 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 38000, Active chain's tip = 0000000000000032fa3a3ff4a6d00be9db7113b5a09bec54f864bf16046e2cf7
-Jan 28 14:26:38.059 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:e135:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
-Jan 28 14:26:38.503 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 40000, Active chain's tip = 000000000000000c1a1fad82b0e133f4772802b6dff7a95990580ae2e15c634f
-Jan 28 14:26:39.001 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 42000, Active chain's tip = 0000000067e871308ed838eaf7365ab1d61b8a0187f39e5457096596d73adad4
-Jan 28 14:26:39.577 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 44000, Active chain's tip = 000000007c45abdd246fb171d826b4adec60ced93208185474935445e15c9690
-Jan 28 14:26:40.066 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 46000, Active chain's tip = 0000000015222c1380636cd645fc38be3c90fab4e24d5b9be0cd31f4ecdd734b
-Jan 28 14:26:40.625 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 48000, Active chain's tip = 0000000014d177c53bc3266605968eddafc78c9d001ca43a6cec8be7d30dcdca
-Jan 28 14:26:40.812 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2406:7400:c1:0:1a31:b00f:f1d3:5ecf]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:41.117 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 50000, Active chain's tip = 00000000e2c8c94ba126169a88997233f07a9769e2b009fb10cad0e893eff2cb
-Jan 28 14:26:41.617 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 52000, Active chain's tip = 000000000057e4a39b583f13d2bc93c12f1f58d9ed432e298fc699ccb939fb13
-Jan 28 14:26:42.080 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 54000, Active chain's tip = 000000000057685c85d53ab5a10bd87c8ef9a3d07534cff3ef6f4c27bd2d718a
-Jan 28 14:26:42.528 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 56000, Active chain's tip = 0000000000a70700870f622b5c3311a00145f7bc2bd3d35e138cc18178272716
-Jan 28 14:26:43.073 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 58000, Active chain's tip = 00000000d3ec21fa7fa1771aefcf6462d19921996ddb4f7beeb19b0c8ed1fe2d
-Jan 28 14:26:43.140 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:21f7:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
-Jan 28 14:26:43.557 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 60000, Active chain's tip = 000000009fa917488fa662d012d41dc6a1d3221244cc37ac78d83935d03009a3
-Jan 28 14:26:44.011 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 62000, Active chain's tip = 000000000000000dc98f0d491c1bc8bce438727689e2c1dfc9e67a21a0317c0c
-Jan 28 14:26:44.549 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 64000, Active chain's tip = 000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5
-Jan 28 14:26:45.016 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 66000, Active chain's tip = 000000000000851857dc3022514806a00f1daf69c39901c244d45c485502c557
-Jan 28 14:26:45.446 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67271, Active chain's tip = 00000000567f89da99e9c728d38b8443ba24706e51201b9d9f39e5e21fba2958
-Jan 28 14:26:46.275 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2600:1700:3170:6a20:e046:c0f0:5377:d3d]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:48.145 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:bc8:50c0:312:7ec2:55ff:fe9d:5900]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:51.312 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:3::92:206]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:53.212 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac1:76a0:28::4:24d]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:56.413 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:16b8:b182:4500:be24:11ff:fedc:387e]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:26:58.320 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a10:3781:4c82:0:5d7e:b963:92ed:5189]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:01.513 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:85f:f06f:501:db:f99f:e1c8:58de]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:01.702 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:1118:ab6:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:27:01.703 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:ab6:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
-Jan 28 14:27:06.613 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6216:1173::1bd:eb]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:06.724 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:229:133f:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
-Jan 28 14:27:09.768 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a02:ff0:220:da4a:75b5:7238:9384:e5bb]:48333 and no socks proxy available.
-Jan 28 14:27:09.768 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:ff0:220:da4a:75b5:7238:9384:e5bb]:48333 ::: No route to host (os error 113)
-Jan 28 14:27:11.813 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:1::92:201]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:14.825 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:3::92:202]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:14.954 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a02:8109:bd0a:dd00:675a:3f97:445c:bd3a]:48333 and no socks proxy available.
-Jan 28 14:27:14.954 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:8109:bd0a:dd00:675a:3f97:445c:bd3a]:48333 ::: Permission denied (os error 13)
-Jan 28 14:27:16.913 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb1e:36:12a3:4ff:10cd:a198:312]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:20.022 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:646:8783:e190:244b:c05f:3c0c:d207]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:22.019 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2600:1700:3170:6a20::b]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:25.135 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb04:119a:f200:5552:78f8:8604:6b0f]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:27.113 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:1::92:202]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:30.215 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac1:7680:28::4:33e]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:30.447 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:2e0:8993:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:27:30.447 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:8993:52a1:32ff:fe23:25ea]:18332 ::: Connection refused (os error 111)
-Jan 28 14:27:32.212 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:282:8281:3f30::7766]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:35.513 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac0:1000:378::1c4:117]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:37.336 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:ac8:30:67::11]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:40.612 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:18f:1080:2360::174]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:40.744 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:16b8:b18c:ed00:be24:11ff:fedc:387e]:48333 and no socks proxy available.
-Jan 28 14:27:40.744 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:16b8:b18c:ed00:be24:11ff:fedc:387e]:48333 ::: Permission denied (os error 13)
-Jan 28 14:27:42.423 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:c23:6066:a300:900f:f2ff:fea3:bbcd]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:45.813 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac1:76a0:28::1d0:9f]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:47.524 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6214:1232::1d0:dd]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:50.913 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2600:1700:3170:6a20:2e:2ea3:2b78:d383]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:52.612 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:16b8:b1b4:ed00:be24:11ff:fedc:387e]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:56.013 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2406:7400:c1:0:1c0b:6202:28e2:4bc4]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:27:57.714 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb04:119a:f200:e4c6:f5e0:f13f:30c0]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:01.091 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:1118:5640:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:28:01.091 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:5640:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
-Jan 28 14:28:01.113 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:587:1e54:4100:b992:ec52:3728:8789]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:06.112 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2803:c180:2003:512e::1]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:06.212 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:646:8783:e190:dcd0:8782:9749:fac0]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:11.213 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb09:d057:8aba:ce5:47fe:a583:e64d]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:11.314 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6217:1173::1bd:af]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:16.314 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2401:b140:3::92:204]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:16.412 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:1760:8007:173:9822:f036:d0f0:9281]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:19.673 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:1118:413:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:28:19.674 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:413:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
-Jan 28 14:28:21.414 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:63a1:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
-Jan 28 14:28:22.992 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:1118:8cdf:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
-Jan 28 14:28:22.992 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:8cdf:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
-Jan 28 14:28:26.514 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:799:1956:3e00:4486:3e49:d139:269]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:27.158 INFO s:/n:/ic_btc_adapter/addressbook Added 229 address(es) from [2401:b140:2::92:213]:48333.
-Jan 28 14:28:28.013 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2804:14c:5ba4:5655:9c39:3e73:e504:b64]:48333 ::: Connecting to the stream timed out.
-Jan 28 14:28:28.821 INFO s:/n:/ic_btc_adapter/addressbook Added 293 address(es) from [2401:b140:4::92:209]:48333.
-Jan 28 14:35:12.369 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67275, Active chain's tip = 000000000000607110fc56e33fba1ddfeb5aff3c6413d5a18ad3fb2f02f9c849
-Jan 28 14:35:13.430 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67277, Active chain's tip = 00000000000050873caf50517793bd0e01d7daea8ee0b4ea673a2a7e24bd45c1
-Jan 28 14:41:33.345 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67278, Active chain's tip = 000000008de81d54658f200b5391f407df2174c20cfdf0f0c10eb954a6669317
-Jan 28 15:01:34.700 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67279, Active chain's tip = 00000000c88e8e6ccb34d04f5e338cec82c3a8845557aab973a91aa556fc0ab8
+Jan 29 14:23:10.087 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:df6:7280::92:205]:48333 and no socks proxy available.
+Jan 29 14:23:10.087 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:df6:7280::92:205]:48333 ::: Connection refused (os error 111)
+Jan 29 14:23:10.397 INFO s:/n:/ic_btc_adapter/addressbook Added 257 address(es) from [2001:df6:7280::92:203]:48333.
+Jan 29 14:23:10.397 INFO s:/n:/ic_btc_adapter/connectionmanager Adapter has discovered enough addresses: 257
+Jan 29 14:23:10.399 INFO s:/n:/ic_btc_adapter/addressbook Added 256 address(es) from [2001:df6:7280::92:212]:48333.
+Jan 29 14:23:10.595 INFO s:/n:/ic_btc_adapter/addressbook Added 248 address(es) from [2401:b140:2::92:212]:48333.
+Jan 29 14:23:10.596 INFO s:/n:/ic_btc_adapter/addressbook Added 275 address(es) from [2001:df6:7280::92:211]:48333.
+Jan 29 14:23:10.596 INFO s:/n:/ic_btc_adapter/addressbook Added 250 address(es) from [2401:b140:2::92:210]:48333.
+Jan 29 14:23:10.598 INFO s:/n:/ic_btc_adapter/addressbook Added 272 address(es) from [2001:df6:7280::92:210]:48333.
+Jan 29 14:23:10.600 INFO s:/n:/ic_btc_adapter/addressbook Added 256 address(es) from [2001:df6:7280::92:209]:48333.
+Jan 29 14:23:10.627 INFO s:/n:/ic_btc_adapter/addressbook Added 249 address(es) from [2001:df6:7280::92:207]:48333.
+Jan 29 14:23:12.366 INFO s:/n:/ic_btc_adapter/addressbook Added 157 address(es) from [2405:1204:c235:9700:10ca:f752:85cc:2387]:48333.
+Jan 29 14:23:14.627 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 2000, Active chain's tip = 00000000e8ca04ea9cc45f31650f2f79582a7644168721ed647a911aca26d19e
+Jan 29 14:23:15.710 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 4000, Active chain's tip = 000000001ad4cb83ac630ce327922439a51adf2ca7dfb48668ec1b3002772b66
+Jan 29 14:23:15.763 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:16b8:b18c:ed00:be24:11ff:fedc:387e]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:15.764 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:8dbd:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:23:15.764 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:3100:246f:ec00:900f:f2ff:fea3:bbcd]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:15.764 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6217:1246::1d2:68]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:16.483 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 6000, Active chain's tip = 000000000302f0aadaf70036296603f8e6faa1fe8bc62ae04fbc08df8f3654ec
+Jan 29 14:23:17.234 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 8000, Active chain's tip = 00000000001116b0a2de5da24cfee9a37e9d896fee3d2960fd3b0465c31d260f
+Jan 29 14:23:17.994 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 10000, Active chain's tip = 000000000037079ff4c37eed57d00eb9ddfde8737b559ffa4101b11e76c97466
+Jan 29 14:23:18.731 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 12000, Active chain's tip = 00000000000c148aede7d51e7488a203cc2e6ff36142032c277e6931af6eb76b
+Jan 29 14:23:18.812 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a02:ff0:220:da4a:6dc1:1d3f:c1e7:d14c]:48333 and no socks proxy available.
+Jan 29 14:23:18.812 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:ff0:220:da4a:6dc1:1d3f:c1e7:d14c]:48333 ::: No route to host (os error 113)
+Jan 29 14:23:18.926 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2001:16b8:b182:4500:be24:11ff:fedc:387e]:48333 and no socks proxy available.
+Jan 29 14:23:18.926 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2001:16b8:b182:4500:be24:11ff:fedc:387e]:48333 ::: Permission denied (os error 13)
+Jan 29 14:23:19.467 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 14000, Active chain's tip = 000000000003fed2c6688a2a9e2862397f3efcb4cac1db92d92452b6ab02670f
+Jan 29 14:23:20.807 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6217:1232::1d0:e4]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:20.807 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2806:10a6:13:9593:c080:c89a:1761:b122]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:20.807 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:3100:1164:27d6:dd0c:cebb:de5f:1393]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:21.432 INFO s:/n:/ic_btc_adapter/addressbook Added 272 address(es) from [2001:df6:7280::92:210]:48333.
+Jan 29 14:23:22.044 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 16000, Active chain's tip = 000000000000910e5cee8668c1cef4954b260599814953fd12ce70cfb1425215
+Jan 29 14:23:22.184 INFO s:/n:/ic_btc_adapter/addressbook Added 287 address(es) from [2605:6440:1000:1:186:233:184:40]:48333.
+Jan 29 14:23:22.635 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 18000, Active chain's tip = 000000000000f2e03a86f39a5d0e36baa6977d1015c122651ac3d70f30a5359c
+Jan 29 14:23:23.198 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 20000, Active chain's tip = 0000000000003a28386161143be8e7cdc3d857021986c4d0ee140d852a155b59
+Jan 29 14:23:23.849 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 22000, Active chain's tip = 0000000000000a77905eaa0e0d9c35f9833c5c23c65ea29787b652a7bf0037d5
+Jan 29 14:23:24.005 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:5470:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:23:24.404 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 24000, Active chain's tip = 00000000000002ed40bff5de3b44af3d0f391fe5c5a3d224e8de5eae5581735b
+Jan 29 14:23:24.993 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 26000, Active chain's tip = 0000000000000064ce066d01dcd1f4601acf30b5960368cea42dceaee603dab5
+Jan 29 14:23:25.613 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 28000, Active chain's tip = 0000000000287e756dfb036bbd41a09d59533ecc3b73674cf1fd7ffae2d2207d
+Jan 29 14:23:26.268 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 30000, Active chain's tip = 000000000000000095a56b41da7618b40949a3aef84059732ff1b045cb44fbbf
+Jan 29 14:23:26.321 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6212:1250::1d3:2]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:26.950 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 32000, Active chain's tip = 00000000a4350556fc2954810a44877103779d3b249f4963b67fd603fd704cde
+Jan 29 14:23:27.622 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 34000, Active chain's tip = 00000000000000053295ff04b36acc4540703bbb49caff562ca20d02516b84b2
+Jan 29 14:23:28.299 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 36000, Active chain's tip = 00000000000000244c03f453698f3193e260b2740360daadc67d611f5ab15ef2
+Jan 29 14:23:28.875 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 38000, Active chain's tip = 0000000000000032fa3a3ff4a6d00be9db7113b5a09bec54f864bf16046e2cf7
+Jan 29 14:23:29.501 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 40000, Active chain's tip = 000000000000000c1a1fad82b0e133f4772802b6dff7a95990580ae2e15c634f
+Jan 29 14:23:30.170 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 42000, Active chain's tip = 0000000067e871308ed838eaf7365ab1d61b8a0187f39e5457096596d73adad4
+Jan 29 14:23:30.230 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2601:8c:8300:9e:c130:8d9c:feaf:4c0a]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:30.784 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 44000, Active chain's tip = 000000007c45abdd246fb171d826b4adec60ced93208185474935445e15c9690
+Jan 29 14:23:31.339 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:97ce:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:23:31.455 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 46000, Active chain's tip = 0000000015222c1380636cd645fc38be3c90fab4e24d5b9be0cd31f4ecdd734b
+Jan 29 14:23:31.988 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 48000, Active chain's tip = 0000000014d177c53bc3266605968eddafc78c9d001ca43a6cec8be7d30dcdca
+Jan 29 14:23:32.542 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 50000, Active chain's tip = 00000000e2c8c94ba126169a88997233f07a9769e2b009fb10cad0e893eff2cb
+Jan 29 14:23:33.060 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 52000, Active chain's tip = 000000000057e4a39b583f13d2bc93c12f1f58d9ed432e298fc699ccb939fb13
+Jan 29 14:23:33.601 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 54000, Active chain's tip = 000000000057685c85d53ab5a10bd87c8ef9a3d07534cff3ef6f4c27bd2d718a
+Jan 29 14:23:34.118 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 56000, Active chain's tip = 0000000000a70700870f622b5c3311a00145f7bc2bd3d35e138cc18178272716
+Jan 29 14:23:34.768 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 58000, Active chain's tip = 00000000d3ec21fa7fa1771aefcf6462d19921996ddb4f7beeb19b0c8ed1fe2d
+Jan 29 14:23:35.246 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:229:9214:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:23:35.327 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 60000, Active chain's tip = 000000009fa917488fa662d012d41dc6a1d3221244cc37ac78d83935d03009a3
+Jan 29 14:23:35.981 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 62000, Active chain's tip = 000000000000000dc98f0d491c1bc8bce438727689e2c1dfc9e67a21a0317c0c
+Jan 29 14:23:36.599 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 64000, Active chain's tip = 000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5
+Jan 29 14:23:36.654 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac1:76a0:28::1d3:43]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:37.140 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 66000, Active chain's tip = 000000000000851857dc3022514806a00f1daf69c39901c244d45c485502c557
+Jan 29 14:23:37.634 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67427, Active chain's tip = 00000000d1d7c9d4f962d63f6ccf3c604450b42e0661b86f4eed84d9314f78fe
+Jan 29 14:23:40.481 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb04:119a:f200:5552:78f8:8604:6b0f]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:42.290 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:cb1e:36:12a3:4ff:10cd:a198:312]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:45.506 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6211:28::4:33e]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:47.306 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:87f7:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:23:48.842 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2a00:f29:2e0:5387:52a1:32ff:fe23:25ea]:18332 and no socks proxy available.
+Jan 29 14:23:48.842 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:2e0:5387:52a1:32ff:fe23:25ea]:18332 ::: No route to host (os error 113)
+Jan 29 14:23:52.407 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a09:bac5:6214:1232::1d0:db]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:53.907 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2600:1700:cce0:2650:7dfb:53b2:759e:36e4]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:57.157 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2806:2f0:9fa0:6b94:5054:ff:fe29:c5]:48333 and no socks proxy available.
+Jan 29 14:23:57.157 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2806:2f0:9fa0:6b94:5054:ff:fe29:c5]:48333 ::: No route to host (os error 113)
+Jan 29 14:23:57.539 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2406:7400:c1:0:1915:f789:1edd:228d]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:23:57.748 INFO s:/n:/ic_btc_adapter/addressbook Added 249 address(es) from [2001:df6:7280::92:207]:48333.
+Jan 29 14:24:02.680 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [240b:253:24e1:cef0:4c36:5c37:f964:e093]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:24:07.707 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a01:c23:6016:2ee6:cf7b:6c43:b69e:b137]:48333 ::: Connecting to the stream timed out.
+Jan 29 14:24:12.806 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a00:f29:1118:bdc3:52a1:32ff:fe23:25ea]:18332 ::: Connecting to the stream timed out.
+Jan 29 14:24:13.160 DEBG s:/n:/ic_btc_adapter/stream No direct connectivity to bitcoin peer [2804:14d:baa0:9994:d536:2e06:5118:22a6]:48333 and no socks proxy available.
+Jan 29 14:24:13.160 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2804:14d:baa0:9994:d536:2e06:5118:22a6]:48333 ::: Connection refused (os error 111)
+Jan 29 14:24:14.157 INFO s:/n:/ic_btc_adapter/addressbook Added 260 address(es) from [2401:b140:4::92:205]:48333.
+Jan 29 14:27:13.044 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67428, Active chain's tip = 0000000053e3d5b3872d3a1a846946cf8cf1c07544a816bb749c8a036639d704
+Jan 29 14:47:19.425 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67429, Active chain's tip = 0000000003126c35ba36018f615534d6ecf39b634b126c76995a984c040fa582
+Jan 29 14:47:21.917 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67430, Active chain's tip = 0000000000000002a07ccab6efe8d74d67e13f101b91d81b667bcca6f3730f82
+Jan 29 14:47:24.436 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67431, Active chain's tip = 000000000004eaee7042c48201fa4abc359962c638dd63feea423d0479a48dbc
+Jan 29 14:48:30.744 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67434, Active chain's tip = 0000000000003290e5469fe6b89abc678ab77f34d091c54ce394caf85ac09c97
+Jan 29 14:55:00.174 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67435, Active chain's tip = 0000000000000000bba16d2da452124cf79d3db557328ca1ff2f61f1744c9e1f
+Jan 29 14:55:02.671 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67436, Active chain's tip = 000000000c55c32d0dc240053fa49b24e2751ed51c6c49ed7df421f6fa191733
+Jan 29 14:55:02.873 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67437, Active chain's tip = 000000000a0f24f27204ac118dc65df38164bceed099a997142b987b10635a1d
+Jan 29 15:00:53.542 INFO s:/n:/ic_btc_adapter/addressbook Added 1 address(es) from [2405:1204:c235:9700:10ca:f752:85cc:2387]:48333.
+Jan 29 15:07:18.991 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 67438, Active chain's tip = 000000000dc34d57fd9a81c524e2eb6cf7cb7a31db03e71927962ec410481864
