@@ -157,6 +157,18 @@ pub enum SystemApiCallId {
     CanisterVersion,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
+    /// Tracker for `ic0.cost_call()`
+    CostCall,
+    /// Tracker for `ic0.cost_create_canister()`
+    CostCreateCanister,
+    /// Tracker for `ic0.cost_ecdsa()`
+    CostEcdsa,
+    /// Tracker for `ic0.cost_http_request()`
+    CostHttpRequest,
+    /// Tracker for `ic0.cost_schnorr()`
+    CostSchnorr,
+    /// Tracker for `ic0.cost_vetkey()`
+    CostVetkey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -223,6 +235,8 @@ pub enum SystemApiCallId {
     SubnetSelfSize,
     /// Tracker for `ic0.subnet_self_copy()`
     SubnetSelfCopy,
+    /// Tracker for `ic0.replication_factor()`
+    ReplicationFactor,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
