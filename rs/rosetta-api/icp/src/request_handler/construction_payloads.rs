@@ -453,7 +453,12 @@ fn handle_list_neurons(
         &update,
         SignatureType::from(pk.curve_type),
     );
-    updates.push((RequestType::ListNeurons, update));
+    updates.push((
+        RequestType::ListNeurons {
+            page_number: req.page_number.unwrap_or_default(),
+        },
+        update,
+    ));
     Ok(())
 }
 

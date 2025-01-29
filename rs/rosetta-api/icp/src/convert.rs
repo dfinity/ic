@@ -40,10 +40,7 @@ use icp_ledger::{
 use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{from_value, map::Map, Number, Value};
-use std::{
-    convert::{TryFrom, TryInto},
-    fs::metadata,
-};
+use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures

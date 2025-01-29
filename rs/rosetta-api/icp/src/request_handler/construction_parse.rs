@@ -97,7 +97,9 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
-                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
+                RequestType::ListNeurons { page_number } => {
+                    list_neurons(&mut requests, arg, from, Some(page_number))?
+                }
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
