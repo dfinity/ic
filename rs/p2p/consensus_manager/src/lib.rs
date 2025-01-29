@@ -142,7 +142,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     // Locally produced adverts to send to the node's peers.
     outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+    slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
@@ -169,7 +169,7 @@ where
         log,
         metrics,
         rt_handle,
-        adverts_received,
+        slot_updates_rx,
         assembler,
         sender,
         topology_watcher,
