@@ -1,6 +1,5 @@
 [Unit]
 Description=Initialize fstrim metrics
-Before=node_exporter.service
 
 [Service]
 Type=oneshot
@@ -31,6 +30,3 @@ SystemCallArchitectures=native
 SystemCallErrorNumber=EPERM
 SystemCallFilter=@system-service
 UMask=022
-
-[Install]
-WantedBy=multi-user.target

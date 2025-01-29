@@ -1,5 +1,6 @@
 [Unit]
 Description=Report custom metrics once per minute
+Before=node_exporter.service
 
 [Service]
 Type=oneshot
