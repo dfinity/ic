@@ -33,11 +33,6 @@ pub struct SandboxFeatures {
     pub syscall_tracing: bool,
 }
 
-// The number of sandbox threads must be known in advance because:
-//   1. We need to call `ptrace::attach` immediately after the thread is spawned.
-//   2. Detached threads interfere with libfuzzer's cleanup process.
-const SANDBOX_THREADS: usize = 14;
-
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
 // However, to enable canister sandboxing, we override the initialisation by providing our own `main()`
 // which acts as a dispatcher for different sandboxed under certain arguments.
@@ -90,6 +85,12 @@ fn syscall_monitor<F>(name: &str, sandbox: F)
 where
     F: Fn(),
 {
+    // The number of sandbox threads must be known in advance because:
+    //   1. We need to call `ptrace::attach` immediately after the thread is spawned.
+    //   2. Detached threads interfere with libfuzzer's cleanup process.
+
+    const SANDBOX_THREADS: usize = 14;
+
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
             sandbox();
