@@ -434,18 +434,37 @@ type ListKnownNeuronsResponse = record {
   known_neurons : vec KnownNeuron;
 };
 
+// Parameters of the list_neurons method.
 type ListNeurons = record {
-  include_public_neurons_in_full_neurons : opt bool;
+  // These fields select neurons to be in the result set.
   neuron_ids : vec nat64;
-  include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
+
+  // Only has an effect when include_neurons_readable_by_caller.
+  include_empty_neurons_readable_by_caller : opt bool;
+
+  // When a public neuron is a member of the result set, include it in the
+  // full_neurons field (of ListNeuronsResponse). This does not affect which
+  // neurons are part of the result set.
+  include_public_neurons_in_full_neurons : opt bool;
+
   page_number: opt nat64;
   page_size: opt nat64;
 };
 
+// Output of the list_neurons method.
 type ListNeuronsResponse = record {
+  // Per the NeuronInfo type, this is a redacted view of the neurons in the
+  // result set consisting of information that require no special privileges to
+  // view.
   neuron_infos : vec record { nat64; NeuronInfo };
+
+  // If the caller has the necessary special privileges (or the neuron is
+  // public, and the request sets include_public_neurons_in_full_neurons to
+  // true), then all the information about the neurons in the result set is made
+  // available here.
   full_neurons : vec Neuron;
+
   total_pages_available: opt nat64;
 };
 
