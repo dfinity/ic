@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{
-    api::{caller, Funds},
-    over, over_async, over_init,
-};
+use dfn_core::{api::Funds, over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_management_canister_types::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
@@ -37,10 +34,10 @@ use ic_sns_wasm::{
     sns_wasm::SnsWasmCanister,
 };
 use ic_types::{CanisterId, Cycles};
+use std::time::{Duration, SystemTime};
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -60,7 +57,7 @@ struct CanisterApiImpl {}
 impl CanisterApi for CanisterApiImpl {
     /// See CanisterApi::local_canister_id
     fn local_canister_id(&self) -> CanisterId {
-        dfn_core::api::id()
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
     }
 
     /// See CanisterApi::create_canister
@@ -80,7 +77,7 @@ impl CanisterApi for CanisterApiImpl {
             candid_one,
             CreateCanisterArgs {
                 settings: Some(settings.build()),
-                sender_canister_version: Some(dfn_core::api::canister_version()),
+                sender_canister_version: Some(ic_cdk::api::canister_version()),
             },
             Funds::new(cycles.get().try_into().unwrap()),
         )
@@ -128,7 +125,7 @@ impl CanisterApi for CanisterApiImpl {
             arg: init_payload,
             compute_allocation: None,
             memory_allocation: None,
-            sender_canister_version: Some(dfn_core::api::canister_version()),
+            sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
         let install_res: Result<(), (Option<i32>, String)> = dfn_core::call(
             CanisterId::ic_00(),
@@ -154,7 +151,7 @@ impl CanisterApi for CanisterApiImpl {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_controllers(controllers)
                 .build(),
-            sender_canister_version: Some(dfn_core::api::canister_version()),
+            sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
 
         let result: Result<(), (Option<i32>, String)> =
@@ -167,7 +164,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = dfn_core::api::canister_cycle_balance();
+        let available = ic_cdk::api::canister_balance();
 
         if available < required_cycles {
             return Err(format!(
@@ -179,7 +176,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = dfn_core::api::msg_cycles_available();
+        let available = ic_cdk::api::call::msg_cycles_available();
 
         if available < required_cycles {
             return Err(format!(
@@ -191,10 +188,10 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(dfn_core::api::msg_cycles_available);
+        let cycles = cycles.unwrap_or_else(ic_cdk::api::call::msg_cycles_available);
         self.message_has_enough_cycles(cycles)?;
 
-        let accepted = dfn_core::api::msg_cycles_accept(cycles);
+        let accepted = ic_cdk::api::call::msg_cycles_accept(cycles);
         Ok(accepted)
     }
 
@@ -215,7 +212,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 }
 
-/// This handles the errors returned from dfn_core::call (and related methods)
+/// This handles the errors returned from ic_cdk::call (and related methods)
 fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> String {
     move |(code, msg)| {
         let err = format!(
@@ -282,6 +279,10 @@ impl CanisterApiImpl {
     }
 }
 
+fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
+
 #[export_name = "canister_init"]
 fn canister_init() {
     over_init(|CandidOne(arg)| canister_init_(arg))
@@ -320,7 +321,6 @@ fn canister_pre_upgrade() {
 /// to stable memory in canister_pre_upgrade and initialising the governance's state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
     SNS_WASM.with(|c| {

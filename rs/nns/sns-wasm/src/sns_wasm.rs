@@ -46,8 +46,7 @@ use std::{
     thread::LocalKey,
 };
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
