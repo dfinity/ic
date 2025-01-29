@@ -3484,7 +3484,7 @@ pub struct ListProposalInfoResponse {
 /// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListNeurons {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
@@ -3523,9 +3523,8 @@ pub mod list_neurons {
     /// A type for the request to list neurons.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct NeuronSubaccount {
-        #[prost(bytes = "vec", tag = "1")]
         #[serde(with = "serde_bytes")]
         pub subaccount: Vec<u8>,
     }
