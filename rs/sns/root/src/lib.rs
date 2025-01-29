@@ -32,7 +32,6 @@ use types::SnsCanisterType;
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
-mod request_impls;
 pub mod types;
 
 // The number of dapp canisters that can be registered with the SNS Root
