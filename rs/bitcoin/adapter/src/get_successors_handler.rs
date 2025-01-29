@@ -26,7 +26,13 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
 // Max number of blocks that can be returned in the `GetSuccessorsResponse`.
 // We limit the number of blocks because serializing many blocks to pb can take some time.
-const MAX_BLOCKS_LENGTH: usize = 100;
+const MAX_BLOCKS_LENGTH: usize = 50;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+// The number of blokcs outside of hte main chain easily exceeds 100 currently.
+// Setting this to 100 would prevent the adapter from making progress,
+// as it gets stuck on these blocks, whose requests timeout indefinitely.
+const MAX_IN_FLIGHT_BLOCKS: usize = 1000;
 
 const BLOCK_HEADER_SIZE: usize = 80;
 
@@ -52,7 +58,7 @@ pub struct GetSuccessorsRequest {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<Arc<Block>>,
     /// Next set of headers to be sent to the canister.
     pub next: Vec<BlockHeader>,
 }
@@ -96,7 +102,7 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let response = {
+        let (blocks, next) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -115,17 +121,23 @@ impl GetSuccessorsHandler {
                 &request.processed_block_hashes,
                 &blocks,
             );
-            GetSuccessorsResponse { blocks, next }
+            (blocks, next)
+        };
+        //extract the first MAX_NEXT_BLOCK_HEADERS_LENGTH and return them to the caller
+        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        let response = GetSuccessorsResponse {
+            blocks,
+            next: response_next.to_vec(),
         };
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
 
-        if !response.next.is_empty() {
+        if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    response.next.clone(),
+                    next.clone(),
                 ))
                 .ok();
         }
@@ -151,7 +163,7 @@ fn get_successor_blocks(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
-) -> Vec<Block> {
+) -> Vec<Arc<Block>> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
     let mut successor_blocks = vec![];
@@ -169,12 +181,13 @@ fn get_successor_blocks(
             match state.get_block(block_hash) {
                 Some(block) => {
                     let block_size = block.total_size();
+                    let block_size = block.total_size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
-                        successor_blocks.push(block.clone());
+                        successor_blocks.push(Arc::clone(&block));
                         response_block_size += block_size;
                     } else {
                         break;
@@ -204,7 +217,7 @@ fn get_next_headers(
     state: &BlockchainState,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
-    blocks: &[Block],
+    blocks: &Vec<Arc<Block>>,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
@@ -219,7 +232,7 @@ fn get_next_headers(
 
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
+        if next_headers.len() >= MAX_IN_FLIGHT_BLOCKS {
             break;
         }
 
@@ -237,7 +250,7 @@ fn get_next_headers(
 fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
     match network {
         Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet | Network::Signet | Network::Regtest => true,
+        Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
         other => unreachable!("Unsupported network: {:?}", other),
     }
 }
