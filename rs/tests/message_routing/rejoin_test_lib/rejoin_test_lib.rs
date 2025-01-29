@@ -224,14 +224,14 @@ async fn assert_state_sync_has_happened(
     // wind down does eventually happen.
     for i in 0..NUM_RETRIES {
         let res = fetch_metrics::<u64>(
-            &logger,
+            logger,
             rejoin_node.clone(),
             vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
         )
         .await;
         if res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
             let res = fetch_metrics::<f64>(
-                &logger,
+                logger,
                 rejoin_node.clone(),
                 vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
             )
