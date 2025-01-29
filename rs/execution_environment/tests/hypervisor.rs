@@ -8053,7 +8053,8 @@ fn check_correct_execution_state(is_wasm64: bool) {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     let execution_state = test.execution_state(canister_id);
-    assert_eq!(execution_state.is_wasm64, is_wasm64);
+    let bool_wasm_exec_mode: bool = execution_state.wasm_execution_mode.is_wasm64();
+    assert_eq!(bool_wasm_exec_mode, is_wasm64);
 }
 
 #[test]

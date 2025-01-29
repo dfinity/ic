@@ -12,7 +12,7 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::common::modify_wasm_bytes;
-use ic_sns_governance::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister};
+use ic_sns_governance_api::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister};
 use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;

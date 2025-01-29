@@ -210,62 +210,6 @@ enum Visibility {
   VISIBILITY_PUBLIC = 2;
 }
 
-// The result of querying for the state of a single neuron.
-message NeuronInfo {
-  // The exact time at which this data was computed. This means, for
-  // example, that the exact time that this neuron will enter the
-  // dissolved state, assuming it is currently dissolving, is given
-  // by `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
-  uint64 retrieved_at_timestamp_seconds = 1;
-  // The current state of the neuron. See [NeuronState] for a
-  // description of the different states.
-  NeuronState state = 2;
-  // The current age of the neuron. See [Neuron::age_seconds]
-  // for details on how it is computed.
-  uint64 age_seconds = 3;
-  // The current dissolve delay of the neuron. See
-  // [Neuron::dissolve_delay_seconds] for details on how it is
-  // computed.
-  uint64 dissolve_delay_seconds = 4;
-  // See [Neuron::recent_ballots] for a description.
-  repeated BallotInfo recent_ballots = 5;
-  // Current voting power of the neuron.
-  uint64 voting_power = 6;
-  // When the Neuron was created. A neuron can only vote on proposals
-  // submitted after its creation date.
-  uint64 created_timestamp_seconds = 7;
-  // Current stake of the neuron, in e8s.
-  uint64 stake_e8s = 8;
-  // Timestamp when this neuron joined the community fund.
-  optional uint64 joined_community_fund_timestamp_seconds = 9;
-  // If this neuron is a known neuron, this is data associated
-  // with it, including the neuron's name and (optionally) a description.
-  optional KnownNeuronData known_neuron_data = 10;
-  // The type of the Neuron. See [NeuronType] for a description
-  // of the different states.
-  optional NeuronType neuron_type = 11;
-  // See the Visibility enum.
-  optional Visibility visibility = 12;
-  // The last time that voting power was "refreshed". There are two ways to
-  // refresh the voting power of a neuron: set following, or vote directly. In
-  // the future, there will be a dedicated API for refreshing. Note that direct
-  // voting implies that refresh also occurs when a proposal is created, because
-  // direct voting is part of proposal creation.
-  //
-  // Effect: When this becomes > 6 months ago, the amount of voting power that
-  // this neuron can exercise decreases linearly down to 0 over the course of 1
-  // month. After that, following is cleared, except for ManageNeuron proposals.
-  //
-  // This will always be populated. If the underlying neuron was never
-  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
-  // after the UNIX epoch).
-  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
-  // See the analogous field in Nueron.
-  optional uint64 deciding_voting_power = 14;
-  // See the analogous field in Neuron.
-  optional uint64 potential_voting_power = 15;
-}
-
 // A transfer performed from some account to stake a new neuron.
 message NeuronStakeTransfer {
   // When the transfer arrived at the governance canister.
@@ -1698,64 +1642,6 @@ message WaitForQuietState {
   uint64 current_deadline_timestamp_seconds = 1;
 }
 
-// This is a view of the ProposalData returned by API queries and is NOT used
-// for storage. The ballots are restricted to those of the caller's neurons and
-// additionally it has the computed fields, topic, status, and reward_status.
-message ProposalInfo {
-  // The unique id for this proposal.
-  ic_nns_common.pb.v1.ProposalId id = 1;
-
-  // The ID of the neuron that made this proposal.
-  ic_nns_common.pb.v1.NeuronId proposer = 2;
-
-  // The amount of ICP in E8s to be charged to the proposer if the proposal is
-  // rejected.
-  uint64 reject_cost_e8s = 3;
-
-  // The proposal originally submitted.
-  Proposal proposal = 4;
-
-  // The timestamp, in seconds from the Unix epoch, when this proposal was made.
-  uint64 proposal_timestamp_seconds = 5;
-
-  // See [ProposalData::ballots].
-  map<fixed64, Ballot> ballots = 6;
-
-  // See [ProposalData::latest_tally].
-  Tally latest_tally = 7;
-
-  // See [ProposalData::decided_timestamp_seconds].
-  uint64 decided_timestamp_seconds = 8;
-
-  // See [ProposalData::executed_timestamp_seconds].
-  uint64 executed_timestamp_seconds = 12;
-
-  // See [ProposalData::failed_timestamp_seconds].
-  uint64 failed_timestamp_seconds = 13;
-
-  // See [ProposalData::failure_reason].
-  GovernanceError failure_reason = 18;
-
-  // See [ProposalData::reward_event_round].
-  uint64 reward_event_round = 14;
-
-  // Derived - see [Topic] for more information
-  Topic topic = 15;
-
-  // Derived - see [ProposalStatus] for more information
-  ProposalStatus status = 16;
-
-  // Derived - see [ProposalRewardStatus] for more information
-  ProposalRewardStatus reward_status = 17;
-
-  optional uint64 deadline_timestamp_seconds = 19;
-
-  DerivedProposalInformation derived_proposal_information = 20;
-
-  // See [ProposalData::total_potential_voting_power].
-  optional uint64 total_potential_voting_power = 21;
-}
-
 // Network economics contains the parameters for several operations related
 // to the economy of the network. When submitting a NetworkEconomics proposal
 // default values (0) are considered unchanged, so a valid proposal only needs
@@ -2546,10 +2432,6 @@ message ListProposalInfo {
   // is useful to improve download times and to ensure that the response to the
   // request doesn't exceed the message size limit.
   optional bool omit_large_fields = 7;
-}
-
-message ListProposalInfoResponse {
-  repeated ProposalInfo proposal_info = 1;
 }
 
 // A response to "ListKnownNeurons"

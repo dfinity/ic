@@ -19,8 +19,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
 };
-use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
-use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
+};
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
@@ -970,7 +972,10 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution.into())
+            .prepayment_for_response_execution(
+                self.subnet_size,
+                WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
+            )
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {

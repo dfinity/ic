@@ -24,7 +24,7 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+  RUSTFLAGS: "--remap-path-prefix=${{ github.workspace }}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
@@ -35,7 +35,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
-      group: zh1
+      group: ln1
       labels: dind-large
     env:
       AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
@@ -101,6 +101,19 @@ jobs:
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS: ${{ env.BAZEL_EXTRA_ARGS }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v4
         with:
@@ -136,6 +149,19 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
@@ -166,8 +192,21 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
           BAZEL_COMMAND: test
           BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
-          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${CI_RUN_ID}"
+          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${{ github.run_id }}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -194,6 +233,19 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -215,6 +267,19 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
