@@ -12,13 +12,11 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 source /opt/ic/bin/functions.sh
 
-GENERATION=
+HARDWARE_GENERATION=
 
 ###############################################################################
 # Hardware Requirements
 ###############################################################################
-
-MINIMUM_CPU_SOCKETS=2
 
 GEN1_CPU_MODEL="AMD EPYC 7302"
 GEN1_CPU_CAPABILITIES=("sev")
@@ -27,6 +25,7 @@ GEN1_CPU_THREADS=64
 
 GEN2_CPU_MODEL="AMD EPYC 7..3"
 GEN2_CPU_CAPABILITIES=("sev_snp")
+GEN2_MINIMUM_CPU_SOCKETS=2
 GEN2_MINIMUM_CPU_THREADS=64
 
 # 510 GiB (Gibibyte)
@@ -51,11 +50,11 @@ function get_cpu_info_json() {
 }
 
 ###############################################################################
-# Generation Detection
+# Hardware Generation Detection
 ###############################################################################
 
-function check_generation() {
-    echo "* Checking Generation..."
+function check_hardware_generation() {
+    echo "* Checking hardware generation..."
 
     local cpu_json="$(get_cpu_info_json)"
 
@@ -71,23 +70,23 @@ function check_generation() {
         local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
 
         if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            if [[ ${GENERATION} =~ ^(|1)$ ]]; then
-                GENERATION=1
+            if [[ ${HARDWARE_GENERATION} =~ ^(|1)$ ]]; then
+                HARDWARE_GENERATION=1
             else
-                log_and_halt_installation_on_error "1" "  CPU Socket Generations inconsistent."
+                log_and_halt_installation_on_error "1" "  CPU Socket Hardware Generations inconsistent."
             fi
         elif [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            if [[ ${GENERATION} =~ ^(|2)$ ]]; then
-                GENERATION=2
+            if [[ ${HARDWARE_GENERATION} =~ ^(|2)$ ]]; then
+                HARDWARE_GENERATION=2
             else
-                log_and_halt_installation_on_error "1" "  CPU Socket Generations inconsistent."
+                log_and_halt_installation_on_error "1" "  CPU Socket Hardware Generations inconsistent."
             fi
         else
             log_and_halt_installation_on_error "2" "  CPU Model does NOT meet system requirements."
         fi
     done
 
-    echo "* Generation ${GENERATION} detected"
+    echo "* Hardware generation ${HARDWARE_GENERATION} detected"
 }
 
 ###############################################################################
@@ -95,23 +94,21 @@ function check_generation() {
 ###############################################################################
 
 function check_num_cpus() {
-    local num_cpu_sockets=$(lscpu | grep "Socket(s)" | awk '{print $2}')
-    if [ "${num_cpu_sockets}" -ne "${MINIMUM_CPU_SOCKETS}" ]; then
-        log_and_halt_installation_on_error "1" "Number of CPU's (${num_cpu_sockets}) does NOT meet system requirements (${MINIMUM_CPU_SOCKETS})."
+    local required_sockets="$1"
+
+    local cpu_json="$(get_cpu_info_json)"
+    local num_cpu_sockets=$(echo "${cpu_json}" | jq -r '.[].id' | wc -l)
+    log_and_halt_installation_on_error "$?" "Unable to extract CPU sockets from CPU JSON."
+
+    if [ "${num_cpu_sockets}" -ne "${required_sockets}" ]; then
+        log_and_halt_installation_on_error "1" "Number of CPU sockets (${num_cpu_sockets}) does NOT meet system requirements (expected ${required_sockets})."
     fi
 }
 
 function verify_gen1_cpu() {
     local cpu_json="$(get_cpu_info_json)"
 
-    local sockets=$(echo "${cpu_json}" | jq -r '.[].id' | wc -l)
-    log_and_halt_installation_on_error "${?}" "Unable to extract CPU sockets."
-
-    if [ "${sockets}" -eq "${GEN1_CPU_SOCKETS}" ]; then
-        echo "  Number of sockets (${sockets}/${GEN1_CPU_SOCKETS}) meets system requirements."
-    else
-        log_and_halt_installation_on_error "1" "  Number of sockets (${sockets}/${GEN1_CPU_SOCKETS}) does NOT meet system requirements."
-    fi
+    check_num_cpus "${GEN1_CPU_SOCKETS}"
 
     for i in $(echo "${cpu_json}" | jq -r '.[].id'); do
         local unit=$(echo "${i}" | awk -F ':' '{ print $2 }')
@@ -151,7 +148,7 @@ function verify_gen1_cpu() {
 function verify_gen2_cpu() {
     local cpu_json="$(get_cpu_info_json)"
 
-    check_num_cpus
+    check_num_cpus "${GEN2_MINIMUM_CPU_SOCKETS}"
 
     for i in $(echo "${cpu_json}" | jq -r '.[].id'); do
         local unit=$(echo "${i}" | awk -F ':' '{ print $2 }')
@@ -187,9 +184,9 @@ function verify_gen2_cpu() {
 }
 
 function verify_cpu() {
-    echo "* Verifying Generation ${GENERATION} CPU..."
+    echo "* Verifying hardware generation ${HARDWARE_GENERATION} CPU..."
 
-    if [[ "${GENERATION}" == "1" ]]; then
+    if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
         verify_gen1_cpu
     else
         verify_gen2_cpu
@@ -282,7 +279,7 @@ function verify_gen2_disks() {
 
 function verify_disks() {
     echo "* Verifying disks..."
-    if [[ "${GENERATION}" == "1" ]]; then
+    if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
         verify_gen1_disks
     else
         verify_gen2_disks
@@ -296,7 +293,7 @@ function verify_disks() {
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
 
-    if [[ "${GENERATION}" == "2" ]] && [[ ! -f "/boot/config/node_operator_private_key.pem" ]]; then
+    if [[ "${HARDWARE_GENERATION}" == "2" ]] && [[ ! -f "/boot/config/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
         echo -e "\033[1;31mGen2 hardware should be deployed using the Gen2 Node Deployment method.\033[0m"
@@ -315,14 +312,14 @@ function verify_deployment_path() {
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
-        check_generation
+        check_hardware_generation
         verify_cpu
         verify_memory
         verify_disks
         verify_deployment_path
     else
         echo "* Hardware checks skipped by request via kernel command line"
-        GENERATION=2
+        HARDWARE_GENERATION=2
     fi
     log_end "$(basename $0)"
 }
