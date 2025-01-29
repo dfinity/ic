@@ -1,5 +1,6 @@
 [Unit]
 Description=Initialize fstrim metrics
+Before=node_exporter.service
 
 [Service]
 Type=oneshot
