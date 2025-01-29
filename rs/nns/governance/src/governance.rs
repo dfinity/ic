@@ -100,7 +100,7 @@ use ic_nns_governance_api::{
     pb::v1::{
         self as api,
         manage_neuron_response::{self, MergeMaturityResponse, StakeMaturityResponse},
-        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+        CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeuronsProto,
         ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo,
         ProposalInfo,
     },
@@ -2219,12 +2219,12 @@ impl Governance {
     /// See `ListNeurons`.
     pub fn list_neurons(
         &self,
-        list_neurons: &ListNeurons,
+        list_neurons: &ListNeuronsCandid,
         caller: PrincipalId,
     ) -> ListNeuronsResponse {
         let now = self.env.now();
 
-        let ListNeurons {
+        let ListNeuronsProto {
             neuron_ids,
             include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller,

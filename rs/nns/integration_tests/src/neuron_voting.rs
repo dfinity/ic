@@ -423,7 +423,7 @@ fn test_voting_can_span_multiple_rounds() {
     let listed_neurons = list_all_neurons_and_combine_responses(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: (0..1000u64).collect(),
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,

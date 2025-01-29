@@ -20,7 +20,7 @@ use ic_nns_governance_api::pb::v1::{
         Command as CommandResponse, {self},
     },
     neuron::DissolveState,
-    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+    GovernanceError, ListNeuronsProto, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -548,7 +548,7 @@ fn test_list_neurons() {
     let list_neurons_response = list_neurons(
         &state_machine,
         PrincipalId::new_anonymous(),
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: vec![neuron_id_1.id, neuron_id_2.id, neuron_id_3.id],
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
@@ -565,7 +565,7 @@ fn test_list_neurons() {
     let list_neurons_response = list_neurons(
         &state_machine,
         principal_1,
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
@@ -582,7 +582,7 @@ fn test_list_neurons() {
     let list_neurons_response = list_neurons(
         &state_machine,
         principal_1,
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
@@ -600,7 +600,7 @@ fn test_list_neurons() {
     let list_neurons_response = list_neurons(
         &state_machine,
         principal_1,
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
@@ -620,7 +620,7 @@ fn test_list_neurons() {
     let list_neurons_response = list_neurons(
         &state_machine,
         principal_1,
-        ListNeurons {
+        ListNeuronsProto {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),

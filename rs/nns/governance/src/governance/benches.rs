@@ -30,7 +30,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
-use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::pb::v1::ListNeuronsProto;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
 use rand::{Rng, SeedableRng};
@@ -567,7 +567,7 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
         Box::new(StubCMC {}),
     );
 
-    let request = ListNeurons {
+    let request = ListNeuronsProto {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: false,
         include_empty_neurons_readable_by_caller: Some(false),
@@ -610,7 +610,7 @@ fn list_neurons_benchmark() -> BenchResult {
         Box::new(StubCMC {}),
     );
 
-    let request = ListNeurons {
+    let request = ListNeuronsProto {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: Some(false),

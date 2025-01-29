@@ -101,7 +101,7 @@ use ic_nns_governance_api::{
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         proposal::Action as ApiAction,
         Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-        ListNeurons, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
+        ListNeuronsProto, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
         NeuronState,
     },
     proposal_validation::validate_proposal_title,
@@ -2291,7 +2291,7 @@ fn test_enforce_private_neuron() {
         .unwrap();
 
     let list_neurons_response = governance.list_neurons(
-        &ListNeurons {
+        &ListNeuronsProto {
             neuron_ids: vec![1],
             ..Default::default()
         },
@@ -10594,7 +10594,7 @@ fn test_include_public_neurons_in_full_neurons() {
     // Step 2: Call the code under test.
 
     let list_neurons_response = governance.list_neurons(
-        &ListNeurons {
+        &ListNeuronsProto {
             // Try to read all neurons that are not controlled by caller. Only the public ones
             // should appear in full_neurons.
             neuron_ids: vec![1, 2, 3, 4],
@@ -14668,7 +14668,7 @@ fn test_neuron_info_private_enforcement() {
             // Step 2.2: Call list_neurons.
             let list_neurons = |requester| {
                 governance.list_neurons(
-                    &ListNeurons {
+                    &ListNeuronsProto {
                         neuron_ids: vec![neuron_id.id],
                         include_neurons_readable_by_caller: false,
                         include_empty_neurons_readable_by_caller: None,

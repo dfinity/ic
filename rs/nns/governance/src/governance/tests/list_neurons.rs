@@ -6,7 +6,7 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
-use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::pb::v1::ListNeuronsProto;
 
 #[test]
 fn test_list_neurons_with_paging() {
@@ -44,7 +44,7 @@ fn test_list_neurons_with_paging() {
         Box::new(StubCMC {}),
     );
 
-    let mut request = ListNeurons {
+    let mut request = ListNeuronsProto {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: Some(true),
@@ -63,7 +63,7 @@ fn test_list_neurons_with_paging() {
     assert_eq!(response_with_0_page_number.total_pages_available, Some(2));
 
     let response = governance.list_neurons(
-        &ListNeurons {
+        &ListNeuronsProto {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
@@ -80,7 +80,7 @@ fn test_list_neurons_with_paging() {
 
     // Assert maximum page size cannot be exceeded
     let response = governance.list_neurons(
-        &ListNeurons {
+        &ListNeuronsProto {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
@@ -132,7 +132,7 @@ fn test_list_neurons_by_subaccounts_and_ids() {
         Box::new(StubCMC {}),
     );
 
-    let request = ListNeurons {
+    let request = ListNeuronsProto {
         neuron_ids: (1..501).collect(),
         include_neurons_readable_by_caller: false,
         include_empty_neurons_readable_by_caller: None,
@@ -153,7 +153,7 @@ fn test_list_neurons_by_subaccounts_and_ids() {
     assert_eq!(response_1.total_pages_available, Some(2));
 
     let response_2 = governance.list_neurons(
-        &ListNeurons {
+        &ListNeuronsProto {
             neuron_ids: (1..501).collect(),
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: None,
