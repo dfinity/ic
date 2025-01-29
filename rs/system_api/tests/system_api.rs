@@ -304,13 +304,6 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::SubnetSelfCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
-    println!(
-        "Checking if {:?} is supported in context {:?} and api type {:?}",
-        matrix.get(&api_type).unwrap().contains(&context)
-            || (context != "s" && matrix.get(&api_type).unwrap().contains(&"*")),
-        context,
-        api_type
-    );
     matrix.get(&api_type).unwrap().contains(&context)
         || (context != "s" && matrix.get(&api_type).unwrap().contains(&"*"))
 }
