@@ -20,7 +20,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::expiry_time_from_now,
-    CanisterId, PrincipalId, Time, Time, UserId,
+    CanisterId, PrincipalId, Time, UserId,
 };
 use rand::thread_rng;
 use rand::RngCore;
