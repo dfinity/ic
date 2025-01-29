@@ -27,20 +27,6 @@ pub trait Request: Send {
     type Response: CandidType + DeserializeOwned;
 }
 
-// impl<R: ic_nervous_system_clients::Request> Request for R {
-//     fn method(&self) -> &'static str {
-//         Self::METHOD
-//     }
-//     fn update(&self) -> bool {
-//         Self::UPDATE
-//     }
-//     fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-//         candid::encode_one(self)
-//     }
-
-//     type Response = <Self as ic_nervous_system_clients::Request>::Response;
-// }
-
 pub trait CallCanisters: sealed::Sealed {
     type Error: Display + Send + std::error::Error + 'static;
     fn call<R: Request>(
