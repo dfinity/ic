@@ -32,10 +32,6 @@ const TRANSFER_MULTIPLIER: u64 = 1000;
 const APPROVE_MULTIPLIER: u64 = 100;
 const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
-#[cfg(not(feature = "u256-tokens"))]
-// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances are migrated to
-// stable structures
-const LEDGER_VERSION_1: u64 = 1;
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
 // migrated to stable structures
 const LEDGER_VERSION_2: u64 = 2;
@@ -71,7 +67,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
-        LEDGER_VERSION_1,
+        LEDGER_VERSION_2,
         Some(Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
         ))),
