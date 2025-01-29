@@ -615,12 +615,14 @@ mod tests {
                 Some((stripped_block_proposal, NODE_1)),
                 MockPeers(NODE_1),
             )
-            .await
-            .expect("should reassemble the message given the dependencies");
+            .await;
 
         assert_eq!(
             reassembled_block_proposal,
-            (ConsensusMessage::BlockProposal(block_proposal), NODE_1)
+            AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(block_proposal),
+                peer_id: NODE_1
+            }
         );
     }
 }
