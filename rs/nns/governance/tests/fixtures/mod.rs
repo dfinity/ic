@@ -930,9 +930,7 @@ impl NNS {
     pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
         self.governance
             .neuron_store
-            .with_neuron(ident, |n| {
-                Neuron::from(n.clone())
-            })
+            .with_neuron(ident, |n| Neuron::from(n.clone()))
             .unwrap()
     }
 

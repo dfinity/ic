@@ -1298,9 +1298,7 @@ async fn test_cascade_following_new() {
             GovernanceChange::Neurons(vec![
                 MapChange::Changed(
                     1,
-                    vec![
-                        NeuronChange::NeuronFeesE8S(U64Change(100000000, 0)),
-                    ],
+                    vec![NeuronChange::NeuronFeesE8S(U64Change(100000000, 0)),],
                 ),
                 MapChange::Changed(
                     2,
@@ -2276,7 +2274,7 @@ fn test_enforce_private_neuron() {
         driver.get_fake_cmc(),
     );
 
-    // Step 2: Call code under test. (Same as previous test.)
+    // Step 2: Call code under test.
     let neuron_id = NeuronId { id: 1 };
     let key = NeuronIdOrSubaccount::NeuronId(neuron_id);
     let controller = principal(1);
@@ -2310,7 +2308,7 @@ fn test_enforce_private_neuron() {
             neuron_infos: hashmap! {
                 1 => neuron_info,
             },
-            full_neurons: vec![api::Neuron::from(full_neuron)],
+            full_neurons: vec![full_neuron],
             total_pages_available: Some(1),
         },
     );
@@ -4548,7 +4546,9 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             cached_neuron_stake_e8s: neuron_stake_e8s,
             created_timestamp_seconds: driver.now(),
             aging_since_timestamp_seconds: driver.now(),
-            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
+                dissolve_delay_seconds
+            )),
             kyc_verified: true,
             visibility: Some(Visibility::Private as i32),
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
@@ -6740,7 +6740,9 @@ fn test_disburse_to_neuron() {
     assert_eq!(child_neuron.aging_since_timestamp_seconds, driver.now());
     assert_eq!(
         child_neuron.dissolve_state,
-        Some(api::neuron::DissolveState::DissolveDelaySeconds(24 * 60 * 60))
+        Some(api::neuron::DissolveState::DissolveDelaySeconds(
+            24 * 60 * 60
+        ))
     );
     assert_eq!(child_neuron.kyc_verified, true);
     // We expect the child's followees not to be inherited from parent.
@@ -6751,10 +6753,7 @@ fn test_disburse_to_neuron() {
         gov.heap_data
             .default_followees
             .iter()
-            .map(|(id, followees)| (
-                *id,
-                api::neuron::Followees::from(followees.clone()),
-            ))
+            .map(|(id, followees)| (*id, api::neuron::Followees::from(followees.clone()),))
             .collect(),
     );
     assert_eq!(
@@ -10532,7 +10531,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
             cached_neuron_stake_e8s: 10 * E8,
             controller: Some(controller),
-            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(
+                8 * ONE_YEAR_SECONDS,
+            )),
             aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(20 * E8),
@@ -10543,7 +10544,11 @@ fn test_include_public_neurons_in_full_neurons() {
     };
 
     let legacy_neuron = new_neuron(1, Visibility::Unspecified, None); // We say this is legacy, because its visibility is None.
-    let known_neuron = new_neuron(2, Visibility::Unspecified, Some(api::KnownNeuronData::default()));
+    let known_neuron = new_neuron(
+        2,
+        Visibility::Unspecified,
+        Some(api::KnownNeuronData::default()),
+    );
     let explicitly_private_neuron = new_neuron(3, Visibility::Private, None);
     let explicitly_public_neuron = new_neuron(4, Visibility::Public, None);
     let caller_controlled_neuron = api::Neuron {
