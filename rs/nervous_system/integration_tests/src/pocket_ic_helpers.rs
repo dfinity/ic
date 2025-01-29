@@ -322,8 +322,14 @@ pub struct NnsInstaller {
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
 }
 
+impl Default for NnsInstaller {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NnsInstaller {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             // Enforce an explicit decision.
             mainnet_nns_canister_versions: None,
@@ -532,7 +538,7 @@ pub async fn install_nns_canisters(
     custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
 ) -> Vec<PrincipalId> {
-    let mut nns_installer = NnsInstaller::new();
+    let mut nns_installer = NnsInstaller::default();
 
     nns_installer
         .with_initial_balances(initial_balances)
