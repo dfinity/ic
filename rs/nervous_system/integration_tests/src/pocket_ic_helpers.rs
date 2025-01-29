@@ -320,6 +320,7 @@ pub struct NnsInstaller {
     neurons_fund_hotkeys: Vec<PrincipalId>,
     custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    with_cycles_ledger: bool,
 }
 
 impl Default for NnsInstaller {
@@ -336,6 +337,7 @@ impl NnsInstaller {
             neurons_fund_hotkeys: vec![],
             custom_initial_registry_mutations: None,
             initial_balances: vec![],
+            with_cycles_ledger: false,
         }
     }
 
@@ -382,6 +384,11 @@ impl NnsInstaller {
         initial_balances: Vec<(AccountIdentifier, Tokens)>,
     ) -> &mut Self {
         self.initial_balances = initial_balances;
+        self
+    }
+
+    pub fn with_cycles_ledger(&mut self) -> &mut Self {
+        self.with_cycles_ledger = true;
         self
     }
 
@@ -506,14 +513,69 @@ impl NnsInstaller {
         )
         .await;
 
-        let nns_neurons = nns_init_payload
+        if self.with_cycles_ledger {
+            cycles_ledger::install(pocket_ic).await;
+        }
+
+        nns_init_payload
             .governance
             .neurons
             .values()
             .map(|neuron| neuron.controller.unwrap())
-            .collect();
+            .collect()
+    }
+}
 
-        nns_neurons
+pub mod cycles_ledger {
+    use super::install_canister;
+    use candid::{CandidType, Encode, Principal};
+    use canister_test::Wasm;
+    use ic_nns_constants::{CYCLES_LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
+    use pocket_ic::nonblocking::PocketIc;
+
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
+    struct CyclesLedgerInitArgs {
+        pub index_id: Option<Principal>,
+        pub max_blocks_per_request: u64,
+    }
+
+    /// Argument taken by the Cycles Ledger canister.
+    ///
+    /// See (https://github.com/dfinity/cycles-ledger/tree/main/cycles-ledger
+    ///
+    /// ```candid
+    /// (variant {
+    ///     Init = record {
+    ///         index_id : opt principal;
+    ///         max_blocks_per_request : nat64;
+    ///     }
+    /// })
+    /// ```
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
+    enum CyclesLedgerArgs {
+        Init(CyclesLedgerInitArgs),
+    }
+
+    pub async fn install(pocket_ic: &PocketIc) {
+        let features = &[];
+        let cycles_ledger_wasm =
+            Wasm::from_location_specified_by_env_var("cycles_ledger", features).unwrap();
+
+        let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
+            index_id: None,
+            max_blocks_per_request: 1000,
+        }))
+        .unwrap();
+
+        install_canister(
+            pocket_ic,
+            "Cycles Ledger",
+            CYCLES_LEDGER_CANISTER_ID,
+            arg,
+            cycles_ledger_wasm,
+            Some(ROOT_CANISTER_ID.get()),
+        )
+        .await;
     }
 }
 
