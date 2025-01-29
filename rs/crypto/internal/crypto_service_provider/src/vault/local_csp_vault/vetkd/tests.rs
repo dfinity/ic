@@ -3,7 +3,7 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::{key_id::KeyId, LocalCspVault};
 use assert_matches::assert_matches;
-use ic_crypto_internal_bls12_381_vetkd::{G2Affine, Scalar, TransportSecretKey};
+use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -56,7 +56,6 @@ fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng>(
 #[test]
 fn should_fail_to_create_key_share_with_invalid_master_public_key() {
     let rng = &mut reproducible_rng();
-
     let mut test_env = CreateVetKdKeyShareTestSetup::new(rng);
     test_env.master_public_key = b"invalid-master-public-key".to_vec();
     test_env.secret_key_store_override = Some(MockSecretKeyStore::new());
@@ -133,7 +132,7 @@ impl CreateVetKdKeyShareTestSetup {
     pub fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let master_secret_key = Scalar::random(rng);
         let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-        let transport_secret_key = TransportSecretKey::generate(rng);
+        let transport_public_key = G1Affine::from(G1Affine::generator() * Scalar::random(rng));
         let key_id = KeyId::from([123; 32]);
         let derivation_path = ExtendedDerivationPath {
             caller: canister_test_id(234).get(),
@@ -145,7 +144,7 @@ impl CreateVetKdKeyShareTestSetup {
         Self {
             master_secret_key,
             master_public_key: master_public_key.serialize().to_vec(),
-            transport_public_key: transport_secret_key.public_key().serialize().to_vec(),
+            transport_public_key: transport_public_key.serialize().to_vec(),
             key_id,
             derivation_path,
             derivation_id,
