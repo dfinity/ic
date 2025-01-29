@@ -20,6 +20,8 @@ inputs:
     required: false
   SSH_PRIVATE_KEY:
     required: false
+  GPG_PASSPHRASE:
+    required: false
 
 runs:
   using: "composite"
@@ -60,6 +62,11 @@ runs:
               rm "$exportout"
               echo "BEP events exported to honeycomb!"
           fi
+          if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
+              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
+                  --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
+              rm -f bazel-bep.pb
+          fi
 
           # output node name to gihub step summary
           [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
@@ -78,3 +85,4 @@ runs:
           CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
