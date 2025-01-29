@@ -40,21 +40,21 @@ GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 ###############################################################################
-# Helper / Utility Functions
+# Helper Functions
 ###############################################################################
 
 function get_cpu_info_json() {
-    local cpu="$(lshw -quiet -class cpu -json)"
+    local cpu_json="$(lshw -quiet -class cpu -json)"
     log_and_halt_installation_on_error "${?}" "Unable to fetch CPU information."
-    echo "${cpu}"
+    echo "${cpu_json}"
 }
 
 ###############################################################################
 # Hardware Generation Detection
 ###############################################################################
 
-function check_hardware_generation() {
-    echo "* Checking hardware generation..."
+function detect_hardware_generation() {
+    echo "* Detecting hardware generation..."
 
     local cpu_json="$(get_cpu_info_json)"
 
@@ -73,16 +73,16 @@ function check_hardware_generation() {
             if [[ ${HARDWARE_GENERATION} =~ ^(|1)$ ]]; then
                 HARDWARE_GENERATION=1
             else
-                log_and_halt_installation_on_error "1" "  CPU Socket Hardware Generations inconsistent."
+                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
             fi
         elif [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
             if [[ ${HARDWARE_GENERATION} =~ ^(|2)$ ]]; then
                 HARDWARE_GENERATION=2
             else
-                log_and_halt_installation_on_error "1" "  CPU Socket Hardware Generations inconsistent."
+                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
             fi
         else
-            log_and_halt_installation_on_error "2" "  CPU Model does NOT meet system requirements."
+            log_and_halt_installation_on_error "2" "CPU Model does NOT meet system requirements."
         fi
     done
 
@@ -116,7 +116,7 @@ function verify_gen1_cpu() {
 
         local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
         if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            echo "  Model meets system requirements."
+            echo "Model meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
         fi
@@ -130,7 +130,7 @@ function verify_gen1_cpu() {
             log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
 
             if [[ ${capability} =~ .*true.* ]]; then
-                echo "  Capability '${c}' meets system requirements."
+                echo "Capability '${c}' meets system requirements."
             else
                 log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
             fi
@@ -138,7 +138,7 @@ function verify_gen1_cpu() {
 
         local num_threads=$(nproc)
         if [ "${num_threads}" -eq "${GEN1_CPU_THREADS}" ]; then
-            echo "  Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
+            echo "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
         fi
@@ -156,7 +156,7 @@ function verify_gen2_cpu() {
 
         local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
         if [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            echo "  Model meets system requirements."
+            echo "Model meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
         fi
@@ -170,7 +170,7 @@ function verify_gen2_cpu() {
             log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
 
             if [[ ${capability} =~ .*true.* ]]; then
-                echo "  Capability '${c}' meets system requirements."
+                echo "Capability '${c}' meets system requirements."
             else
                 log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
             fi
@@ -207,7 +207,7 @@ function verify_memory() {
     log_and_halt_installation_on_error "${?}" "Unable to extract memory size."
 
     if [ "${size}" -gt "${MINIMUM_MEMORY_SIZE}" ]; then
-        echo "  Memory size (${size} bytes) meets system requirements."
+        echo "Memory size (${size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Memory size (${size} bytes/${MINIMUM_MEMORY_SIZE}) does NOT meet system requirements."
     fi
@@ -221,6 +221,8 @@ function verify_gen1_disks() {
     local aggregate_size=0
     local large_drives=($(get_large_drives))
     for drive in "${large_drives[@]}"; do
+        echo "* Verifying disk ${drive}"
+
         test -b "/dev/${drive}"
         log_and_halt_installation_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
@@ -233,14 +235,14 @@ function verify_gen1_disks() {
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
         if [ "${disk_size}" -gt "${GEN1_MINIMUM_DISK_SIZE}" ]; then
-            echo "  Disk size (${disk_size} bytes) meets system requirements."
+            echo "Disk size (${disk_size} bytes) meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN1_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
         fi
         aggregate_size=$((aggregate_size + disk_size))
     done
     if [ "${aggregate_size}" -gt "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
-        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
+        echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
     fi
@@ -264,14 +266,14 @@ function verify_gen2_disks() {
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
         if [ "${disk_size}" -gt "${GEN2_MINIMUM_DISK_SIZE}" ]; then
-            echo "  Disk size (${disk_size} bytes) meets system requirements."
+            echo "Disk size (${disk_size} bytes) meets system requirements."
         else
             log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN2_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
         fi
         aggregate_size=$((aggregate_size + disk_size))
     done
     if [ "${aggregate_size}" -gt "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
-        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
+        echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
     fi
@@ -312,7 +314,7 @@ function verify_deployment_path() {
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
-        check_hardware_generation
+        detect_hardware_generation
         verify_cpu
         verify_memory
         verify_disks
