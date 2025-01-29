@@ -251,12 +251,9 @@ impl NetworkTopology {
         signature_scheme: SignatureScheme,
         key_name: &str,
     ) -> Option<&MasterPublicKeyId> {
-        for entry in self.chain_key_enabled_subnets.keys() {
-            if signature_scheme == entry.into() && key_name == entry.get_key_name() {
-                return Some(entry);
-            }
-        }
-        None
+        self.chain_key_enabled_subnets
+            .keys()
+            .find(|&entry| signature_scheme == entry.into() && key_name == entry.get_key_name())
     }
 }
 
