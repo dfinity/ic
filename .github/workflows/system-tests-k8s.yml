@@ -81,7 +81,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_CONTENT }}
+          CLOUD_SHARED_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_SHARED_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
@@ -138,7 +138,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_CONTENT }}
+          CLOUD_SHARED_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_SHARED_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
