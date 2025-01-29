@@ -535,6 +535,10 @@ impl BlockchainManager {
             }
         }
 
+        for block_hash in retry_queue.iter() {
+            self.getdata_request_info.remove(block_hash);
+        }
+
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
