@@ -3484,13 +3484,15 @@ pub struct ListProposalInfoResponse {
 /// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListNeurons {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
+    #[prost(fixed64, repeated, packed = "false", tag = "1")]
     pub neuron_ids: Vec<u64>,
     /// If true, the "requested list" also contains the neuron ID of the
     /// neurons that the calling principal is authorized to read.
+    #[prost(bool, tag = "2")]
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
@@ -3506,16 +3508,20 @@ pub struct ListNeurons {
     /// requested list. In general, you probably want to set this to true, but
     /// since this feature was added later, it is opt in to avoid confusing
     /// existing (unmigrated) callers.
+    #[prost(bool, optional, tag = "4")]
     pub include_public_neurons_in_full_neurons: Option<bool>,
     /// If this is set, we return the batch of neurons at a given page, using the `page_size` to
     /// determine how many neurons are returned in each page.
+    #[prost(uint64, optional, tag = "5")]
     pub page_number: Option<u64>,
     /// If this is set, we use the page limit provided to determine how large pages will be.
     /// This cannot be greater than MAX_LIST_NEURONS_RESULTS, which is set to 500.
     /// If not set, this defaults to MAX_LIST_NEURONS_RESULTS.
+    #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
     /// A list of neurons by subaccounts to return in the response.  If the neurons are not
     /// found by subaccount, no error is returned, but the page will still be returned.
+    #[prost(message, optional, repeated, tag = "7")]
     pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
 }
 
@@ -3523,8 +3529,9 @@ pub mod list_neurons {
     /// A type for the request to list neurons.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct NeuronSubaccount {
+        #[prost(bytes = "vec", tag = "1")]
         #[serde(with = "serde_bytes")]
         pub subaccount: Vec<u8>,
     }
