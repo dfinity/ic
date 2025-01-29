@@ -1,3 +1,8 @@
+"""
+For now, this just defines how large compressed NNS canister WASMs are allowed to be,
+but other things could be added here later.
+"""
+
 # How these limits were chosen:
 #
 #   1. Temporarily set value to "0".
