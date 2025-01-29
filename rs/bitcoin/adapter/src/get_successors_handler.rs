@@ -26,7 +26,7 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
 // Max number of blocks that can be returned in the `GetSuccessorsResponse`.
 // We limit the number of blocks because serializing many blocks to pb can take some time.
-const MAX_BLOCKS_LENGTH: usize = 100;
+const MAX_BLOCKS_LENGTH: usize = 50;
 
 // The maximum number of get blocks requests that can be in-flight at any given time.
 // The number of blokcs outside of hte main chain easily exceeds 100 currently.
