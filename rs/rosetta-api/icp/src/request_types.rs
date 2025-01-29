@@ -874,6 +874,17 @@ impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
     }
 }
 
+impl TryFrom<ListNeuronsMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ListNeuronsMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FollowMetadata {
     pub topic: i32,
