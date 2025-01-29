@@ -3523,7 +3523,7 @@ pub struct ListNeurons {
     /// A list of neurons by subaccounts to return in the response.  If the neurons are not
     /// found by subaccount, no error is returned, but the page will still be returned.
     #[prost(message, repeated, tag = "7")]
-    pub neuron_subaccounts: Vec<list_neurons::NeuronSubaccount>,
+    pub neuron_subaccounts: Option<Vec<list_neurons::NeuronSubaccount>>,
 }
 
 pub mod list_neurons {

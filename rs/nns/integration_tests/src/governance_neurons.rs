@@ -555,7 +555,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -572,7 +572,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -589,7 +589,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: Some(vec![]), // Should be equivalent to None
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -607,7 +607,7 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: Some(vec![]),
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -627,9 +627,9 @@ fn test_list_neurons() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
-            neuron_subaccounts: vec![NeuronSubaccount {
+            neuron_subaccounts: Some(vec![NeuronSubaccount {
                 subaccount: subaccount.to_vec(),
-            }],
+            }]),
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

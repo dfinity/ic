@@ -574,7 +574,7 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
-        neuron_subaccounts: subaccounts,
+        neuron_subaccounts: Some(subaccounts),
     };
 
     bench_fn(|| {
@@ -617,7 +617,7 @@ fn list_neurons_benchmark() -> BenchResult {
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
-        neuron_subaccounts: vec![],
+        neuron_subaccounts: None,
     };
 
     bench_fn(|| {

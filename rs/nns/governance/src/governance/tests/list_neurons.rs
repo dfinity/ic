@@ -51,7 +51,7 @@ fn test_list_neurons_with_paging() {
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
-        neuron_subaccounts: vec![],
+        neuron_subaccounts: Some(vec![]),
     };
 
     let response_with_no_page_number = governance.list_neurons(&request, user_id);
@@ -70,7 +70,7 @@ fn test_list_neurons_with_paging() {
             include_public_neurons_in_full_neurons: None,
             page_number: Some(1),
             page_size: None,
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: None,
         },
         user_id,
     );
@@ -87,7 +87,7 @@ fn test_list_neurons_with_paging() {
             include_public_neurons_in_full_neurons: None,
             page_number: Some(0),
             page_size: Some(501),
-            neuron_subaccounts: vec![],
+            neuron_subaccounts: None,
         },
         user_id,
     );
@@ -139,11 +139,13 @@ fn test_list_neurons_by_subaccounts_and_ids() {
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
-        neuron_subaccounts: (501..1000)
-            .map(|id| NeuronSubaccount {
-                subaccount: crate::test_utils::test_subaccount_for_neuron_id(id),
-            })
-            .collect(),
+        neuron_subaccounts: Some(
+            (501..1000)
+                .map(|id| NeuronSubaccount {
+                    subaccount: crate::test_utils::test_subaccount_for_neuron_id(id),
+                })
+                .collect(),
+        ),
     };
 
     let response_1 = governance.list_neurons(&request, user_id);
@@ -158,11 +160,13 @@ fn test_list_neurons_by_subaccounts_and_ids() {
             include_public_neurons_in_full_neurons: None,
             page_number: Some(1),
             page_size: None,
-            neuron_subaccounts: (501..1000)
-                .map(|id| NeuronSubaccount {
-                    subaccount: crate::test_utils::test_subaccount_for_neuron_id(id),
-                })
-                .collect(),
+            neuron_subaccounts: Some(
+                (501..1000)
+                    .map(|id| NeuronSubaccount {
+                        subaccount: crate::test_utils::test_subaccount_for_neuron_id(id),
+                    })
+                    .collect(),
+            ),
         },
         user_id,
     );
