@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "icsum"
+version = "0.1.0"
+edition = "2021"
+
+# We are not referencing deps from workspace using workspace = true because we want to be
+# able to compile icsum in separation.
+[dependencies]
+anyhow = "1.0"
+nix = { version = "0.29", features = ["fs"] }
+blake3 = "1.5"
+
+[dev-dependencies]
+rand = "0.9"
+tempfile = "3.15"

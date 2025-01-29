@@ -292,6 +292,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
+            "blake3": crate.spec(
+                version = "^1.5",
+            ),
             "bs58": crate.spec(
                 version = "^0.5.0",
             ),

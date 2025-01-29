@@ -1,6 +1,8 @@
 # A .bazelrc needing build configuration. Without this configuration, the
 # build will most likely fail.
 
+startup --unix_digest_hash_attribute_name=user.icsum
+
 # To require no rustfmt issues, pass --config=fmt.
 # To require no clippy issues, pass --config=clippy. Without this, warnings will still be generated.
 # To enable both of the above, pass --config=lint.

@@ -30,7 +30,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -113,7 +113,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -178,7 +178,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -199,7 +199,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -220,7 +220,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -250,7 +250,7 @@ jobs:
   build-ic:
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -350,7 +350,7 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
     timeout-minutes: 30
     runs-on:
       group: ch1
@@ -385,7 +385,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
+      image: ghcr.io/dfinity/ic-build@sha256:5926f073e5d8c1b37d5905697107f13dd3876a44863225910e146f5e2d26de2c
     timeout-minutes: 30
     runs-on:
       group: ch1
