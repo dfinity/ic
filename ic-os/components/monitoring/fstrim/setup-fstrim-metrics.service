@@ -31,3 +31,6 @@ SystemCallArchitectures=native
 SystemCallErrorNumber=EPERM
 SystemCallFilter=@system-service
 UMask=022
+
+[Install]
+WantedBy=multi-user.target
