@@ -3600,7 +3600,13 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        todo!()
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .cycles_account_manager
+            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        Ok(())
     }
 
     fn ic0_cost_ecdsa(
