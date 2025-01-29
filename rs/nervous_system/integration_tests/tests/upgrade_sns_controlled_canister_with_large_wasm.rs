@@ -4,11 +4,11 @@ use candid::Principal;
 use canister_test::Wasm;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout, install_canister_on_subnet, nns, sns,
+    await_with_timeout, install_canister_on_subnet, nns, sns, NnsInstaller,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters},
+    pocket_ic_helpers::add_wasms_to_sns_wasm,
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::common::modify_wasm_bytes;
@@ -107,14 +107,17 @@ async fn run_test(store_same_as_target: bool) {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
+        .with_ii_subnet()
         .with_application_subnet()
         .build_async()
         .await;
 
     // Install the NNS canisters.
     {
-        let with_mainnet_nns_canisters = false;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer.with_tip_nns_canister_versions();
+        nns_installer.with_cycles_ledger();
+        nns_installer.install(&pocket_ic).await;
     }
 
     // Publish SNS Wasms to SNS-W.

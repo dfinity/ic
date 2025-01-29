@@ -536,7 +536,7 @@ pub mod cycles_ledger {
     #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
     struct CyclesLedgerInitArgs {
         pub index_id: Option<Principal>,
-        pub max_blocks_per_request: u64,
+        pub max_transactions_per_request: u64,
     }
 
     /// Argument taken by the Cycles Ledger canister.
@@ -547,7 +547,7 @@ pub mod cycles_ledger {
     /// (variant {
     ///     Init = record {
     ///         index_id : opt principal;
-    ///         max_blocks_per_request : nat64;
+    ///         max_transactions_per_request : nat64;
     ///     }
     /// })
     /// ```
@@ -563,7 +563,7 @@ pub mod cycles_ledger {
 
         let arg = Encode!(&CyclesLedgerArgs::Init(CyclesLedgerInitArgs {
             index_id: None,
-            max_blocks_per_request: 1000,
+            max_transactions_per_request: 1000,
         }))
         .unwrap();
 
