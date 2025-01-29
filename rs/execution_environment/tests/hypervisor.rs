@@ -2020,15 +2020,23 @@ fn ic0_subnet_self_size_works() {
             (func (export "canister_update test")
                 ;; heap[0] = $subnet_self_size()
                 (i32.store (i32.const 0) (call $subnet_self_size))
-                ;; return heap[0]
-                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                ;; return heap[0-4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
                 (call $msg_reply)
             )
             (memory 1 1)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(vec![10]), result);
+    assert_eq!(
+        WasmResult::Reply(vec![
+            test.get_own_subnet_id().get().as_slice().len() as u8,
+            0,
+            0,
+            0
+        ]),
+        result
+    );
 }
 
 #[test]

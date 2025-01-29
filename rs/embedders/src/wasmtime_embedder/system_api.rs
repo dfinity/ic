@@ -459,7 +459,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
+                        anyhow::Error::msg(format!("ic0::msg_method_name_size failed: {}", e))
                     })
                 })
             }
@@ -1043,7 +1043,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
+                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {}", e))
                     })
                 })
             }
