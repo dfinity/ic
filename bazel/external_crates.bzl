@@ -434,6 +434,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "dfx-core": crate.spec(
+                version = "^0.1.3",
+            ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
             ),
