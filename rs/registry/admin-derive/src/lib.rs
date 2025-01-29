@@ -23,7 +23,7 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn url(&self) -> String {
-                parse_proposal_url(self.proposal_url.clone())
+                parse_proposal_url(&self.proposal_url)
             }
 
             fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender) {

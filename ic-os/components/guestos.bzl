@@ -96,8 +96,6 @@ component_files = {
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
-    Label("networking/retry-ipv6-config/retry-ipv6-config.sh"): "/opt/ic/bin/retry-ipv6-config.sh",
-    Label("networking/retry-ipv6-config/retry-ipv6-config.service"): "/etc/systemd/system/retry-ipv6-config.service",
     Label("networking/nftables/reload_nftables.path"): "/etc/systemd/system/reload_nftables.path",
     Label("networking/nftables/reload_nftables.service"): "/etc/systemd/system/reload_nftables.service",
     Label("networking/nftables/nftables-empty.conf"): "/etc/nftables.conf",

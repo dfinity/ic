@@ -1,7 +1,14 @@
 use crate::{
-    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    certification::recertify_registry, missing_node_types_map::MISSING_NODE_TYPES_MAP,
+    mutations::node_management::common::get_key_family, pb::v1::RegistryCanisterStableStorage,
+    registry::Registry,
 };
+use ic_base_types::{NodeId, PrincipalId};
+use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
+use ic_registry_keys::{make_node_record_key, NODE_RECORD_KEY_PREFIX};
+use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
+use std::str::FromStr;
 
 pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
     // Purposefully fail the upgrade if we can't find authz information.
@@ -16,18 +23,18 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
     );
 
     // Registry data migrations should be implemented as follows:
-    // let mutation_batches_due_to_data_migrations = {
-    //     let mutations = registry.compute_mutations_from_my_data_migration();
-    //     if mutations.is_empty() {
-    //         0 // No mutations required for this data migration.
-    //     } else {
-    //         registry.maybe_apply_mutation_internal(mutations);
-    //         1 // Single batch of mutations due to this data migration.
-    //     }
-    // };
-    //
+    let mutation_batches_due_to_data_migrations = {
+        let mutations = add_missing_node_types_to_nodes(registry);
+        if mutations.is_empty() {
+            0 // No mutations required for this data migration.
+        } else {
+            registry.maybe_apply_mutation_internal(mutations);
+            1 // Single batch of mutations due to this data migration.
+        }
+    };
+
     // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
-    let mutation_batches_due_to_data_migrations = 0;
+    // let mutation_batches_due_to_data_migrations = 0;
 
     registry.check_global_state_invariants(&[]);
     // Registry::from_serializable_from guarantees this always passes in this function
@@ -53,6 +60,34 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
     }
 }
 
+fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation> {
+    let missing_node_types_map = &MISSING_NODE_TYPES_MAP;
+
+    let mut mutations = Vec::new();
+
+    for (id, record) in get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter() {
+        if record.node_reward_type.is_none() {
+            let reward_type = missing_node_types_map
+                .get(id.as_str())
+                .map(|t| NodeRewardType::from(t.to_string()));
+
+            if let Some(reward_type) = reward_type {
+                if reward_type != NodeRewardType::Unspecified {
+                    let mut record = record;
+                    record.node_reward_type = Some(reward_type as i32);
+                    let node_id = NodeId::from(PrincipalId::from_str(&id).unwrap());
+                    mutations.push(update(
+                        make_node_record_key(node_id),
+                        record.encode_to_vec(),
+                    ));
+                }
+            }
+        }
+    }
+
+    mutations
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -61,6 +96,9 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
+    use ic_base_types::{NodeId, PrincipalId};
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_transport::insert;
 
     fn stable_storage_from_registry(
         registry: &Registry,
@@ -166,5 +204,53 @@ mod test {
         // then we panic when decoding
         let mut new_registry = Registry::new();
         canister_post_upgrade(&mut new_registry, &stable_storage);
+    }
+
+    #[test]
+    fn test_migration_works_correctly() {
+        use std::str::FromStr;
+        let mut registry = invariant_compliant_registry(0);
+
+        let mut node_additions = Vec::new();
+        for (id, _) in MISSING_NODE_TYPES_MAP.iter() {
+            let record = NodeRecord {
+                xnet: None,
+                http: None,
+                node_operator_id: PrincipalId::new_anonymous().to_vec(),
+                chip_id: None,
+                hostos_version_id: None,
+                public_ipv4_config: None,
+                domain: None,
+                node_reward_type: None,
+            };
+
+            node_additions.push(insert(
+                make_node_record_key(NodeId::new(PrincipalId::from_str(id).unwrap())),
+                record.encode_to_vec(),
+            ));
+        }
+
+        let nodes_expected = node_additions.len();
+        assert_eq!(nodes_expected, 1418);
+
+        registry.apply_mutations_for_test(node_additions);
+
+        let mutations = add_missing_node_types_to_nodes(&registry);
+        assert_eq!(mutations.len(), nodes_expected);
+
+        registry.apply_mutations_for_test(mutations);
+
+        for (id, reward_type) in MISSING_NODE_TYPES_MAP.iter() {
+            let record =
+                registry.get_node_or_panic(NodeId::from(PrincipalId::from_str(id).unwrap()));
+
+            let expected_reward_type = NodeRewardType::from(reward_type.clone());
+            assert_eq!(
+                record.node_reward_type,
+                Some(expected_reward_type as i32),
+                "Assertion for Node {} failed",
+                id
+            );
+        }
     }
 }
