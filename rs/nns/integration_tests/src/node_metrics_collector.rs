@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use candid::{Decode, Encode, Principal};
 use ic_cdk::api::management_canister::main::CanisterId;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
@@ -9,19 +10,36 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use tempfile::TempDir;
+use pocket_ic::common::rest::{SubnetBlockMaker, RawNodeId, RawSubnetId, TickConfigs, BlockmakerMetrics, SubnetId};
 
 const RUNTIME_DAYS: u64 = 3;
 const DAY_HOURS: u64 = 24;
 const BLOCK_INTERVAL_SECONDS: u64 = 60 * 60;
 
 /// Advances the PocketIC state by a given number of days, producing one block per hour.
-async fn advance_pocket_ic_time(pocket_ic: &PocketIc, days: u64) {
+async fn advance_pocket_ic_time(pocket_ic: &PocketIc, days: u64, subnet: SubnetId) {
+
+    let mut subnets_blockmakers = BTreeMap::new();
+
+
+    subnets_blockmakers.insert(subnet.to_text(), BlockmakerMetrics{
+        blockmaker: RawNodeId::from(Principal::anonymous()),
+        failed_blockmakers: vec![ RawNodeId::from(Principal::anonymous())],
+    });
+
+    let tick_configs = TickConfigs {
+        blockmakers_configs: Some(SubnetBlockMaker {
+            subnets_blockmakers: Some(subnets_blockmakers)
+        })
+    };
+
     for _ in 0..days {
         for _ in 0..DAY_HOURS {
             pocket_ic
                 .advance_time(std::time::Duration::from_secs(BLOCK_INTERVAL_SECONDS))
                 .await;
-            pocket_ic.tick().await;
+
+            pocket_ic.tick_with_configs(tick_configs.clone()).await;
         }
     }
 }
@@ -78,8 +96,12 @@ async fn test_node_metrics_collector() {
     )
     .await;
 
+    let topology = pocket_ic.topology().await;
+    let application_subnet = topology.get_app_subnets()[0];
+    let nodes = topology.subnet_configs.get(&application_subnet).unwrap().node_ids[0].clone();
+
     // Advance time for the initial runtime period
-    advance_pocket_ic_time(&pocket_ic, RUNTIME_DAYS).await;
+    advance_pocket_ic_time(&pocket_ic, RUNTIME_DAYS, application_subnet).await;
 
     // Install node_metrics_collector canister in the NNS subnet
     let nns_subnet = pocket_ic.topology().await.get_nns().unwrap();
@@ -102,13 +124,15 @@ async fn test_node_metrics_collector() {
     pocket_ic.tick().await;
 
     // Validate metrics backfilled for the past RUNTIME_DAYS days
-    let application_subnet = pocket_ic.topology().await.get_app_subnets()[0];
+
     let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
 
+    println!("{:?}", node_metrics);
+    assert!(false);
     assert_eq!(node_metrics.len(), RUNTIME_DAYS as usize);
 
     // Advance time for another RUNTIME_DAYS and validate again
-    advance_pocket_ic_time(&pocket_ic, RUNTIME_DAYS).await;
+    advance_pocket_ic_time(&pocket_ic, RUNTIME_DAYS, application_subnet).await;
     let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
 
     assert_eq!(node_metrics.len(), RUNTIME_DAYS as usize * 2);

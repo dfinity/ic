@@ -73,12 +73,7 @@ use ic_types::{
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
-use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
-};
+use pocket_ic::common::rest::{self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest, CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology};
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
 use slog::Level;
@@ -102,6 +97,7 @@ use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
+use ic_types::batch::BlockmakerMetrics;
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
@@ -1579,12 +1575,30 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Tick;
+#[derive(Clone, Debug)]
+pub struct Tick {
+    pub configs: TickConfigs,
+}
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        for subnet in pic.subnets.get_all() {
+        for (subnet_id, subnet) in pic.subnets.subnets.read().unwrap().iter() {
+            if let Some(blockmakers) = self
+                .configs
+                .blockmakers_configs
+                .as_ref()
+                .and_then(|config| config.subnets_blockmakers.as_ref())
+                .and_then(|sb| sb.get(&subnet_id.get().to_string()))
+            {
+                subnet.state_machine.set_blockmakers_metrics(BlockmakerMetrics {
+                    blockmaker: NodeId::from(PrincipalId::from(Principal::from(blockmakers.clone().blockmaker))),
+                    failed_blockmakers: blockmakers
+                        .failed_blockmakers
+                        .iter()
+                        .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id.clone()))))
+                        .collect(),
+                });
+            }
             subnet.state_machine.execute_round();
         }
         OpOut::NoOutput

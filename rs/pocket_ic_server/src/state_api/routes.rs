@@ -35,18 +35,13 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
-use pocket_ic::common::rest::{
-    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
-    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, Topology,
-};
+use pocket_ic::common::rest::{self, ApiResponse, AutoProgressConfig, SubnetBlockMaker, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs, Topology};
 use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use std::convert::Infallible;
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -1101,9 +1096,10 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(raw): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick{ configs: raw };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

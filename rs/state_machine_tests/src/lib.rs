@@ -834,6 +834,7 @@ pub struct StateMachine {
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
+    blockmaker_metrics: RwLock<Option<BlockmakerMetrics>>,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
@@ -1417,7 +1418,8 @@ impl StateMachine {
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
-            .with_self_validating(self_validating);
+            .with_self_validating(self_validating)
+            .with_blockmaker_metrics(self.blockmaker_metrics.read().unwrap().clone());
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1808,6 +1810,7 @@ impl StateMachine {
             certified_height_tx,
             runtime,
             state_dir,
+            blockmaker_metrics: None.into(),
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
             checkpoint_interval_length: checkpoint_interval_length.into(),
@@ -2386,10 +2389,13 @@ impl StateMachine {
             current_time
         };
 
+        let blockmaker_metrics = payload.blockmaker_metrics.clone().unwrap_or(BlockmakerMetrics::new_for_test());
+
         let batch = Batch {
             batch_number,
             batch_summary,
             requires_full_state_hash,
+            blockmaker_metrics,
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -2405,7 +2411,6 @@ impl StateMachine {
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
         };
 
@@ -2550,6 +2555,11 @@ impl StateMachine {
                 .unwrap()
                 .as_nanos() as u64,
         )
+    }
+
+    /// Advances the state machine time by the given amount.
+    pub fn set_blockmakers_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
+        *self.blockmaker_metrics.write().unwrap() = Some(blockmaker_metrics);
     }
 
     /// Advances the state machine time by the given amount.
@@ -3814,6 +3824,7 @@ pub struct PayloadBuilder {
     consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
+    blockmaker_metrics: Option<BlockmakerMetrics>,
 }
 
 impl Default for PayloadBuilder {
@@ -3826,6 +3837,7 @@ impl Default for PayloadBuilder {
             consensus_responses: Default::default(),
             query_stats: Default::default(),
             self_validating: Default::default(),
+            blockmaker_metrics: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -3834,6 +3846,13 @@ impl Default for PayloadBuilder {
 impl PayloadBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_blockmaker_metrics(self, blockmaker_metrics: Option<BlockmakerMetrics>) -> Self {
+        Self {
+            blockmaker_metrics,
+            ..self
+        }
     }
 
     pub fn with_max_expiry_time_from_now(self, now: SystemTime) -> Self {
