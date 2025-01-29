@@ -58,16 +58,15 @@ function detect_hardware_generation() {
 
     local cpu_json="$(get_cpu_info_json)"
 
-    # Loop over each CPU socket to detect its generation (1 or 2).
-    for i in $(echo "${cpu_json}" | jq -r '.[].id'); do
-        if [[ ${i} =~ .*:.* ]]; then
-            unit=$(echo "${i}" | awk -F ':' '{ print $2 }')
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        if [[ ${socket_id} =~ .*:.* ]]; then
+            unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
         else
-            unit="${i}"
+            unit="${socket_id}"
         fi
 
         echo "* Checking CPU socket ${unit}..."
-        local model=$(echo "${cpu_json}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
+        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
 
         if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
             if [[ ${HARDWARE_GENERATION} =~ ^(|1)$ ]]; then
