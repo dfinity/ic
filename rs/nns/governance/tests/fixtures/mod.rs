@@ -931,8 +931,7 @@ impl NNS {
         self.governance
             .neuron_store
             .with_neuron(ident, |n| {
-                n.clone()
-                    .into_proto(self.governance.voting_power_economics(), self.now())
+                Neuron::from(n.clone())
             })
             .unwrap()
     }
