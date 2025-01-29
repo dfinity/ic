@@ -235,7 +235,7 @@ impl<'de> Deserialize<'de> for SignedIngress {
     fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct BytesVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for BytesVisitor {
+        impl serde::de::Visitor<'_> for BytesVisitor {
             type Value = Vec<u8>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -560,8 +560,11 @@ pub fn extract_effective_canister_id(
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)
         | Ok(Method::ComputeInitialIDkgDealings)
+        | Ok(Method::ReshareChainKey)
         | Ok(Method::SchnorrPublicKey)
         | Ok(Method::SignWithSchnorr)
+        | Ok(Method::VetKdPublicKey)
+        | Ok(Method::VetKdDeriveEncryptedKey)
         | Ok(Method::BitcoinGetBalance)
         | Ok(Method::BitcoinGetUtxos)
         | Ok(Method::BitcoinGetBlockHeaders)
@@ -570,6 +573,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::BitcoinGetSuccessors)
         | Ok(Method::BitcoinGetCurrentFeePercentiles)
         | Ok(Method::NodeMetricsHistory)
+        | Ok(Method::SubnetInfo)
         | Ok(Method::FetchCanisterLogs) => {
             // Subnet method not allowed for ingress.
             Err(ParseIngressError::SubnetMethodNotAllowed)

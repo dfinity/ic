@@ -7,27 +7,30 @@ use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::page_map::{storage::validate, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary,
+    canister_state::execution_state::WasmExecutionMode, page_map::PageMap, CanisterMetrics,
+    CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
-    ReadPolicy, SnapshotLayout,
+    SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
+use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::convert::{identity, TryFrom};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
     CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 #[cfg(test)]
@@ -47,24 +50,15 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 }
 
 /// Creates a checkpoint of the node state using specified directory
-/// layout. Returns a new state that is equivalent to the given one
-/// and a result of the operation.
-///
-/// This function uses the provided thread-pool to parallelize expensive
-/// operations.
-///
-/// If the result is `Ok`, the returned state is "rebased" to use
-/// files from the newly created checkpoint. If the result is `Err`,
-/// the returned state is exactly the one that was passed as argument.
-pub(crate) fn make_checkpoint(
+/// layout. Returns a layout of the new state that is equivalent to the
+/// given one and a result of the operation.
+pub(crate) fn make_unvalidated_checkpoint(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    thread_pool: &mut scoped_threadpool::Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
-) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState, HasDowngrade), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -124,56 +118,66 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap();
     }
 
-    let state = {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["load"])
-            .start_timer();
-        load_checkpoint(
-            &cp,
-            state.metadata.own_subnet_type,
-            metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        )?
-    };
-
-    cp.remove_unverified_checkpoint_marker()?;
-
-    Ok((cp, state, has_downgrade))
+    Ok((cp, has_downgrade))
 }
 
-/// Calls [load_checkpoint] with a newly created thread pool.
-/// See [load_checkpoint] for further details.
-pub fn load_checkpoint_parallel(
+pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: Option<&ReplicatedState>,
+    own_subnet_type: SubnetType,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &CheckpointMetrics,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> Result<(), CheckpointError> {
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+        |pm| validate(pm),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+    if let Some(reference_state) = reference_state {
+        validate_eq_checkpoint(
+            checkpoint_layout,
+            reference_state,
+            own_subnet_type,
+            thread_pool,
+            fd_factory,
+            metrics,
+        );
+    }
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
+    Ok(())
+}
+
+/// Loads checkpoint and validates correctness of the overlays in parallel, if success removes the
+/// unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a
+/// successful loading.
+pub fn load_checkpoint_and_validate_parallel(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-
-    load_checkpoint(
+    let state = load_checkpoint(
         checkpoint_layout,
         own_subnet_type,
         metrics,
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
-    )
-}
-
-/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
-/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
-pub fn load_checkpoint_parallel_and_mark_verified(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    own_subnet_type: SubnetType,
-    metrics: &CheckpointMetrics,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
-    let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
-    checkpoint_layout
-        .remove_unverified_checkpoint_marker()
-        .map_err(CheckpointError::from)?;
+    )?;
+    validate_checkpoint_and_remove_unverified_marker(
+        checkpoint_layout,
+        None,
+        own_subnet_type,
+        fd_factory,
+        metrics,
+        Some(&mut thread_pool),
+    )?;
     Ok(state)
 }
 
@@ -246,7 +250,7 @@ impl CheckpointLoader {
         .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
     }
 
-    fn load_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
+    fn load_epoch_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
         let stats = self.checkpoint_layout.stats().deserialize()?;
         if let Some(query_stats) = stats.query_stats {
             Ok(RawQueryStats::try_from(query_stats)
@@ -287,6 +291,45 @@ impl CheckpointLoader {
         Ok(canister_states)
     }
 
+    fn validate_eq_canister_states(
+        &self,
+        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+        ref_canister_states: &BTreeMap<CanisterId, CanisterState>,
+    ) -> Result<(), String> {
+        let on_disk_canister_ids = self
+            .checkpoint_layout
+            .canister_ids()
+            .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
+        let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
+        debug_assert!(on_disk_canister_ids.is_sorted());
+        debug_assert!(ref_canister_ids.is_sorted());
+        if on_disk_canister_ids != ref_canister_ids {
+            return Err("Canister ids mismatch".to_string());
+        }
+        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
+            load_canister_state_from_checkpoint(
+                &self.checkpoint_layout,
+                canister_id,
+                Arc::clone(&self.fd_factory),
+                &self.metrics,
+            )
+            .map_err(|err| {
+                format!(
+                    "Failed to load canister state for validation for key #{}: {}",
+                    canister_id, err
+                )
+            })?
+            .0
+            .validate_eq(
+                ref_canister_states
+                    .get(canister_id)
+                    .expect("Failed to get canister from canister_states"),
+            )
+        })
+        .into_iter()
+        .try_for_each(identity)
+    }
+
     fn load_canister_snapshots(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
@@ -319,6 +362,49 @@ impl CheckpointLoader {
 
         Ok(CanisterSnapshots::new(canister_snapshots))
     }
+
+    fn validate_eq_canister_snapshots(
+        &self,
+        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+        ref_canister_snapshots: &CanisterSnapshots,
+    ) -> Result<(), String> {
+        let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
+            format!(
+                "Snapshot validation: failed to load list of snapshot ids: {}",
+                err
+            )
+        })?;
+        let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
+        on_disk_snapshot_ids.sort();
+        ref_snapshot_ids.sort();
+        if on_disk_snapshot_ids != ref_snapshot_ids {
+            return Err("Snapshot ids mismatch".to_string());
+        }
+        if !ref_canister_snapshots.is_unflushed_changes_empty() {
+            return Err("Snapshots have unflushed changes after checkpoint".to_string());
+        }
+        maybe_parallel_map(thread_pool, ref_snapshot_ids.iter(), |snapshot_id| {
+            load_snapshot_from_checkpoint(
+                &self.checkpoint_layout,
+                snapshot_id,
+                Arc::clone(&self.fd_factory),
+            )
+            .map_err(|err| {
+                format!(
+                    "Failed to load canister snapshot {} for validation: {}",
+                    snapshot_id, err
+                )
+            })?
+            .0
+            .validate_eq(
+                ref_canister_snapshots
+                    .get(**snapshot_id)
+                    .expect("Failed to lookup snapshot in ref state"),
+            )
+        })
+        .into_iter()
+        .try_for_each(identity)
+    }
 }
 
 /// Loads the node state heighted with `height` using the specified
@@ -340,9 +426,78 @@ pub fn load_checkpoint(
         checkpoint_loader.load_canister_states(&mut thread_pool)?,
         checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
-        checkpoint_loader.load_query_stats()?,
+        checkpoint_loader.load_epoch_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
+}
+
+pub fn validate_eq_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: &ReplicatedState,
+    own_subnet_type: SubnetType,
+    thread_pool: Option<&mut scoped_threadpool::Pool>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
+    metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
+) {
+    validate_eq_checkpoint_internal(
+        checkpoint_layout,
+        reference_state,
+        own_subnet_type,
+        thread_pool,
+        fd_factory,
+        metrics,
+    )
+    .unwrap_or_else(|err: String| {
+        error!(
+            &metrics.log,
+            "{}: Replicated state altered: {}",
+            CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+            err
+        );
+        metrics.replicated_state_altered_after_checkpoint.inc();
+    });
+}
+
+fn validate_eq_checkpoint_internal(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: &ReplicatedState,
+    own_subnet_type: SubnetType,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
+    metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
+) -> Result<(), String> {
+    let (
+        canister_states,
+        metadata,
+        subnet_queues,
+        consensus_queue,
+        epoch_query_stats,
+        canister_snapshots,
+    ) = reference_state.component_refs();
+
+    let checkpoint_loader = CheckpointLoader {
+        checkpoint_layout: checkpoint_layout.clone(),
+        own_subnet_type,
+        metrics: metrics.clone(),
+        fd_factory,
+    };
+
+    checkpoint_loader.validate_eq_canister_states(&mut thread_pool, canister_states)?;
+    checkpoint_loader
+        .load_system_metadata()
+        .map_err(|err| format!("Failed to load system metadata: {}", err))?
+        .validate_eq(metadata)?;
+    checkpoint_loader
+        .load_subnet_queues()
+        .unwrap()
+        .validate_eq(subnet_queues)?;
+    if checkpoint_loader.load_epoch_query_stats().unwrap() != *epoch_query_stats {
+        return Err("query_stats has diverged.".to_string());
+    }
+    if !consensus_queue.is_empty() {
+        return Err("consensus_queue is not empty".to_string());
+    }
+    checkpoint_loader.validate_eq_canister_snapshots(&mut thread_pool, canister_snapshots)
 }
 
 #[derive(Default)]
@@ -392,7 +547,11 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
-                PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+                PageMap::open(
+                    Box::new(wasm_memory_layout),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
@@ -400,7 +559,11 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
-                PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+                PageMap::open(
+                    Box::new(stable_memory_layout),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -427,7 +590,9 @@ pub fn load_canister_state(
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
                 next_scheduled_method: execution_state_bits.next_scheduled_method,
-                is_wasm64: execution_state_bits.is_wasm64,
+                wasm_execution_mode: WasmExecutionMode::from_is_wasm64(
+                    execution_state_bits.is_wasm64,
+                ),
             })
         }
         None => None,
@@ -457,8 +622,11 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
-    let wasm_chunk_store_data =
-        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store_data = PageMap::open(
+        Box::new(wasm_chunk_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(
@@ -529,8 +697,8 @@ fn load_canister_state_from_checkpoint(
     )
 }
 
-pub fn load_snapshot<P: ReadPolicy>(
-    snapshot_layout: &SnapshotLayout<P>,
+pub fn load_snapshot(
+    snapshot_layout: &SnapshotLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -560,7 +728,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let wasm_memory_layout = snapshot_layout.vmemory_0();
         let wasm_memory = PageMemory {
-            page_map: PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Box::new(wasm_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.wasm_memory_size,
         };
         durations.insert("snapshot_wasm_memory", starting_time.elapsed());
@@ -568,7 +740,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let stable_memory_layout = snapshot_layout.stable_memory();
         let stable_memory = PageMemory {
-            page_map: PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Box::new(stable_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.stable_memory_size,
         };
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
@@ -591,8 +767,11 @@ pub fn load_snapshot<P: ReadPolicy>(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
-    let wasm_chunk_store_data =
-        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store_data = PageMap::open(
+        Box::new(wasm_chunk_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     let wasm_chunk_store = WasmChunkStore::from_checkpoint(
         wasm_chunk_store_data,
         canister_snapshot_bits.wasm_chunk_store_metadata,
@@ -614,13 +793,13 @@ pub fn load_snapshot<P: ReadPolicy>(
     Ok((canister_snapshot, metrics))
 }
 
-fn load_snapshot_from_checkpoint<P: ReadPolicy>(
-    checkpoint_layout: &CheckpointLayout<P>,
+fn load_snapshot_from_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
-    load_snapshot::<P>(
+    load_snapshot(
         &snapshot_layout,
         snapshot_id,
         checkpoint_layout.height(),

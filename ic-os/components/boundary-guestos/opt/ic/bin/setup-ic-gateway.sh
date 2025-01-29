@@ -125,8 +125,8 @@ ENV="${ENV}"
 DOMAIN_APP="${DOMAINS_APP}"
 DOMAIN_SYSTEM="${DOMAINS_SYSTEM}"
 DOMAIN_API="${DOMAINS_API}"
-HTTP_SERVER_LISTEN_PLAIN="[::]:80"
-HTTP_SERVER_LISTEN_TLS="[::]:443"
+LISTEN_PLAIN="[::]:80"
+LISTEN_TLS="[::]:443"
 DNS_PROTOCOL="https"
 METRICS_LISTEN="[::]:9314"
 POLICY_PRE_ISOLATION_CANISTERS="${RUN_DIR}/pre_isolation_canisters.txt"
@@ -148,9 +148,6 @@ CACHE_XFETCH_BETA="3.0"
 SHED_SYSTEM_EWMA="0.9"
 SHED_SYSTEM_CPU="0.95"
 SHED_SYSTEM_MEMORY="0.95"
-SHED_SHARDED_EWMA="0.6"
-SHED_SHARDED_PASSTHROUGH="20000"
-SHED_SHARDED_LATENCY="query:1s,call:1s,sync_call:13s,read_state:1s,read_state_subnet:1s,status:100ms,health:100ms,registrations:5s,http:5s"
 EOF
 
     if [ ! -z "${DENYLIST_URL:-}" ]; then
@@ -165,10 +162,6 @@ EOF
 
     if [ ! -z "${MAX_CONCURRENCY:-}" ]; then
         echo "LOAD_MAX_CONCURRENCY=\"${MAX_CONCURRENCY}\"" >>"${ENV_FILE}"
-    fi
-
-    if [ ! -z "${SHED_EWMA_PARAM:-}" ]; then
-        echo "LOAD_SHED_EWMA_PARAM=\"${SHED_EWMA_PARAM}\"" >>"${ENV_FILE}"
     fi
 }
 

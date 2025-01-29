@@ -5,13 +5,16 @@ use crate::{
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
-    network::{
+    block::Header as BlockHeader,
+    hashes::Hash as _,
+    p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    Block, BlockHash, BlockHeader,
+    Block, BlockHash,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
+use ic_btc_validation::ValidateHeaderError;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use std::{
     collections::{HashMap, HashSet},
@@ -59,8 +62,8 @@ enum ReceivedHeadersMessageError {
     ReceivedTooManyHeaders,
     #[error("Received too many unsolicited headers")]
     ReceivedTooManyUnsolicitedHeaders,
-    #[error("Received an invalid header")]
-    ReceivedInvalidHeader,
+    #[error("Received an invalid header, with block hash {0} and error {1:?}")]
+    ReceivedInvalidHeader(BlockHash, ValidateHeaderError),
 }
 
 /// The possible errors the `BlockchainManager::received_inv_message(...)` may produce.
@@ -372,8 +375,11 @@ impl BlockchainManager {
             }
 
             match maybe_err {
-                Some(AddHeaderError::InvalidHeader(_, _)) => {
-                    return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader)
+                Some(AddHeaderError::InvalidHeader(block_hash, validate_header_error)) => {
+                    return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader(
+                        block_hash,
+                        validate_header_error,
+                    ));
                 }
                 Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
                     Some((blockchain_state.locator_hashes(), stop_hash))
@@ -385,7 +391,7 @@ impl BlockchainManager {
                         if headers.len() < MAX_HEADERS_SIZE {
                             None
                         } else {
-                            Some((vec![last.header.block_hash()], BlockHash::default()))
+                            Some((vec![last.header.block_hash()], BlockHash::all_zeros()))
                         }
                     } else {
                         None
@@ -468,7 +474,7 @@ impl BlockchainManager {
                 tip: initial_hash,
             },
         );
-        let locators = (locator_hashes, BlockHash::default());
+        let locators = (locator_hashes, BlockHash::all_zeros());
         self.send_getheaders(channel, addr, locators);
     }
 
@@ -630,23 +636,26 @@ impl BlockchainManager {
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         match message {
             NetworkMessage::Inv(inventory) => {
-                if self
-                    .received_inv_message(channel, &addr, inventory)
-                    .is_err()
-                {
+                if let Err(err) = self.received_inv_message(channel, &addr, inventory) {
+                    warn!(
+                        self.logger,
+                        "Received an invalid inv message from {}: {}", addr, err
+                    );
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Headers(headers) => {
-                if self
-                    .received_headers_message(channel, &addr, headers)
-                    .is_err()
-                {
+                if let Err(err) = self.received_headers_message(channel, &addr, headers) {
+                    warn!(
+                        self.logger,
+                        "Received an invalid headers message form {}: {}", addr, err
+                    );
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Block(block) => {
-                if self.received_block_message(&addr, block).is_err() {
+                if let Err(err) = self.received_block_message(&addr, block) {
+                    warn!(self.logger, "Received an invalid block {}: {}", addr, err);
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
@@ -680,7 +689,7 @@ impl BlockchainManager {
             if !self.getheaders_requests.contains_key(&addr) && self.catchup_headers.contains(&addr)
             {
                 let locators = self.blockchain.lock().unwrap().locator_hashes();
-                self.send_getheaders(channel, &addr, (locators, BlockHash::default()));
+                self.send_getheaders(channel, &addr, (locators, BlockHash::all_zeros()));
                 self.catchup_headers.remove(&addr);
             }
         }
@@ -770,9 +779,7 @@ pub mod test {
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
-    use bitcoin::{
-        network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
-    };
+    use bitcoin::{p2p::message::NetworkMessage, BlockHash};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
@@ -808,7 +815,7 @@ pub mod test {
 
         assert_eq!(channel.command_count(), 1);
 
-        let locators = (vec![genesis_hash], BlockHash::default());
+        let locators = (vec![genesis_hash], BlockHash::all_zeros());
         blockchain_manager.send_getheaders(&mut channel, &addr, locators.clone());
         assert!(blockchain_manager.getheaders_requests.contains_key(&addr));
         let request = blockchain_manager.getheaders_requests.get(&addr).unwrap();
@@ -817,7 +824,7 @@ pub mod test {
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::default())
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::all_zeros())
         );
         assert!(
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
@@ -887,7 +894,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -897,7 +904,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
 
@@ -925,7 +932,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -934,7 +941,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
     }

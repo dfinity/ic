@@ -12,7 +12,6 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal,
 };
-use ic_sns_governance::pb::v1::governance::Mode;
 use itertools::Itertools;
 use std::{
     collections::HashSet,
@@ -170,6 +169,17 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
     Ok(())
 }
 
+fn functions_disallowed_in_pre_initialization_swap() -> Vec<&'static str> {
+    vec![
+        "ManageNervousSystemParameters",
+        "TransferSnsTreasuryFunds",
+        "MintSnsTokens",
+        "UpgradeSnsControlledCanister",
+        "RegisterDappCanisters",
+        "DeregisterDappCanisters",
+    ]
+}
+
 fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
     let csns = match &proposal.action {
         Some(Action::CreateServiceNervousSystem(csns)) => csns,
@@ -204,9 +214,9 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
         r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#.to_string()
     };
 
-    let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
+    let disallowed_types = functions_disallowed_in_pre_initialization_swap()
         .into_iter()
-        .map(|t| format!("  - {}", t.name))
+        .map(|t| format!("  - {}", t))
         .join("\n");
     let allowed_proposals = format!(
         r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
@@ -470,9 +480,9 @@ fn save_proposal_id_to_file(path: &Path, proposal_id: &ProposalId) -> Result<(),
 
 #[cfg(test)]
 mod test {
-    use crate::init_config_file::friendly::SnsConfigurationFile;
-
     use super::*;
+    use crate::init_config_file::friendly::SnsConfigurationFile;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn confirmation_messages_test() {
@@ -511,12 +521,12 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
   - 5zxxw-63ouu-faaaa-aaaap-4ai"#,
             r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
 Within this restricted mode, some proposal actions will not be allowed:
-  - Manage nervous system parameters
-  - Transfer SNS treasury funds
-  - Mint SNS tokens
-  - Upgrade SNS controlled canister
-  - Register dapp canisters
-  - Deregister Dapp Canisters
+  - ManageNervousSystemParameters
+  - TransferSnsTreasuryFunds
+  - MintSnsTokens
+  - UpgradeSnsControlledCanister
+  - RegisterDappCanisters
+  - DeregisterDappCanisters
 Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#,
         ];
         assert_eq!(observed_messages, expected_messages);

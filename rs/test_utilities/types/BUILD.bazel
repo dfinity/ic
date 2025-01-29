@@ -25,7 +25,6 @@ rust_test(
     crate = ":types",
     deps = [
         # Keep sorted.
-        "@crate_index//:assert_matches",
         "@crate_index//:bincode",
         "@crate_index//:serde_cbor",
     ],

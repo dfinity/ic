@@ -13,8 +13,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//rs/canister_client",
-    "//rs/crypto/secp256k1",
+    "//rs/canister_client/read_state_response_parser",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -75,7 +74,6 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/ledger_suite/icrc1/tokens_u256",
-    "//rs/nns/governance",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/test_utils",
@@ -100,7 +98,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.0"
+ROSETTA_VERSION = "2.1.1"
 
 rust_library(
     name = "rosetta-api",
@@ -180,6 +178,7 @@ rust_test_suite_with_extra_srcs(
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "4",
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
@@ -196,7 +195,9 @@ rust_test_suite_with_extra_srcs(
         "tests/system_tests/common/*.rs",
         "tests/system_tests/test_cases/*.rs",
     ]),
+    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 

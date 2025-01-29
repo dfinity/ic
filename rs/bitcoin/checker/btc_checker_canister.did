@@ -1,0 +1,98 @@
+type BitcoinAddress = text;
+
+type CheckAddressArgs = record {
+    // Bitcoin address to be checked.
+    address: BitcoinAddress;
+};
+
+type CheckAddressResponse = variant { Passed; Failed };
+
+type CheckTransactionArgs = record { txid : blob };
+
+type CheckTransactionStrArgs = record { txid : text };
+
+// The result of a check_transaction call.
+type CheckTransactionResponse = variant {
+    // When check finishes and all input addresses passed.
+    Passed;
+    // When check finishes and one or more input addresses failed.
+    // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
+    Failed: vec BitcoinAddress;
+    // Unknown case where it is unable to give a final answer of Passed or Failed.
+    // The caller should examine the status and decide how to handle it.
+    Unknown: CheckTransactionStatus;
+};
+
+type CheckTransactionStatus = variant {
+    // Caller should call with a minimum of 40 billion cycles.
+    NotEnoughCycles;
+    // The result is not available, but calls can be retried.
+    Retriable: CheckTransactionRetriable;
+    /// The result is unknown due to an irrecoverable error.
+    Error: CheckTransactionIrrecoverableError;
+};
+
+type CheckTransactionRetriable = variant {
+    // Work is already in progress, and the result is pending.
+    Pending;
+    // The service is experience high load.
+    HighLoad;
+    // There was a transient error fetching data.
+    TransientInternalError: text;
+};
+
+type CheckTransactionIrrecoverableError = variant {
+    // Response size is too large (>400kB) when fetching transaction data.
+    ResponseTooLarge : record { txid: blob };
+    // Invalid transaction id.
+    InvalidTransactionId : text;
+    // Invalid transaction.
+    InvalidTransaction : text;
+};
+
+type InitArg = record {
+    btc_network : BtcNetwork;
+    check_mode : CheckMode;
+    num_subnet_nodes : nat16;
+};
+
+type UpgradeArg = record {
+    check_mode: opt CheckMode;
+    num_subnet_nodes: opt nat16;
+};
+
+type CheckArg = variant {
+    InitArg : InitArg;
+    UpgradeArg: opt UpgradeArg;
+};
+
+type BtcNetwork = variant {
+    mainnet;
+    testnet;
+    regtest: record { json_rpc_url: text };
+};
+
+type CheckMode = variant {
+    AcceptAll;
+    RejectAll;
+    Normal;
+};
+
+service : (CheckArg) -> {
+    // Check input addresses of a transaction matching the given transaction id.
+    // See `CheckTransactionResponse` for more details on the return result.
+    //
+    // The caller should attach at least 40 billion cycles with each call.
+    // The actual cost may be well less than that, and unspent cycles will be refunded.
+    // There is also a service charge of 0.1 billion cycles for each call, regardless
+    // of the return result.
+    check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
+
+    // Same as check_transaction, but taking the transaction id argument as a string.
+    check_transaction_str: (CheckTransactionStrArgs) -> (CheckTransactionResponse);
+
+    // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
+    // May throw error (trap) if the given address is malformed or not a mainnet address.
+    check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
+
+}

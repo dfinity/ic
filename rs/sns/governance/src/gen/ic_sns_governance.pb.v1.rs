@@ -47,7 +47,7 @@ pub struct NeuronIds {
     pub neuron_ids: ::prost::alloc::vec::Vec<NeuronId>,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
 #[self_describing]
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ProposalId {
@@ -366,6 +366,27 @@ pub struct Motion {
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }
+/// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ChunkedCanisterWasm {
+    /// Obligatory check sum of the overall WASM to be reassembled from chunks.
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// Obligatory; indicates which canister stores the WASM chunks.
+    #[prost(message, optional, tag = "2")]
+    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+    /// one chunk.
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(
@@ -395,6 +416,10 @@ pub struct UpgradeSnsControlledCanister {
         tag = "4"
     )]
     pub mode: ::core::option::Option<i32>,
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    #[prost(message, optional, tag = "5")]
+    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -612,6 +637,53 @@ pub struct ManageDappCanisterSettings {
     pub log_visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "8")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
+}
+/// Unlike `Governance.Version`, this message has optional fields and is the recommended one
+/// to use in APIs that can evolve. For example, the SNS Governance could eventually support
+/// a shorthand notation for SNS versions, enabling clients to specify SNS versions without having
+/// to set each individual SNS framework canister's WASM hash.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SnsVersion {
+    /// The hash of the Governance canister WASM.
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub governance_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Swap canister WASM.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub swap_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Root canister WASM.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub root_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Index canister WASM.
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub index_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Ledger canister WASM.
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub ledger_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Ledger Archive canister WASM.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub archive_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceSnsTargetVersion {
+    /// If not specified, the target will advance to the latest SNS version known to this SNS.
+    #[prost(message, optional, tag = "1")]
+    pub new_target: ::core::option::Option<SnsVersion>,
 }
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -641,7 +713,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -704,7 +776,7 @@ pub mod proposal {
         RemoveGenericNervousSystemFunction(u64),
         /// Execute a method outside the SNS canisters.
         ///
-        /// Id = \[1000-u64::MAX\].
+        /// Ids \in \[1000, u64::MAX\].
         #[prost(message, tag = "10")]
         ExecuteGenericNervousSystemFunction(super::ExecuteGenericNervousSystemFunction),
         /// Execute an upgrade to next version on the blessed SNS upgrade path.
@@ -714,7 +786,7 @@ pub mod proposal {
         UpgradeSnsToNextVersion(super::UpgradeSnsToNextVersion),
         /// Modify values of SnsMetadata.
         ///
-        /// Id = 8
+        /// Id = 8.
         #[prost(message, tag = "12")]
         ManageSnsMetadata(super::ManageSnsMetadata),
         /// Transfer SNS treasury funds (ICP or SNS token) to an account.
@@ -738,7 +810,7 @@ pub mod proposal {
         MintSnsTokens(super::MintSnsTokens),
         /// Change some parameters on the ledger.
         ///
-        /// Id = 13
+        /// Id = 13.
         #[prost(message, tag = "17")]
         ManageLedgerParameters(super::ManageLedgerParameters),
         /// Change canister settings for one or more dapp canister(s).
@@ -746,6 +818,11 @@ pub mod proposal {
         /// Id = 14.
         #[prost(message, tag = "18")]
         ManageDappCanisterSettings(super::ManageDappCanisterSettings),
+        /// Advance SNS target version.
+        ///
+        /// Id = 15.
+        #[prost(message, tag = "19")]
+        AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -977,6 +1054,8 @@ pub struct ProposalData {
     /// Id 8 - ManageSnsMetadata proposals.
     /// Id 9 - TransferSnsTreasuryFunds proposals.
     /// Id 13 - ManageLedgerParameters proposals.
+    /// Id 14 - ManageDappCanisterSettings proposals.
+    /// Id 15 - AdvanceSnsTargetVersion proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -1100,7 +1179,7 @@ pub struct ProposalData {
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
-    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23")]
+    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
     pub action_auxiliary: ::core::option::Option<proposal_data::ActionAuxiliary>,
 }
 /// Nested message and enum types in `ProposalData`.
@@ -1129,6 +1208,20 @@ pub mod proposal_data {
         #[prost(message, optional, tag = "1")]
         pub valuation: ::core::option::Option<super::Valuation>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct AdvanceSnsTargetVersionActionAuxiliary {
+        /// Corresponds to the Some(target_version) from an AdvanceSnsTargetVersion proposal, or
+        /// to the last SNS version known to this SNS at the time of AdvanceSnsTargetVersion creation.
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<super::SnsVersion>,
+    }
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[derive(
@@ -1144,6 +1237,8 @@ pub mod proposal_data {
         TransferSnsTreasuryFunds(TransferSnsTreasuryFundsActionAuxiliary),
         #[prost(message, tag = "23")]
         MintSnsTokens(MintSnsTokensActionAuxiliary),
+        #[prost(message, tag = "24")]
+        AdvanceSnsTargetVersion(AdvanceSnsTargetVersionActionAuxiliary),
     }
 }
 #[derive(
@@ -1378,6 +1473,10 @@ pub struct NervousSystemParameters {
     /// (enabled) agree.
     #[prost(bool, optional, tag = "22")]
     pub maturity_modulation_disabled: ::core::option::Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    #[prost(bool, optional, tag = "23")]
+    pub automatically_advance_target_version: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -1636,7 +1735,7 @@ pub struct Governance {
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
-    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    pub pending_version: ::core::option::Option<governance::PendingVersion>,
     #[prost(message, optional, tag = "30")]
     pub target_version: ::core::option::Option<governance::Version>,
     /// True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
@@ -1835,6 +1934,9 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        Eq,
+        std::hash::Hash,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1869,6 +1971,7 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1886,7 +1989,7 @@ pub mod governance {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct UpgradeInProgress {
+    pub struct PendingVersion {
         /// Version to  be upgraded to
         #[prost(message, optional, tag = "1")]
         pub target_version: ::core::option::Option<Version>,
@@ -1898,8 +2001,8 @@ pub mod governance {
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
         /// The proposal that initiated this upgrade
-        #[prost(uint64, tag = "4")]
-        pub proposal_id: u64,
+        #[prost(uint64, optional, tag = "4")]
+        pub proposal_id: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
@@ -2065,6 +2168,7 @@ pub struct GetSnsInitializationParametersResponse {
 pub struct GetRunningSnsVersionRequest {}
 /// Response with the SNS's currently running version and any upgrades
 /// that are in progress.
+/// GetUpgradeJournal is a superior API to this one that should
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2079,7 +2183,35 @@ pub struct GetRunningSnsVersionResponse {
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// The upgrade in progress, if any.
     #[prost(message, optional, tag = "2")]
-    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    pub pending_version:
+        ::core::option::Option<get_running_sns_version_response::UpgradeInProgress>,
+}
+/// Nested message and enum types in `GetRunningSnsVersionResponse`.
+pub mod get_running_sns_version_response {
+    /// The same as PendingVersion (stored in the governance proto). They are separated to make it easy to change one without changing the other.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeInProgress {
+        /// Version to  be upgraded to
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<super::governance::Version>,
+        /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+        #[prost(uint64, tag = "2")]
+        pub mark_failed_at_seconds: u64,
+        /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+        /// allowing us to fail in case we otherwise have gotten stuck.
+        #[prost(uint64, tag = "3")]
+        pub checking_upgrade_lock: u64,
+        /// The proposal that initiated this upgrade
+        #[prost(uint64, tag = "4")]
+        pub proposal_id: u64,
+    }
 }
 /// Request to fail an upgrade proposal that is Adopted but not Executed or
 /// Failed if it is past the time when it should have been marked as failed.
@@ -2112,6 +2244,7 @@ pub struct FailStuckUpgradeInProgressResponse {}
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     Copy,
     PartialEq,
@@ -3336,11 +3469,34 @@ pub struct AdvanceTargetVersionRequest {
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionResponse {}
+/// A test-only API that refreshes the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsRequest {}
+/// The response to a request to refresh the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsResponse {}
 /// Represents a single entry in the upgrade journal.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -3348,7 +3504,7 @@ pub struct AdvanceTargetVersionResponse {}
 pub struct UpgradeJournalEntry {
     #[prost(uint64, optional, tag = "6")]
     pub timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 7, 2, 3, 4, 5")]
     pub event: ::core::option::Option<upgrade_journal_entry::Event>,
 }
 /// Nested message and enum types in `UpgradeJournalEntry`.
@@ -3357,6 +3513,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3369,6 +3526,22 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeStepsReset {
+        #[prost(string, optional, tag = "1")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(message, optional, tag = "2")]
+        pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3378,11 +3551,14 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(bool, optional, tag = "3")]
+        pub is_advanced_automatically: ::core::option::Option<bool>,
     }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3392,11 +3568,14 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(string, optional, tag = "3")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
     }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3415,6 +3594,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             Copy,
             PartialEq,
@@ -3431,6 +3611,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3447,6 +3628,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -3459,6 +3641,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             PartialEq,
             ::prost::Oneof,
@@ -3479,6 +3662,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Oneof,
@@ -3486,6 +3670,8 @@ pub mod upgrade_journal_entry {
     pub enum Event {
         #[prost(message, tag = "1")]
         UpgradeStepsRefreshed(UpgradeStepsRefreshed),
+        #[prost(message, tag = "7")]
+        UpgradeStepsReset(UpgradeStepsReset),
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
@@ -3501,6 +3687,7 @@ pub mod upgrade_journal_entry {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -3521,7 +3708,16 @@ pub struct UpgradeJournal {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetUpgradeJournalRequest {}
+pub struct GetUpgradeJournalRequest {
+    /// Maximum number of journal entries to return.
+    /// If not specified, defaults to 100. Values larger than 100 will be capped at 100.
+    #[prost(uint64, optional, tag = "1")]
+    pub limit: ::core::option::Option<u64>,
+    /// The starting index from which to return entries, counting from the oldest entry (0).
+    /// If not specified, return the most recent entries.
+    #[prost(uint64, optional, tag = "2")]
+    pub offset: ::core::option::Option<u64>,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3540,8 +3736,12 @@ pub struct GetUpgradeJournalResponse {
     /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
+    #[prost(message, optional, tag = "5")]
+    pub deployed_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
+    #[prost(uint64, optional, tag = "6")]
+    pub upgrade_journal_entry_count: ::core::option::Option<u64>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is

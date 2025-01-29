@@ -8,8 +8,9 @@ use crate::invariants::{
 };
 use ic_base_types::{subnet_id_try_from_protobuf, NodeId, SubnetId};
 use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
-use ic_protobuf::registry::crypto::v1::{MasterPublicKeyId, PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+use ic_protobuf::types::v1::MasterPublicKeyId;
 use ic_registry_keys::{
     get_master_public_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_subnet_record_key,

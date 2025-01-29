@@ -1,3 +1,4 @@
+use super::utils::memo_bytebuf_to_u64;
 use crate::common::utils::get_custom_agent;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
@@ -6,7 +7,7 @@ use crate::common::{
     utils::test_identity,
 };
 use candid::{Encode, Principal};
-use ic_agent::Identity;
+use ic_agent::{Agent, Identity};
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icp_rosetta_runner::RosettaOptions;
@@ -34,15 +35,12 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use pocket_ic::CanisterSettings;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
-
-use super::utils::memo_bytebuf_to_u64;
 
 pub struct RosettaTestingEnvironment {
     pub pocket_ic: PocketIc,
@@ -154,6 +152,10 @@ impl RosettaTestingEnvironment {
         )
         .await;
         self
+    }
+
+    pub async fn get_test_agent(&self) -> Agent {
+        get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await
     }
 }
 

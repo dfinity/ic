@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:pem",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:sha2",
     "@crate_index//:simple_asn1",
     "@crate_index//:zeroize",
 ]
@@ -20,9 +21,9 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:bip32",
+    "@crate_index//:bitcoin_0_28",
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
-    "@crate_index//:sha2",
     "@crate_index//:wycheproof",
 ]
 

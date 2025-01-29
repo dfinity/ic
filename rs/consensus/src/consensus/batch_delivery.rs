@@ -135,7 +135,8 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let idkg_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
+        // TODO(CON-1419): Add vetKD keys to this map as well
+        let chain_key_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
             Ok(keys) => keys,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,
@@ -227,7 +228,7 @@ pub fn deliver_batches(
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
             registry_version: block.context.registry_version,
             time: block.context.time,
@@ -308,7 +309,7 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
     for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
         let add_transcript = |transcript_results: &mut TranscriptResults| {
             let value = Some(transcript.clone());
-            match id.dkg_tag {
+            match &id.dkg_tag {
                 NiDkgTag::LowThreshold => {
                     if transcript_results.low_threshold.is_some() {
                         error!(
@@ -326,6 +327,15 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
                         );
                     }
                     transcript_results.high_threshold = value;
+                }
+                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                    /////////////////////////////////////
+                    // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
+                    /////////////////////////////////////
+                    error!(
+                        log,
+                        "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
+                    );
                 }
             }
         };

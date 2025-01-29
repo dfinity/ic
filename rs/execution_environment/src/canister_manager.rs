@@ -16,7 +16,6 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::{
     execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
 };
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -35,6 +34,7 @@ use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, CanisterSnapshotError},
     canister_state::{
         execution_state::Memory,
+        execution_state::WasmExecutionMode,
         system_state::{
             wasm_chunk_store::{self, WasmChunkStore},
             CyclesUseCase, ReservationError,
@@ -121,7 +121,8 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
-    pub(crate) max_canister_memory_size: NumBytes,
+    pub(crate) max_canister_memory_size_wasm32: NumBytes,
+    pub(crate) max_canister_memory_size_wasm64: NumBytes,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
@@ -141,7 +142,8 @@ impl CanisterMgrConfig {
         own_subnet_type: SubnetType,
         max_controllers: usize,
         compute_capacity: usize,
-        max_canister_memory_size: NumBytes,
+        max_canister_memory_size_wasm32: NumBytes,
+        max_canister_memory_size_wasm64: NumBytes,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
         rate_limiting_of_heap_delta: FlagStatus,
@@ -160,7 +162,8 @@ impl CanisterMgrConfig {
             max_controllers,
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
-            max_canister_memory_size,
+            max_canister_memory_size_wasm32,
+            max_canister_memory_size_wasm64,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
@@ -465,8 +468,11 @@ impl CanisterManager {
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
@@ -480,7 +486,8 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
-            | Ok(Ic00Method::NodeMetricsHistory) => Err(UserError::new(
+            | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetInfo) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
@@ -908,7 +915,7 @@ impl CanisterManager {
                 return false;
             }
         };
-        module.memories.first().map_or(false, |m| m.memory64)
+        module.memories.first().is_some_and(|m| m.memory64)
     }
 
     /// Installs code to a canister.
@@ -959,7 +966,9 @@ impl CanisterManager {
             };
         }
 
-        let is_wasm64_execution = self.check_if_wasm64_module(context.wasm_source.clone());
+        let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
+            self.check_if_wasm64_module(context.wasm_source.clone()),
+        );
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -976,7 +985,7 @@ impl CanisterManager {
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
                     reveal_top_up,
-                    is_wasm64_execution.into(),
+                    wasm_execution_mode,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -1008,7 +1017,7 @@ impl CanisterManager {
             sender: context.sender(),
             canister_id: canister.canister_id(),
             log_dirty_pages,
-            wasm_execution_mode: is_wasm64_execution.into(),
+            wasm_execution_mode,
         };
 
         let round = RoundContext {
@@ -1091,7 +1100,7 @@ impl CanisterManager {
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
     ) -> StopCanisterResult {
-        let mut canister = match state.take_canister_state(&canister_id) {
+        let canister = match state.canister_state_mut(&canister_id) {
             None => {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
@@ -1101,7 +1110,7 @@ impl CanisterManager {
             Some(canister) => canister,
         };
 
-        let result = match validate_controller(&canister, stop_context.sender()) {
+        let result = match validate_controller(canister, stop_context.sender()) {
             Err(err) => StopCanisterResult::Failure {
                 error: err,
                 cycles_to_return: stop_context.take_cycles(),
@@ -1115,7 +1124,6 @@ impl CanisterManager {
             },
         };
         canister.system_state.canister_version += 1;
-        state.put_canister_state(canister);
         result
     }
 
@@ -1171,6 +1179,7 @@ impl CanisterManager {
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
+        let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1208,6 +1217,7 @@ impl CanisterManager {
                 .total_query_stats
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
+            wasm_memory_threshold.get(),
         ))
     }
 
@@ -1703,7 +1713,7 @@ impl CanisterManager {
                         } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                             bytes: chunk_bytes,
                             available,
-                            threshold: requested,
+                            required: requested,
                         },
                         ReservationError::ReservedLimitExceed { requested, limit } => {
                             CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -1909,7 +1919,7 @@ impl CanisterManager {
                     Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: new_snapshot_increase,
                         available: canister.system_state.balance(),
-                        threshold,
+                        required: threshold + reservation_cycles,
                     }),
                     NumInstructions::new(0),
                 );
@@ -1943,7 +1953,7 @@ impl CanisterManager {
                     } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: new_snapshot_increase,
                         available,
-                        threshold: requested,
+                        required: requested,
                     },
                     ReservationError::ReservedLimitExceed { requested, limit } => {
                         CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
@@ -2185,14 +2195,19 @@ impl CanisterManager {
             .certified_data
             .clone_from(snapshot.certified_data());
 
-        let is_wasm64_execution = new_execution_state
+        let wasm_execution_mode = new_execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |exec_state| {
+                exec_state.wasm_execution_mode
+            });
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
-        let memory_allocation_given = canister.memory_limit(self.config.max_canister_memory_size);
+
+        let memory_allocation_given =
+            canister.memory_limit(self.get_max_canister_memory_size(wasm_execution_mode));
+
         if new_memory_usage > memory_allocation_given {
             return (
                 Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
@@ -2211,7 +2226,7 @@ impl CanisterManager {
             subnet_size,
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
         ) {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
@@ -2333,6 +2348,18 @@ impl CanisterManager {
         );
         Ok(())
     }
+
+    /// Depending on the canister architecture (Wasm32 or Wasm64), returns the
+    /// maximum memory size that can be allocated by a canister.
+    pub(crate) fn get_max_canister_memory_size(
+        &self,
+        wasm_execution_mode: WasmExecutionMode,
+    ) -> NumBytes {
+        match wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
+            WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -2398,7 +2425,7 @@ pub(crate) enum CanisterManagerError {
     InsufficientCyclesInMemoryGrow {
         bytes: NumBytes,
         available: Cycles,
-        threshold: Cycles,
+        required: Cycles,
     },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
@@ -2826,7 +2853,7 @@ impl From<CanisterManagerError> for UserError {
                 )
 
             }
-            InsufficientCyclesInMemoryGrow { bytes, available, threshold} =>
+            InsufficientCyclesInMemoryGrow { bytes, available, required} =>
             {
                 Self::new(
                     ErrorCode::InsufficientCyclesInMemoryGrow,
@@ -2834,7 +2861,7 @@ impl From<CanisterManagerError> for UserError {
                         "Canister cannot grow memory by {} bytes due to insufficient cycles. \
                          At least {} additional cycles are required.{additional_help}",
                          bytes,
-                         threshold - available)
+                         required - available)
                 )
             }
             ReservedCyclesLimitExceededInMemoryAllocation { memory_allocation, requested, limit} =>

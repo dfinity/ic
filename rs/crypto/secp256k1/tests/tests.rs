@@ -147,6 +147,39 @@ fn should_accept_ecdsa_signatures_that_we_generate() {
 }
 
 #[test]
+fn bitcoin_library_accepts_our_bip341_signatures() {
+    use bitcoin::{
+        hashes::hex::FromHex,
+        schnorr::TapTweak,
+        secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey},
+        util::taproot::TapBranchHash,
+    };
+
+    let secp256k1 = Secp256k1::new();
+
+    let mut rng = test_rng();
+
+    for _trial in 0..1024 {
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        let msg = rng.gen::<[u8; 32]>();
+        let ttr = rng.gen::<[u8; 32]>();
+
+        let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
+
+        let pk = XOnlyPublicKey::from_slice(&sk.public_key().serialize_sec1(true)[1..]).unwrap();
+
+        let tbh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
+
+        let tweaked_key = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_inner();
+
+        let msg = Message::from_slice(&msg).unwrap();
+        let sig = Signature::from_slice(&sig).unwrap();
+        assert!(sig.verify(&msg, &tweaked_key).is_ok());
+    }
+}
+
+#[test]
 fn should_accept_bip340_signatures_that_we_generate() {
     use rand::RngCore;
 
@@ -159,9 +192,32 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let mut msg = vec![0u8; len];
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
 
+        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
         assert!(pk.verify_bip340_signature(&msg, &sig));
+    }
+}
+
+#[test]
+fn should_accept_bip341_signatures_that_we_generate() {
+    use rand::RngCore;
+
+    let mut rng = test_rng();
+
+    for len in 0..100 {
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        let pk = sk.public_key();
+
+        let mut msg = vec![0u8; len];
+        rng.fill_bytes(&mut msg);
+
+        for ttr_len in [0, 32] {
+            let mut ttr = vec![0u8; ttr_len];
+            rng.fill_bytes(&mut ttr);
+            let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
+            assert!(pk.verify_bip341_signature(&msg, &sig, &ttr));
+        }
     }
 }
 
@@ -577,5 +633,44 @@ mod try_recovery_from_digest {
 
         assert_eq!(recid.is_y_odd(), expected_v);
         assert!(!recid.is_x_reduced());
+    }
+}
+
+#[test]
+fn should_reject_secp256r1_private_key() {
+    let secp256r1 = "-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgltghITmEVNmrlBy+
+aujQhvgtQltTMa/DyGIMcmVX2QqhRANCAASgJ2vw0zWoiPFnCHigP0GXhWOUaVzH
+tz/anssmxkNaYFHKxkqYb8GWzZHcs6fgz6D13qrBrOguDHJJ0N8mKHet
+-----END PRIVATE KEY-----";
+
+    match PrivateKey::deserialize_pkcs8_pem(secp256r1) {
+        Ok(_) => panic!("Unexpectedly accepted a secp256r1 private key as secp256k1"),
+        Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
+            assert_eq!(
+                format!("{:?}", e),
+                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) })\""
+            );
+        }
+        Err(e) => panic!("Unexpected error {:?}", e),
+    }
+}
+
+#[test]
+fn should_reject_secp256r1_public_key() {
+    let secp256r1 = "-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcGClpkvFYrljOL+cYogpVpcn/Ueu
+Fuih1ILwOK+Hmr2Q5yPe4k0Kz2se3NM1eQeVaTl5BtwlTTc9IOcky4I7oQ==
+-----END PUBLIC KEY-----";
+
+    match PublicKey::deserialize_pem(secp256r1) {
+        Ok(_) => panic!("Unexpectedly accepted a secp256r1 public key as secp256k1"),
+        Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
+            assert_eq!(
+                format!("{:?}", e),
+                "\"OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) }\""
+            );
+        }
+        Err(e) => panic!("Unexpected error {:?}", e),
     }
 }

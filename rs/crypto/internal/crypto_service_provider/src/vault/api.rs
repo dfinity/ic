@@ -22,10 +22,11 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -186,31 +187,31 @@ impl NodeKeysErrors {
     }
 
     pub fn keys_in_registry_missing_locally(&self) -> bool {
-        self.node_signing_key_error.as_ref().map_or(false, |err| {
+        self.node_signing_key_error.as_ref().is_some_and(|err| {
             err.external_public_key_error.is_none()
                 && err.contains_local_public_or_secret_key_error()
         }) || self
             .committee_signing_key_error
             .as_ref()
-            .map_or(false, |err| {
+            .is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
-            || self.tls_certificate_error.as_ref().map_or(false, |err| {
+            || self.tls_certificate_error.as_ref().is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
             || self
                 .dkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
             || self
                 .idkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
@@ -386,6 +387,7 @@ pub trait CspVault:
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
     + ThresholdSchnorrSignerCspVault
+    + VetKdCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -404,6 +406,7 @@ impl<T> CspVault for T where
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
         + ThresholdSchnorrSignerCspVault
+        + VetKdCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
@@ -950,6 +953,29 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
     SecretSharesNotFound { commitment_string: String },
     /// On other internal errors than described above, e.g., invalid points.
     InternalError(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
+/// Operations of `CspVault` related to verifiably encrypted threshold key derivation (vetKD)
+/// (cf. [`ic_interfaces::crypto::VetKdProtocol`]).
+pub trait VetKdCspVault {
+    /// Generates an encrypted vetKD key share.
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        encryption_public_key: Vec<u8>,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
+}
+
+/// Vault-level error for vetKD key share creation.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum VetKdEncryptedKeyShareCreationVaultError {
+    /// If some arguments are invalid
+    InvalidArgument(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
 }

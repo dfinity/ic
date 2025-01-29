@@ -29,6 +29,7 @@ DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
+    "@crate_index//:bincode",
     "@crate_index//:maplit",
     "@crate_index//:strum",
     "@crate_index//:tempfile",

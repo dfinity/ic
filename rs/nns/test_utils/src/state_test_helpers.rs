@@ -411,7 +411,7 @@ pub fn set_up_universal_canister(machine: &StateMachine, cycles: Option<Cycles>)
         .install_wasm_in_mode(
             canister_id,
             CanisterInstallMode::Install,
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes(),
             vec![],
         )
         .unwrap();
@@ -989,7 +989,7 @@ pub fn nns_disburse_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    amount_e8s: u64,
+    amount_e8s: Option<u64>,
     to_account: Option<AccountIdentifier>,
 ) -> ManageNeuronResponse {
     manage_neuron(
@@ -997,7 +997,8 @@ pub fn nns_disburse_neuron(
         sender,
         neuron_id,
         ManageNeuronCommandRequest::Disburse(Disburse {
-            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            amount: amount_e8s
+                .map(|amount_e8s| manage_neuron::disburse::Amount { e8s: amount_e8s }),
             to_account: to_account.map(|account| account.into()),
         }),
     )
@@ -1572,6 +1573,38 @@ pub fn list_neurons(
     Decode!(&result, ListNeuronsResponse).unwrap()
 }
 
+/// This function is intended to ensure all neurons are paged through.  It
+/// recursively calls `list_neurons`.  This method will panic if more than 20 requests are made
+/// this method could be adjusted.
+pub fn list_all_neurons_and_combine_responses(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
+    assert_eq!(
+        request.page_number.unwrap_or_default(),
+        0,
+        "This method is intended to ensure all neurons \
+                        are paged through.  `page_number` should be None or Some(0)"
+    );
+
+    let mut response = list_neurons(state_machine, sender, request.clone());
+
+    let pages_needed = response.total_pages_available.unwrap();
+
+    for page in 1..=pages_needed {
+        let mut new_request = request.clone();
+        new_request.page_number = Some(page);
+        let mut new_response = list_neurons(state_machine, sender, new_request);
+        response.full_neurons.append(&mut new_response.full_neurons);
+        response
+            .neuron_infos
+            .extend(new_response.neuron_infos.into_iter());
+    }
+
+    response
+}
+
 pub fn list_neurons_by_principal(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1584,6 +1617,8 @@ pub fn list_neurons_by_principal(
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
         },
     )
 }

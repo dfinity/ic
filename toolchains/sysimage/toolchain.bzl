@@ -342,6 +342,12 @@ def _ext4_image_impl(ctx):
     if len(ctx.attr.strip_paths) > 0:
         args += ["--strip-paths"] + ctx.attr.strip_paths
 
+    if ctx.attr.extra_files.items():
+        args.append("--extra-files")
+    for input_target, install_target in ctx.attr.extra_files.items():
+        args.append(input_target.files.to_list()[0].path + ":" + install_target)
+        inputs += input_target.files.to_list()
+
     _run_with_icos_wrapper(
         ctx,
         executable = tool.path,
@@ -369,6 +375,10 @@ ext4_image = _icos_build_rule(
         ),
         "subdir": attr.string(
             default = "/",
+        ),
+        "extra_files": attr.label_keyed_string_dict(
+            allow_files = True,
+            mandatory = False,
         ),
         "_build_ext4_image": attr.label(
             allow_files = True,
@@ -502,6 +512,58 @@ disk_image = _icos_build_rule(
         "_dflate": attr.label(
             allow_files = True,
             default = "//rs/ic_os/build_tools/dflate",
+        ),
+    },
+)
+
+# I had to copy pasta this from above because I did not know how
+# to genericize the tools and the dflate argument being empty.
+# this really shouldn't be two separate things, but rather one
+# thing that produces the image and another that tars it.
+def _disk_image_no_tar_impl(ctx):
+    tool_file = ctx.files._build_disk_image_tool[0]
+
+    in_layout = ctx.files.layout[0]
+    partitions = ctx.files.partitions
+    out = ctx.actions.declare_file(ctx.label.name)
+    expanded_size = ctx.attr.expanded_size
+
+    partition_files = []
+    for p in partitions:
+        partition_files.append(p.path)
+
+    args = ["-p", in_layout.path, "-o", out.path]
+
+    if expanded_size:
+        args += ["-s", expanded_size]
+
+    args += partition_files
+
+    _run_with_icos_wrapper(
+        ctx,
+        executable = tool_file.path,
+        arguments = args,
+        inputs = [in_layout] + partitions,
+        outputs = [out],
+        tools = [tool_file],
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+disk_image_no_tar = _icos_build_rule(
+    implementation = _disk_image_no_tar_impl,
+    attrs = {
+        "layout": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "partitions": attr.label_list(
+            allow_files = True,
+        ),
+        "expanded_size": attr.string(),
+        "_build_disk_image_tool": attr.label(
+            allow_files = True,
+            default = ":build_disk_image.py",
         ),
     },
 )

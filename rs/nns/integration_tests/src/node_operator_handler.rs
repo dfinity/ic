@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use canister_test::Runtime;
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
@@ -19,14 +20,18 @@ use ic_nns_test_utils::{
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
-use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::{
+    do_add_node_operator::AddNodeOperatorPayload,
+    do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
+use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the
 /// Registry
@@ -91,8 +96,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         add_node_operator(&nns_canisters, &TEST_NEURON_1_OWNER_PRINCIPAL).await;
@@ -100,6 +105,16 @@ fn test_node_operator_records_can_be_added_and_removed() {
 
         // Assert that a Node Operator with no nodes can be removed
         let (payload, _) = prepare_add_node_payload(1);
+        // To fix occasional flakiness similar to this error:
+        // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
+        //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"
+        // we advance time on the state machine by 5 minutes.
+        // The theory is that resource contention is causing the system time to advance while the time
+        // set for the state machine does not, causing the key's time to be in the future.
+        if let Runtime::StateMachine(sm) = &runtime {
+            sm.advance_time(Duration::from_secs(300));
+            sm.tick();
+        };
         let _node_id: NodeId = nns_canisters
             .registry
             .update_from_sender(
@@ -111,11 +126,10 @@ fn test_node_operator_records_can_be_added_and_removed() {
             .await
             .unwrap();
 
-        let node_operator_id_1: Vec<u8> = (*TEST_NEURON_1_OWNER_PRINCIPAL.into_vec()).to_vec();
-        let node_operator_id_2: Vec<u8> = (*TEST_NEURON_2_OWNER_PRINCIPAL.into_vec()).to_vec();
-        let proposal_payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![node_operator_id_1, node_operator_id_2],
-        };
+        let proposal_payload = RemoveNodeOperatorsPayload::new(vec![
+            *TEST_NEURON_1_OWNER_PRINCIPAL,
+            *TEST_NEURON_2_OWNER_PRINCIPAL,
+        ]);
 
         let node_operator_record_key_1 =
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).into_bytes();
@@ -137,8 +151,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // Node Operator 1 is not removed because it has associated node records
@@ -200,8 +214,8 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
     assert_eq!(
         wait_for_final_state(&nns_canisters.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 
     // Assert that the executed proposal had the expected result

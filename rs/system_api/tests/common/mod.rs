@@ -22,7 +22,7 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
@@ -44,6 +44,7 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
         canister_memory_limit: NumBytes::new(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: 50,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode,
@@ -95,6 +96,15 @@ impl ApiTypeBuilder {
             SystemMethod::CanisterHeartbeat,
             UNIX_EPOCH,
             CallContextId::from(1),
+        )
+    }
+
+    pub fn build_replicated_query_api() -> ApiType {
+        ApiType::replicated_query(
+            UNIX_EPOCH,
+            vec![],
+            user_test_id(1).get(),
+            CallContextId::new(1),
         )
     }
 
@@ -174,6 +184,27 @@ impl ApiTypeBuilder {
             0.into(),
         )
     }
+
+    pub fn build_inspect_message_api() -> ApiType {
+        ApiType::inspect_message(
+            PrincipalId::new_anonymous(),
+            "test".to_string(),
+            vec![],
+            UNIX_EPOCH,
+        )
+    }
+
+    pub fn build_start_api() -> ApiType {
+        ApiType::start(UNIX_EPOCH)
+    }
+
+    pub fn build_init_api() -> ApiType {
+        ApiType::init(UNIX_EPOCH, vec![], user_test_id(1).get())
+    }
+
+    pub fn build_pre_upgrade_api() -> ApiType {
+        ApiType::pre_upgrade(UNIX_EPOCH, user_test_id(1).get())
+    }
 }
 
 pub fn get_system_api(
@@ -188,7 +219,8 @@ pub fn get_system_api(
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -222,7 +254,7 @@ pub fn get_system_state() -> SystemState {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     system_state

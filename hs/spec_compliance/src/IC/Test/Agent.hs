@@ -249,7 +249,6 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = 
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
-  putStrLn $ "Spec version claimed: " ++ T.unpack (status_api_version s)
 
   return
     AgentConfig
@@ -460,7 +459,7 @@ postCBOR' ep path gr = do
         }
   waitFor $ do
     res <- httpLbs request agentManager
-    if responseStatus res == tooManyRequests429
+    if responseStatus res == tooManyRequests429 || responseStatus res == badGateway502
       then return Nothing
       else return $ Just res
 
@@ -991,20 +990,17 @@ runGet a b = case Get.runGetOrFail (a <* done) b of
 -- * Status endpoint parsing
 
 data StatusResponse = StatusResponse
-  { status_api_version :: T.Text,
-    status_root_key :: Blob
-  }
+  {status_root_key :: Blob}
 
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
   asExceptT . record do
-    v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"
     _ <- optionalField text "impl_version"
     _ <- optionalField text "impl_revision"
     pk <- field blob "root_key"
     swallowAllFields -- More fields are explicitly allowed
-    return StatusResponse {status_api_version = v, status_root_key = pk}
+    return StatusResponse {status_root_key = pk}
 
 -- * Interacting with aaaaa-aa (via HTTP)
 

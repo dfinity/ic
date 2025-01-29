@@ -12,6 +12,7 @@ use ic_system_test_driver::driver::test_env_api::{
     IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
+use ic_system_test_driver::util::timeit;
 use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::path::PathBuf;
@@ -68,12 +69,19 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
     use ic_system_test_driver::util::block_on;
     use std::env;
 
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(16)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes: None,
+    };
+
     // If requested, deploy a Boundary Node concurrently with deploying the rest of the testnet:
     let mut deploy_bn_thread: Option<JoinHandle<BoundaryNodeWithVm>> = None;
     let cloned_env = env.clone();
     if deploy_bn_and_nns_canisters {
         deploy_bn_thread = Some(spawn(move || {
             BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+                .with_vm_resources(vm_resources)
                 .allocate_vm(&cloned_env)
                 .expect("Allocation of BoundaryNode failed.")
         }));
@@ -102,92 +110,122 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
             canister_http::start_httpbin_on_uvm(&cloned_env);
         }))
     }
-
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: None,
-        boot_image_minimal_size_gibibytes: None,
-    };
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .with_features(SubnetFeatures {
-                    http_requests,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(REPLICATION_FACTOR),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .with_features(SubnetFeatures {
-                    http_requests,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(REPLICATION_FACTOR),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    if deploy_bn_and_nns_canisters {
-        let nns_node = env
-            .topology_snapshot()
-            .root_subnet()
-            .nodes()
-            .next()
-            .unwrap();
-        NnsInstallationBuilder::new()
-            .install(&nns_node, &env)
-            .expect("NNS canisters not installed");
-        info!(env.logger(), "NNS canisters are installed.");
-
-        let allocated_bn = deploy_bn_thread.unwrap().join().unwrap();
-        allocated_bn
-            .for_ic(&env, "")
-            .use_real_certs_and_dns()
-            .start(&env)
-            .expect("failed to setup BoundaryNode VM");
-    }
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
+    let cloned_env = env.clone();
+    timeit(cloned_env.logger(), "deploying IC", move || {
+        InternetComputer::new()
+            .add_subnet(
+                Subnet::new(SubnetType::System)
+                    .with_default_vm_resources(vm_resources)
+                    .with_features(SubnetFeatures {
+                        http_requests,
+                        ..SubnetFeatures::default()
+                    })
+                    .add_nodes(REPLICATION_FACTOR),
+            )
+            .add_subnet(
+                Subnet::new(SubnetType::Application)
+                    .with_default_vm_resources(vm_resources)
+                    .with_features(SubnetFeatures {
+                        http_requests,
+                        ..SubnetFeatures::default()
+                    })
+                    .add_nodes(REPLICATION_FACTOR),
+            )
+            .setup_and_start(&cloned_env)
+            .expect("failed to setup IC under test");
     });
-
+    if deploy_bn_and_nns_canisters {
+        let cloned_env: TestEnv = env.clone();
+        timeit(
+            cloned_env.logger(),
+            "installing NNS & starting BN concurrently",
+            move || {
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        let nns_node = cloned_env
+                            .topology_snapshot()
+                            .root_subnet()
+                            .nodes()
+                            .next()
+                            .unwrap();
+                        NnsInstallationBuilder::new()
+                            .install(&nns_node, &cloned_env)
+                            .expect("NNS canisters not installed");
+                        info!(cloned_env.logger(), "NNS canisters are installed.");
+                    });
+                    s.spawn(|| {
+                        let allocated_bn = deploy_bn_thread.unwrap().join().unwrap();
+                        allocated_bn
+                            .for_ic(&cloned_env, "")
+                            .use_real_certs_and_dns()
+                            .start(&cloned_env)
+                            .expect("failed to setup BoundaryNode VM");
+                    });
+                });
+            },
+        );
+    }
+    let cloned_env = env.clone();
+    timeit(
+        cloned_env.logger(),
+        "waiting until all IC nodes are healthy",
+        move || {
+            cloned_env.topology_snapshot().subnets().for_each(|subnet| {
+                subnet
+                    .nodes()
+                    .for_each(|node| node.await_status_is_healthy().unwrap())
+            });
+        },
+    );
     if http_requests {
-        deploy_httpbin_uvm_thread.unwrap().join().unwrap();
+        timeit(env.logger(), "waiting on httpbin deployment", move || {
+            deploy_httpbin_uvm_thread.unwrap().join().unwrap();
+        });
+        let cloned_env = env.clone();
+        timeit(
+            cloned_env.logger(),
+            "waiting until httpbin responds to requests",
+            move || {
+                let log = cloned_env.logger();
+                ic_system_test_driver::retry_with_msg!(
+                    "check if httpbin is responding to requests",
+                    log.clone(),
+                    secs(300),
+                    secs(10),
+                    || {
+                        block_on(async {
+                            let client = reqwest::Client::builder()
+                                .use_rustls_tls()
+                                .https_only(true)
+                                .http1_only()
+                                .build()?;
 
-        let log = env.logger();
-        ic_system_test_driver::retry_with_msg!(
-            "check if httpbin is responding to requests",
-            log.clone(),
-            secs(300),
-            secs(10),
-            || {
-                block_on(async {
-                    let client = reqwest::Client::builder()
-                        .use_rustls_tls()
-                        .https_only(true)
-                        .http1_only()
-                        .build()?;
+                            let webserver_ipv6 = get_universal_vm_address(&cloned_env);
+                            let httpbin = format!("https://[{webserver_ipv6}]:20443");
 
-                    let webserver_ipv6 = get_universal_vm_address(&env);
-                    let httpbin = format!("https://[{webserver_ipv6}]:20443");
+                            let resp = client.get(httpbin).send().await?;
 
-                    let resp = client.get(httpbin).send().await?;
+                            let body = String::from_utf8(resp.bytes().await?.to_vec()).unwrap();
 
-                    let body = String::from_utf8(resp.bytes().await?.to_vec()).unwrap();
+                            info!(log, "response body from httpbin: {}", body);
 
-                    info!(log, "response body from httpbin: {}", body);
-
-                    Ok(())
-                })
-            }
-        )
-        .expect("Httpbin server should respond to incoming requests!");
+                            Ok(())
+                        })
+                    }
+                )
+                .expect("Httpbin server should respond to incoming requests!");
+            },
+        );
     }
     if deploy_bn_and_nns_canisters {
-        await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+        let cloned_env = env.clone();
+        timeit(
+            cloned_env.logger(),
+            "waiting until Boundary Node is healthy",
+            move || {
+                await_boundary_node_healthy(&cloned_env, BOUNDARY_NODE_NAME);
+            },
+        );
     }
 }
 
@@ -299,6 +337,9 @@ pub fn run_ic_ref_test(
 ) {
     let mut cmd = Command::new(ic_ref_test_path);
     cmd.env("IC_TEST_DATA", ic_test_data_path)
+        .arg("+RTS")
+        .arg(format!("-N{}", jobs))
+        .arg("-RTS")
         .arg(format!("-j{}", jobs))
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
@@ -365,7 +406,7 @@ pub fn with_endpoint(
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        32,
+        16,
     );
 }
 

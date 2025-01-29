@@ -1,8 +1,8 @@
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, BlockHash, Network,
+};
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_btc_adapter::config::IncomingSource;
-use ic_btc_adapter::start_server;
-use ic_btc_adapter::{config::Config, BlockchainState};
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
@@ -37,7 +37,6 @@ async fn start_client(uds_path: &Path) -> BitcoinAdapterClient {
 }
 
 fn prepare(
-    blockchain_state: &mut BlockchainState,
     processed_block_hashes: &mut Vec<BlockHash>,
     genesis: BlockHeader,
     forks_num: usize,
@@ -59,16 +58,6 @@ fn prepare(
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        blockchain_state.add_headers(&fork);
-        for header in fork {
-            let block = Block {
-                header,
-                txdata: vec![],
-            };
-            blockchain_state
-                .add_block(block)
-                .expect("Failed to add block");
-        }
     }
 }
 
@@ -78,18 +67,10 @@ fn e2e(criterion: &mut Criterion) {
         ..Default::default()
     };
 
-    let mut blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
     let mut processed_block_hashes = vec![];
-    let genesis = *blockchain_state.genesis();
+    let genesis = genesis_block(config.network).header;
 
-    prepare(
-        &mut blockchain_state,
-        &mut processed_block_hashes,
-        genesis,
-        4,
-        2000,
-        1975,
-    );
+    prepare(&mut processed_block_hashes, genesis, 4, 2000, 1975);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 

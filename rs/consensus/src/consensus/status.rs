@@ -52,7 +52,7 @@ pub fn get_status(
     Some(Status::Running)
 }
 
-fn should_halt(
+pub fn should_halt(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,

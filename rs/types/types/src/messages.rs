@@ -270,6 +270,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl AsRef<[u8]> for SignedRequestBytes {
@@ -763,27 +764,19 @@ mod tests {
 
     #[test]
     fn serialize_request_via_bincode() {
-        for metadata in [
-            None,
-            Some(RequestMetadata::new(
-                13,
-                Time::from_nanos_since_unix_epoch(17),
-            )),
-        ] {
-            let request = Request {
-                receiver: CanisterId::from(13),
-                sender: CanisterId::from(17),
-                sender_reply_callback: CallbackId::from(100),
-                payment: Cycles::from(100_000_000_u128),
-                method_name: "method".into(),
-                method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
-                metadata,
-                deadline: CoarseTime::from_secs_since_unix_epoch(169),
-            };
-            let bytes = bincode::serialize(&request).unwrap();
-            let request1 = bincode::deserialize::<Request>(&bytes);
-            assert_matches!(request1, Ok(request1) if request == request1);
-        }
+        let request = Request {
+            receiver: CanisterId::from(13),
+            sender: CanisterId::from(17),
+            sender_reply_callback: CallbackId::from(100),
+            payment: Cycles::from(100_000_000_u128),
+            method_name: "method".into(),
+            method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(17)),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
+        };
+        let bytes = bincode::serialize(&request).unwrap();
+        let request1 = bincode::deserialize::<Request>(&bytes);
+        assert_matches!(request1, Ok(request1) if request == request1);
     }
 
     #[test]

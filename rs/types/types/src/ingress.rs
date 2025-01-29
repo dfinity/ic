@@ -1,7 +1,7 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
+use crate::{CanisterId, MemoryDiskBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -107,8 +107,8 @@ impl IngressStatus {
     pub fn payload_bytes(&self) -> usize {
         match self {
             IngressStatus::Known { state, .. } => match state {
-                IngressState::Completed(result) => result.count_bytes(),
-                IngressState::Failed(error) => error.description().as_bytes().len(),
+                IngressState::Completed(result) => result.memory_bytes(),
+                IngressState::Failed(error) => error.description().len(),
                 _ => 0,
             },
             IngressStatus::Unknown => 0,
@@ -176,12 +176,16 @@ pub enum WasmResult {
     Reject(String),
 }
 
-impl CountBytes for WasmResult {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for WasmResult {
+    fn memory_bytes(&self) -> usize {
         match self {
             WasmResult::Reply(bytes) => bytes.len(),
-            WasmResult::Reject(string) => string.as_bytes().len(),
+            WasmResult::Reject(string) => string.len(),
         }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 

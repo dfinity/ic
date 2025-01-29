@@ -1,4 +1,5 @@
 use crate::{
+    checkpoint::validate_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -15,6 +16,8 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -37,6 +40,7 @@ use rand::prelude::SliceRandom;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -122,10 +126,11 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    #[cfg(debug_assertions)]
     ValidateReplicatedState {
-        checkpointed_state: Box<ReplicatedState>,
-        execution_state: Box<ReplicatedState>,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        reference_state: Arc<ReplicatedState>,
+        own_subnet_type: SubnetType,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -449,17 +454,28 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        #[cfg(debug_assertions)]
                         TipRequest::ValidateReplicatedState {
-                            checkpointed_state,
-                            execution_state,
+                            checkpoint_layout,
+                            reference_state,
+                            own_subnet_type,
+                            fd_factory,
                         } => {
-                            debug_assert!(
-                                checkpointed_state == execution_state,
-                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
-                                checkpointed_state,
-                                execution_state,
-                            );
+                            let _timer = request_timer(&metrics, "validate_replicated_state");
+                            if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
+                                &checkpoint_layout,
+                                Some(reference_state.deref()),
+                                own_subnet_type,
+                                Arc::clone(&fd_factory),
+                                &metrics.checkpoint_metrics,
+                                Some(&mut thread_pool),
+                            ) {
+                                fatal!(
+                                    &log,
+                                    "Checkpoint validation for {} has failed: {:#}",
+                                    checkpoint_layout.raw_path().display(),
+                                    err
+                                )
+                            }
                         }
 
                         TipRequest::Noop => {}
@@ -847,7 +863,7 @@ fn merge_to_base(
         merge_candidate.is_some()
     });
 
-    return rewritten.iter().any(|b| *b);
+    rewritten.iter().any(|b| *b)
 }
 
 fn serialize_to_tip(
@@ -982,7 +998,7 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
-                is_wasm64: execution_state.is_wasm64,
+                is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
             })
         }
         None => {

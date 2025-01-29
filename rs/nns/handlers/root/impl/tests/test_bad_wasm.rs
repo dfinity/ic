@@ -23,10 +23,10 @@ fn assert_is_running_universal_canister(status: &CanisterStatusResult) {
         .expect("This is not the universal canister: it has no wasm module.");
     assert_eq!(
         hash,
-        &UNIVERSAL_CANISTER_WASM_SHA256,
+        &UNIVERSAL_CANISTER_WASM_SHA256.to_vec(),
         "This is not the universal canister: its wasm hash is {} instead of {}.",
         hex::encode(hash),
-        hex::encode(UNIVERSAL_CANISTER_WASM_SHA256)
+        hex::encode(*UNIVERSAL_CANISTER_WASM_SHA256)
     );
     assert_eq!(status.status, CanisterStatusType::Running);
 }

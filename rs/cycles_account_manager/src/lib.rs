@@ -21,6 +21,7 @@ use ic_management_canister_types::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
 };
 use ic_types::{
@@ -61,24 +62,6 @@ impl std::fmt::Display for CyclesAccountManagerError {
             CyclesAccountManagerError::ContractViolation(msg) => {
                 write!(f, "Contract violation: {}", msg)
             }
-        }
-    }
-}
-
-/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
-/// can charge cycles accordingly.
-#[derive(Debug, Copy, Clone)]
-pub enum WasmExecutionMode {
-    Wasm32,
-    Wasm64,
-}
-
-impl From<bool> for WasmExecutionMode {
-    fn from(is_wasm64: bool) -> Self {
-        if is_wasm64 {
-            WasmExecutionMode::Wasm64
-        } else {
-            WasmExecutionMode::Wasm32
         }
     }
 }
@@ -668,6 +651,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for vet KD.
+    pub fn vetkd_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.vetkd_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -925,6 +913,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -1009,7 +998,7 @@ impl CyclesAccountManager {
         canister_id: CanisterId,
         cycles_balance: &mut Cycles,
         amount_to_mint: Cycles,
-    ) -> Result<(), CyclesAccountManagerError> {
+    ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
                 "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
@@ -1017,8 +1006,10 @@ impl CyclesAccountManager {
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
+            let before_balance = *cycles_balance;
             *cycles_balance += amount_to_mint;
-            Ok(())
+            // equal to amount_to_mint, except when the addition saturated
+            Ok(*cycles_balance - before_balance)
         }
     }
 

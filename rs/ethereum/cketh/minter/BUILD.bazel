@@ -22,6 +22,16 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
@@ -42,6 +52,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/secp256k1",
@@ -132,6 +143,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,

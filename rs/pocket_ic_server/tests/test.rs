@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
@@ -16,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -313,14 +313,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     }
     let client = builder.build().unwrap();
 
-    // create agent with custom transport
-    let transport = ReqwestTransport::create_with_client(
-        format!("{}://{}:{}", proto, localhost, port),
-        client.clone(),
-    )
-    .unwrap();
+    // create agent
     let agent = ic_agent::Agent::builder()
-        .with_transport(transport)
+        .with_url(format!("{}://{}:{}", proto, localhost, port))
+        .with_http_client(client.clone())
         .build()
         .unwrap();
     agent.fetch_root_key().await.unwrap();
@@ -632,12 +628,7 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
     let res = pic
         .query_call(canister_id, Principal::anonymous(), "read", vec![])
         .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            assert_eq!(u32::from_le_bytes(data.try_into().unwrap()), expected_ctr);
-        }
-        _ => panic!("Unexpected update call response"),
-    };
+    assert_eq!(u32::from_le_bytes(res.try_into().unwrap()), expected_ctr);
 }
 
 /// Tests that the PocketIC topology and canister states
@@ -687,6 +678,28 @@ fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<S
         // Delete the PocketIC instance.
         drop(pic);
     }
+}
+
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
 }
 
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
@@ -875,12 +888,9 @@ fn test_specified_id_call_v3() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let transport = ReqwestTransport::create(endpoint.clone())
-            .unwrap()
-            .with_use_call_v3_endpoint();
-
         let agent = ic_agent::Agent::builder()
-            .with_transport(transport)
+            .with_url(endpoint)
+            .with_http_client(reqwest::Client::new())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
@@ -1182,7 +1192,7 @@ fn test_unresponsive_gateway_backend() {
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
     assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
         .unwrap()
-        .contains("connection_failure: client error"));
+        .contains("connection_failure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
@@ -1211,7 +1221,8 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url))
+            || message.contains(&format!("An error happened during communication with the replica: error sending request for url ({}/api/v2/status)", backend_url)));
         }
     };
 }
@@ -1285,9 +1296,6 @@ fn registry_canister() {
 }
 
 #[test]
-#[should_panic(
-    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
-)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -1383,6 +1391,16 @@ fn auto_progress() {
     pic.auto_progress();
 
     loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(!stdout.contains("Stopping auto progress for instance 0."));
+        if stdout.contains("Starting auto progress for instance 0.") {
+            break;
+        }
+    }
+
+    loop {
         let t = pic.get_time();
         if t > t0 {
             break;
@@ -1390,18 +1408,73 @@ fn auto_progress() {
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    // Since the time increased by now, we know that the log should have been recorded.
-    let mut bytes = [0; 1000];
-    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
-    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(stdout.contains("Starting auto progress for instance 0."));
-    assert!(!stdout.contains("Stopping auto progress for instance 0."));
-
     // Stopping auto progress on the IC => a corresponding log should be made.
     pic.stop_progress();
 
-    let mut bytes = [0; 1000];
-    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
-    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(stdout.contains("Stopping auto progress for instance 0."));
+    loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        if stdout.contains("Stopping auto progress for instance 0.") {
+            break;
+        }
+    }
+}
+
+fn create_gateway(
+    server_url: Url,
+    port: Option<u16>,
+    forward_to: HttpGatewayBackend,
+) -> Result<u16, String> {
+    let endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port,
+        forward_to,
+        domains: None,
+        https_config: None,
+    };
+    let res = reqwest::blocking::Client::new()
+        .post(endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .expect("HTTP failure")
+        .json::<CreateHttpGatewayResponse>()
+        .expect("Could not parse response for create HTTP gateway request");
+    match res {
+        CreateHttpGatewayResponse::Created(info) => Ok(info.port),
+        CreateHttpGatewayResponse::Error { message } => Err(message),
+    }
+}
+
+#[test]
+fn test_gateway_address_in_use() {
+    let (server_url, _) = start_server_helper(None, None, false, false);
+
+    // create PocketIC instance
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // create an HTTP gateway at an arbitrary port
+    let port = create_gateway(
+        server_url.clone(),
+        None,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap();
+
+    // try to create another HTTP gateway at the same port
+    let err = create_gateway(
+        server_url,
+        Some(port),
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap_err();
+    assert!(err.contains(&format!(
+        "Failed to bind to address 127.0.0.1:{}: Address already in use",
+        port
+    )));
 }

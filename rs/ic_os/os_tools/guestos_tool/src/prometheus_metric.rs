@@ -8,7 +8,6 @@ use std::vec::Vec;
 /// Types and utils for writing prometheus metrics to textfile collector
 /// Unused for now:
 /// const DEFAULT_TEXTFILE_COLLECTOR_DIR: &str = "/run/node_exporter/collector_textfile/";
-
 #[allow(dead_code)]
 pub enum MetricType {
     Counter,

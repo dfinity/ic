@@ -1,4 +1,5 @@
 use crate::sns::Sns;
+use crate::CallCanisters;
 use anyhow::anyhow;
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -12,8 +13,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
-
-use crate::CallCanisters;
+pub mod requests;
 
 pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent: &C,
@@ -26,6 +26,9 @@ pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent.call(SNS_WASM_CANISTER_ID, request).await
 }
 
+/// Queries SNS-W to get the deployed SNSes. The returned SNSes are not guaranteed to be
+/// fully initialized (they may have ongoing or failed swaps). Archive canisters are not
+/// included in the response (as SNS-W doesn't know about them).
 pub async fn list_deployed_snses<C: CallCanisters>(agent: &C) -> Result<Vec<Sns>, C::Error> {
     let response = agent
         .call(SNS_WASM_CANISTER_ID, ListDeployedSnsesRequest {})

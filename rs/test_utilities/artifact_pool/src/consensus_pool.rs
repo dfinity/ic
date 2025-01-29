@@ -1,3 +1,4 @@
+use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -144,7 +145,7 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
     Box::new(move |cons_pool, parent, validation_context| {
-        ic_consensus::dkg::create_payload(
+        ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
@@ -187,7 +188,7 @@ impl TestConsensusPool {
                 ))
             }),
         ));
-        let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
+        let summary = ic_consensus_dkg::make_genesis_summary(&*registry_client, subnet_id, None);
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
@@ -255,8 +256,17 @@ impl TestConsensusPool {
         block.context.time += monotonic_block_increment;
 
         block.context.registry_version = registry_version;
+        let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
-        block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
+        let payload = match dkg_payload {
+            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg,
+                idkg,
+            }),
+        };
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
         let signer = self.get_block_maker_by_rank(block.height(), rank);
         BlockProposal::fake(block, signer)
     }

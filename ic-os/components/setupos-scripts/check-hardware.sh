@@ -32,8 +32,6 @@ GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
-CONFIG_DIR="/var/ic/config"
-
 function check_generation() {
     echo "* Checking Generation..."
 
@@ -249,6 +247,7 @@ function verify_disks() {
 
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
+
     if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
@@ -264,11 +263,16 @@ function verify_deployment_path() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    check_generation
-    verify_cpu
-    verify_memory
-    verify_disks
-    verify_deployment_path
+    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+        check_generation
+        verify_cpu
+        verify_memory
+        verify_disks
+        verify_deployment_path
+    else
+        echo "* Hardware checks skipped by request via kernel command line"
+        GENERATION=2
+    fi
     log_end "$(basename $0)"
 }
 

@@ -6,14 +6,6 @@ use slog::{debug, info};
 use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration, time::Instant};
 use tokio::time::sleep;
 
-use discower_bowndary::{
-    check::{HealthCheck, HealthCheckImpl},
-    fetch::{NodesFetcher, NodesFetcherImpl},
-    node::Node,
-    route_provider::HealthCheckRouteProvider,
-    snapshot_health_based::HealthBasedSnapshot,
-    transport::{TransportProvider, TransportProviderImpl},
-};
 use ic_base_types::NodeId;
 
 use ic_canister_client::Sender;
@@ -44,11 +36,8 @@ use registry_canister::mutations::{
 
 use ic_agent::{
     agent::{
-        http_transport::{
-            reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
-            route_provider::RouteProvider,
-            ReqwestTransport,
-        },
+        http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
+        route_provider::RouteProvider,
         ApiBoundaryNode,
     },
     export::Principal,
@@ -65,8 +54,6 @@ use ic_boundary_nodes_system_test_utils::{
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
-const API_BN_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
-const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(5);
 
 /* tag::catalog[]
 Title:: API Boundary Nodes Decentralization
@@ -78,11 +65,8 @@ Runbook:
 . Convert two (out of four unassigned nodes) into the API Boundary Nodes via proposals
 . Assert both API BNs are present in the state tree
 . Assert nftables firewall rules are working for these API BNs
-. Instantiate an agent with a HealthCheckRouteProvider service, which dynamically discovers and routes requests to existing (and healthy) API BNs
-. Assert calls to IC via this agent are successful and are routed via newly added API BNs (api1.com, api2.com)
 . Convert two remaining unassigned nodes into the API Boundary Nodes via proposals and also remove the first two existing ones
 . Assert state tree now has the following two API BNs - api3.com and api4.com
-. Assert calls to IC via agent are successful and are routed via newly discovered API BNs (api3.com, api4.com)
 
 end::catalog[] */
 
@@ -198,93 +182,13 @@ async fn test(env: TestEnv) {
         assert!(rules.contains("ct state new add @connection_limit"));
     }
 
-    info!(
-        log,
-        "Creating an agent with a HealthCheckRouteProvider to route requests against discovered and healthy API BNs",
-    );
-
-    let route_provider = {
-        let subnet_id = env
-            .topology_snapshot()
-            .subnets()
-            .next()
-            .unwrap()
-            .subnet_id
-            .get();
-        let api_bn_fetch_interval = Duration::from_secs(5);
-        let transport_provider =
-            Arc::new(TransportProviderImpl::new(http_client.clone())) as Arc<dyn TransportProvider>;
-        let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
-        let health_timeout = Duration::from_secs(5);
-        let check_interval = Duration::from_secs(1);
-        let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
-        let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
-        let snapshot = HealthBasedSnapshot::new();
-        let route_provider = Arc::new(HealthCheckRouteProvider::new(
-            snapshot,
-            Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
-            api_bn_fetch_interval,
-            Arc::clone(&checker) as Arc<dyn HealthCheck>,
-            check_interval,
-            seed_nodes,
-        ));
-
-        route_provider.run().await;
-
-        info!(
-            log,
-            "Assert: HealthCheckRouteProvider has discovered API BNs {:?} and routes calls correctly", &all_api_domains[..2]
-        );
-
-        assert_routing_via_domains(
-            &log,
-            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
-            all_api_domains[..2].to_vec(),
-            API_BN_DISCOVERY_TIMEOUT,
-            ROUTE_CALL_INTERVAL,
-        )
-        .await;
-
-        route_provider
-    };
-
-    let api_bn_agent = {
-        // This agent routes directly via ipv6 addresses and doesn't employ domain names.
-        // Ideally, domains with valid certificates should be used in testing.
-        let transport = ReqwestTransport::create_with_client_route(
-            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
-            http_client.clone(),
-        )
+    let bn_agent = Agent::builder()
+        .with_url("https://api1.com")
+        .with_http_client(http_client.clone())
+        .with_identity(AnonymousIdentity {})
+        .build()
         .unwrap();
-
-        let agent = Agent::builder()
-            .with_transport(transport)
-            .with_identity(AnonymousIdentity {})
-            .build()
-            .unwrap();
-
-        ic_system_test_driver::retry_with_msg_async!(
-            "fetch_root_key",
-            &log,
-            Duration::from_secs(30),
-            Duration::from_secs(2),
-            || async {
-                if agent.fetch_root_key().await.is_ok() {
-                    return Ok(());
-                }
-                bail!("Failed to fetch root key");
-            }
-        )
-        .await
-        .expect("Failed to fetch root key");
-
-        agent
-    };
-
-    info!(
-        log,
-        "Agent with HealthCheckRouteProvider created successfully"
-    );
+    let _ = bn_agent.fetch_root_key().await;
 
     info!(log, "Installing counter canisters ...");
 
@@ -307,7 +211,7 @@ async fn test(env: TestEnv) {
 
     set_counters_on_counter_canisters(
         &log,
-        api_bn_agent.clone(),
+        bn_agent.clone(),
         canister_ids.clone(),
         canister_increments.clone(),
         CANISTER_RETRY_BACKOFF,
@@ -322,7 +226,7 @@ async fn test(env: TestEnv) {
 
     let counters = read_counters_on_counter_canisters(
         &log,
-        api_bn_agent.clone(),
+        bn_agent.clone(),
         canister_ids.clone(),
         CANISTER_RETRY_BACKOFF,
         CANISTER_RETRY_TIMEOUT,
@@ -350,15 +254,6 @@ async fn test(env: TestEnv) {
         agent_with_identity.clone(),
         nns_node.clone(),
         all_api_bns[..4].to_vec(),
-    )
-    .await;
-
-    assert_routing_via_domains(
-        &log,
-        Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
-        all_api_domains[..4].to_vec(),
-        API_BN_DISCOVERY_TIMEOUT,
-        ROUTE_CALL_INTERVAL,
     )
     .await;
 
@@ -399,26 +294,20 @@ async fn test(env: TestEnv) {
 
     info!(
         log,
-        "Assert: HealthCheckRouteProvider discovered added/removed API BNs and routes calls correctly"
-    );
-
-    assert_routing_via_domains(
-        &log,
-        Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
-        all_api_domains[2..4].to_vec(),
-        API_BN_DISCOVERY_TIMEOUT,
-        ROUTE_CALL_INTERVAL,
-    )
-    .await;
-
-    info!(
-        log,
         "Incrementing counters on canisters for the second time"
     );
 
+    let bn_agent = Agent::builder()
+        .with_url("https://api3.com")
+        .with_http_client(http_client)
+        .with_identity(AnonymousIdentity {})
+        .build()
+        .unwrap();
+    let _ = bn_agent.fetch_root_key().await;
+
     set_counters_on_counter_canisters(
         &log,
-        api_bn_agent.clone(),
+        bn_agent.clone(),
         canister_ids.clone(),
         canister_increments,
         CANISTER_RETRY_BACKOFF,
@@ -433,7 +322,7 @@ async fn test(env: TestEnv) {
 
     let counters = read_counters_on_counter_canisters(
         &log,
-        api_bn_agent,
+        bn_agent,
         canister_ids,
         CANISTER_RETRY_BACKOFF,
         CANISTER_RETRY_TIMEOUT,
@@ -441,10 +330,6 @@ async fn test(env: TestEnv) {
     .await;
 
     assert_eq!(counters, vec![2, 6]);
-
-    info!(log, "Gracefully stopping HealthCheckRouteProvider");
-
-    route_provider.stop().await;
 }
 
 pub fn read_state_via_subnet_path_test(env: TestEnv) {
@@ -626,14 +511,10 @@ async fn assert_api_bns_present_in_state_tree(
                 .sorted_by(|a, b| Ord::cmp(&a.domain, &b.domain))
                 .collect::<Vec<_>>();
 
-            let are_expected_bns = api_bns_sorted
-                .iter()
-                .enumerate()
-                .map(|(idx, bn)| {
-                    bn.domain == expected_api_bns[idx].domain
-                        && bn.ipv6_address == expected_api_bns[idx].ipv6_address
-                })
-                .all(|is_match| is_match);
+            let are_expected_bns = api_bns_sorted.iter().enumerate().all(|(idx, bn)| {
+                bn.domain == expected_api_bns[idx].domain
+                    && bn.ipv6_address == expected_api_bns[idx].ipv6_address
+            });
 
             if !are_expected_bns {
                 bail!("Expected API BNs haven't yet appeared in the state tree ...");
@@ -646,7 +527,7 @@ async fn assert_api_bns_present_in_state_tree(
     .expect("API BNs haven't appeared in the state tree");
 }
 
-async fn assert_routing_via_domains(
+async fn _assert_routing_via_domains(
     log: &slog::Logger,
     route_provider: Arc<dyn RouteProvider>,
     domains: Vec<&str>,

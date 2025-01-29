@@ -72,7 +72,7 @@ pub fn benchmark(name: &str, i: usize, r: usize, repeat_code: &str) -> common::B
         Block::default()
             .repeat_n(r, &repeat_code)
             .loop_n(i)
-            .define_variables_and_functions(&repeat_code, wasm64_enabled)
+            .define_variables_and_functions(&repeat_code)
             .into_update_func()
             .into_test_module_wat(wasm64_enabled),
         (i * r) as u64,

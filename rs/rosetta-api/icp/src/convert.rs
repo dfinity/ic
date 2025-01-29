@@ -36,7 +36,6 @@ use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures
-
 pub fn to_rosetta_core_transaction(
     transaction_index: BlockIndex,
     transaction: Transaction,
@@ -291,6 +290,11 @@ pub fn operations_to_requests(
                     Some(p) => Some(principal_id_from_public_key_or_principal(p)?),
                 };
                 state.follow(account, pid, neuron_index, topic, followees)?;
+            }
+            OperationType::RefreshVotingPower => {
+                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.refresh_voting_power(account, neuron_index)?;
             }
         }
     }

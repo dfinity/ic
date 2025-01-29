@@ -22,6 +22,8 @@ mod tests;
 pub struct ThresholdSignerInternal {}
 
 impl ThresholdSignerInternal {
+    // TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
+    #[allow(clippy::result_large_err)]
     pub fn sign_threshold<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         threshold_sig_csp_client: &C,
@@ -70,6 +72,8 @@ fn sig_data_not_found_error(dkg_id: NiDkgId) -> ThresholdSigDataNotFoundError {
     ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id }
 }
 
+// TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
+#[allow(clippy::result_large_err)]
 fn threshold_sig_share_or_panic<H: Signable>(
     csp_signature: CspSignature,
 ) -> Result<ThresholdSigShareOf<H>, ThresholdSignError> {
@@ -441,12 +445,8 @@ impl ThresholdSigVerifierInternal {
         H: Signable,
     {
         let csp_signature = CspSignature::try_from(signature)?;
-        let transcript = initial_ni_dkg_transcript_from_registry(
-            registry,
-            subnet_id,
-            version,
-            NiDkgTag::HighThreshold,
-        )?;
+        let transcript =
+            initial_high_threshold_ni_dkg_transcript_from_registry(registry, subnet_id, version)?;
         let csp_pub_coeffs = CspPublicCoefficients::from(&transcript);
         threshold_sig_csp_client
             .threshold_verify_combined_signature(
@@ -459,20 +459,16 @@ impl ThresholdSigVerifierInternal {
     }
 }
 
-fn initial_ni_dkg_transcript_from_registry(
+fn initial_high_threshold_ni_dkg_transcript_from_registry(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-    dkg_tag: NiDkgTag,
 ) -> CryptoResult<NiDkgTranscript> {
     let maybe_transcripts = registry
         .get_initial_dkg_transcripts(subnet_id, registry_version)
         .map_err(CryptoError::RegistryClient)?;
     match maybe_transcripts.value {
-        Some(transcripts) => Ok(match dkg_tag {
-            NiDkgTag::LowThreshold => transcripts.low_threshold,
-            NiDkgTag::HighThreshold => transcripts.high_threshold,
-        }),
+        Some(transcripts) => Ok(transcripts.high_threshold),
         None => Err(CryptoError::DkgTranscriptNotFound {
             subnet_id,
             registry_version,

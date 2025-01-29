@@ -553,12 +553,8 @@ where
         });
 
         for peers_sender in self.active_assembles.values() {
-            peers_sender.send_if_modified(|set| {
-                nodes_leaving_topology
-                    .iter()
-                    .map(|n| set.remove(*n))
-                    .any(|r| r)
-            });
+            peers_sender
+                .send_if_modified(|set| nodes_leaving_topology.iter().any(|n| set.remove(*n)));
         }
         debug_assert!(
             self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
@@ -652,6 +648,7 @@ mod tests {
 
         fn new() -> Self {
             let (_, adverts_received) = tokio::sync::mpsc::channel(100);
+            #[allow(clippy::disallowed_methods)]
             let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
             let artifact_assembler =

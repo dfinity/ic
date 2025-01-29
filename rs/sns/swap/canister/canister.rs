@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -463,9 +466,6 @@ fn canister_post_upgrade() {
     });
 
     init_timers();
-
-    // TODO[NNS1-3386]: Remove once all Swaps are migrated to have these fields populated.
-    swap_mut().migrate_state();
 }
 
 /// Serve an HttpRequest made to this canister

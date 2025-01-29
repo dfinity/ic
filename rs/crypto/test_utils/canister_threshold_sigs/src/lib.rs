@@ -23,11 +23,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signed};
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
+};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -819,7 +821,7 @@ pub mod node {
         pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
@@ -827,7 +829,7 @@ pub mod node {
         pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
@@ -836,7 +838,7 @@ pub mod node {
             &'a self,
             minimum_size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -851,7 +853,7 @@ pub mod node {
             &'a self,
             size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 size <= self.len(),
                 "Requested a random subset with {} elements but there are only {} elements",
@@ -865,7 +867,7 @@ pub mod node {
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
@@ -876,7 +878,7 @@ pub mod node {
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
@@ -887,7 +889,7 @@ pub mod node {
             &'a self,
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_dealers(params)
                 .choose(rng)
                 .expect("empty dealers")
@@ -2885,10 +2887,8 @@ pub mod ecdsa {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;
@@ -2941,10 +2941,8 @@ pub mod schnorr {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdSchnorrSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;

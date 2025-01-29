@@ -63,9 +63,13 @@ async fn drun_main() -> Result<(), String> {
         // For testing enhanced orthogonal persistence in Motoko,
         // enable Wasm Memory64 and re-configure the main memory capacity.
         hypervisor_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        hypervisor_config.embedders_config.max_wasm_memory_size = MAIN_MEMORY_CAPACITY;
-        hypervisor_config.max_canister_memory_size =
-            hypervisor_config.embedders_config.max_wasm_memory_size
+        hypervisor_config
+            .embedders_config
+            .feature_flags
+            .best_effort_responses = FlagStatus::Enabled;
+        hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
+        hypervisor_config.max_canister_memory_size_wasm64 =
+            hypervisor_config.embedders_config.max_wasm64_memory_size
                 + hypervisor_config.embedders_config.max_stable_memory_size;
 
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {

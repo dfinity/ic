@@ -123,6 +123,8 @@ impl Orchestrator {
             1,
         );
 
+        UtilityCommand::notify_host("\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n", 3);
+
         let version = replica_version.clone();
         thread::spawn(move || loop {
             // Sleep early because IPv4 takes several minutes to configure
@@ -275,6 +277,7 @@ impl Orchestrator {
             replica_version.clone(),
             node_id,
             ic_binary_directory.clone(),
+            config.crypto.clone(),
             logger.clone(),
         );
 

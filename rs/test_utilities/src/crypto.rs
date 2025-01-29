@@ -8,7 +8,7 @@ use ic_interfaces::crypto::{
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -513,6 +513,51 @@ impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
         _inputs: &ThresholdSchnorrSigInputs,
         _signature: &ThresholdSchnorrCombinedSignature,
     ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+        Ok(())
+    }
+}
+
+use ic_types::crypto::vetkd::{
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
+    VetKdKeyVerificationError,
+};
+
+impl VetKdProtocol for CryptoReturningOk {
+    fn create_encrypted_key_share(
+        &self,
+        _args: VetKdArgs,
+    ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+        Ok(VetKdEncryptedKeyShare {
+            encrypted_key_share: VetKdEncryptedKeyShareContent(vec![]),
+            node_signature: vec![],
+        })
+    }
+
+    fn verify_encrypted_key_share(
+        &self,
+        _signer: NodeId,
+        _key_share: &VetKdEncryptedKeyShare,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyShareVerificationError> {
+        Ok(())
+    }
+
+    fn combine_encrypted_key_shares(
+        &self,
+        _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        _args: &VetKdArgs,
+    ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+        Ok(VetKdEncryptedKey {
+            encrypted_key: vec![],
+        })
+    }
+
+    fn verify_encrypted_key(
+        &self,
+        _key: &VetKdEncryptedKey,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyVerificationError> {
         Ok(())
     }
 }

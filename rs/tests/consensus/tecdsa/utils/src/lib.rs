@@ -460,7 +460,7 @@ pub async fn execute_update_subnet_proposal(
         logger,
         "Subnet Update proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn execute_create_subnet_proposal(
@@ -489,7 +489,7 @@ pub async fn execute_create_subnet_proposal(
         logger,
         "Subnet Creation proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn get_signature_with_logger(
@@ -577,6 +577,7 @@ pub async fn get_schnorr_signature_with_logger(
         message,
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: key_id.clone(),
+        aux: None,
     };
     info!(
         logger,
@@ -870,6 +871,7 @@ impl ChainSignatureRequest {
             message: vec![1; message_size],
             derivation_path: DerivationPath::new(Vec::new()),
             key_id: schnorr_key_id,
+            aux: None,
         };
         ForwardParams {
             receiver: Principal::management_canister(),

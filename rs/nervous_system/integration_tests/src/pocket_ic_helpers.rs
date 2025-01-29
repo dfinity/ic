@@ -1,9 +1,13 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
+use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
+use ic_nervous_system_agent::{
+    pocketic_impl::{PocketIcAgent, PocketIcCallError},
+    sns::Sns,
+    CallCanisters,
+};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -34,7 +38,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
@@ -57,15 +61,20 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
+use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{
-    nonblocking::PocketIc, CanisterSettings, ErrorCode, PocketIcBuilder, UserError, WasmResult,
+    management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
+    RejectResponse,
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, ops::Range, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
+
+/// How frequently the canister should attempt to refresh the cached_upgrade_steps
+pub(crate) const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 pub fn fmt_bytes(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, x| {
@@ -92,7 +101,7 @@ pub fn extract_sns_canister_version(
 }
 
 /// Creates a new PocketIc instance with NNS and SNS and application subnet
-pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
+pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> (PocketIc, SnsWasms) {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -100,16 +109,25 @@ pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
         .await;
 
     // Install the (mainnet) NNS canisters.
-    let with_mainnet_nns_canisters = true;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    {
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    }
 
     // Publish (mainnet) SNS Wasms to SNS-W.
-    let with_mainnet_sns_wasms = true;
-    add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)
-        .await
-        .unwrap();
+    let initial_sns_version = {
+        let with_mainnet_sns_canisters = true;
+        let deployed_sns_starting_info =
+            add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
+                .await
+                .unwrap();
+        deployed_sns_starting_info
+            .into_iter()
+            .map(|(canister_type, (_, wasm))| (canister_type, wasm))
+            .collect::<BTreeMap<_, _>>()
+    };
 
-    pocket_ic
+    (pocket_ic, initial_sns_version)
 }
 
 pub async fn install_canister(
@@ -169,6 +187,33 @@ pub async fn install_canister_with_controllers(
     );
 }
 
+pub async fn install_canister_on_subnet(
+    pocket_ic: &PocketIc,
+    subnet_id: Principal,
+    arg: Vec<u8>,
+    wasm: Option<Wasm>,
+    controllers: Vec<PrincipalId>,
+) -> CanisterId {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
+    let settings = Some(CanisterSettings {
+        controllers: Some(controllers),
+        ..Default::default()
+    });
+    let canister_id = pocket_ic
+        .create_canister_on_subnet(None, settings, subnet_id)
+        .await;
+    pocket_ic
+        .add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER)
+        .await;
+    if let Some(wasm) = wasm {
+        pocket_ic
+            .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
+            .await;
+    }
+    CanisterId::unchecked_from_principal(canister_id.into())
+}
+
 // TODO migrate this to nns::governance
 pub async fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
@@ -210,6 +255,18 @@ pub async fn propose_to_set_network_economics_and_wait(
 }
 
 pub type DeployedSnsStartingInfo = BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>;
+pub type SnsWasms = BTreeMap<SnsCanisterType, SnsWasm>;
+
+pub fn hash_sns_wasms(wasms: &SnsWasms) -> Version {
+    Version {
+        root_wasm_hash: wasms[&SnsCanisterType::Root].sha256_hash().to_vec(),
+        governance_wasm_hash: wasms[&SnsCanisterType::Governance].sha256_hash().to_vec(),
+        ledger_wasm_hash: wasms[&SnsCanisterType::Ledger].sha256_hash().to_vec(),
+        swap_wasm_hash: wasms[&SnsCanisterType::Swap].sha256_hash().to_vec(),
+        archive_wasm_hash: wasms[&SnsCanisterType::Archive].sha256_hash().to_vec(),
+        index_wasm_hash: wasms[&SnsCanisterType::Index].sha256_hash().to_vec(),
+    }
+}
 
 pub async fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
@@ -510,7 +567,7 @@ pub async fn install_sns_directly_with_snsw_versions(
         index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
     };
 
-    governance.deployed_version = Some(deployed_version);
+    governance.deployed_version = Some(deployed_version.into());
 
     install_canister(
         root_canister_id,
@@ -689,6 +746,75 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
+/// First, advances time by `expected_event_interval_seconds.start` seconds.
+/// Then, gradually advances time by up to the length of the interval `expected_event_interval_seconds`,
+/// observing the state using the provided `observe` function after each (evenly-timed) tick.
+/// - If the observed state matches the `expected` state, it returns `Ok(())`.
+/// - If the timeout is reached, it returns an error with the last observation.
+///
+/// The frequency of ticks is 1 per second for small intervals of `expected_event_interval_seconds`, and gradually
+/// lower for larger intervals to guarantee at most 500 ticks.
+///
+/// Example:
+/// ```
+/// let upgrade_journal_interval_seconds = 60 * 60;
+/// await_with_timeout(
+///     &pocket_ic,
+///     upgrade_journal_interval_seconds,
+///     |pocket_ic| async {
+///         sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+///             .await
+///             .upgrade_steps
+///             .unwrap()
+///             .versions
+///     },
+///     &vec![initial_sns_version.clone()],
+/// )
+/// .await
+/// .unwrap();
+/// ```
+pub async fn await_with_timeout<'a, T, F, Fut>(
+    pocket_ic: &'a PocketIc,
+    expected_event_interval_seconds: Range<u64>,
+    observe: F,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+    F: Fn(&'a PocketIc) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    assert!(expected_event_interval_seconds.start < expected_event_interval_seconds.end, "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end");
+    let timeout_seconds =
+        expected_event_interval_seconds.end - expected_event_interval_seconds.start;
+    pocket_ic
+        .advance_time(Duration::from_secs(expected_event_interval_seconds.start))
+        .await;
+
+    let mut counter = 0;
+    let num_ticks = timeout_seconds.min(500);
+    let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
+
+    loop {
+        pocket_ic
+            .advance_time(Duration::from_secs(seconds_per_tick))
+            .await;
+        pocket_ic.tick().await;
+
+        let observed = observe(pocket_ic).await;
+        if observed == *expected {
+            return Ok(());
+        }
+
+        counter += 1;
+        if counter > num_ticks {
+            return Err(format!(
+                "Observed state: {observed:?}\n!= Expected state {expected:?}\nafter {timeout_seconds} seconds ({counter} ticks of {seconds_per_tick}s each)",
+            ));
+        }
+    }
+}
+
 pub mod nns {
     use super::*;
     pub mod governance {
@@ -707,22 +833,15 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
-                        include_empty_neurons_readable_by_caller: None,
+                        include_empty_neurons_readable_by_caller: Some(true),
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None
                     })
                     .unwrap(),
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "list_neurons was rejected by the NNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, ListNeuronsResponse).unwrap()
         }
 
@@ -747,10 +866,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to (NNS) manage_neuron failed: {:#?}", s),
-            };
             Decode!(&result, ManageNeuronResponse).unwrap()
         }
 
@@ -789,7 +904,7 @@ pub mod nns {
             pocket_ic: &PocketIc,
             proposal_id: u64,
             sender: PrincipalId,
-        ) -> Result<ProposalInfo, UserError> {
+        ) -> Result<ProposalInfo, RejectResponse> {
             pocket_ic
                 .query_call(
                     GOVERNANCE_CANISTER_ID.into(),
@@ -798,17 +913,7 @@ pub mod nns {
                     Encode!(&proposal_id).unwrap(),
                 )
                 .await
-                .map(|result| match result {
-                    WasmResult::Reply(reply) => {
-                        Decode!(&reply, Option<ProposalInfo>).unwrap().unwrap()
-                    }
-                    WasmResult::Reject(reject) => {
-                        panic!(
-                            "get_proposal_info was rejected by the NNS governance canister: {:#?}",
-                            reject
-                        )
-                    }
-                })
+                .map(|result| Decode!(&result, Option<ProposalInfo>).unwrap().unwrap())
         }
 
         pub async fn wait_for_proposal_execution(
@@ -832,7 +937,7 @@ pub mod nns {
                         // more attempts to get the proposal info to find out if the proposal
                         // actually got executed.
                         let is_benign = [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
-                            .contains(&user_error.code);
+                            .contains(&user_error.error_code);
                         if is_benign {
                             continue;
                         } else {
@@ -880,12 +985,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
         }
 
@@ -932,16 +1031,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_network_economics_parameters was rejected by the NNS governance \
-                        canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, NetworkEconomics).unwrap()
         }
     }
@@ -950,24 +1039,29 @@ pub mod nns {
         use super::*;
         use icp_ledger::{Memo, TransferArgs};
 
-        pub async fn icrc1_transfer(
+        pub async fn icrc1_transfer_request(
             pocket_ic: &PocketIc,
             sender: PrincipalId,
             transfer_arg: TransferArg,
-        ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
                     LEDGER_CANISTER_ID.into(),
                     Principal::from(sender),
                     "icrc1_transfer",
                     Encode!(&transfer_arg).unwrap(),
                 )
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
-            };
+                .unwrap()
+        }
+
+        pub async fn icrc1_transfer(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> Result<Nat, TransferError> {
+            let call_id = icrc1_transfer_request(pocket_ic, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             Decode!(&result, Result<Nat, TransferError>).unwrap()
         }
 
@@ -984,10 +1078,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to account_balance failed: {:#?}", s),
-            };
             Decode!(&result, Tokens).unwrap()
         }
 
@@ -1023,7 +1113,7 @@ pub mod nns {
 
             // Assert result is ok.
             match result {
-                Ok(WasmResult::Reply(_reply)) => (), // Ok,
+                Ok(_reply) => (), // Ok,
                 _ => panic!("{:?}", result),
             }
         }
@@ -1031,8 +1121,10 @@ pub mod nns {
 
     pub mod sns_wasm {
         use super::*;
+        use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
         use ic_sns_wasm::pb::v1::{
             GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            SnsVersion,
         };
 
         pub async fn get_deployed_sns_by_proposal_id(
@@ -1051,12 +1143,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_deployed_sns_by_proposal_id failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetDeployedSnsByProposalIdResponse).unwrap()
         }
 
@@ -1071,10 +1157,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_wasm failed: {:#?}", s),
-            };
             Decode!(&result, GetWasmResponse)
                 .unwrap()
                 .wasm
@@ -1097,12 +1179,6 @@ pub mod nns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_latest_sns_version failed: {:#?}", s)
-                }
-            };
             let response = Decode!(&result, ListUpgradeStepsResponse).unwrap();
             let latest_version = response
                 .steps
@@ -1110,17 +1186,74 @@ pub mod nns {
                 .cloned()
                 .expect("No upgrade steps found")
                 .version
-                .expect("No version found")
-                .into();
+                .expect("No version found");
 
-            latest_version
+            let SnsVersion {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            } = latest_version;
+
+            Version {
+                root_wasm_hash,
+                governance_wasm_hash,
+                ledger_wasm_hash,
+                swap_wasm_hash,
+                archive_wasm_hash,
+                index_wasm_hash,
+            }
+        }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = version.get(&canister_type).unwrap();
+            let wasm = create_modified_sns_wasm(wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
+        }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_master_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = match canister_type {
+                SnsCanisterType::Root => build_root_sns_wasm(),
+                SnsCanisterType::Governance => build_governance_sns_wasm(),
+                SnsCanisterType::Ledger => build_ledger_sns_wasm(),
+                SnsCanisterType::Swap => build_swap_sns_wasm(),
+                SnsCanisterType::Index => build_index_ng_sns_wasm(),
+                SnsCanisterType::Unspecified => {
+                    panic!("Where did you get this canister type from?")
+                }
+                SnsCanisterType::Archive => build_archive_sns_wasm(),
+            };
+            let wasm = create_modified_sns_wasm(&wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
         }
     }
 }
 
 pub mod sns {
-    use ic_sns_root::pb::v1::ListSnsCanistersResponse;
-
     use super::*;
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1139,56 +1272,37 @@ pub mod sns {
 
     pub async fn try_upgrade_sns_to_next_version(
         pocket_ic: &PocketIc,
-        sns_root_canister_id: PrincipalId,
+        sns: &Sns,
         expected_type_to_change: SnsCanisterType,
     ) -> Result<(), SnsUpgradeError> {
-        let response = root::list_sns_canisters(pocket_ic, sns_root_canister_id).await;
-        let ListSnsCanistersResponse {
-            root: Some(sns_root_canister_id_1),
-            governance: Some(sns_governance_canister_id),
-            ledger: Some(sns_ledger_canister_id),
-            swap: Some(swap_canister_id),
-            index: Some(index_canister_id),
-            archives,
-            dapps: _,
-        } = response
-        else {
-            panic!("Cannot find some SNS canister IDs in {:#?}", response);
-        };
-
-        // Sanity check
-        assert_eq!(sns_root_canister_id_1, sns_root_canister_id);
+        // Ensure that we are working with knowledge of the latest archive canisters (if there are any).
+        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap().sns;
 
         let (canister_id, controller_id) = match expected_type_to_change {
-            SnsCanisterType::Root => (sns_root_canister_id, sns_governance_canister_id),
-            SnsCanisterType::Governance => (sns_governance_canister_id, sns_root_canister_id),
-            SnsCanisterType::Ledger => (sns_ledger_canister_id, sns_root_canister_id),
-            SnsCanisterType::Swap => (swap_canister_id, sns_root_canister_id),
+            SnsCanisterType::Root => (sns.root.canister_id, sns.governance.canister_id),
+            SnsCanisterType::Governance => (sns.governance.canister_id, sns.root.canister_id),
+            SnsCanisterType::Ledger => (sns.ledger.canister_id, sns.root.canister_id),
+            SnsCanisterType::Swap => (sns.swap.canister_id, sns.root.canister_id),
             SnsCanisterType::Archive => {
-                let archive_canister_id = archives.last().expect(
+                let archive = sns.archive.last().expect(
                     "Testing Archive canister upgrade requires some Archive canisters \
                         to be created for this SNS.",
                 );
-                (*archive_canister_id, sns_root_canister_id)
+                (archive.canister_id, sns.root.canister_id)
             }
-            SnsCanisterType::Index => (index_canister_id, sns_root_canister_id),
+            SnsCanisterType::Index => (sns.index.canister_id, sns.root.canister_id),
             SnsCanisterType::Unspecified => {
                 panic!("Unspecified canister type to upgrade.");
             }
         };
 
-        let pre_upgrade_running_version =
-            governance::get_running_sns_version(pocket_ic, sns_governance_canister_id)
-                .await
-                .deployed_version
-                .unwrap();
+        let pre_upgrade_version = sns.governance.version(pocket_ic).await;
+        let pre_upgrade_version = pre_upgrade_version.unwrap().deployed_version.unwrap();
 
         // Check that we get the same version from the management canister and from the SNS.
         let pre_upgrade_canister_version = {
-            let canister_version_from_sns_pov = extract_sns_canister_version(
-                pre_upgrade_running_version.clone(),
-                expected_type_to_change,
-            );
+            let canister_version_from_sns_pov =
+                extract_sns_canister_version(pre_upgrade_version.clone(), expected_type_to_change);
             let canister_version_from_ic00_pov = pocket_ic
                 .canister_status(canister_id.into(), Some(controller_id.into()))
                 .await
@@ -1208,7 +1322,7 @@ pub mod sns {
 
         governance::propose_to_upgrade_sns_to_next_version_and_wait(
             pocket_ic,
-            sns_governance_canister_id,
+            sns.governance.canister_id,
         )
         .await;
 
@@ -1217,11 +1331,8 @@ pub mod sns {
             pocket_ic.tick().await;
         }
 
-        let post_upgrade_version =
-            governance::get_running_sns_version(pocket_ic, sns_governance_canister_id)
-                .await
-                .deployed_version
-                .unwrap();
+        let post_upgrade_version = sns.governance.version(pocket_ic).await;
+        let post_upgrade_version = post_upgrade_version.unwrap().deployed_version.unwrap();
 
         // Check that we get the same version from the management canister and from the SNS.
         let post_upgrade_canister_version = {
@@ -1260,10 +1371,10 @@ pub mod sns {
 
     pub async fn upgrade_sns_to_next_version_and_assert_change(
         pocket_ic: &PocketIc,
-        sns_root_canister_id: PrincipalId,
+        sns: &Sns,
         expected_type_to_change: SnsCanisterType,
     ) {
-        try_upgrade_sns_to_next_version(pocket_ic, sns_root_canister_id, expected_type_to_change)
+        try_upgrade_sns_to_next_version(pocket_ic, sns, expected_type_to_change)
             .await
             .unwrap_or_else(|err| {
                 panic!("Upgrading {:?} failed: {:#?}", expected_type_to_change, err)
@@ -1272,48 +1383,44 @@ pub mod sns {
 
     pub mod governance {
         use super::*;
+        use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_sns_governance::pb::v1::{get_neuron_response, GetRunningSnsVersionResponse};
+        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
+        use ic_sns_governance_api::pb::v1::{
+            get_neuron_response,
+            neuron::DissolveState,
+            upgrade_journal_entry::{self, Event},
+            Neuron,
+        };
         use pocket_ic::ErrorCode;
+        use sns_pb::UpgradeSnsControlledCanister;
 
-        pub async fn get_mode(
-            pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
-        ) -> sns_pb::GetModeResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::anonymous(),
-                    "get_mode",
-                    Encode!(&sns_pb::GetMode {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
-            };
-            Decode!(&result, sns_pb::GetModeResponse).unwrap()
-        }
+        pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
+        pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
+            UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS + 10;
 
-        pub async fn get_running_sns_version(
-            pocket_ic: &PocketIc,
-            sns_governance_canister_id: PrincipalId,
-        ) -> GetRunningSnsVersionResponse {
-            let result = pocket_ic
-                .query_call(
-                    sns_governance_canister_id.into(),
-                    Principal::anonymous(),
-                    "get_running_sns_version",
-                    Encode!(&sns_pb::GetRunningSnsVersionRequest {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_running_sns_version failed: {:#?}", s),
-            };
-            Decode!(&result, GetRunningSnsVersionResponse).unwrap()
+        pub fn redact_human_readable(event: Event) -> Event {
+            match event {
+                Event::UpgradeOutcome(upgrade_outcome) => {
+                    Event::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: None,
+                        ..upgrade_outcome
+                    })
+                }
+                Event::UpgradeStepsReset(upgrade_steps_reset) => {
+                    Event::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: None,
+                        ..upgrade_steps_reset
+                    })
+                }
+                Event::TargetVersionReset(target_version_reset) => {
+                    Event::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
+                        human_readable: None,
+                        ..target_version_reset
+                    })
+                }
+                event => event,
+            }
         }
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
@@ -1325,24 +1432,20 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             command: sns_pb::manage_neuron::Command,
         ) -> sns_pb::ManageNeuronResponse {
-            let sub_account = neuron_id.subaccount().unwrap();
+            let subaccount = neuron_id.id.to_vec();
             let result = pocket_ic
                 .update_call(
                     canister_id.into(),
                     sender.into(),
                     "manage_neuron",
                     Encode!(&sns_pb::ManageNeuron {
-                        subaccount: sub_account.to_vec(),
+                        subaccount,
                         command: Some(command),
                     })
                     .unwrap(),
                 )
                 .await
                 .expect("Error calling manage_neuron");
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to (SNS) manage_neuron failed: {:#?}", s),
-            };
             Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
         }
 
@@ -1370,26 +1473,16 @@ pub mod sns {
             neuron_id: sns_pb::NeuronId,
             proposal: sns_pb::Proposal,
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-            let response = manage_neuron(
-                pocket_ic,
-                canister_id,
-                sender,
-                neuron_id,
-                sns_pb::manage_neuron::Command::MakeProposal(proposal),
-            )
-            .await;
-            use sns_pb::manage_neuron_response::Command;
-            let response = match response.command {
-                Some(Command::MakeProposal(response)) => Ok(response),
-                Some(Command::Error(err)) => Err(err),
-                _ => panic!("Proposal failed unexpectedly: {:#?}", response),
-            }?;
-            let proposal_id = response.proposal_id.unwrap_or_else(|| {
-                panic!(
-                    "First SNS proposal response did not contain a proposal_id: {:#?}",
-                    response
-                )
-            });
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+            let governance = GovernanceCanister::new(canister_id);
+            let proposal_id = governance
+                .submit_proposal(&agent, neuron_id, proposal)
+                .await
+                .map_err(|err| match err {
+                    SubmitProposalError::GovernanceError(e) => e,
+                    e => panic!("Unexpected error: {e}"),
+                })?;
+
             wait_for_proposal_execution(pocket_ic, canister_id, proposal_id).await
         }
 
@@ -1416,7 +1509,7 @@ pub mod sns {
                     Ok(proposal) => proposal,
                     Err(user_error) => {
                         if [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
-                            .contains(&user_error.code)
+                            .contains(&user_error.error_code)
                         {
                             continue;
                         } else {
@@ -1451,7 +1544,7 @@ pub mod sns {
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
             sender: PrincipalId,
-        ) -> Result<sns_pb::GetProposalResponse, UserError> {
+        ) -> Result<sns_pb::GetProposalResponse, RejectResponse> {
             pocket_ic
                 .query_call(
                     canister_id.into(),
@@ -1463,17 +1556,7 @@ pub mod sns {
                     .unwrap(),
                 )
                 .await
-                .map(|result| match result {
-                    WasmResult::Reply(reply) => {
-                        Decode!(&reply, sns_pb::GetProposalResponse).unwrap()
-                    }
-                    WasmResult::Reject(reject) => {
-                        panic!(
-                            "get_proposal was rejected by the SNS governance canister: {:#?}",
-                            reject
-                        )
-                    }
-                })
+                .map(|result| Decode!(&result, sns_pb::GetProposalResponse).unwrap())
         }
 
         pub async fn list_neurons(
@@ -1489,19 +1572,21 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "list_neurons was rejected by the SNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
-        /// Searches for the ID and controller principal of an SNS neuron that can submit proposals.
+        pub fn dissolve_delay_seconds(neuron: &Neuron, now_seconds: u64) -> u64 {
+            match neuron.dissolve_state {
+                Some(DissolveState::DissolveDelaySeconds(d)) => d,
+                Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
+                    ts.saturating_sub(now_seconds)
+                }
+                None => 0,
+            }
+        }
+
+        /// Searches for the ID and controller principal of an SNS neuron that can submit proposals,
+        /// i.e., a neuron whose `dissolve_delay_seconds` is greater that or equal 6 months.
         pub async fn find_neuron_with_majority_voting_power(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
@@ -1510,7 +1595,7 @@ pub mod sns {
             sns_neurons
                 .iter()
                 .find(|neuron| {
-                    neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                    dissolve_delay_seconds(neuron, neuron.created_timestamp_seconds)
                         >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
@@ -1521,29 +1606,49 @@ pub mod sns {
                 })
         }
 
+        /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.
         pub async fn get_nervous_system_parameters(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::NervousSystemParameters {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_nervous_system_parameters",
-                    Encode!().unwrap(),
+            GovernanceCanister { canister_id }
+                .get_nervous_system_parameters(pocket_ic)
+                .await
+                .unwrap()
+        }
+
+        pub async fn propose_to_advance_sns_target_version(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> Result<sns_pb::ProposalData, String> {
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
+            let (sns_neuron_id, sns_neuron_principal_id) =
+                sns::governance::find_neuron_with_majority_voting_power(
+                    pocket_ic,
+                    sns_governance_canister_id,
                 )
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_nervous_system_parameters rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::NervousSystemParameters).unwrap()
+                .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+            sns::governance::propose_and_wait(
+                pocket_ic,
+                sns_governance_canister_id,
+                sns_neuron_principal_id,
+                sns_neuron_id.clone(),
+                sns_pb::Proposal {
+                    title: "Advance SNS target version.".to_string(),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(sns_pb::proposal::Action::AdvanceSnsTargetVersion(
+                        sns_pb::AdvanceSnsTargetVersion { new_target: None },
+                    )),
+                },
+            )
+            .await
+            .map_err(|err| format!("{err:?}"))
         }
 
         // Upgrade; one canister at a time.
@@ -1551,9 +1656,10 @@ pub mod sns {
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
         ) {
-            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this neuron
-            // either holds the majority of the voting power or the follow graph is set up s.t. when this
-            // neuron submits a proposal, that proposal gets through without the need for any voting.
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
             let (sns_neuron_id, sns_neuron_principal_id) =
                 find_neuron_with_majority_voting_power(pocket_ic, sns_governance_canister_id)
                     .await
@@ -1570,6 +1676,44 @@ pub mod sns {
                     url: "".to_string(),
                     action: Some(sns_pb::proposal::Action::UpgradeSnsToNextVersion(
                         sns_pb::UpgradeSnsToNextVersion {},
+                    )),
+                },
+            )
+            .await
+            .unwrap();
+
+            // Check 1: The upgrade proposal did not fail.
+            assert_eq!(proposal_data.failure_reason, None);
+
+            // Check 2: The upgrade proposal succeeded.
+            assert!(proposal_data.executed_timestamp_seconds > 0);
+        }
+
+        pub async fn propose_to_upgrade_sns_controlled_canister_and_wait(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            upgrade: UpgradeSnsControlledCanister,
+        ) {
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
+            let (sns_neuron_id, sns_neuron_principal_id) =
+                find_neuron_with_majority_voting_power(pocket_ic, sns_governance_canister_id)
+                    .await
+                    .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+            let proposal_data = propose_and_wait(
+                pocket_ic,
+                sns_governance_canister_id,
+                sns_neuron_principal_id,
+                sns_neuron_id.clone(),
+                sns_pb::Proposal {
+                    title: "Upgrade SNS controlled canister.".to_string(),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(sns_pb::proposal::Action::UpgradeSnsControlledCanister(
+                        upgrade,
                     )),
                 },
             )
@@ -1602,10 +1746,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_neuron failed: {:#?}", s),
-            };
             let response = Decode!(&result, sns_pb::GetNeuronResponse).unwrap();
             match response.result.expect("No result in response") {
                 get_neuron_response::Result::Error(e) => Err(e),
@@ -1628,29 +1768,21 @@ pub mod sns {
             }
         }
 
+        pub async fn try_get_upgrade_journal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> std::result::Result<sns_pb::GetUpgradeJournalResponse, PocketIcCallError> {
+            let payload = sns_pb::GetUpgradeJournalRequest::default();
+            pocket_ic.call(sns_governance_canister_id, payload).await
+        }
+
         pub async fn get_upgrade_journal(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::GetUpgradeJournalResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_upgrade_journal",
-                    Encode!(&sns_pb::GetUpgradeJournalRequest {}).unwrap(),
-                )
+            try_get_upgrade_journal(pocket_ic, canister_id)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_upgrade_journal rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
+                .unwrap()
         }
 
         pub async fn advance_target_version(
@@ -1665,6 +1797,52 @@ pub mod sns {
                 .call(sns_governance_canister_id, payload)
                 .await
                 .unwrap()
+        }
+
+        /// Verifies that the upgrade journal has the expected entries.
+        pub async fn assert_upgrade_journal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            expected_entries: &[sns_pb::upgrade_journal_entry::Event],
+        ) {
+            let response =
+                sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
+
+            let journal_entries = assert_matches!(
+                response,
+                sns_pb::GetUpgradeJournalResponse {
+                    upgrade_journal: Some(sns_pb::UpgradeJournal {
+                        entries,
+                        ..
+                    }),
+                    ..
+                } => entries
+            );
+
+            for (index, either_or_both) in journal_entries
+                .iter()
+                .zip_longest(expected_entries.iter())
+                .enumerate()
+            {
+                let (actual, expected) = match either_or_both {
+                    EitherOrBoth::Both(actual, expected) => (actual, expected),
+                    EitherOrBoth::Left(actual) => panic!(
+                        "Observed an unexpected journal entry at index {}: {:?}",
+                        index, actual
+                    ),
+                    EitherOrBoth::Right(expected) => panic!(
+                        "Did not observe an expected entry at index {}: {:?}",
+                        index, expected
+                    ),
+                };
+                assert!(actual.timestamp_seconds.is_some());
+                assert_eq!(
+                    &actual.event.clone().map(redact_human_readable),
+                    &Some(redact_human_readable(expected.clone())),
+                    "Upgrade journal entry at index {} does not match",
+                    index
+                );
+            }
         }
     }
 
@@ -1692,10 +1870,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to ledger_id failed: {:#?}", s),
-            };
             Decode!(&result, PrincipalId).unwrap()
         }
 
@@ -1709,10 +1883,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to status failed: {:#?}", s),
-            };
             Decode!(&result, Status).unwrap()
         }
 
@@ -1738,10 +1908,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, GetBlocksResponse).unwrap()
         }
 
@@ -1798,10 +1964,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_total_supply failed: {:#?}", s),
-            };
             Decode!(&result, Nat).unwrap()
         }
 
@@ -1819,11 +1981,24 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_balance_of failed: {:#?}", s),
-            };
             Decode!(&result, Nat).unwrap()
+        }
+
+        pub async fn icrc1_transfer_request(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+            sender: PrincipalId,
+            transfer_arg: TransferArg,
+        ) -> pocket_ic::common::rest::RawMessageId {
+            pocket_ic
+                .submit_call(
+                    canister_id.into(),
+                    Principal::from(sender),
+                    "icrc1_transfer",
+                    Encode!(&transfer_arg).unwrap(),
+                )
+                .await
+                .unwrap()
         }
 
         pub async fn icrc1_transfer(
@@ -1832,19 +2007,9 @@ pub mod sns {
             sender: PrincipalId,
             transfer_arg: TransferArg,
         ) -> Result<Nat, TransferError> {
-            let result = pocket_ic
-                .update_call(
-                    canister_id.into(),
-                    Principal::from(sender),
-                    "icrc1_transfer",
-                    Encode!(&transfer_arg).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc1_transfer failed: {:#?}", s),
-            };
+            let call_id =
+                icrc1_transfer_request(pocket_ic, canister_id, sender, transfer_arg).await;
+            let result = pocket_ic.await_call(call_id).await.unwrap();
             Decode!(&result, Result<Nat, TransferError>).unwrap()
         }
 
@@ -1870,10 +2035,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, GetBlocksResponse).unwrap()
         }
 
@@ -1960,10 +2121,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to archives failed: {:#?}", s),
-            };
             Decode!(&result, Vec<ArchiveInfo>).unwrap()
         }
 
@@ -1982,10 +2139,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_approve failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, ApproveError>).unwrap()
         }
 
@@ -2004,10 +2157,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_allowance failed: {:#?}", s),
-            };
             Decode!(&result, Allowance).unwrap()
         }
 
@@ -2026,10 +2175,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to icrc2_transfer_from failed: {:#?}", s),
-            };
             Decode!(&result, Result<Nat, TransferFromError>).unwrap()
         }
     }
@@ -2061,10 +2206,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
-            };
             Decode!(&result, BlockRange).unwrap()
         }
     }
@@ -2084,62 +2225,53 @@ pub mod sns {
         const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 2000;
 
         // Generate a bunch of SNS token transactions.
-        for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {
-            let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
-            if let Some(archive) = archives.pop() {
-                return PrincipalId::from(archive.canister_id);
-            }
+        // Sending all the requests, then awaiting all the responses, is much faster than sending each request in
+        // serial.
+        let transfer_requests = stream::iter(0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE)
+            .map(|i| {
+                async move {
+                    let user_principal_id = PrincipalId::new_user_test_id(i);
+                    let direct_participant_swap_account = Account {
+                        owner: user_principal_id.0,
+                        subaccount: None,
+                    };
+                    ledger::icrc1_transfer_request(
+                        pocket_ic,
+                        sns_ledger_canister_id,
+                        sns_governance_canister_id,
+                        TransferArg {
+                            from_subaccount: None,
+                            to: direct_participant_swap_account,
+                            fee: None,
+                            created_at_time: None,
+                            memo: None,
+                            amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
+                        },
+                    )
+                    .await
+                }
+            })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
+        let _transfer_responses = stream::iter(transfer_requests)
+            .map(|call_id| async move { pocket_ic.await_call(call_id).await.unwrap() })
+            .buffer_unordered(100)
+            .collect::<Vec<_>>()
+            .await;
 
-            let user_principal_id = PrincipalId::new_user_test_id(i);
-            let direct_participant_swap_account = Account {
-                owner: user_principal_id.0,
-                subaccount: None,
-            };
-            let _block_height = ledger::icrc1_transfer(
-                pocket_ic,
-                sns_ledger_canister_id,
-                sns_governance_canister_id,
-                TransferArg {
-                    from_subaccount: None,
-                    to: direct_participant_swap_account,
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
-                },
-            )
-            .await
-            .unwrap();
-        }
-        panic!("Failed to spawn an Archive canister.")
+        let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
+
+        let Some(archive) = archives.pop() else {
+            panic!("Failed to spawn an Archive canister.")
+        };
+
+        PrincipalId::from(archive.canister_id)
     }
 
     pub mod root {
         use super::*;
-        use ic_sns_root::{
-            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
-            GetSnsCanistersSummaryResponse,
-        };
-
-        pub async fn list_sns_canisters(
-            pocket_ic: &PocketIc,
-            sns_root_canister_id: PrincipalId,
-        ) -> ListSnsCanistersResponse {
-            let result = pocket_ic
-                .query_call(
-                    sns_root_canister_id.into(),
-                    Principal::anonymous(),
-                    "list_sns_canisters",
-                    Encode!(&ListSnsCanistersRequest {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to list_sns_canisters failed: {:#?}", s),
-            };
-            Decode!(&result, ListSnsCanistersResponse).unwrap()
-        }
+        use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 
         pub async fn get_sns_canisters_summary(
             pocket_ic: &PocketIc,
@@ -2157,12 +2289,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_sns_canisters_summary failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetSnsCanistersSummaryResponse).unwrap()
         }
     }
@@ -2287,10 +2413,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Decode!(&result, GetInitResponse).unwrap()
         }
 
@@ -2312,10 +2434,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Decode!(&result, ListSnsNeuronRecipesResponse).unwrap()
         }
 
@@ -2338,10 +2456,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
-            };
             Ok(Decode!(&result, NewSaleTicketResponse).unwrap())
         }
 
@@ -2364,10 +2478,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to refresh_buyer_tokens failed: {:#?}", s),
-            };
             Ok(Decode!(&result, RefreshBuyerTokensResponse).unwrap())
         }
 
@@ -2388,10 +2498,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
-            };
             Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
         }
 
@@ -2409,10 +2515,6 @@ pub mod sns {
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_open_ticket failed: {:#?}", s),
-            };
             Ok(Decode!(&result, GetOpenTicketResponse).unwrap())
         }
 
@@ -2433,10 +2535,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to error_refund_icp failed: {:#?}", s),
-            };
             Decode!(&result, ErrorRefundIcpResponse).unwrap()
         }
 
@@ -2453,10 +2551,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_derived_state failed: {:#?}", s),
-            };
             Decode!(&result, GetDerivedStateResponse).unwrap()
         }
 
@@ -2473,10 +2567,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_lifecycle failed: {:#?}", s),
-            };
             Decode!(&result, GetLifecycleResponse).unwrap()
         }
 
@@ -2623,10 +2713,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to finalize_swap failed: {:#?}", s),
-            };
             Decode!(&result, FinalizeSwapResponse).unwrap()
         }
 
@@ -2643,12 +2729,6 @@ pub mod sns {
                 )
                 .await
                 .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => {
-                    panic!("Call to get_auto_finalization_status failed: {:#?}", s)
-                }
-            };
             Decode!(&result, GetAutoFinalizationStatusResponse).unwrap()
         }
 

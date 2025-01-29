@@ -313,6 +313,7 @@ impl Player {
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
+            &state_manager.state_layout().tmp(),
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),
@@ -759,7 +760,7 @@ impl Player {
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            idkg_subnet_public_keys: BTreeMap::new(),
+            chain_key_subnet_public_keys: BTreeMap::new(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version,
             time,

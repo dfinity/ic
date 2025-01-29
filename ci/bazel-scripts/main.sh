@@ -30,7 +30,7 @@ if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BR
     RUN_ON_DIFF_ONLY="false"
 fi
 
-if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
+if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
     s3_upload="False"
     RUN_ON_DIFF_ONLY="false"
 fi
@@ -60,6 +60,7 @@ mkdir -p "$(dirname "${AWS_CREDS}")"
 # add aws credentials file if it's set
 if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
     echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+    unset AWS_SHARED_CREDENTIALS_CONTENT
 fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -92,7 +93,7 @@ stream_awk_program='
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
+bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     --color=yes \
