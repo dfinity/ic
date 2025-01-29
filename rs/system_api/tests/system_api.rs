@@ -296,6 +296,13 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::PerformanceCounter => vec!["*", "s"],
         SystemApiCallId::IsController => vec!["*", "s"],
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
+        SystemApiCallId::CostCall => vec!["*", "s"],
+        SystemApiCallId::CostCreateCanister => vec!["*", "s"],
+        SystemApiCallId::CostEcdsa=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostSchnorr=> vec!["*", "s"],
+        SystemApiCallId::CostVetkey => vec!["*", "s"],
+        SystemApiCallId::ReplicationFactor => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
@@ -801,6 +808,76 @@ fn api_availability_test(
         SystemApiCallId::SubnetSelfCopy => {
             assert_api_availability(
                 |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostCall => {
+            assert_api_availability(
+                |api| api.ic0_cost_call(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostCreateCanister => {
+            assert_api_availability(
+                |api| api.ic0_cost_create_canister(0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostEcdsa => {
+            assert_api_availability(
+                |api| api.ic0_cost_ecdsa(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostHttpRequest => {
+            assert_api_availability(
+                |api| api.ic0_cost_http_request(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostSchnorr => {
+            assert_api_availability(
+                |api| api.ic0_cost_schnorr(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CostVetkey => {
+            assert_api_availability(
+                |api| api.ic0_cost_vetkey(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::ReplicationFactor => {
+            assert_api_availability(
+                |api| api.ic0_replication_factor(0, 0, &[42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
