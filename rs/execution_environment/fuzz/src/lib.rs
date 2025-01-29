@@ -10,8 +10,8 @@ use std::os::raw::c_char;
 #[cfg(target_os = "linux")]
 use {
     nix::{
-        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitStatus, unistd::fork,
-        unistd::ForkResult, unistd::Pid,
+        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitPidFlag,
+        sys::wait::WaitStatus, unistd::fork, unistd::ForkResult, unistd::Pid,
     },
     procfs::process::Process,
     std::collections::BTreeSet,
@@ -85,12 +85,6 @@ fn syscall_monitor<F>(name: &str, sandbox: F)
 where
     F: Fn(),
 {
-    // The number of sandbox threads must be known in advance because:
-    //   1. We need to call `ptrace::attach` immediately after the thread is spawned.
-    //   2. Detached threads interfere with libfuzzer's cleanup process.
-
-    const SANDBOX_THREADS: usize = 14;
-
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
             sandbox();
@@ -119,7 +113,7 @@ where
 
             let mut threads: Vec<_> = vec![];
             let mut visited = BTreeSet::new();
-            while visited.len() < SANDBOX_THREADS {
+            while let Ok(WaitStatus::StillAlive) = waitpid(child, Some(WaitPidFlag::WNOHANG)) {
                 let children = get_children(child.into());
 
                 for pid in children {
