@@ -104,7 +104,6 @@ function check_num_cpus() {
     fi
 }
 
-# Verifies that all CPU sockets match a required model pattern and have certain capabilities.
 function verify_model_and_capabilities_for_all_sockets() {
     local cpu_json="$1"
     local required_model="$2"
