@@ -162,7 +162,7 @@ mod tests {
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{Global, NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType, ExecutionParameters, InstructionLimits,
@@ -242,6 +242,7 @@ mod tests {
             caller,
             0,
             IS_WASM64_EXECUTION,
+            NetworkTopology::default(),
         )
     }
 
