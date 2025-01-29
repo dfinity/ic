@@ -37,6 +37,7 @@ use crate::execution_environment::{
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -374,7 +375,9 @@ impl ResponseHelper {
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
         let old_balance = self.canister.system_state.balance();
-        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         // Note that we ignore the freezing threshold as required by the spec.
         if old_balance < requested {
             let reveal_top_up = self
@@ -462,7 +465,9 @@ impl ResponseHelper {
         // like releasing locks or undoing other state changes.
         let ingress_induction_cycles_debit =
             self.canister.system_state.ingress_induction_cycles_debit();
-        let removed_cycles = canister_state_changes.system_state_changes.removed_cycles();
+        let removed_cycles = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
             self.canister
                 .system_state
@@ -564,11 +569,11 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .is_some_and(|es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -577,7 +582,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 

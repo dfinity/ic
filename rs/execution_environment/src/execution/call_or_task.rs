@@ -19,7 +19,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{num_bytes_try_from, CallContextAction, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
+    CallOrigin, CanisterState,
+};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -61,10 +64,10 @@ pub fn execute_call_or_task(
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
 
-                let is_wasm64_execution = canister
+                let wasm_execution_mode = canister
                     .execution_state
                     .as_ref()
-                    .is_some_and(|es| es.is_wasm64);
+                    .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
                 let prepaid_execution_cycles = match round
                     .cycles_account_manager
@@ -76,7 +79,7 @@ pub fn execute_call_or_task(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
-                        is_wasm64_execution.into(),
+                        wasm_execution_mode,
                     ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -276,10 +279,10 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
-    let is_wasm64_execution = canister
+    let wasm_execution_mode = canister
         .execution_state
         .as_ref()
-        .is_some_and(|es| es.is_wasm64);
+        .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -289,7 +292,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution.into(),
+        wasm_execution_mode,
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -492,7 +495,9 @@ impl UpdateHelper {
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
         let old_balance = self.canister.system_state.balance();
-        let requested = canister_state_changes.system_state_changes.removed_cycles();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
         let reveal_top_up = self
             .canister
             .controllers()
@@ -552,13 +557,15 @@ impl UpdateHelper {
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
                 if output.wasm_result.is_ok() {
-                    match canister_state_changes.system_state_changes.apply_changes(
-                        round.time,
-                        &mut self.canister.system_state,
-                        round.network_topology,
-                        round.hypervisor.subnet_id(),
-                        round.log,
-                    ) {
+                    match canister_state_changes
+                        .system_state_modifications
+                        .apply_changes(
+                            round.time,
+                            &mut self.canister.system_state,
+                            round.network_topology,
+                            round.hypervisor.subnet_id(),
+                            round.log,
+                        ) {
                         Ok(_) => self.canister.system_state.canister_version += 1,
                         Err(err) => {
                             return finish_err(
@@ -629,11 +636,11 @@ impl UpdateHelper {
             }
         };
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .is_some_and(|es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -642,7 +649,7 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 

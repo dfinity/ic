@@ -55,6 +55,7 @@ ic-nns-governance-init = { path = "../governance/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }

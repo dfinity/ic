@@ -8,8 +8,8 @@ use crate::{
     pb::v1::{
         install_code::CanisterInstallMode, neuron::Followees, proposal::Action, Ballot, BallotInfo,
         CreateServiceNervousSystem, ExecuteNnsFunction, Governance as GovernanceProto, InstallCode,
-        KnownNeuron, ListNeurons, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto,
-        NnsFunction, Proposal, ProposalData, Topic, Vote, VotingPowerEconomics,
+        KnownNeuron, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto, NnsFunction,
+        Proposal, ProposalData, Topic, Vote, VotingPowerEconomics,
     },
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
@@ -22,12 +22,14 @@ use crate::{
 use canbench_rs::{bench, bench_fn, BenchResult};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_proto::pb::v1::Image;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
     types::NeuronId,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::pb::v1::ListNeurons;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
 use rand::{Rng, SeedableRng};
@@ -563,6 +565,8 @@ fn list_neurons_benchmark() -> BenchResult {
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: Some(false),
         include_public_neurons_in_full_neurons: None,
+        page_number: None,
+        page_size: None,
     };
 
     bench_fn(|| {
@@ -643,6 +647,8 @@ fn list_proposals_benchmark() -> BenchResult {
             wasm_module: Some(vec![0u8; 1 << 20]), // 1 MiB
             arg: Some(vec![0u8; 1 << 20]),         // 1 MiB
             install_mode: Some(CanisterInstallMode::Install as i32),
+            wasm_module_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            arg_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
             skip_stopping_before_installing: None,
         }),
         Action::CreateServiceNervousSystem(
@@ -668,8 +674,7 @@ fn list_proposals_benchmark() -> BenchResult {
     }
 
     bench_fn(|| {
-        let response = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
-        let _ = ic_nns_governance_api::pb::v1::ListProposalInfoResponse::from(response);
+        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
     })
 }
 

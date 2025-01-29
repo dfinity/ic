@@ -4,7 +4,7 @@ use ic_replicated_state::{
     page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     ApiType, ExecutionParameters,
 };
 use ic_types::{methods::FuncRef, NumBytes};
@@ -67,7 +67,7 @@ pub struct StateModifications {
     /// The system state changes contain parts that are always applied
     /// and parts that are only applied depending on the method executed
     /// (similarly to `execution_state_modifications`).
-    pub system_state_changes: SystemStateChanges,
+    pub system_state_modifications: SystemStateModifications,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]

@@ -415,8 +415,8 @@ impl Hypervisor {
             network_topology,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_changes) => {
-                (slice, output, system_state_changes)
+            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
+                (slice, output, system_state_modifications)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -489,7 +489,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
-            execution_state.is_wasm64,
+            execution_state.wasm_execution_mode.is_wasm64(),
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(

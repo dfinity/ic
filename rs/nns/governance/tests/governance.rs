@@ -62,7 +62,7 @@ use ic_nns_governance::{
         add_or_remove_node_provider::Change,
         governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
         governance_error::ErrorType::{
-            self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
         },
         install_code::CanisterInstallMode,
         manage_neuron::{
@@ -75,7 +75,6 @@ use ic_nns_governance::{
             MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
             StartDissolving,
         },
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         neuron::{self, DissolveState, Followees},
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action, ActionDesc},
@@ -84,9 +83,8 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
-        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
+        KnownNeuron, KnownNeuronData, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronType, NeuronsFundData,
         NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
         ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
@@ -101,7 +99,14 @@ use ic_nns_governance::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    pb::v1::{
+        self as api,
+        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
+        proposal::Action as ApiAction,
+        Ballot as ApiBallot, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+        ListNeurons, ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse,
+        NeuronState,
+    },
     proposal_validation::validate_proposal_title,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -118,7 +123,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
@@ -126,7 +131,7 @@ use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
     ops::{Deref, Div},
@@ -2214,8 +2219,8 @@ async fn test_no_voting_after_deadline() {
         result,
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Error(
-                GovernanceError::new_with_message(
-                    PreconditionFailed,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::PreconditionFailed,
                     "Proposal deadline has passed.",
                 )
             ))
@@ -2335,7 +2340,8 @@ fn test_get_neuron_when_private_neuron_enforcement_disabled() {
             neuron_infos: hashmap! {
                 1 => neuron_info,
             },
-            full_neurons: vec![full_neuron],
+            full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2390,7 +2396,8 @@ fn test_get_neuron_when_private_neuron_enforcement_enabled() {
             neuron_infos: hashmap! {
                 1 => neuron_info,
             },
-            full_neurons: vec![full_neuron],
+            full_neurons: vec![api::Neuron::from(full_neuron)],
+            total_pages_available: Some(1),
         },
     );
 }
@@ -2575,7 +2582,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 2 }, principal(2))
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -2613,7 +2620,7 @@ async fn test_manage_neuron() {
         gov.get_neuron_info(&NeuronId { id: 3 }, principal(3),)
             .unwrap()
             .recent_ballots,
-        vec![BallotInfo {
+        vec![api::BallotInfo {
             proposal_id: Some(ProposalId { id: 1 },),
             vote: Vote::Yes as i32,
         }]
@@ -4466,28 +4473,25 @@ fn test_get_neuron_ids_by_principal() {
         driver.get_fake_cmc(),
     );
 
-    let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
-    principal2_neuron_ids.sort_unstable();
-
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal1),
-        vec![NeuronId { id: 1 }]
+        btreeset! { NeuronId { id: 1 } }
     );
     assert_eq!(
-        principal2_neuron_ids,
-        vec![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+        gov.get_neuron_ids_by_principal(&principal2),
+        btreeset! { NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 } }
     );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal3),
-        Vec::<NeuronId>::new()
+        BTreeSet::<NeuronId>::new()
     );
+    assert_eq!(gov.get_neuron_ids_by_principal(&principal3), btreeset! {});
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal4),
-        vec![NeuronId { id: 4 }]
+        btreeset! { NeuronId { id: 4 } }
     );
 }
 
-/// *Test fixture for general tests*
 fn empty_fixture() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
@@ -4520,7 +4524,7 @@ fn claim_or_refresh_neuron_by_memo(
         .now_or_never()
         .unwrap();
     match manage_neuron_response.command.unwrap() {
-        CommandResponse::Error(error) => Err(error),
+        CommandResponse::Error(error) => Err(GovernanceError::from(error)),
         CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
             Ok(claim_or_refresh_response.refreshed_neuron_id.unwrap())
         }
@@ -4645,7 +4649,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), btreeset! { id });
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -5399,8 +5403,8 @@ fn test_rate_limiting_neuron_creation() {
         Some(CommandResponse::Error(e)) => {
             assert_eq!(
                 e,
-                GovernanceError::new_with_message(
-                    ErrorType::Unavailable,
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::Unavailable,
                     "Reached maximum number of neurons that can be created in this hour. \
                         Please wait and try again later."
                 )
@@ -5788,10 +5792,8 @@ fn test_neuron_split() {
         parent_neuron.voting_power_refreshed_timestamp_seconds,
     );
 
-    let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
-    neuron_ids.sort_unstable();
-    let mut expected_neuron_ids = vec![id, child_nid];
-    expected_neuron_ids.sort_unstable();
+    let neuron_ids = governance.get_neuron_ids_by_principal(&from);
+    let expected_neuron_ids = btreeset! { id, child_nid };
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
 
@@ -7052,7 +7054,7 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
     assert!(result.is_err());
     assert_eq!(
         result.clone().err().unwrap().error_type(),
-        ErrorType::NotAuthorized
+        api::governance_error::ErrorType::NotAuthorized
     );
     assert_eq!(
         result.err().unwrap().error_message,
@@ -7344,7 +7346,12 @@ fn test_manage_and_reward_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -7695,7 +7702,12 @@ fn test_manage_and_reward_multiple_node_providers() {
     let info = gov
         .get_proposal_info(&PrincipalId::new_anonymous(), pid)
         .unwrap();
-    assert_eq!(info.status(), ProposalStatus::Failed, "info: {:?}", info);
+    assert_eq!(
+        info.status,
+        ProposalStatus::Failed as i32,
+        "info: {:?}",
+        info
+    );
     assert_eq!(
         info.failure_reason.as_ref().unwrap().error_type,
         ErrorType::NotFound as i32,
@@ -8157,7 +8169,7 @@ fn test_get_proposal_info() {
     let action = result.proposal.unwrap().action.unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload == [1, 2, 3]
     );
 }
 
@@ -8195,7 +8207,7 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8233,7 +8245,7 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu)
+        ApiAction::ExecuteNnsFunction(eu)
         if eu.payload.len() ==
             EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
     );
@@ -8268,7 +8280,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
         .unwrap();
     assert_matches!(
         action,
-        proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
+        ApiAction::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
 }
 
@@ -8927,7 +8939,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -8939,7 +8951,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                2 => Ballot {
+                2 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 2,
                 },
@@ -8951,7 +8963,7 @@ fn test_filter_proposal_ballots() {
             .proposal_info[0]
             .ballots,
         hashmap! {
-                1 => Ballot {
+                1 => ApiBallot {
                     vote: Vote::Yes as i32,
                     voting_power: 1,
                 },
@@ -9101,7 +9113,7 @@ fn test_omit_large_fields() {
     );
 
     fn get_logo(list_proposals_response: ListProposalInfoResponse) -> Option<Image> {
-        let Action::CreateServiceNervousSystem(create_service_nervous_system) =
+        let ApiAction::CreateServiceNervousSystem(create_service_nervous_system) =
             list_proposals_response.proposal_info[0]
                 .proposal
                 .clone()
@@ -9205,8 +9217,9 @@ async fn test_max_number_of_proposals_with_ballots() {
         .unwrap();
     }
     assert_eq!(
+        gov.get_pending_proposals(&PrincipalId::new_anonymous())
+            .len(),
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        gov.get_pending_proposals_data().count()
     );
     // Let's try one more. It should be rejected.
     assert_matches!(gov.make_proposal(
@@ -9239,6 +9252,8 @@ async fn test_max_number_of_proposals_with_ballots() {
                     install_mode: Some(CanisterInstallMode::Upgrade as i32),
                     arg: Some(vec![4, 5, 6]),
                     skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(vec![7, 8, 9]),
+                    arg_hash: Some(vec![10, 11, 12]),
                 })),
                 ..Default::default()
             },
@@ -9583,11 +9598,13 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
     assert_eq!(
         response,
         ManageNeuronResponse {
-            command: Some(CommandResponse::Error(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "The command MergeMaturity is no longer available, as this functionality was \
+            command: Some(CommandResponse::Error(
+                api::GovernanceError::new_with_message(
+                    api::governance_error::ErrorType::InvalidCommand,
+                    "The command MergeMaturity is no longer available, as this functionality was \
                 superseded by StakeMaturity. Use StakeMaturity instead."
-            ))),
+                )
+            )),
         }
     );
 }
@@ -10145,7 +10162,10 @@ fn test_join_neurons_fund() {
             )
             .now_or_never()
             .unwrap();
-        assert_eq!(ErrorType::NotAuthorized, result.err().unwrap().error_type());
+        assert_eq!(
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotAuthorized,
+        );
     }
     // Join the Neurons' Fund for neuron 3.
     {
@@ -10252,8 +10272,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::AlreadyJoinedCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::AlreadyJoinedCommunityFund,
         );
     }
     // Principal B leaves the Neurons' Fund for Neuron 3
@@ -10298,8 +10318,8 @@ fn test_join_neurons_fund() {
             .now_or_never()
             .unwrap();
         assert_eq!(
-            ErrorType::NotInTheCommunityFund,
-            result.err().unwrap().error_type()
+            result.err().unwrap().error_type(),
+            api::governance_error::ErrorType::NotInTheCommunityFund,
         );
     }
     // Run periodic tasks to populate metrics. Need to call it twice
@@ -10404,7 +10424,7 @@ where
 
     match result {
         CommandResponse::Configure(ok) => Ok(ok),
-        CommandResponse::Error(err) => Err(err),
+        CommandResponse::Error(err) => Err(GovernanceError::from(err)),
         _ => panic!("{:#?}", result),
     }
 }
@@ -10789,6 +10809,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
             // This should have no effect.
             include_empty_neurons_readable_by_caller: Some(true),
+
+            page_number: None,
+            page_size: None,
         },
         caller,
     );
@@ -10816,6 +10839,10 @@ fn test_include_public_neurons_in_full_neurons() {
         }
     }
 
+    let expected_full_neurons = expected_full_neurons
+        .into_iter()
+        .map(api::Neuron::from)
+        .collect::<Vec<_>>();
     assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
 }
 
@@ -10902,7 +10929,7 @@ async fn test_refresh_voting_power() {
     );
     match err {
         manage_neuron_response::Command::Error(error) => {
-            let GovernanceError {
+            let api::GovernanceError {
                 error_type,
                 error_message,
             } = &error;
@@ -11049,8 +11076,8 @@ fn wait_for_quiet_test_helper(
             };
             let deadline_passed_response = ManageNeuronResponse {
                 command: Some(manage_neuron_response::Command::Error(
-                    GovernanceError::new_with_message(
-                        PreconditionFailed,
+                    api::GovernanceError::new_with_message(
+                        api::governance_error::ErrorType::PreconditionFailed,
                         "Proposal deadline has passed.",
                     ),
                 )),
@@ -12008,8 +12035,8 @@ async fn test_known_neurons() {
     assert_eq!(
         gov.get_proposal_info(&principal(3), failed_proposal_id)
             .unwrap()
-            .status(),
-        ProposalStatus::Failed
+            .status,
+        ProposalStatus::Failed as i32
     );
 
     // Check that the state is the same as before the last proposal.
@@ -14756,7 +14783,7 @@ fn test_neuron_info_private_enforcement() {
     let hot_key = PrincipalId::new_user_test_id(random.gen());
 
     let proposal_id = random.gen();
-    let recent_ballots = vec![BallotInfo {
+    let recent_ballots = vec![api::BallotInfo {
         proposal_id: Some(ProposalId { id: proposal_id }),
         vote: Vote::Yes as i32,
     }];
@@ -14767,7 +14794,11 @@ fn test_neuron_info_private_enforcement() {
     let base_neuron = {
         let controller = Some(controller);
         let hot_keys = vec![hot_key];
-        let recent_ballots = recent_ballots.clone();
+        let recent_ballots = recent_ballots
+            .iter()
+            .cloned()
+            .map(BallotInfo::from)
+            .collect();
 
         let dissolve_state = Some(DissolveState::DissolveDelaySeconds(random.gen()));
         let cached_neuron_stake_e8s = random.gen();
@@ -14852,6 +14883,8 @@ fn test_neuron_info_private_enforcement() {
                         include_neurons_readable_by_caller: false,
                         include_empty_neurons_readable_by_caller: None,
                         include_public_neurons_in_full_neurons: None,
+                        page_number: None,
+                        page_size: None,
                     },
                     requester,
                 )
