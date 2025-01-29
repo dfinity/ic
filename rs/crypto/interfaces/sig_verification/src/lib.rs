@@ -4,6 +4,7 @@
 //!
 //! Please refer to the trait documentation for details.
 
+use ic_types::artifact::IngressMessageId;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPublicKey};
 use ic_types::messages::{Delegation, MessageId, WebAuthnEnvelope};

@@ -959,6 +959,12 @@ impl TryFrom<Bytes> for ReplicaSignedIngress {
     }
 }
 
+impl From<ReplicaSignedIngress> for Bytes {
+    fn from(_value: ReplicaSignedIngress) -> Self {
+        todo!()
+    }
+}
+
 impl From<ConsensusMessage> for pb::ConsensusMessage {
     fn from(value: ConsensusMessage) -> Self {
         Self {

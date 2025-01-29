@@ -10,9 +10,9 @@ use crate::{
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
+use ic_crypto_interfaces_sig_verification::{IngressSigVerifier, IngressSignerVerifier};
 use ic_error_types::UserError;
-use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces::{crypto::Crypto, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -22,13 +22,9 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
-    artifact::UnvalidatedArtifactMutation,
-    malicious_flags::MaliciousFlags,
-    messages::{
+    artifact::UnvalidatedArtifactMutation, consensus::ReplicaSignedIngress, malicious_flags::MaliciousFlags, messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
-    },
-    time::current_time,
-    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
+    }, time::current_time, CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId
 };
 use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
@@ -46,7 +42,8 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    crypto: Arc<dyn IngressSignerVerifier+ Send + Sync>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -58,7 +55,8 @@ impl IngressValidatorBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
+        crypto: Arc<dyn IngressSignerVerifier+ Send + Sync>,
     ) -> Self {
         Self {
             log,
@@ -70,6 +68,7 @@ impl IngressValidatorBuilder {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            crypto,
         }
     }
 
@@ -89,6 +88,7 @@ impl IngressValidatorBuilder {
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
+            crypto: self.crypto,
         }
     }
 }
@@ -167,7 +167,8 @@ pub struct IngressValidator {
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
+    crypto: Arc<dyn IngressSignerVerifier + Send + Sync>,
 }
 
 impl IngressValidator {
@@ -189,6 +190,7 @@ impl IngressValidator {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            crypto,
         } = self;
 
         // Load shed the request if the ingress pool is full.
@@ -271,12 +273,14 @@ impl IngressValidator {
             ingress_tx,
             node_id,
             message: msg,
+            crypto,
         })
     }
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
+    crypto: Arc<dyn IngressSignerVerifier>,
     node_id: NodeId,
     message: SignedIngress,
 }
@@ -294,7 +298,12 @@ impl IngressMessageSubmitter {
             ingress_tx,
             node_id,
             message,
+            crypto,
         } = self;
+
+        match crypto.sign_simple(&message, node_id, todo!()) {
+        }
+
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.

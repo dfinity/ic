@@ -26,6 +26,8 @@ cfg_if::cfg_if! {
 
 pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
+use ic_interfaces::crypto::Crypto;
+use ic_types::consensus::ReplicaSignedIngress;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
@@ -282,7 +284,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -300,6 +302,7 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    crypto: Arc<dyn Crypto + Send + Sync>,
 ) {
     info!(log, "Starting HTTP server...");
     let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
@@ -322,6 +325,7 @@ pub fn start_server(
         ingress_filter.clone(),
         ingress_throttler.clone(),
         ingress_tx.clone(),
+        crypto,
     )
     .with_malicious_flags(malicious_flags.clone())
     .build();

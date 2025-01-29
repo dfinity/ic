@@ -11,7 +11,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, consensus::ReplicaSignedIngress, messages::SignedIngress};
+use ic_types::{artifact::*, consensus::ReplicaSignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
     pin::Pin,

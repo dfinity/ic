@@ -49,7 +49,7 @@ use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseShare},
     consensus::{
         certification::CertificationMessage, dkg, idkg::IDkgMessage, CatchUpPackage,
-        ConsensusMessage, HasHeight,
+        ConsensusMessage, HasHeight, ReplicaSignedIngress,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
@@ -364,7 +364,7 @@ pub fn setup_consensus_and_p2p(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
