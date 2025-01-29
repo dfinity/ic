@@ -181,13 +181,12 @@ fn get_successor_blocks(
             match state.get_block(block_hash) {
                 Some(block) => {
                     let block_size = block.total_size();
-                    let block_size = block.total_size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
-                        successor_blocks.push(Arc::clone(&block));
+                        successor_blocks.push(block.clone());
                         response_block_size += block_size;
                     } else {
                         break;
