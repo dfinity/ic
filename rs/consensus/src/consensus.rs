@@ -255,6 +255,7 @@ impl ConsensusImpl {
                 logger.clone(),
                 ValidatorMetrics::new(metrics_registry.clone()),
                 Arc::clone(&time_source),
+                malicious_flags.clone(),
             ),
             aggregator: ShareAggregator::new(
                 membership,

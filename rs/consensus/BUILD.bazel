@@ -5,10 +5,12 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/canister_client/sender",
     "//rs/config",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/crypto",
+    "//rs/crypto/ed25519",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
@@ -27,6 +29,7 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "//rs/universal_canister/lib",
     "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:rand",

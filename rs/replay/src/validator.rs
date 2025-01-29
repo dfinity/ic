@@ -36,6 +36,7 @@ use ic_types::{
         HasCommittee,
     },
     crypto::CryptoHashOf,
+    malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     Height, NodeId, PrincipalId, SubnetId,
 };
@@ -134,6 +135,7 @@ impl ReplayValidator {
             log.clone(),
             ValidatorMetrics::new(metrics_registry.clone()),
             time_source.clone(),
+            MaliciousFlags::default(),
         );
 
         Self {

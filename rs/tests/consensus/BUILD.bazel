@@ -117,7 +117,7 @@ system_test(
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
         "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    ] + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":liveness_test_common",
@@ -294,7 +294,7 @@ system_test(
     uses_guestos_dev_test = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
         "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-    ],
+    ] + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":liveness_test_common",

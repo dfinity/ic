@@ -174,6 +174,12 @@ impl IngressSelector for IngressManager {
                     );
                     // Any message that generates validation errors gets removed from
                     // the canister's queue.
+                    if result.is_err() {
+                        warn!(
+                            self.log,
+                            "Ingress failed validation: {:?}, message = {:?}", result, ingress
+                        );
+                    }
                     match result {
                         Ok(()) => (),
                         Err(ValidationError::InvalidArtifact(

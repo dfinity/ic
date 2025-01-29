@@ -30,7 +30,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
@@ -42,6 +42,7 @@ use ic_types::{
         RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
+    malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
@@ -687,6 +688,8 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
+    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
+    malicious_flags: MaliciousFlags,
 }
 
 impl Validator {
@@ -704,6 +707,7 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
+        malicious_flags: MaliciousFlags,
     ) -> Validator {
         Validator {
             replica_config,
@@ -718,6 +722,7 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
+            malicious_flags,
         }
     }
 
@@ -1098,6 +1103,12 @@ impl Validator {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
                 if proposal.content.get_hash().get_ref() != existing_metadata.content.hash() {
+                    // FIXME: Temporarily disable equivocation proof generation for testing
+                    #[cfg(feature = "malicious_code")]
+                    if self.malicious_flags.is_consensus_malicious() {
+                        continue;
+                    }
+
                     let proof = EquivocationProof {
                         signer: proposal.signature.signer,
                         version: proposal.content.version().clone(),
@@ -1123,6 +1134,12 @@ impl Validator {
             // The artifact was already verified at this point, so we can do
             // all the remaining block validity checks.
             let check = self.check_block_validity(pool_reader, &proposal);
+            if check.is_err() {
+                warn!(
+                    self.log,
+                    "Failed block validation: {:?}, proposal: {:?}", check, proposal
+                );
+            }
             if let Some(action) = self.compute_action_from_artifact_verification(
                 pool_reader,
                 check,
@@ -1994,6 +2011,7 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
+                MaliciousFlags::default(),
             );
             Self {
                 validator,

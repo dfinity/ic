@@ -5,18 +5,125 @@ use crate::consensus::{
     add_all_to_validated, block_maker, block_maker::BlockMaker, finalizer::Finalizer,
     notary::Notary,
 };
+use ic_canister_client_sender::{ed25519_public_key_to_der, Sender};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
+    batch::IngressPayload,
     consensus::{
-        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, ConsensusMessage,
+        ConsensusMessageHashable, DataPayload, FinalizationContent, FinalizationShare, HasHeight,
+        HashedBlock, NotarizationShare, Payload, PayloadType, Rank,
     },
+    crypto::DOMAIN_IC_REQUEST,
     malicious_flags::MaliciousFlags,
-    Time,
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
+    time::expiry_time_from_now,
+    CanisterId, PrincipalId, Time, Time, UserId,
 };
+use rand::thread_rng;
+use rand::RngCore;
+use rayon::prelude::*;
+use std::str::FromStr;
 use std::time::Duration;
+
+#[derive(Clone)]
+struct SignedIngressBuilder {
+    update: HttpCanisterUpdate,
+    sender_pubkey: Option<Vec<u8>>,
+    sender_sig: Option<Vec<u8>>,
+}
+
+#[allow(dead_code)]
+impl SignedIngressBuilder {
+    fn new(id: CanisterId) -> Self {
+        let update = HttpCanisterUpdate {
+            canister_id: Blob(id.get().into_vec()),
+            method_name: "".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(PrincipalId::new_anonymous().into()),
+            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+            nonce: None,
+        };
+        Self {
+            update,
+            sender_pubkey: None,
+            sender_sig: None,
+        }
+    }
+
+    /// Sets the `sender` field.
+    fn sender(mut self, user_id: UserId) -> Self {
+        self.update.sender = Blob(user_id.get().into_vec());
+        self
+    }
+
+    /// Sets the `method_name` field.
+    fn method_name<S: ToString>(mut self, method_name: S) -> Self {
+        self.update.method_name = method_name.to_string();
+        self
+    }
+
+    /// Sets the `arg` (i.e. method payload) field.
+    fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
+        self.update.arg = Blob(method_payload);
+        self
+    }
+
+    /// Sets the `nonce` field.
+    fn nonce(mut self, nonce: u64) -> Self {
+        self.update.nonce = Some(Blob(nonce.to_le_bytes().to_vec()));
+        self
+    }
+
+    /// Sets the `ingress_expiry` field.
+    fn expiry_time(mut self, expiry_time: Time) -> Self {
+        self.update.ingress_expiry = expiry_time.as_nanos_since_unix_epoch();
+        self
+    }
+
+    /// Create keypair, set sender and signature accordingly
+    fn sign_for_randomly_generated_sender(mut self) -> Self {
+        let private_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut thread_rng());
+        let sender_pubkey =
+            ed25519_public_key_to_der(private_key.public_key().serialize_raw().to_vec());
+        self.sender_pubkey = Some(sender_pubkey.clone());
+        self.update.sender = Blob(
+            UserId::from(PrincipalId::new_self_authenticating(&sender_pubkey))
+                .get()
+                .into_vec(),
+        );
+        let message_id = self.update.id();
+        let bytes_to_sign = {
+            let mut buf = vec![];
+            buf.extend_from_slice(DOMAIN_IC_REQUEST);
+            buf.extend_from_slice(message_id.as_bytes());
+            buf
+        };
+        self.sender_sig = Some(private_key.sign_message(&bytes_to_sign).to_vec());
+        self
+    }
+
+    /// Returns the built `SignedIngress`.
+    fn build(&self) -> SignedIngress {
+        // TODO(NNS1-502): Consider panicking if expiry_time_from_now() was not called
+
+        let content = HttpCallContent::Call {
+            update: self.update.clone(),
+        };
+        let sender_pubkey = self.sender_pubkey.as_ref().map(|key| Blob(key.clone()));
+        let sender_sig = self.sender_sig.as_ref().map(|sig| Blob(sig.clone()));
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
+            content,
+            sender_pubkey,
+            sender_sig,
+            sender_delegation: None,
+        };
+
+        SignedIngress::try_from(envelope).unwrap()
+    }
+}
 
 /// Return a `Mutations` that moves all block proposals in the range to the
 /// validated pool.
@@ -63,7 +170,7 @@ fn maliciously_propose_blocks(
         MaliciousBehaviour, MaliciousBehaviourLogEntry,
     };
     trace!(block_maker.log, "maliciously_propose_blocks");
-    let number_of_proposals = 5;
+    let number_of_proposals = 500;
 
     let my_node_id = block_maker.replica_config.node_id;
     let (beacon, parent) = match block_maker::get_dependencies(pool) {
@@ -86,11 +193,8 @@ fn maliciously_propose_blocks(
         .membership
         .get_block_maker_rank(height, &beacon, my_node_id)
     {
-        Ok(Some(rank)) => Some(rank),
-        // TODO: introduce a malicious flag which will instruct a malicious node to propose a block
-        // when it's not elected a block maker; implement a system test which uses the flag.
-        Ok(None) => None,
-        Err(_) => None,
+        Ok(Some(Rank(0))) => Some(Rank(0)),
+        _ => None,
     };
 
     if let Some(rank) = maybe_rank {
@@ -103,37 +207,83 @@ fn maliciously_propose_blocks(
 
             if let Some(proposal) = maybe_proposal {
                 let mut proposals = vec![];
+                let start = std::time::Instant::now();
 
                 match maliciously_equivocation_blockmaker {
                     false => {}
                     true => {
-                        let original_block = Block::from(proposal.clone());
+                        let mut original_block = Block::from(proposal.clone());
+                        let mut rng = rand::thread_rng();
+                        let mut bytes = vec![1u8; 2 * 1024];
+
+                        let base_msg = SignedIngressBuilder::new(
+                            CanisterId::try_from_principal_id(
+                                PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
+                            )
+                            .unwrap(),
+                        )
+                        .method_name("update")
+                        .method_payload(
+                            ic_universal_canister::wasm()
+                                .push_bytes(&bytes)
+                                .append_and_reply()
+                                .build(),
+                        )
+                        .expiry_time(expiry_time_from_now());
+
                         // Generate more valid proposals based on this proposal, by slightly
                         // increasing the time in the context of
                         // this block.
-                        for i in 1..(number_of_proposals - 1) {
-                            let mut new_block = original_block.clone();
-                            new_block.context.time += Duration::from_nanos(i);
-                            let hashed_block =
-                                hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                            let metadata = BlockMetadata::from_block(
-                                &hashed_block,
-                                block_maker.replica_config.subnet_id,
-                            );
-                            if let Ok(signature) = block_maker.crypto.sign(
-                                &metadata,
-                                block_maker.replica_config.node_id,
-                                registry_version,
-                            ) {
-                                proposals.push(BlockProposal {
+                        proposals = (0..number_of_proposals)
+                            .into_par_iter()
+                            .map(|i| {
+                                let mut original_block = original_block.clone();
+                                // Modify data payload of original block
+                                let msg1 = base_msg.clone().nonce(1337 + i).build();
+                                let msg2 = base_msg.clone().nonce(1213231 + i).build();
+
+                                let payload: &BlockPayload = original_block.payload.as_ref();
+                                if original_block.payload.payload_type() == PayloadType::Data {
+                                    let mut dp: DataPayload = payload.as_data().clone();
+                                    dp.batch.ingress = IngressPayload::from(vec![msg1, msg2]);
+
+                                    original_block.payload = Payload::new(
+                                        ic_types::crypto::crypto_hash,
+                                        BlockPayload::Data(dp),
+                                    );
+                                }
+
+                                let mut new_block = original_block.clone();
+                                let hashed_block =
+                                    hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
+                                let metadata = BlockMetadata::from_block(
+                                    &hashed_block,
+                                    block_maker.replica_config.subnet_id,
+                                );
+
+                                let signature = block_maker
+                                    .crypto
+                                    .sign(
+                                        &metadata,
+                                        block_maker.replica_config.node_id,
+                                        registry_version,
+                                    )
+                                    .unwrap();
+                                BlockProposal {
                                     signature,
                                     content: hashed_block,
-                                });
-                            }
-                        }
+                                }
+                            })
+                            .collect();
+
+                        // Done pushing proposals
+                        ic_logger::info!(
+                            block_maker.log,
+                            "[MALICIOUS] -- total: {}ms",
+                            start.elapsed().as_millis()
+                        );
                     }
                 };
-                proposals.push(proposal);
 
                 if maliciously_propose_empty_blocks {
                     ic_logger::info!(
