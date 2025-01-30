@@ -834,7 +834,6 @@ pub struct StateMachine {
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
-    blockmaker_metrics: RwLock<Option<BlockmakerMetrics>>,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
@@ -1336,7 +1335,7 @@ impl StateMachine {
     /// and execute a round with this payload.
     /// Note that only ingress messages submitted via `Self::submit_ingress`
     /// will be considered during payload building.
-    pub fn execute_round(&self) {
+    pub fn execute_round(&self, blockmaker_metrics: Option<BlockmakerMetrics>) {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
@@ -1419,7 +1418,7 @@ impl StateMachine {
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating)
-            .with_blockmaker_metrics(self.blockmaker_metrics.read().unwrap().clone());
+            .with_blockmaker_metrics(blockmaker_metrics);
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1810,7 +1809,6 @@ impl StateMachine {
             certified_height_tx,
             runtime,
             state_dir,
-            blockmaker_metrics: None.into(),
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
             checkpoint_interval_length: checkpoint_interval_length.into(),
@@ -2391,7 +2389,6 @@ impl StateMachine {
 
         let blockmaker_metrics = payload
             .blockmaker_metrics
-            .clone()
             .unwrap_or(BlockmakerMetrics::new_for_test());
 
         let batch = Batch {
@@ -2558,11 +2555,6 @@ impl StateMachine {
                 .unwrap()
                 .as_nanos() as u64,
         )
-    }
-
-    /// Set blockmakers for the next round
-    pub fn set_blockmakers_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
-        *self.blockmaker_metrics.write().unwrap() = Some(blockmaker_metrics);
     }
 
     /// Advances the state machine time by the given amount.

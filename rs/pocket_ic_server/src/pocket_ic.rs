@@ -882,7 +882,7 @@ impl PocketIc {
 
         // We execute a round on every subnet to make sure it has a state to certify.
         for subnet in subnets.get_all() {
-            subnet.state_machine.execute_round();
+            subnet.state_machine.execute_round(None);
         }
 
         // We initialize delegation from NNS.
@@ -1586,7 +1586,7 @@ pub struct Tick {
 }
 
 impl Tick {
-    fn set_subnets_blockmaker(
+    fn validate_blockmakers_per_subnet(
         &self,
         pic: &mut PocketIc,
         subnets_blockmaker: &[SubnetBlockmakerMetrics],
@@ -1606,11 +1606,6 @@ impl Tick {
                     return Err(OpOut::Error(PocketIcError::BlockmakerNotFound(blockmaker)));
                 }
             }
-
-            state_machine.set_blockmakers_metrics(BlockmakerMetrics {
-                blockmaker: subnet_blockmaker.blockmaker,
-                failed_blockmakers: subnet_blockmaker.failed_blockmakers.clone(),
-            });
         }
         Ok(())
     }
@@ -1625,14 +1620,29 @@ impl Operation for Tick {
                 .map(|subnet| SubnetBlockmakerMetrics::from(subnet.clone()))
                 .collect_vec()
         });
-        if let Some(blockmakers_per_subnet) = blockmakers_per_subnet {
-            if let Err(error) = self.set_subnets_blockmaker(pic, &blockmakers_per_subnet) {
+        if let Some(blockmakers_per_subnet) = blockmakers_per_subnet.as_ref() {
+            if let Err(error) = self.validate_blockmakers_per_subnet(pic, blockmakers_per_subnet) {
                 return error;
             }
         }
 
-        for subnet in pic.subnets.get_all() {
-            subnet.state_machine.execute_round();
+        let subnets = pic.subnets.subnets.read().unwrap();
+
+        for (subnet_id, subnet) in subnets.iter() {
+            let blockmaker_metrics = blockmakers_per_subnet
+                .as_ref()
+                .map(|bm_per_subnet| {
+                    bm_per_subnet
+                        .iter()
+                        .find(|bm| bm.subnet == *subnet_id)
+                        .map(|bm| BlockmakerMetrics {
+                            blockmaker: bm.blockmaker,
+                            failed_blockmakers: bm.failed_blockmakers.clone(),
+                        })
+                })
+                .flatten();
+
+            subnet.state_machine.execute_round(blockmaker_metrics);
         }
         OpOut::NoOutput
     }
@@ -1649,7 +1659,7 @@ impl Operation for AdvanceTimeAndTick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         for subnet in pic.subnets.get_all() {
             subnet.state_machine.advance_time(self.0);
-            subnet.state_machine.execute_round();
+            subnet.state_machine.execute_round(None);
         }
         OpOut::NoOutput
     }
@@ -1759,7 +1769,7 @@ impl Operation for AwaitIngressMessage {
                         _ => {}
                     }
                     for subnet_ in pic.subnets.get_all() {
-                        subnet_.state_machine.execute_round();
+                        subnet_.state_machine.execute_round(None);
                     }
                 }
                 OpOut::Error(PocketIcError::BadIngressMessage(format!(
@@ -2791,7 +2801,7 @@ fn route(
                     // We need to execute a round on the new subnet to make its state certified.
                     // To keep the PocketIC instance time in sync, we execute a round on all subnets.
                     for subnet in pic.subnets.get_all() {
-                        subnet.state_machine.execute_round();
+                        subnet.state_machine.execute_round(None);
                     }
                     // We initialize delegation from NNS.
                     if let Some(nns_subnet) = pic.nns_subnet() {

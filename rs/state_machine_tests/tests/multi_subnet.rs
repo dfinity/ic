@@ -145,7 +145,7 @@ fn counter_canister_call_test() {
                 .build(),
         )
         .unwrap();
-    env1.execute_round();
+    env1.execute_round(None);
     let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
     match wasm_result {
         WasmResult::Reply(bytes) => assert_eq!(bytes, 10_000_000_u32.to_le_bytes()),
@@ -170,7 +170,7 @@ fn counter_canister_call_test() {
                 .build(),
         )
         .unwrap();
-    env1.execute_round();
+    env1.execute_round(None);
     let wasm_result = env1.await_ingress(msg_id, MAX_TICKS).unwrap();
     match wasm_result {
         // The call fails with CANISTER_ERROR reject code (5).
@@ -191,7 +191,7 @@ fn counter_canister_call_test() {
                 .build(),
         )
         .unwrap();
-    env1.execute_round();
+    env1.execute_round(None);
     let wasm_result = env1.await_ingress(msg1_id, MAX_TICKS).unwrap();
     match wasm_result {
         WasmResult::Reply(bytes) => assert_eq!(bytes, vec![42; 2000000]),
@@ -238,9 +238,9 @@ fn counter_canister_call_test() {
     // inter-canister call, and finally we execute a round on the 1st subnet
     // to process the callback of the inter-canister call and finish processing
     // the ingress message.
-    env1.execute_round();
-    env2.execute_round();
-    env1.execute_round();
+    env1.execute_round(None);
+    env1.execute_round(None);
+    env1.execute_round(None);
 
     let wasm_result = env1.await_ingress(msg3_id, MAX_TICKS).unwrap();
     match wasm_result {
@@ -326,7 +326,7 @@ fn counter_canister_call_test() {
 
     // This time we need to execute multiple rounds on the 1st subnet
     // to induct all ingress messages with large payloads.
-    env1.execute_round();
+    env1.execute_round(None);
     assert!(matches!(
         (
             env1.ingress_status(&msg10_id),
@@ -342,7 +342,7 @@ fn counter_canister_call_test() {
 
     // The third ingress message is only inducted after a repeated
     // call to execute a round.
-    env1.execute_round();
+    env1.execute_round(None);
     assert!(matches!(
         (
             env1.ingress_status(&msg10_id),
@@ -365,16 +365,16 @@ fn counter_canister_call_test() {
         env2.ingress_status(&msg20_id),
         IngressStatus::Known { .. }
     ));
-    env2.execute_round();
-    env2.execute_round();
+    env2.execute_round(None);
+    env2.execute_round(None);
     // Finally, we need to execute multiple rounds on the 1st subnet
     // to induct all (large) responses from the 2nd subnet
     // and an inter-canister call from the 2nd into the 1st subnet
     // with large argument.
-    env1.execute_round();
-    env1.execute_round();
-    env1.execute_round();
-    env1.execute_round();
+    env1.execute_round(None);
+    env1.execute_round(None);
+    env1.execute_round(None);
+    env1.execute_round(None);
 
     let wasm_result = env1.await_ingress(msg10_id, MAX_TICKS).unwrap();
     match wasm_result {
