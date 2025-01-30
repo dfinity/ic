@@ -8,8 +8,8 @@ lazy_static! {
     pub static ref REFRESH_NEURON_DESC: Update = {
         const PID: &str = "Refresh_Neuron";
         let default_locals = VarAssignment::new()
-            .add("account", default_account())
-            .add("neuron_id", 0_u64.to_tla_value());
+            .add("neuron_id", 0_u64.to_tla_value())
+            .add("account", default_account());
 
         Update {
             default_start_locals: default_locals.clone(),
