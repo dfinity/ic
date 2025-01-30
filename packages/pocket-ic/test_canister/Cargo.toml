@@ -15,3 +15,4 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+ic-management-canister-types = { path = "../../../rs/types/management_canister_types" }

@@ -1058,69 +1058,6 @@ fn test_query_stats_live() {
     })
 }
 
-#[test]
-fn test_custom_blockmaker() {
-    // Setup PocketIC with initial subnets and records
-    let pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build();
-
-    let topology = pocket_ic.topology();
-    let application_subnet = topology.get_app_subnets()[0];
-    let blockmaker_node = topology
-        .subnet_configs
-        .get(&application_subnet)
-        .unwrap()
-        .node_ids[0]
-        .clone();
-
-    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_node,
-        failed_blockmakers: vec![],
-    }];
-
-    let tick_configs = TickConfigs {
-        blockmakers: Some(BlockMakerConfigs {
-            blockmakers_per_subnet: subnets_blockmakers,
-        }),
-    };
-
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-
-    pocket_ic
-        //go to next day it should have recorder the metrics
-        .advance_time(std::time::Duration::from_secs(60 * 60 * 25));
-
-    pocket_ic.tick();
-    pocket_ic.tick();
-    pocket_ic.tick();
-    pocket_ic.tick();
-    pocket_ic.tick();
-
-    let response = pocket_ic
-        .update_call(
-            Principal::management_canister(),
-            Principal::anonymous(),
-            "node_metrics_history",
-            Encode!(&NodeMetricsHistoryArgs {
-                subnet_id: application_subnet.into(),
-                start_at_timestamp_nanos: 0,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-
-    let res = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
-    println!("{:?}", res);
-    assert!(false)
-}
-
 /// Tests subnet read state requests.
 #[test]
 fn test_subnet_read_state() {

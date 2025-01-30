@@ -1,5 +1,5 @@
 use candid::{define_function, CandidType, Principal};
-use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
+use ic_cdk::api::call::{accept_message, arg_data_raw, reject, CallResult, RejectionCode};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
@@ -10,9 +10,9 @@ use ic_cdk::api::management_canister::http_request::{
     TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{inspect_message, query, trap, update};
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-
 // HTTP gateway interface
 
 pub type HeaderField = (String, String);
@@ -266,6 +266,21 @@ async fn canister_http_with_transform() -> HttpResponse {
 }
 
 // inter-canister calls
+
+#[query]
+async fn node_metrics_history_proxy(
+    args: NodeMetricsHistoryArgs,
+) -> Vec<NodeMetricsHistoryResponse> {
+    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+        candid::Principal::management_canister(),
+        "node_metrics_history",
+        (args,),
+        0_u128,
+    )
+    .await
+    .unwrap()
+    .0
+}
 
 #[update]
 async fn whoami() -> String {

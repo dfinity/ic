@@ -17765,6 +17765,7 @@ dependencies = [
  "ic-cdk 0.16.0",
  "ic-certification 3.0.2",
  "ic-error-types",
+ "ic-management-canister-types",
  "ic-transport-types",
  "k256 0.13.4",
  "lazy_static",
@@ -17886,6 +17887,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk 0.16.0",
+ "ic-management-canister-types",
  "serde",
  "serde_bytes",
 ]

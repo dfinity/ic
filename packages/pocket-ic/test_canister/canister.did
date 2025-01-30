@@ -98,6 +98,22 @@ type TransformArgs = record {
   context : blob;
 };
 
+type NodeMetricsHistoryArgs = record {
+    subnet_id: principal;
+    start_at_timestamp_nanos: nat64;
+};
+
+type NodeMetrics = record {
+    node_id: principal;
+    num_blocks_proposed_total: nat64;
+    num_block_failures_total: nat64;
+};
+
+type NodeMetricsHistoryResponse = record {
+  timestamp_nanos: nat64;
+  node_metrics: vec NodeMetrics;
+};
+
 service : {
   http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
   schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
@@ -107,6 +123,7 @@ service : {
   canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
+  node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse) query;
   whoami : () -> (text);
   whois : (principal) -> (text);
   blob_len : (blob) -> (nat64);
