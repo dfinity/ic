@@ -320,6 +320,12 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
     shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
     args: &VetKdArgs,
 ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+    ensure_sufficient_shares_to_fail_fast(
+        shares,
+        lockable_threshold_sig_data_store,
+        &args.ni_dkg_id,
+    )?;
+
     let transcript_data_from_store = lockable_threshold_sig_data_store
         .read()
         .transcript_data(&args.ni_dkg_id)
@@ -504,6 +510,37 @@ fn verify_encrypted_key_internal(
     ) {
         true => Ok(()),
         false => Err(VetKdKeyVerificationError::VerificationError),
+    }
+}
+
+fn ensure_sufficient_shares_to_fail_fast(
+    shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+    lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
+    ni_dkg_id: &NiDkgId,
+) -> Result<(), VetKdKeyShareCombinationError> {
+    let reconstruction_threshold = lockable_threshold_sig_data_store
+        .read()
+        .transcript_data(ni_dkg_id)
+        .map(|data| match data.public_coefficients() {
+            PublicCoefficients::Bls12_381(bls_pub_coeffs) => bls_pub_coeffs.coefficients.len(),
+        })
+        .ok_or_else(|| {
+            VetKdKeyShareCombinationError::ThresholdSigDataNotFound(
+                ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
+                    dkg_id: ni_dkg_id.clone(),
+                },
+            )
+        })?;
+    let share_count = shares.len();
+    if share_count < reconstruction_threshold {
+        return Err(
+            VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
+                threshold: reconstruction_threshold,
+                share_count,
+            },
+        );
+    } else {
+        Ok(())
     }
 }
 
