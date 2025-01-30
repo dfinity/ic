@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
         backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
@@ -63,7 +63,7 @@ use crate::{
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
+            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
         },
     },
@@ -2303,7 +2303,7 @@ impl Governance {
                         // neuron is public, and the caller requested that
                         // public neurons be included (in full_neurons).
                         || (include_public_neurons_in_full_neurons
-                            && neuron.visibility() == Some(Visibility::Public)
+                            && neuron.visibility() == Visibility::Public
                         );
                 if let_caller_read_full_neuron {
                     full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics()));
