@@ -185,13 +185,24 @@ impl Neuron {
     /// When we turn on enforcement of private neurons, this will only return
     /// Public or Private, not None. When that happens, we should define another
     /// Visibility that does NOT have Unspecified.
+    ///
+    /// See also set_visibility.
     pub fn visibility(&self) -> Visibility {
-        debug_assert_eq!(
-            self.known_neuron_data.is_some(),
-            self.visibility == Visibility::public,
-            "{:#?}",
-            self,
-        );
+        // Log (and in non-release builds, also panic) if inconsistent.
+        let inconsistent =
+            self.known_neuron_data.is_some() && (self.visibility != Visibility::Public);
+        if inconsistent {
+            println!(
+                "{}WARNING: Neuron is inconsistent. In release builds, it will be treated \
+                 as Public. Otherwise, the next statement is a panic. Neuron: {:#?}",
+                LOG_PREFIX, self,
+            );
+            debug_assert!(false);
+        }
+
+        if self.known_neuron_data.is_some() {
+            return Visibility::Public;
+        }
 
         self.visibility
     }
@@ -654,6 +665,8 @@ impl Neuron {
     }
 
     /// Err is returned when self is a known neuron, but Private is passed.
+    ///
+    /// See also the visibility getter method.
     fn set_visibility(&mut self, visibility: Option<i32>) -> Result<(), GovernanceError> {
         // Validate input.
 
@@ -1219,33 +1232,39 @@ impl TryFrom<NeuronProto> for Neuron {
             aging_since_timestamp_seconds,
         })?;
 
-        // Log if there is an inconsistency between known_neuron_data and
-        // visibility. If so, the return value still ends up with Public
-        // visibility. That is, known_neuron_data trumps.
-        let allowed_known_neuron_visibility = visibility.is_none()
-            // This is unexpected, but at least it is not inconsistent with
-            // being a known neuron.
-            || visibility == Some(Visibility::Public as i32);
-        if known_neuron_data.is_some() && !allowed_known_neuron_visibility {
-            println!(
-                "{}WARNING: Neuron {:?} is a known neuron, but its visibility ({:?}) is \
-                 not set accordingly. It will be treated as public.",
-                LOG_PREFIX, id, visibility,
-            );
+        // Log (and if non-release build, also panic) if there is an
+        // inconsistency between known_neuron_data and visibility.
+        //
+        // In release builds, the return value still ends up being Public (see
+        // the next chunk). I.e. known_neuron_data trumps when there is an
+        // inconsistency.
+        {
+            let inconsistent = known_neuron_data.is_some()
+                && ![None, Some(Visibility::Public as i32)].contains(&visibility);
+            if inconsistent {
+                println!(
+                    "{}WARNING: Neuron {:?} is a known neuron, but its visibility ({:?}) is \
+                     not set accordingly. It will be treated as public.",
+                    LOG_PREFIX, id, visibility,
+                );
+                debug_assert!(false);
+            }
         }
 
         let visibility = if known_neuron_data.is_some() {
+            // Put a hard stop against visibility being inconsistent vs. known_neuron_data.
             Visibility::Public
         } else {
+            // Convert (if visibility is Some), or default to Private.
             visibility
-                .and_then(|visibility| {
-                    Visibility::try_from(visibility)
+                .and_then(|code| {
+                    Visibility::try_from(code)
                         .inspect_err(|err| {
                             println!(
                                 "{}ERROR: The visibility of neuron {:?} was set to {}, \
                                  which is invalid (reason: {}). Assuming private.",
-                                LOG_PREFIX, id, visibility, err
-                            )
+                                LOG_PREFIX, id, code, err,
+                            );
                         })
                         .ok()
                 })
@@ -1586,14 +1605,27 @@ impl From<DecomposedNeuron> for Neuron {
         let visibility = match visibility {
             None => Visibility::Private,
             Some(visibility) => Visibility::try_from(visibility)
+                // Log (and in non-release builds, also panic) on conversion
+                // failure.
                 .inspect_err(|err| {
                     println!(
                         "{}ERROR: The visibility of neuron {:?} was set to {}, \
                          which is invalid (reason: {}). Assuming private.",
                         LOG_PREFIX, id, visibility, err
-                    )
+                    );
+                    debug_assert!(false);
                 })
+                // In release builds, sweep conversion problems under the rug,
+                // i.e. pretend like the input neuron was private.
                 .unwrap_or(Visibility::Private),
+        };
+        // known_neuron_data trumps visibility. (In non-release builds, this is
+        // moot, because inconsistency would have already caused a panic a few
+        // lines ago.)
+        let visibility = if known_neuron_data.is_some() {
+            Visibility::Public
+        } else {
+            visibility
         };
 
         let voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds
@@ -1819,6 +1851,7 @@ impl NeuronBuilder {
     #[cfg(test)]
     pub fn with_known_neuron_data(mut self, known_neuron_data: Option<KnownNeuronData>) -> Self {
         self.known_neuron_data = known_neuron_data;
+        self.visibility = Visibility::Public;
         self
     }
 
@@ -1878,6 +1911,7 @@ impl NeuronBuilder {
 
         #[cfg(test)]
         let visibility = if known_neuron_data.is_some() {
+            assert_eq!(visibility, Visibility::Public, "{:?}", id);
             Visibility::Public
         } else {
             visibility
