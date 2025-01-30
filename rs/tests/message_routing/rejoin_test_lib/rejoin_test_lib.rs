@@ -217,11 +217,10 @@ async fn assert_state_sync_has_happened(
         "Checking for the state sync count metrics indicating that a successful state sync has happened"
     );
 
-    // We retry a few times as there is a pontential race condition. The state
-    // sync metrics are only updated once the state sync is wound down, but the
-    // checkpoint can be fetched (and the subnet unstalled) without properly
-    // winding down the state sync. We still do this check to verify that the
-    // wind down does eventually happen.
+    // We retry a few times as we observed a pontential race condition where it
+    // still reads a slightly older value from the metrics, even though the
+    // state sync has already happened. This is a workaround to make the test
+    // more robust.
     for i in 0..NUM_RETRIES {
         let res = fetch_metrics::<u64>(
             logger,
