@@ -3,7 +3,7 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_private_neuron_enforcement_enabled, is_voting_power_adjustment_enabled,
+    is_voting_power_adjustment_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -265,11 +265,7 @@ impl Neuron {
             return Some(Visibility::Public);
         }
 
-        if is_private_neuron_enforcement_enabled() {
-            return self.visibility.or(Some(Visibility::Private));
-        }
-
-        self.visibility
+        self.visibility.or(Some(Visibility::Private))
     }
 
     /// Sets a neuron's dissolve state and age.
@@ -955,8 +951,7 @@ impl Neuron {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
-        let show_full = !is_private_neuron_enforcement_enabled()
-            || self.visibility() == Some(Visibility::Public)
+        let show_full = self.visibility() == Some(Visibility::Public)
             || self.is_hotkey_or_controller(&requester);
         if show_full {
             let mut additional_recent_ballots = self
