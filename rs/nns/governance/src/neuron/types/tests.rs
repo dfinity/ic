@@ -49,11 +49,13 @@ fn test_neuron_into_api() {
             proposal_id,
             vote: Vote::No as i32,
         });
-    };
+    }
     original_neuron.recent_ballots_next_entry_index = Some(3);
 
     // Step 2: run code under test.
-    let api_neuron = original_neuron.clone().into_api(some_timestamp_seconds + 99, &VotingPowerEconomics::DEFAULT);
+    let api_neuron = original_neuron
+        .clone()
+        .into_api(some_timestamp_seconds + 99, &VotingPowerEconomics::DEFAULT);
 
     // Step 3: Inspect result(s).
 
@@ -73,8 +75,12 @@ fn test_neuron_into_api() {
     );
 
     // Verify most fields, or at least, the interesting ones.
-    let potential_voting_power = Some(original_neuron.potential_voting_power(some_timestamp_seconds + 99));
-    let deciding_voting_power = Some(original_neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, some_timestamp_seconds + 99));
+    let potential_voting_power =
+        Some(original_neuron.potential_voting_power(some_timestamp_seconds + 99));
+    let deciding_voting_power = Some(
+        original_neuron
+            .deciding_voting_power(&VotingPowerEconomics::DEFAULT, some_timestamp_seconds + 99),
+    );
     assert_eq!(
         api::Neuron {
             recent_ballots: vec![],
@@ -96,7 +102,7 @@ fn test_neuron_into_api() {
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             spawn_at_timestamp_seconds: None,
-            followees: hashmap!{},
+            followees: hashmap! {},
             recent_ballots: vec![],
             kyc_verified: false,
             transfer: None,
