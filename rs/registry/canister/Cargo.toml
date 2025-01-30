@@ -42,6 +42,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
+ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
