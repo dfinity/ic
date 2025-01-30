@@ -310,7 +310,7 @@ fn canister_post_upgrade() {
 }
 
 #[update]
-fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
+fn add_wasm(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
     let access_controls_enabled =
         SNS_WASM.with(|sns_wasm| sns_wasm.borrow().access_controls_enabled);
     if access_controls_enabled && caller() != GOVERNANCE_CANISTER_ID.into() {
