@@ -105,7 +105,7 @@ pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 /// The intent is to incrementally release the feature, first to application
 /// subnets only, then to all subnets, by rolling forward one stage at a time.
 /// Rolling back is also supported, including directly to stage 1. Rolling back
-/// to stage 0 will break all canister that have started using best-effort
+/// to stage 0 will break all canisters that have started using best-effort
 /// response calls, as they will trap reliably.
 //
 // TODO(MR-649): Drop this once best-effort responses are fully rolled out.
