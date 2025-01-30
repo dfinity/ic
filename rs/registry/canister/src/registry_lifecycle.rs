@@ -124,8 +124,9 @@ mod test {
 
         // we can use canister_post_upgrade to initialize a new registry correctly
         let mut new_registry = Registry::new();
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
-            .expect("Error decoding from stable.");
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
 
         // and the version is right
@@ -138,9 +139,10 @@ mod test {
         let mut registry = Registry::new();
         // try with garbage to check first error condition
         let stable_storage_bytes = [1, 2, 3];
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
-            .expect("Error decoding from stable.");
-        canister_post_upgrade(&mut new_registry, registry_storage);
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
+        canister_post_upgrade(&mut registry, registry_storage);
     }
 
     #[test]
@@ -159,9 +161,9 @@ mod test {
 
         // When we try to run canister_post_upgrade
         // Then we panic
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
+        let registry_storage = RegistryCanisterStableStorage::decode(serialized.as_slice())
             .expect("Error decoding from stable.");
-        canister_post_upgrade(&mut new_registry, registry_storage);
+        canister_post_upgrade(&mut registry, registry_storage);
     }
 
     #[test]
@@ -174,8 +176,9 @@ mod test {
 
         // with our bad mutation, this should throw
         let mut new_registry = Registry::new();
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
-            .expect("Error decoding from stable.");
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
     }
 
@@ -189,8 +192,9 @@ mod test {
         let stable_storage_bytes = stable_storage_from_registry(&registry, Some(7u64));
 
         let mut new_registry = Registry::new();
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
-            .expect("Error decoding from stable.");
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
 
         // missing versions are added by the deserializer
@@ -212,11 +216,12 @@ mod test {
     fn post_upgrade_fails_when_registry_decodes_different_version() {
         // Given a mismatched stable storage version from the registry
         let registry = invariant_compliant_registry(0);
-        let stable_storage = stable_storage_from_registry(&registry, Some(100u64));
+        let stable_storage_bytes = stable_storage_from_registry(&registry, Some(100u64));
         // then we panic when decoding
         let mut new_registry = Registry::new();
-        let registry_storage = RegistryCanisterStableStorage::decode(&stable_storage_bytes)
-            .expect("Error decoding from stable.");
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
     }
 
