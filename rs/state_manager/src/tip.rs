@@ -321,7 +321,7 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             replicated_state,
                         } => {
-                            let _timer = request_timer(&metrics, "serialize_to_tip");
+                            let _timer = request_timer(&metrics, "serialize_wasm_binaries");
                             #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => {
