@@ -1,8 +1,6 @@
 use async_trait::async_trait;
-use candid::candid_method;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
@@ -37,7 +35,8 @@ use ic_sns_wasm::{
 use ic_types::{CanisterId, Cycles};
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
-use ic_cdk::println;
+use ic_cdk::{init, post_upgrade, pre_upgrade, println, query, update};
+use ic_nervous_system_common::serve_metrics;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -268,15 +267,10 @@ fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(arg))
-}
-
 /// In contrast to canister_init(), this method does not do deserialization.
 /// In addition to canister_init, this method is called by canister_post_upgrade.
-#[candid_method(init)]
-fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
+#[init]
+fn canister_init(init_payload: SnsWasmCanisterInitPayload) {
     println!("{}Executing canister init", LOG_PREFIX);
     SNS_WASM.with(|c| {
         c.borrow_mut().set_sns_subnets(init_payload.sns_subnet_ids);
@@ -293,7 +287,7 @@ fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
 /// canister state to stable memory so that it is preserved during the upgrade and can
 /// be deserialized again in canister_post_upgrade. That is, the stable memory allows
 /// saving the state and restoring it after the upgrade.
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
@@ -304,7 +298,7 @@ fn canister_pre_upgrade() {
 
 /// Executes some logic after executing an upgrade, including deserializing what has been written
 /// to stable memory in canister_pre_upgrade and initialising the governance's state with it.
-#[export_name = "canister_post_upgrade"]
+#[post_upgrade]
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
@@ -315,12 +309,7 @@ fn canister_post_upgrade() {
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
 
-#[export_name = "canister_update add_wasm"]
-fn add_wasm() {
-    over(candid_one, add_wasm_)
-}
-
-#[candid_method(update, rename = "add_wasm")]
+#[update]
 fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
     let access_controls_enabled =
         SNS_WASM.with(|sns_wasm| sns_wasm.borrow().access_controls_enabled);
@@ -331,13 +320,8 @@ fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
     }
 }
 
-#[export_name = "canister_update insert_upgrade_path_entries"]
-fn insert_upgrade_path_entries() {
-    over(candid_one, insert_upgrade_path_entries_)
-}
-
-#[candid_method(update, rename = "insert_upgrade_path_entries")]
-fn insert_upgrade_path_entries_(
+#[update]
+fn insert_upgrade_path_entries(
     payload: InsertUpgradePathEntriesRequest,
 ) -> InsertUpgradePathEntriesResponse {
     let access_controls_enabled =
@@ -351,35 +335,18 @@ fn insert_upgrade_path_entries_(
     }
 }
 
-#[export_name = "canister_query list_upgrade_steps"]
-fn list_upgrade_steps() {
-    over(candid_one, list_upgrade_steps_)
-}
-
-#[candid_method(query, rename = "list_upgrade_steps")]
-fn list_upgrade_steps_(payload: ListUpgradeStepsRequest) -> ListUpgradeStepsResponse {
+#[query]
+fn list_upgrade_steps(payload: ListUpgradeStepsRequest) -> ListUpgradeStepsResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_upgrade_steps(payload))
 }
 
-#[export_name = "canister_query get_wasm"]
-fn get_wasm() {
-    over(candid_one, get_wasm_)
-}
-
-#[candid_method(query, rename = "get_wasm")]
-fn get_wasm_(get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
+#[query]
+fn get_wasm(get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
 }
 
-#[export_name = "canister_query get_wasm_metadata"]
-fn get_wasm_metadata() {
-    over(candid_one, get_wasm_metadata_)
-}
-
-#[candid_method(query, rename = "get_wasm_metadata")]
-fn get_wasm_metadata_(
-    get_wasm_metadata_payload: GetWasmMetadataRequest,
-) -> GetWasmMetadataResponse {
+#[query]
+fn get_wasm_metadata(get_wasm_metadata_payload: GetWasmMetadataRequest) -> GetWasmMetadataResponse {
     SNS_WASM.with(|sns_wasm| {
         sns_wasm
             .borrow()
@@ -387,13 +354,8 @@ fn get_wasm_metadata_(
     })
 }
 
-#[export_name = "canister_query get_proposal_id_that_added_wasm"]
-fn get_proposal_id_that_added_wasm() {
-    over(candid_one, get_proposal_id_that_added_wasm_)
-}
-
-#[candid_method(query, rename = "get_proposal_id_that_added_wasm")]
-fn get_proposal_id_that_added_wasm_(
+#[query]
+fn get_proposal_id_that_added_wasm(
     get_proposal_id_that_added_wasm_payload: GetProposalIdThatAddedWasmRequest,
 ) -> GetProposalIdThatAddedWasmResponse {
     SNS_WASM.with(|sns_wasm| {
@@ -403,62 +365,35 @@ fn get_proposal_id_that_added_wasm_(
     })
 }
 
-#[export_name = "canister_query get_next_sns_version"]
-fn get_next_sns_version() {
-    over(candid_one, get_next_sns_version_)
-}
-
-#[candid_method(query, rename = "get_next_sns_version")]
-fn get_next_sns_version_(request: GetNextSnsVersionRequest) -> GetNextSnsVersionResponse {
+#[query]
+fn get_next_sns_version(request: GetNextSnsVersionRequest) -> GetNextSnsVersionResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_next_sns_version(request, caller()))
 }
 
-#[export_name = "canister_query get_latest_sns_version_pretty"]
-fn get_latest_sns_version_pretty() {
-    over(candid_one, get_latest_sns_version_pretty_)
-}
-
-#[candid_method(query, rename = "get_latest_sns_version_pretty")]
-fn get_latest_sns_version_pretty_(_: ()) -> HashMap<String, String> {
+#[query]
+fn get_latest_sns_version_pretty(_: ()) -> HashMap<String, String> {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_latest_sns_version_pretty())
 }
 
-#[export_name = "canister_update deploy_new_sns"]
-fn deploy_new_sns() {
-    over_async(candid_one, deploy_new_sns_)
-}
-
-#[candid_method(update, rename = "deploy_new_sns")]
-async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsResponse {
+#[update]
+async fn deploy_new_sns(req: DeployNewSnsRequest) -> DeployNewSnsResponse {
     SnsWasmCanister::deploy_new_sns(
         &SNS_WASM,
         &canister_api(),
         &NnsRootCanisterClientImpl::default(),
-        deploy_new_sns,
+        req,
         caller(),
     )
     .await
 }
 
-#[export_name = "canister_query list_deployed_snses"]
-fn list_deployed_snses() {
-    over(candid_one, list_deployed_snses_)
-}
-
-#[candid_method(query, rename = "list_deployed_snses")]
-fn list_deployed_snses_(request: ListDeployedSnsesRequest) -> ListDeployedSnsesResponse {
+#[query]
+fn list_deployed_snses(request: ListDeployedSnsesRequest) -> ListDeployedSnsesResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_deployed_snses(request))
 }
 
-#[export_name = "canister_update update_allowed_principals"]
-fn update_allowed_principals() {
-    over(candid_one, update_allowed_principals_)
-}
-
-#[candid_method(update, rename = "update_allowed_principals")]
-fn update_allowed_principals_(
-    _: UpdateAllowedPrincipalsRequest,
-) -> UpdateAllowedPrincipalsResponse {
+#[update]
+fn update_allowed_principals(_: UpdateAllowedPrincipalsRequest) -> UpdateAllowedPrincipalsResponse {
     UpdateAllowedPrincipalsResponse {
         update_allowed_principals_result: Some(UpdateAllowedPrincipalsResult::Error(
             SnsWasmError {
@@ -470,26 +405,16 @@ fn update_allowed_principals_(
     }
 }
 
-#[export_name = "canister_query get_allowed_principals"]
-fn get_allowed_principals() {
-    over(candid_one, get_allowed_principals_)
-}
-
-#[candid_method(query, rename = "get_allowed_principals")]
-fn get_allowed_principals_(_request: GetAllowedPrincipalsRequest) -> GetAllowedPrincipalsResponse {
+#[query]
+fn get_allowed_principals(_request: GetAllowedPrincipalsRequest) -> GetAllowedPrincipalsResponse {
     GetAllowedPrincipalsResponse {
         allowed_principals: vec![],
     }
 }
 
 /// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be deployed to
-#[export_name = "canister_update update_sns_subnet_list"]
-fn update_sns_subnet_list() {
-    over(candid_one, update_sns_subnet_list_)
-}
-
-#[candid_method(update, rename = "update_sns_subnet_list")]
-fn update_sns_subnet_list_(request: UpdateSnsSubnetListRequest) -> UpdateSnsSubnetListResponse {
+#[update]
+fn update_sns_subnet_list(request: UpdateSnsSubnetListRequest) -> UpdateSnsSubnetListResponse {
     if caller() != GOVERNANCE_CANISTER_ID.into() {
         UpdateSnsSubnetListResponse::error(
             "update_sns_subnet_list can only be called by NNS Governance",
@@ -500,23 +425,13 @@ fn update_sns_subnet_list_(request: UpdateSnsSubnetListRequest) -> UpdateSnsSubn
 }
 
 /// Return the list of SNS subnet IDs that SNS-WASM will deploy SNS instances to
-#[export_name = "canister_query get_sns_subnet_ids"]
-fn get_sns_subnet_ids() {
-    over(candid_one, get_sns_subnet_ids_)
-}
-
-#[candid_method(query, rename = "get_sns_subnet_ids")]
-fn get_sns_subnet_ids_(_request: GetSnsSubnetIdsRequest) -> GetSnsSubnetIdsResponse {
+#[query]
+fn get_sns_subnet_ids(_request: GetSnsSubnetIdsRequest) -> GetSnsSubnetIdsResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_sns_subnet_ids())
 }
 
-#[export_name = "canister_query get_deployed_sns_by_proposal_id"]
-fn get_deployed_sns_by_proposal_id() {
-    over(candid_one, get_deployed_sns_by_proposal_id_)
-}
-
-#[candid_method(query, rename = "get_deployed_sns_by_proposal_id")]
-fn get_deployed_sns_by_proposal_id_(
+#[query]
+fn get_deployed_sns_by_proposal_id(
     request: GetDeployedSnsByProposalIdRequest,
 ) -> GetDeployedSnsByProposalIdResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_deployed_sns_by_proposal_id(request))
@@ -563,9 +478,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[query(hidden = true, decoding_quota = 10000)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(|encoder| encode_metrics(encoder)),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }
 
 fn main() {
