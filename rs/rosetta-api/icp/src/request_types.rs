@@ -859,7 +859,7 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct ListNeuronsMetadata {
-    page_number: Option<u64>,
+    pub page_number: Option<u64>,
 }
 
 impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
