@@ -186,6 +186,13 @@ impl Neuron {
     /// Public or Private, not None. When that happens, we should define another
     /// Visibility that does NOT have Unspecified.
     pub fn visibility(&self) -> Visibility {
+        debug_assert_eq!(
+            self.known_neuron_data.is_some(),
+            self.visibility == Visibility::public,
+            "{:#?}",
+            self,
+        );
+
         self.visibility
     }
 
