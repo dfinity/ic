@@ -226,7 +226,7 @@ impl PocketIc {
                 blob_id,
             },
         )
-            .await;
+        .await;
     }
 
     /// Get stable memory of a canister.
@@ -421,7 +421,7 @@ impl PocketIc {
                         .unwrap_or(LOCALHOST.to_string()),
                     port
                 ))
-                    .unwrap()
+                .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
                 panic!("Failed to crate http gateway: {}", message)
@@ -491,7 +491,7 @@ impl PocketIc {
                     .as_nanos() as u64,
             },
         )
-            .await;
+        .await;
     }
 
     /// Set the current certified time of the IC, on all subnets.
@@ -507,7 +507,7 @@ impl PocketIc {
                     .as_nanos() as u64,
             },
         )
-            .await;
+        .await;
     }
 
     /// Advance the time on the IC on all subnets by some nanoseconds.
@@ -579,7 +579,7 @@ impl PocketIc {
             method,
             payload,
         )
-            .await
+        .await
     }
 
     /// Submit an update call with a provided effective principal (without executing it immediately).
@@ -698,7 +698,7 @@ impl PocketIc {
             method,
             payload,
         )
-            .await
+        .await
     }
 
     /// Execute a query call on a canister.
@@ -717,7 +717,7 @@ impl PocketIc {
             method,
             payload,
         )
-            .await
+        .await
     }
 
     /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
@@ -741,7 +741,7 @@ impl PocketIc {
             method,
             payload,
         )
-            .await
+        .await
     }
 
     /// Fetch canister logs via a query call to the management canister.
@@ -760,11 +760,11 @@ impl PocketIc {
                     "fetch_canister_logs",
                     payload,
                 )
-                    .await
+                .await
             },
         )
-            .await
-            .map(|responses| responses.0.canister_log_records)
+        .await
+        .map(|responses| responses.0.canister_log_records)
     }
 
     /// Request a canister's status.
@@ -782,8 +782,8 @@ impl PocketIc {
             "canister_status",
             (CanisterIdRecord { canister_id },),
         )
-            .await
-            .map(|responses| responses.0)
+        .await
+        .map(|responses| responses.0)
     }
 
     /// Create a canister with default settings as the anonymous principal.
@@ -802,9 +802,9 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
-            .map(|(x,)| x)
-            .unwrap();
+        .await
+        .map(|(x,)| x)
+        .unwrap();
         canister_id
     }
 
@@ -828,9 +828,9 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
-            .map(|(x,)| x)
-            .unwrap();
+        .await
+        .map(|(x,)| x)
+        .unwrap();
         canister_id
     }
 
@@ -861,12 +861,12 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
-            .map(|(x,)| x);
+        .await
+        .map(|(x,)| x);
         match res {
             Ok(CanisterIdRecord {
-                   canister_id: actual_canister_id,
-               }) => Ok(actual_canister_id),
+                canister_id: actual_canister_id,
+            }) => Ok(actual_canister_id),
             Err(e) => Err(format!("{:?}", e)),
         }
     }
@@ -915,8 +915,8 @@ impl PocketIc {
             "upload_chunk",
             (UploadChunkArgs { canister_id, chunk },),
         )
-            .await
-            .map(|responses| responses.0.hash)
+        .await
+        .map(|responses| responses.0.hash)
     }
 
     /// List WASM chunk hashes in the WASM chunk store of a canister.
@@ -934,8 +934,8 @@ impl PocketIc {
             "stored_chunks",
             (CanisterIdRecord { canister_id },),
         )
-            .await
-            .map(|responses| responses.0.into_iter().map(|chunk| chunk.hash).collect())
+        .await
+        .map(|responses| responses.0.into_iter().map(|chunk| chunk.hash).collect())
     }
 
     /// Clear the WASM chunk store of a canister.
@@ -953,7 +953,7 @@ impl PocketIc {
             "clear_chunk_store",
             (CanisterIdRecord { canister_id },),
         )
-            .await
+        .await
     }
 
     /// Install a WASM module assembled from chunks on an existing canister.
@@ -987,7 +987,7 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
+        .await
     }
 
     async fn install_canister_helper(
@@ -1013,7 +1013,7 @@ impl PocketIc {
                     sender_canister_version: None,
                 },),
             )
-                .await
+            .await
         } else {
             self.clear_chunk_store(canister_id, sender).await.unwrap();
             let chunks: Vec<_> = wasm_module.chunks(INSTALL_CODE_CHUNK_SIZE).collect();
@@ -1037,7 +1037,7 @@ impl PocketIc {
                 wasm_module_hash,
                 arg,
             )
-                .await
+            .await
         }
     }
 
@@ -1057,8 +1057,8 @@ impl PocketIc {
             arg,
             sender,
         )
-            .await
-            .unwrap()
+        .await
+        .unwrap()
     }
 
     /// Upgrade a canister with a new WASM module.
@@ -1082,7 +1082,7 @@ impl PocketIc {
             arg,
             sender,
         )
-            .await
+        .await
     }
 
     /// Reinstall a canister WASM module.
@@ -1101,7 +1101,7 @@ impl PocketIc {
             arg,
             sender,
         )
-            .await
+        .await
     }
 
     /// Uninstall a canister.
@@ -1119,7 +1119,7 @@ impl PocketIc {
             "uninstall_code",
             (CanisterIdRecord { canister_id },),
         )
-            .await
+        .await
     }
 
     /// Take canister snapshot.
@@ -1141,8 +1141,8 @@ impl PocketIc {
                 replace_snapshot,
             },),
         )
-            .await
-            .map(|responses| responses.0)
+        .await
+        .map(|responses| responses.0)
     }
 
     /// Load canister snapshot.
@@ -1165,7 +1165,7 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
+        .await
     }
 
     /// List canister snapshots.
@@ -1183,8 +1183,8 @@ impl PocketIc {
             "list_canister_snapshots",
             (CanisterIdRecord { canister_id },),
         )
-            .await
-            .map(|responses| responses.0)
+        .await
+        .map(|responses| responses.0)
     }
 
     /// Delete canister snapshot.
@@ -1206,7 +1206,7 @@ impl PocketIc {
                 snapshot_id,
             },),
         )
-            .await
+        .await
     }
 
     /// Update canister settings.
@@ -1229,7 +1229,7 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
+        .await
     }
 
     /// Set canister's controllers.
@@ -1256,7 +1256,7 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
+        .await
     }
 
     /// Start a canister.
@@ -1274,7 +1274,7 @@ impl PocketIc {
             "start_canister",
             (CanisterIdRecord { canister_id },),
         )
-            .await
+        .await
     }
 
     /// Stop a canister.
@@ -1292,7 +1292,7 @@ impl PocketIc {
             "stop_canister",
             (CanisterIdRecord { canister_id },),
         )
-            .await
+        .await
     }
 
     /// Delete a canister.
@@ -1310,7 +1310,7 @@ impl PocketIc {
             "delete_canister",
             (CanisterIdRecord { canister_id },),
         )
-            .await
+        .await
     }
 
     /// Checks whether the provided canister exists.
@@ -1612,9 +1612,9 @@ where
             method,
             payload,
         )
-            .await
-    })
         .await
+    })
+    .await
 }
 
 /// Call a canister candid method, anonymous.
@@ -1638,7 +1638,7 @@ where
         method,
         input,
     )
-        .await
+    .await
 }
 
 /// Call a canister candid query method, anonymous.
@@ -1671,7 +1671,7 @@ where
     with_candid(input, |bytes| async {
         env.query_call(canister_id, sender, method, bytes).await
     })
-        .await
+    .await
 }
 
 /// Call a canister candid update method, anonymous.
@@ -1704,7 +1704,7 @@ where
     with_candid(input, |bytes| async {
         env.update_call(canister_id, sender, method, bytes).await
     })
-        .await
+    .await
 }
 
 /// A helper function that we use to implement both [`call_candid`] and

@@ -336,9 +336,9 @@ pub(crate) type CanisterHttpClient = Arc<
     Mutex<
         Box<
             dyn NonBlockingChannel<
-                AdapterCanisterHttpRequest,
-                Response = AdapterCanisterHttpResponse,
-            > + Send,
+                    AdapterCanisterHttpRequest,
+                    Response = AdapterCanisterHttpResponse,
+                > + Send,
         >,
     >,
 >;
@@ -2020,7 +2020,7 @@ impl Operation for CallRequest {
                     let HttpCallContent::Call { update: payload } = envelope.content;
                     payload.canister_id.0 == PrincipalId::default().to_vec()
                         && Ic00Method::from_str(&payload.method_name)
-                        == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
+                            == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
                 }
                 Err(_) => false,
             };
@@ -2048,7 +2048,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
-                    .build();
+                .build();
 
                 // Task that waits for call service to submit the ingress message, and
                 // forwards it to the state machine. The task will automatically terminate
@@ -2178,7 +2178,7 @@ impl Operation for QueryRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
-                    .build_service();
+                .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2233,7 +2233,7 @@ impl Operation for CanisterReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
-                    .build_service();
+                .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2284,7 +2284,7 @@ impl Operation for SubnetReadStateRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     subnet.state_manager.clone(),
                 )
-                    .build_service();
+                .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2901,7 +2901,7 @@ fn route_call(
     };
     let is_provisional_create_canister = canister_call.canister_id == CanisterId::ic_00()
         && Ic00Method::from_str(&canister_call.method)
-        == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles);
+            == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles);
     route(pic, effective_principal, is_provisional_create_canister)
 }
 
@@ -2959,7 +2959,7 @@ mod tests {
             assert_ne!(pic1.get_state_label(), pic1_state_label);
             assert_ne!(pic1.get_state_label(), pic0.get_state_label());
         })
-            .await
-            .unwrap();
+        .await
+        .unwrap();
     }
 }
