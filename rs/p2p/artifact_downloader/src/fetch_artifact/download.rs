@@ -160,9 +160,9 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
-    /// Waits until advert resolves to fetch. If all peers are removed or bouncer value becomes Unwanted `Aborted` is returned.
+    /// Waits until advert resolves to fetch. If all peers are removed or bouncer value becomes Unwanted, false is returned.
     #[instrument(skip_all)]
-    async fn wait_fetch(
+    async fn should_download(
         id: &Artifact::Id,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
@@ -189,9 +189,8 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
     ///
     /// The download fails iff:
-    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
-    /// and the failure condition is reported in the error variant of the returned result.
+    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`AssembleResult::Unwanted`]
+    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`AssembleResult::Unwanted`]
     #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
@@ -204,7 +203,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         metrics: FetchArtifactMetrics,
     ) -> AssembleResult<Artifact> {
         // Evaluate bouncer and wait until we should fetch.
-        if !Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
+        if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
             return AssembleResult::Unwanted;
         }
 
@@ -267,7 +266,9 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
                     // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    if !Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await {
+                    if !Self::should_download(&id, &mut artifact, &metrics, &mut bouncer_watcher)
+                        .await
+                    {
                         return AssembleResult::Unwanted;
                     }
                 };
