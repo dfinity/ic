@@ -335,17 +335,15 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         PublicCoefficients::Bls12_381(pub_coeffs) => &pub_coeffs.coefficients,
     };
     let reconstruction_threshold = pub_coeffs_from_store.len();
-    let master_public_key =
-        master_pubkey_from_trusted_coeffs(pub_coeffs_from_store, &args.ni_dkg_id).map_err(
-            |error| match error {
-                MasterPubkeyFromCoeffsError::InternalError(msg) => {
-                    VetKdKeyShareCombinationError::InternalError(msg)
-                }
-                MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
-                    VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
-                }
-            },
-        )?;
+    let master_public_key = master_pubkey_from_coeffs(pub_coeffs_from_store, &args.ni_dkg_id)
+        .map_err(|error| match error {
+            MasterPubkeyFromCoeffsError::InternalError(msg) => {
+                VetKdKeyShareCombinationError::InternalError(msg)
+            }
+            MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
+                VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
+            }
+        })?;
     let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
         .map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
@@ -415,8 +413,6 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     })?;
                     let node_public_key_g2affine = match node_public_key {
                         CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes) => {
-                            ///////////////////////////////////////////////////////////////
-                            // TODO: Can/should we use G2Affine::deserialize_unchecked here
                             G2Affine::deserialize(&public_key_bytes.0)
                             .map_err(|_: PairingInvalidPoint| VetKdKeyShareCombinationError::InternalError(
                                 format!("individual public key of node with ID {node_id} in threshold sig data store")
@@ -477,7 +473,7 @@ fn verify_encrypted_key_internal(
             })?;
         match pub_coeffs_from_store {
             PublicCoefficients::Bls12_381(bls_coeffs_trusted) => {
-                master_pubkey_from_trusted_coeffs(&bls_coeffs_trusted.coefficients, &args.ni_dkg_id)
+                master_pubkey_from_coeffs(&bls_coeffs_trusted.coefficients, &args.ni_dkg_id)
                     .map_err(|error| match error {
                         MasterPubkeyFromCoeffsError::InternalError(msg) => {
                             VetKdKeyVerificationError::InternalError(msg)
@@ -511,7 +507,7 @@ fn verify_encrypted_key_internal(
     }
 }
 
-fn master_pubkey_from_trusted_coeffs(
+fn master_pubkey_from_coeffs(
     pub_coeffs: &[bls12_381::PublicKeyBytes],
     ni_dkg_id: &NiDkgId,
 ) -> Result<G2Affine, MasterPubkeyFromCoeffsError> {
@@ -522,7 +518,7 @@ fn master_pubkey_from_trusted_coeffs(
         ))
     })?;
     let first_coeff_g2 =
-        G2Affine::deserialize_unchecked(&first_coeff).map_err(|_: PairingInvalidPoint| {
+        G2Affine::deserialize(&first_coeff).map_err(|_: PairingInvalidPoint| {
             MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey
         })?;
     Ok(first_coeff_g2)
