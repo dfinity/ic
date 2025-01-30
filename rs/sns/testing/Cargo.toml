@@ -23,11 +23,13 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 clap = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-swap = { path = "../swap" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 reqwest = { workspace = true }

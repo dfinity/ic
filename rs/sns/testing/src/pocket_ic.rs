@@ -1,13 +1,21 @@
 use candid::{CandidType, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers::nns::governance::propose_to_deploy_sns_and_wait,
+    pocket_ic_helpers::sns::{
+        governance::{
+            propose_to_upgrade_sns_controlled_canister_and_wait,
+            EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+        },
+        swap::{await_swap_lifecycle, smoke_test_participate_and_finalize},
+    },
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, install_canister_on_subnet, install_canister_with_controllers,
-        nns::governance::propose_to_deploy_sns_and_wait,
-        sns::swap::{await_swap_lifecycle, smoke_test_participate_and_finalize},
+        add_wasms_to_sns_wasm, await_with_timeout,
+        install_canister_on_subnet, install_canister_with_controllers,
         NnsInstaller,
     },
 };
@@ -17,8 +25,9 @@ use ic_nns_constants::{
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
+use ic_sns_governance_api::pb::v1::UpgradeSnsControlledCanister;
 use ic_sns_swap::pb::v1::Lifecycle;
-use pocket_ic::nonblocking::PocketIc;
+use pocket_ic::{management_canister::CanisterStatusResultStatus, nonblocking::PocketIc};
 
 pub async fn bootstrap_nns(pocket_ic: &PocketIc) {
     // TODO @rvem: at some point in the future we might want to use
@@ -190,4 +199,44 @@ pub async fn create_sns(
         .await
         .expect("Expecting the swap to be commited after creation and swap completion");
     (sns, proposal_id)
+}
+
+pub async fn upgrade_sns_controlled_test_canister(
+    pocket_ic: &PocketIc,
+    sns: Sns,
+    canister_id: CanisterId,
+    upgrade_arg: TestCanisterInitArgs,
+) {
+    // For now, we're using the same wasm module, but different init arguments used in 'post_upgrade' hook.
+    let features = &[];
+    let test_canister_wasm =
+        Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
+    propose_to_upgrade_sns_controlled_canister_and_wait(
+        pocket_ic,
+        sns.governance.canister_id,
+        UpgradeSnsControlledCanister {
+            canister_id: Some(canister_id.get()),
+            new_canister_wasm: test_canister_wasm.bytes(),
+            canister_upgrade_arg: Some(Encode!(&upgrade_arg).unwrap()),
+            mode: Some(CanisterInstallMode::Upgrade as i32),
+            chunked_canister_wasm: None,
+        },
+    )
+    .await;
+    // Wait for the canister to become available
+    await_with_timeout(
+        pocket_ic,
+        0..EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+        |pocket_ic| async {
+            let canister_status = pocket_ic
+                .canister_status(canister_id.into(), Some(sns.root.canister_id.into()))
+                .await;
+            canister_status
+                .expect("Canister status is unavailable")
+                .status as u32
+        },
+        &(CanisterStatusResultStatus::Running as u32),
+    )
+    .await
+    .expect("Test canister failed to get into the 'Running' state after upgrade");
 }

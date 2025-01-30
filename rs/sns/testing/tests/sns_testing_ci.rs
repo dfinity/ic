@@ -1,6 +1,7 @@
 use candid::{Decode, Encode, Principal};
 use ic_sns_testing::pocket_ic::{
-    bootstrap_nns, create_sns, install_test_canister, TestCanisterInitArgs,
+    bootstrap_nns, create_sns, install_test_canister, upgrade_sns_controlled_test_canister,
+    TestCanisterInitArgs,
 };
 use pocket_ic::PocketIcBuilder;
 
@@ -34,7 +35,30 @@ async fn test_sns_testing_pocket_ic() {
         .expect("Call to a test canister failed");
     assert_eq!(
         Decode!(&test_canister_response, String).expect("Failed to decode test canister response"),
-        format!("{}, {}!", greeting, test_call_arg),
+        format!("{}, {}!", greeting, test_call_arg.clone()),
     );
     let (sns, _nns_proposal_id) = create_sns(&pocket_ic, vec![test_canister_id]).await;
+    let new_greeting = "Hi".to_string();
+    upgrade_sns_controlled_test_canister(
+        &pocket_ic,
+        sns,
+        test_canister_id,
+        TestCanisterInitArgs {
+            greeting: Some(new_greeting.clone()),
+        },
+    )
+    .await;
+    let test_canister_response = pocket_ic
+        .query_call(
+            test_canister_id.into(),
+            Principal::anonymous(),
+            "greet",
+            Encode!(&test_call_arg).unwrap(),
+        )
+        .await
+        .expect("Call to a test canister failed");
+    assert_eq!(
+        Decode!(&test_canister_response, String).expect("Failed to decode test canister response"),
+        format!("{}, {}!", new_greeting, test_call_arg),
+    );
 }
