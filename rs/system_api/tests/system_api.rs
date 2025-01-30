@@ -1,4 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
+use ic_config::embedders::{BestEffortResponsesFeature, FeatureFlags};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
@@ -27,6 +28,7 @@ use ic_test_utilities_types::{
     ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
     messages::RequestBuilder,
 };
+use ic_types::messages::RequestOrResponse;
 use ic_types::{
     messages::{CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
     methods::{Callback, WasmClosure},
@@ -1363,14 +1365,14 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1380,13 +1382,9 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1461,11 +1459,7 @@ fn helper_test_on_low_wasm_memory(
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1662,14 +1656,14 @@ fn push_output_request_respects_memory_limits() {
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1694,13 +1688,9 @@ fn push_output_request_respects_memory_limits() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1776,14 +1766,14 @@ fn push_output_request_oversized_request_memory_limits() {
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1808,13 +1798,9 @@ fn push_output_request_oversized_request_memory_limits() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -2132,4 +2118,140 @@ fn in_replicated_execution_works_correctly() {
         let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
         assert_eq!(api.ic0_in_replicated_execution(), Ok(0));
     }
+}
+
+#[test]
+#[should_panic(expected = "ic0::call_with_best_effort_response is not enabled.")]
+fn ic0_call_with_best_effort_response_traps_when_disabled() {
+    let system_state = SystemStateBuilder::default().build();
+    let mut api = get_system_api_for_best_effort_response_feature_test(
+        SubnetType::Application,
+        BestEffortResponsesFeature::DisabledByTrap,
+        &system_state,
+    );
+
+    // Make a call to something that isn't `IC_00`.
+    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+        .unwrap();
+    api.ic0_call_with_best_effort_response(13).unwrap();
+}
+
+#[test]
+fn ic0_call_with_best_effort_response_feature_stages() {
+    use BestEffortResponsesFeature::*;
+
+    for feature_stage in [
+        FallBackToGuaranteedResponse,
+        ApplicationSubnetsOnly,
+        Enabled,
+    ] {
+        for subnet_type in SubnetType::iter() {
+            let mut system_state = SystemStateBuilder::default().build();
+            let mut api = get_system_api_for_best_effort_response_feature_test(
+                subnet_type,
+                feature_stage,
+                &system_state,
+            );
+
+            // Make a call to something that isn't `IC_00`.
+            api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+                .unwrap();
+
+            // Call should never trap (because we never run with `DisabledByTrap`).
+            api.ic0_call_with_best_effort_response(13).unwrap();
+            api.ic0_call_perform().unwrap();
+
+            // Propagate system state changes
+            let system_state_modifications = api.into_system_state_modifications();
+            system_state_modifications
+                .apply_changes(
+                    UNIX_EPOCH,
+                    &mut system_state,
+                    &default_network_topology(),
+                    subnet_test_id(1),
+                    &no_op_logger(),
+                )
+                .unwrap();
+
+            let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
+            else {
+                unreachable!();
+            };
+            let callback = system_state
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .values()
+                .next()
+                .unwrap();
+
+            match (feature_stage, subnet_type) {
+                (FallBackToGuaranteedResponse, _)
+                | (ApplicationSubnetsOnly, SubnetType::System) => {
+                    // Silently converted to a guaranteed response request.
+                    assert_eq!(req.deadline, NO_DEADLINE);
+                    assert_eq!(callback.deadline, NO_DEADLINE);
+                }
+
+                (ApplicationSubnetsOnly, _) | (Enabled, _) => {
+                    // An actual best-effort request.
+                    assert_ne!(req.deadline, NO_DEADLINE);
+                    assert_ne!(callback.deadline, NO_DEADLINE);
+                }
+
+                (DisabledByTrap, _) => unreachable!(),
+            }
+        }
+    }
+}
+
+fn get_system_api_for_best_effort_response_feature_test(
+    subnet_type: SubnetType,
+    best_effort_responses: BestEffortResponsesFeature,
+    system_state: &SystemState,
+) -> SystemApiImpl {
+    const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+    let api_type = ApiTypeBuilder::build_update_api();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(subnet_type)
+        .build();
+    let mut execution_parameters = execution_parameters(api_type.execution_mode());
+    execution_parameters.subnet_type = cycles_account_manager.subnet_type();
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
+        Default::default(),
+        api_type.caller(),
+        api_type.call_context_id(),
+    );
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            best_effort_responses,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    SystemApiImpl::new(
+        api_type,
+        sandbox_safe_system_state,
+        CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
+        execution_parameters,
+        SubnetAvailableMemory::new(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+        ),
+        &embedders_config,
+        Memory::new_for_testing(),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
+        no_op_logger(),
+    )
 }

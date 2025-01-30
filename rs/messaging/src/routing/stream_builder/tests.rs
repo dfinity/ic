@@ -8,7 +8,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CanisterState, InputQueueType, ReplicatedState, Stream,
+    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -31,6 +31,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use pretty_assertions::assert_eq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::{
@@ -43,6 +44,7 @@ const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
@@ -651,6 +653,125 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
     });
 }
 
+fn build_streams_with_best_effort_messages_impl(
+    best_effort_responses: BestEffortResponsesFeature,
+    local_subnet_type: SubnetType,
+    remote_subnet_type: SubnetType,
+) {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        // Two best-effort requests: one local and one remote.
+        let msgs = vec![
+            RequestBuilder::new()
+                .sender(local_canister_id)
+                .receiver(local_canister_id)
+                .sender_reply_callback(CallbackId::from(1))
+                .deadline(SOME_DEADLINE)
+                .build(),
+            RequestBuilder::new()
+                .sender(local_canister_id)
+                .receiver(remote_canister_id)
+                .sender_reply_callback(CallbackId::from(2))
+                .deadline(SOME_DEADLINE)
+                .build(),
+        ];
+
+        let (mut stream_builder, mut provided_state, _) = new_fixture(&log);
+        stream_builder.best_effort_responses = best_effort_responses;
+
+        // Set the subnet types of the local and remote subnets.
+        provided_state.metadata.network_topology.subnets = btreemap! {
+            LOCAL_SUBNET => SubnetTopology {subnet_type: local_subnet_type, ..Default::default()},
+            REMOTE_SUBNET => SubnetTopology {subnet_type: remote_subnet_type, ..Default::default()},
+        };
+        // Ensure that the routing table knows about `LOCAL_SUBNET` and `REMOTE_SUBNET`.
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+            btreemap! {
+                CanisterIdRange{ start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange{ start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            },
+        ).unwrap());
+
+        // Set up a canister with `msgs` in its output queues.
+        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        provided_state.put_canister_states(provided_canister_states);
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // Local best-effort requests are always routed, regardless.
+        assert!(
+            !result_state
+                .streams()
+                .get(&LOCAL_SUBNET)
+                .unwrap()
+                .messages()
+                .is_empty(),
+            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
+            best_effort_responses,
+            local_subnet_type,
+            remote_subnet_type,
+        );
+
+        // Remote best-effort requests are only routed when enabled for the respective
+        // remote subnet type.
+        let remote_request_routed = best_effort_responses == BestEffortResponsesFeature::Enabled
+            || (best_effort_responses == BestEffortResponsesFeature::ApplicationSubnetsOnly
+                && remote_subnet_type != SubnetType::System);
+        assert_eq!(
+            remote_request_routed,
+            result_state.streams().contains_key(&REMOTE_SUBNET),
+            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
+            best_effort_responses,
+            local_subnet_type,
+            remote_subnet_type,
+        );
+
+        // If the remote request was not routed, a reject response was enqueued.
+        assert_eq!(
+            !remote_request_routed as usize,
+            result_state
+                .canister_state(&local_canister_id)
+                .unwrap()
+                .system_state
+                .queues()
+                .input_queues_response_count(),
+            "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
+            best_effort_responses,
+            local_subnet_type,
+            remote_subnet_type,
+        );
+    });
+}
+
+#[test]
+fn build_streams_with_best_effort_messages() {
+    for best_effort_responses in &[
+        BestEffortResponsesFeature::DisabledByTrap,
+        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        for local_subnet_type in &[
+            SubnetType::Application,
+            SubnetType::System,
+            SubnetType::VerifiedApplication,
+        ] {
+            for remote_subnet_type in &[
+                SubnetType::Application,
+                SubnetType::System,
+                SubnetType::VerifiedApplication,
+            ] {
+                build_streams_with_best_effort_messages_impl(
+                    *best_effort_responses,
+                    *local_subnet_type,
+                    *remote_subnet_type,
+                );
+            }
+        }
+    }
+}
+
 // Tests that remote requests and all responses with oversized payloads are rejected.
 #[test]
 fn build_streams_with_oversized_payloads() {
@@ -871,6 +992,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
+        BestEffortResponsesFeature::Enabled,
         log.clone(),
     );
 

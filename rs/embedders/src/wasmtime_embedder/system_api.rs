@@ -1251,16 +1251,9 @@ pub fn syscalls<
         .func_wrap("ic0", "call_with_best_effort_response", {
             move |mut caller: Caller<'_, StoreData>, timeout_seconds: u32| {
                 charge_for_cpu(&mut caller, overhead::CALL_WITH_BEST_EFFORT_RESPONSE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| {
-                        system_api.ic0_call_with_best_effort_response(timeout_seconds)
-                    })
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| {
+                    system_api.ic0_call_with_best_effort_response(timeout_seconds)
+                })
             }
         })
         .unwrap();
@@ -1269,14 +1262,7 @@ pub fn syscalls<
         .func_wrap("ic0", "msg_deadline", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::msg_deadline is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
             }
         })
         .unwrap();

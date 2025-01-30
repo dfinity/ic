@@ -100,6 +100,33 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
+/// Best-effort responses feature rollout stage.
+///
+/// The intent is to incrementally release the feature, first to application
+/// subnets only, then to all subnets, by rolling forward one stage at a time.
+/// Rolling back is also supported, including directly to stage 1. Rolling back
+/// to stage 0 will break all canister that have started using best-effort
+/// response calls, as they will trap reliably.
+//
+// TODO(MR-649): Drop this once best-effort responses are fully rolled out.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum BestEffortResponsesFeature {
+    /// Stage 0: Feature is disabled, API calls trap.
+    DisabledByTrap,
+
+    /// Stage 1: Feature is disabled, `ic0_call_with_best_effort_response` API is a
+    /// no-op, silently falling back to a guaranteed response.
+    FallBackToGuaranteedResponse,
+
+    /// Stage 2: Feature is enabled on application (and verified application)
+    /// subnets only. System subnets fall back to guaranteed responses and
+    /// best-effort requests to system subnets are rejected before routing.
+    ApplicationSubnetsOnly,
+
+    /// Stage 3: Feature is enabled on all subnets.
+    Enabled,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
@@ -110,9 +137,8 @@ pub struct FeatureFlags {
     pub wasm_native_stable_memory: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
-    // TODO(IC-1674): remove this flag once the feature is enabled by default.
-    /// Indicates whether the best-effort responses feature is enabled.
-    pub best_effort_responses: FlagStatus,
+    /// Rollout stage of the best-effort responses feature.
+    pub best_effort_responses: BestEffortResponsesFeature,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
 }
@@ -124,7 +150,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: FlagStatus::Disabled,
+            best_effort_responses: BestEffortResponsesFeature::FallBackToGuaranteedResponse,
             canister_backtrace: FlagStatus::Enabled,
         }
     }

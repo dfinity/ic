@@ -2,6 +2,7 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
@@ -659,6 +660,10 @@ impl BatchProcessorImpl {
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .best_effort_responses,
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(
@@ -1513,6 +1518,7 @@ impl MessageRoutingImpl {
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
+            BestEffortResponsesFeature::Enabled,
             log.clone(),
         ));
 
