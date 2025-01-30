@@ -3,7 +3,7 @@ use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
-    ListNeuronsProto as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
+    ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
 };
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{

@@ -1,5 +1,5 @@
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
-use ic_nns_governance_api::pb::v1::{ListNeurons, ListNeuronsProto};
+use ic_nns_governance_api::pb::v1::ListNeurons;
 use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
 use std::borrow::Cow;

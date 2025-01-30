@@ -43,7 +43,7 @@ use ic_nns_governance_api::{
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeuronsProto, ListNeuronsResponse,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
         ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
         ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
         ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
@@ -67,7 +67,6 @@ use std::{
 
 #[cfg(not(feature = "tla"))]
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
-use ic_nns_governance_api::pb::v1::ListNeurons;
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -954,7 +953,7 @@ fn list_neurons_pb() {
 
     ic_cdk::setup();
     let request =
-        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeurons");
+        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
     // New fields are not supported in list_neurons_pb and it is deprecated anyway.
     let candid_request = ListNeurons::from(request);
     let res: ListNeuronsResponse = list_neurons(candid_request);
