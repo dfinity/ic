@@ -181,7 +181,9 @@ fn canister_post_upgrade() {
     let registry = registry_mut();
     let stable_storage = stable::get();
     // delegate real work to more testable function
-    registry_lifecycle::canister_post_upgrade(registry, stable_storage.as_slice());
+    let registry_storage = RegistryCanisterStableStorage::decode(stable_storage.as_slice())
+        .expect("Error decoding from stable.");
+    registry_lifecycle::canister_post_upgrade(registry, registry_storage);
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
