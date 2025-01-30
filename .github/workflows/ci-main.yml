@@ -24,7 +24,7 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+  RUSTFLAGS: "--remap-path-prefix=${{ github.workspace }}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
@@ -35,10 +35,10 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
-      group: zh1
+      group: ln1
       labels: dind-large
     env:
-      AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+      CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
@@ -100,7 +100,21 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS: ${{ env.BAZEL_EXTRA_ARGS }}
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v4
         with:
@@ -136,6 +150,20 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
@@ -161,14 +189,27 @@ jobs:
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
           BAZEL_COMMAND: test
           BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
-          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${CI_RUN_ID}"
+          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${{ github.run_id }}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -195,7 +236,20 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -217,7 +271,20 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
@@ -282,13 +349,11 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
+          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
         env:
           BAZEL_COMMAND: "build"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
@@ -383,13 +448,10 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     container:
@@ -421,10 +483,7 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              cargo build --release --locked
+          cargo build --release --locked

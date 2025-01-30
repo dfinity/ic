@@ -49,6 +49,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
@@ -1802,11 +1803,10 @@ impl ExecutionEnvironment {
 
     /// Returns the maximum amount of memory that can be utilized by a single
     /// canister.
-    pub fn max_canister_memory_size(&self, is_wasm64: bool) -> NumBytes {
-        if is_wasm64 {
-            self.config.max_canister_memory_size_wasm64
-        } else {
-            self.config.max_canister_memory_size_wasm32
+    pub fn max_canister_memory_size(&self, wasm_execution_mode: WasmExecutionMode) -> NumBytes {
+        match wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
+            WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
         }
     }
 
@@ -1824,13 +1824,13 @@ impl ExecutionEnvironment {
         execution_mode: ExecutionMode,
         subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
-        let is_wasm64_execution = match &canister.execution_state {
+        let wasm_execution_mode = match &canister.execution_state {
             // The canister is not already installed, so we do not know what kind of canister it is.
             // Therefore we can assume it is Wasm64 because Wasm64 can have a larger memory limit.
-            None => true,
-            Some(execution_state) => execution_state.is_wasm64,
+            None => WasmExecutionMode::Wasm64,
+            Some(execution_state) => execution_state.wasm_execution_mode,
         };
-        let max_memory_size = self.max_canister_memory_size(is_wasm64_execution);
+        let max_memory_size = self.max_canister_memory_size(wasm_execution_mode);
 
         ExecutionParameters {
             instruction_limits,

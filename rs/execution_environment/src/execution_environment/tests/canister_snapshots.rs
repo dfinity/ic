@@ -3,7 +3,6 @@ use candid::{Decode, Encode};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
@@ -14,7 +13,10 @@ use ic_management_canister_types::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
-    canister_state::{execution_state::WasmBinary, system_state::CyclesUseCase},
+    canister_state::{
+        execution_state::WasmBinary, execution_state::WasmExecutionMode,
+        system_state::CyclesUseCase,
+    },
     CanisterState, ExecutionState, SchedulerState,
 };
 use ic_test_utilities_execution_environment::{
@@ -1876,7 +1878,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
         metadata: _,
         last_executed_round: _,
         next_scheduled_method: _,
-        is_wasm64: _,
+        wasm_execution_mode: _,
     } = execution_state.unwrap();
 
     //
