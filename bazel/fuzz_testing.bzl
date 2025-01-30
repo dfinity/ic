@@ -32,7 +32,13 @@ DEFAULT_SANITIZERS = [
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
 DEFAULT_RUSTC_FLAGS_FOR_FUZZING = DEFAULT_RUSTC_FLAGS + DEFAULT_SANITIZERS
 
-def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], allow_main = False, **kwargs):
+# zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
+ZIG_LINK_ARGS = [
+    "-Zexternal-clangrt",
+    "-Clink-arg=/usr/lib/gcc/x86_64-linux-gnu/9/libasan.a",
+]
+
+def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
     """Wrapper for the rust_binary to compile a fuzzing rust_binary
 
     Args:
@@ -43,7 +49,6 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
       crate_features: Additional crate_features to be used for compilation.
             fuzzing is added by default.
       deps: Fuzzer dependencies.
-      allow_main: Allow the fuzzer to export a main function.
       proc_macro_deps: Fuzzer proc_macro dependencies.
       **kwargs: additional arguments to pass a rust_binary rule.
     """
@@ -51,20 +56,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
     if not sanitizers:
         sanitizers = DEFAULT_SANITIZERS
 
-    # This would only work inside the devcontainer
-    if allow_main:
-        FUZZER_LIB = [
-            "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer_no_main-x86_64.a",
-        ]
-        TAGS = ["sandbox_libfuzzer"]
-    else:
-        # default
-        FUZZER_LIB = [
-            "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a",
-        ]
-        TAGS = []
-
-    RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + FUZZER_LIB
+    RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + ZIG_LINK_ARGS
 
     kwargs.setdefault("testonly", True)
 
@@ -80,11 +72,10 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
             # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
             "fuzz_test",
             "libfuzzer",
-        ] + TAGS,
+        ],
         **kwargs
     )
 
-# TODO(PSEC): Enable allow_main for AFL fuzzers
 def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
     """Wrapper for the rust_binary to compile a fuzzing rust_binary compatible with AFL
 
@@ -99,7 +90,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
       **kwargs: additional arguments to pass a rust_binary rule.
     """
 
-    RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
+    RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + ZIG_LINK_ARGS + [
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
         "-Clink-arg=-fuse-ld=gold",
         "-Clink-arg=-fsanitize=fuzzer",
