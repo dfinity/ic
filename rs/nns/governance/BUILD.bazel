@@ -323,6 +323,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
+    shard_count = 10,
 )
 
 rust_test(
