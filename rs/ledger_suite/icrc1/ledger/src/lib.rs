@@ -21,7 +21,7 @@ pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
-    blockchain::Blockchain,
+    blockchain::{Blockchain, HeapBlockData},
     ledger::{
         apply_transaction_no_trimming, block_locations, LedgerContext, LedgerData, TransactionInfo,
     },
@@ -562,7 +562,7 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, HeapBlockData>,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -773,6 +773,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction<Tokens>;
     type Block = Block<Tokens>;
+    type BlockData = HeapBlockData;
 
     fn transaction_window(&self) -> Duration {
         TRANSACTION_WINDOW
@@ -802,11 +803,13 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData> {
         &mut self.blockchain
     }
 

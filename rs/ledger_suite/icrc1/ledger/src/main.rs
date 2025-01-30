@@ -390,7 +390,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         w.encode_gauge(
             "ledger_transactions",
-            ledger.blockchain().blocks.len() as f64,
+            ledger.blockchain().num_unarchived_blocks() as f64,
             "Total number of transactions stored in the main memory.",
         )?;
         w.encode_gauge(
@@ -402,7 +402,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         // in order to be able to accurately calculate the total transaction rate.
         w.encode_gauge(
             "ledger_total_transactions",
-            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
+            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().num_unarchived_blocks()) as f64,
             "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
         )?;
         if is_ready() {

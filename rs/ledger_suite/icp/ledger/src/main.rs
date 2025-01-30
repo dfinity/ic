@@ -35,8 +35,8 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
@@ -585,7 +585,7 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
             "[ledger] Checking the ledger for block [{}]",
             block_index
         ));
-        state.blockchain.get(block_index).cloned().map(Ok)
+        state.blockchain.get(block_index).map(Ok)
     }
 }
 
@@ -1315,9 +1315,19 @@ fn icrc1_total_supply_candid() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let blocks = &LEDGER.read().unwrap().blockchain.blocks;
         let length = std::cmp::min(length, max_blocks_per_request(&caller()));
-        icp_ledger::iter_blocks(blocks, start, length)
+        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
+        let start = std::cmp::min(start, blocks_len);
+        let end = std::cmp::min(start + length, blocks_len);
+        let blocks = LEDGER
+            .read()
+            .unwrap()
+            .blockchain
+            .block_slice(std::ops::Range {
+                start: start as u64,
+                end: end as u64,
+            });
+        IterBlocksRes(blocks)
     });
 }
 
@@ -1329,7 +1339,29 @@ fn get_blocks_() {
         let length = std::cmp::min(length, max_blocks_per_request(&caller()) as u64);
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length as usize)
+        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
+        let range_from_offset = start;
+        let range_from = start_offset;
+        // Inclusive end of the range of *requested* blocks
+        let requested_range_to = range_from as usize + length as usize - 1;
+        // Inclusive end of the range of *available* blocks
+        let range_to = range_from_offset as usize + blocks_len - 1;
+        // Example: If the Node stores 10 blocks beginning at BlockIndex 100, i.e.
+        // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
+        // > 109 is an error
+        if range_from < range_from_offset || requested_range_to > range_to {
+            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+            range_from, requested_range_to, range_from_offset, range_to)));
+        }
+        // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
+        // is 100 and the Block with BlockIndex 100 is at index 0
+        let offset = (range_from - range_from_offset) as usize;
+        GetBlocksRes(Ok(LEDGER.read().unwrap().blockchain.block_slice(
+            std::ops::Range {
+                start: offset as u64,
+                end: offset as u64 + length as u64,
+            },
+        )))
     });
 }
 
@@ -1475,7 +1507,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_blocks",
-        ledger.blockchain.blocks.len() as f64,
+        ledger.blockchain.num_unarchived_blocks() as f64,
         "Total number of blocks stored in the main memory.",
     )?;
     // This value can go down -- the number is increased before archiving, and if
@@ -1489,7 +1521,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     // order to be able to accurately calculate the total block rate.
     w.encode_gauge(
         "ledger_total_blocks",
-        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.blocks.len() as u64) as f64,
+        ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.num_unarchived_blocks()) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
     if is_ready() {
