@@ -12,8 +12,8 @@ use crate::{
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
-        Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote, VotingPowerEconomics,
+        Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Visibility,
+        Vote, VotingPowerEconomics,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
@@ -21,6 +21,7 @@ use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
 use std::{
@@ -958,7 +959,13 @@ impl Neuron {
             || self.visibility() == Some(Visibility::Public)
             || self.is_hotkey_or_controller(&requester);
         if show_full {
-            recent_ballots.append(&mut self.sorted_recent_ballots());
+            let mut additional_recent_ballots = self
+                .sorted_recent_ballots()
+                .into_iter()
+                .map(api::BallotInfo::from)
+                .collect();
+            recent_ballots.append(&mut additional_recent_ballots);
+
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
@@ -975,7 +982,10 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
-            known_neuron_data: self.known_neuron_data.clone(),
+            known_neuron_data: self
+                .known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from),
             neuron_type: self.neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(
