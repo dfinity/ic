@@ -189,13 +189,24 @@ impl OnDiskSerializedModule {
             data_segments: serialized_module.data_segments,
             wasm_metadata: serialized_module.wasm_metadata,
         };
-        let mut bytes_file = File::create_new(bytes_path)
-            .expect("Unable to serialize module: failed to create bytes file");
+        let mut bytes_file = File::create_new(bytes_path).unwrap_or_else(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                panic!("Unable to serialize module: File {bytes_path:?} already exists.")
+            }
+            _ => panic!("Unable to serialize module: failed to create bytes file: {e}"),
+        });
         bytes_file
             .write_all(bytes)
             .expect("Unable to serialize module: failed to write bytes file");
-        let mut initial_state_file = File::create_new(initial_state_path)
-            .expect("Unable to serialize module: failed to create initial state file");
+        let mut initial_state_file =
+            File::create_new(initial_state_path).unwrap_or_else(|e| match e.kind() {
+                std::io::ErrorKind::AlreadyExists => {
+                    panic!(
+                        "Unable to serialize module: File {initial_state_path:?} already exists."
+                    )
+                }
+                _ => panic!("Unable to serialize module: failed to create initial state file: {e}"),
+            });
         initial_state_file
             .write_all(
                 &bincode::serialize(&initial_state_data)
