@@ -1,12 +1,11 @@
 use crate::common::rest::{
-    ApiResponse, AutoProgressConfig, BlobCompression, BlobId,
-    CanisterHttpRequest, CreateHttpGatewayResponse, CreateInstanceResponse,
-    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig,
-    InstanceConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal,
-    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
-    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId,
-    TickConfigs, Topology,
+    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
+    CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,

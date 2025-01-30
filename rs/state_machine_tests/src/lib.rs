@@ -2389,7 +2389,10 @@ impl StateMachine {
             current_time
         };
 
-        let blockmaker_metrics = payload.blockmaker_metrics.clone().unwrap_or(BlockmakerMetrics::new_for_test());
+        let blockmaker_metrics = payload
+            .blockmaker_metrics
+            .clone()
+            .unwrap_or(BlockmakerMetrics::new_for_test());
 
         let batch = Batch {
             batch_number,
