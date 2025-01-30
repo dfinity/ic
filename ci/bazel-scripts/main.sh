@@ -58,8 +58,9 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 
 # add aws credentials file if it's set
-if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
-    echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+if [ -n "${CLOUD_CREDENTIALS_CONTENT+x}" ]; then
+    echo "$CLOUD_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+    unset CLOUD_CREDENTIALS_CONTENT
 fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -92,7 +93,7 @@ stream_awk_program='
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
+bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     --color=yes \

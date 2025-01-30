@@ -1,12 +1,14 @@
 use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     manage_neuron, manage_neuron_response, GetMetadataRequest, GetMetadataResponse, GetMode,
     GetModeResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, GovernanceError,
     ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId, Proposal, ProposalId,
 };
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+
+pub mod requests;
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
@@ -58,10 +60,7 @@ impl GovernanceCanister {
         neuron_id: NeuronId,
         command: manage_neuron::Command,
     ) -> Result<ManageNeuronResponse, C::Error> {
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Valid SNS neuron IDs should be ICRC1 sub-accounts.")
-            .to_vec();
+        let subaccount = neuron_id.id;
         let request = ManageNeuron {
             subaccount,
             command: Some(command),

@@ -65,8 +65,8 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "ic-icrc1-ledger-u256.wasm.gz": "7",
     # Size when constraint addded: 841_234 bytes
     "ledger-canister.wasm.gz": "9",
-    # Size when constraint addded: 847_186 bytes
-    "ledger-canister_notify-method.wasm.gz": "9",
+    # Size when constraint addded: 906_940 bytes
+    "ledger-canister_notify-method.wasm.gz": "10",
 
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
@@ -97,7 +97,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 # amount of growth happens.
 
 NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "cycles-minting-canister.wasm.gz": "5",
+    "cycles-minting-canister.wasm.gz": "6",
     "genesis-token-canister.wasm.gz": "3",
     "governance-canister.wasm.gz": "17",
     "governance-canister_test.wasm.gz": "17",

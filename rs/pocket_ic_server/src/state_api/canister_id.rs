@@ -2,14 +2,13 @@ use crate::state_api::state::HandlerState;
 use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use candid::Principal;
-use fqdn::{Fqdn, FQDN};
+use fqdn::{fqdn, Fqdn, FQDN};
 use hyper::{
     header::{HOST, REFERER},
     http::request::Parts,
     Uri,
 };
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::sync::Arc;
 
 // ADAPTED from ic-gateway
@@ -190,10 +189,8 @@ impl FromRequestParts<DomainResolver> for HostHeader {
             .rsplit_once(':')
             .map(|(host, _port)| host)
             .unwrap_or(host);
-        let fqdn =
-            FQDN::from_str(host).map_err(|_| "Could not parse domain name from Host header")?;
         resolver
-            .resolve_domain(&fqdn)
+            .resolve_domain(&fqdn!(host))
             .map(|d| d.canister_id)
             .ok_or(BAD_HOST)?
             .ok_or(BAD_HOST)
@@ -231,10 +228,8 @@ impl FromRequestParts<DomainResolver> for RefererHeaderHost {
         let referer = referer.to_str().map_err(|_| BAD_REFERER)?;
         let referer: Uri = referer.parse().map_err(|_| BAD_REFERER)?;
         let referer = referer.authority().ok_or(BAD_REFERER)?;
-        let fqdn = FQDN::from_str(referer.host())
-            .map_err(|_| "Could not parse domain name from Referer header")?;
         resolver
-            .resolve_domain(&fqdn)
+            .resolve_domain(&fqdn!(referer.host()))
             .map(|d| d.canister_id)
             .ok_or(BAD_REFERER)?
             .ok_or(BAD_REFERER)

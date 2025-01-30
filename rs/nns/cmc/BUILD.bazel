@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nns/common",
@@ -55,6 +56,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:candid_parser",
     "@crate_index//:futures",
+    "@crate_index//:maplit",
     "@crate_index//:serde_bytes",
 ]
 

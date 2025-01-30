@@ -637,6 +637,26 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 },
             )],
         ),
+        (
+            "subnet_self_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_self_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis

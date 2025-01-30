@@ -17,6 +17,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::k8s::config::LOGS_URL;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
@@ -292,6 +293,14 @@ pub fn setup_and_start_vms(
                     )
                     .expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
+                    let node_name = tnet_node.name.unwrap();
+                    info!(t_farm.logger, "starting k8s vm: {}", node_name);
+                    info!(
+                        t_farm.logger,
+                        "vm {} console logs: {}",
+                        node_name.clone(),
+                        LOGS_URL.replace("{job}", &node_name)
+                    );
                 }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(

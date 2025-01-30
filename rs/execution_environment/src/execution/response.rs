@@ -37,6 +37,7 @@ use crate::execution_environment::{
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -568,11 +569,11 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .is_some_and(|es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -581,7 +582,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 

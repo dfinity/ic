@@ -161,7 +161,8 @@ pub(crate) struct StorageImpl {
     overlays: Vec<OverlayFile>,
 }
 
-pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
+/// Validate that the overlay files are loadable.
+pub fn validate(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
     StorageImpl::load(storage_layout)?;
     Ok(())
 }
