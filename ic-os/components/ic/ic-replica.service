@@ -3,9 +3,14 @@ Description=IC replica
 
 After=generate-ic-config.service
 Wants=generate-ic-config.service
-# Replica & orchestrator need ic-crypto-csp service running.
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
+After=ic-https-outcalls-adapter.service
+Wants=ic-https-outcalls-adapter.service
+After=ic-btc-mainnet-adapter.service
+Wants=ic-btc-mainnet-adapter.service
+After=ic-btc-testnet-adapter.service
+Wants=ic-btc-testnet-adapter.service
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
