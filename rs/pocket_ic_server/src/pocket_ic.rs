@@ -1619,19 +1619,15 @@ impl Tick {
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnets_blockmakers =
-            self.configs
-                .blockmakers_configs
-                .as_ref()
-                .map(|blockmaker_configs| {
-                    blockmaker_configs
-                        .subnets_blockmakers
-                        .iter()
-                        .map(|subnet| SubnetBlockmakerMetrics::from(subnet.clone()))
-                        .collect_vec()
-                });
-        if let Some(subnets_blockmakers) = subnets_blockmakers {
-            if let Err(error) = self.set_subnets_blockmaker(pic, &subnets_blockmakers) {
+        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|blockmaker_configs| {
+            blockmaker_configs
+                .blockmakers_per_subnet
+                .iter()
+                .map(|subnet| SubnetBlockmakerMetrics::from(subnet.clone()))
+                .collect_vec()
+        });
+        if let Some(blockmakers_per_subnet) = blockmakers_per_subnet {
+            if let Err(error) = self.set_subnets_blockmaker(pic, &blockmakers_per_subnet) {
                 return error;
             }
         }

@@ -27,7 +27,7 @@ pub struct TickConfigs {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct BlockMakerConfigs {
-    pub subnets_blockmakers: Vec<RawSubnetBlockmakerMetrics>,
+    pub blockmakers_per_subnet: Vec<RawSubnetBlockmakerMetrics>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
