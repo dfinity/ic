@@ -54,6 +54,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, Subnets,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -73,7 +74,13 @@ use ic_types::{
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
-use pocket_ic::common::rest::{self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest, CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology};
+use pocket_ic::common::rest::{
+    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
+    CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
+    RawSubnetBlockmakerMetrics, SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs,
+    Topology,
+};
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
 use slog::Level;
@@ -97,7 +104,6 @@ use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
-use ic_types::batch::BlockmakerMetrics;
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
@@ -1580,32 +1586,89 @@ pub struct Tick {
     pub configs: TickConfigs,
 }
 
+impl Tick {
+    fn set_subnets_blockmaker(
+        &self,
+        pic: &mut PocketIc,
+        subnets_blockmaker: &[SubnetBlockmakerMetrics],
+    ) -> Result<(), OpOut> {
+        for subnet_blockmaker in subnets_blockmaker {
+            let Some(state_machine) = pic.get_subnet_with_id(subnet_blockmaker.subnet) else {
+                return Err(OpOut::Error(PocketIcError::SubnetNotFound(
+                    subnet_blockmaker.subnet.get().0,
+                )));
+            };
+
+            let mut request_blockmakers = subnet_blockmaker.failed_blockmakers.clone();
+            request_blockmakers.push(subnet_blockmaker.blockmaker);
+            let subnet_nodes: Vec<_> = state_machine.nodes.iter().map(|n| n.node_id).collect();
+            for blockmaker in request_blockmakers {
+                if !subnet_nodes.contains(&blockmaker) {
+                    return Err(OpOut::Error(PocketIcError::BlockmakerNotFound(blockmaker)));
+                }
+            }
+
+            state_machine.set_blockmakers_metrics(BlockmakerMetrics {
+                blockmaker: subnet_blockmaker.blockmaker,
+                failed_blockmakers: subnet_blockmaker.failed_blockmakers.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        for (subnet_id, subnet) in pic.subnets.subnets.read().unwrap().iter() {
-            if let Some(blockmakers) = self
-                .configs
+        let subnets_blockmakers =
+            self.configs
                 .blockmakers_configs
                 .as_ref()
-                .and_then(|config| config.subnets_blockmakers.as_ref())
-                .and_then(|sb| sb.get(&subnet_id.get().to_string()))
-            {
-                subnet.state_machine.set_blockmakers_metrics(BlockmakerMetrics {
-                    blockmaker: NodeId::from(PrincipalId::from(Principal::from(blockmakers.clone().blockmaker))),
-                    failed_blockmakers: blockmakers
-                        .failed_blockmakers
+                .map(|blockmaker_configs| {
+                    blockmaker_configs
+                        .subnets_blockmakers
                         .iter()
-                        .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id.clone()))))
-                        .collect(),
+                        .map(|subnet| SubnetBlockmakerMetrics::from(subnet.clone()))
+                        .collect_vec()
                 });
+        if let Some(subnets_blockmakers) = subnets_blockmakers {
+            if let Err(error) = self.set_subnets_blockmaker(pic, &subnets_blockmakers) {
+                return error;
             }
+        }
+
+        let subnets = pic.subnets.subnets.read().unwrap();
+        for (_, subnet) in subnets.iter() {
             subnet.state_machine.execute_round();
         }
         OpOut::NoOutput
     }
-
     fn id(&self) -> OpId {
         OpId("tick".to_string())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmakerMetrics {
+    pub subnet: SubnetId,
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
+    fn from(raw: RawSubnetBlockmakerMetrics) -> Self {
+        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
+        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
+        let failed_blockmakers: Vec<NodeId> = raw
+            .failed_blockmakers
+            .into_iter()
+            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
+            .collect();
+
+        SubnetBlockmakerMetrics {
+            subnet,
+            blockmaker,
+            failed_blockmakers,
+        }
     }
 }
 

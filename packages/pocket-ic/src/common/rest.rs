@@ -20,18 +20,19 @@ pub struct AutoProgressConfig {
     pub artificial_delay_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
 pub struct TickConfigs {
-    pub blockmakers_configs: Option<SubnetBlockMaker>,
+    pub blockmakers_configs: Option<BlockMakerConfigs>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct SubnetBlockMaker {
-    pub subnets_blockmakers: Option<BTreeMap<String, BlockmakerMetrics>>,
+pub struct BlockMakerConfigs {
+    pub subnets_blockmakers: Vec<RawSubnetBlockmakerMetrics>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockmakerMetrics {
+pub struct RawSubnetBlockmakerMetrics {
+    pub subnet: RawSubnetId,
     pub blockmaker: RawNodeId,
     pub failed_blockmakers: Vec<RawNodeId>,
 }
@@ -326,7 +327,9 @@ impl From<RawCanisterId> for Principal {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash, Ord, PartialOrd,
+)]
 pub struct RawSubnetId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]

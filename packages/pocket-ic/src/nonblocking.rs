@@ -1,4 +1,13 @@
-use crate::common::rest::{ApiResponse, AutoProgressConfig, BlobCompression, BlobId, SubnetBlockMaker, CanisterHttpRequest, CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology};
+use crate::common::rest::{
+    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, BlockMakerConfigs,
+    CanisterHttpRequest, CreateHttpGatewayResponse, CreateInstanceResponse,
+    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig,
+    InstanceConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawEffectivePrincipal,
+    RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId,
+    TickConfigs, Topology,
+};
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
     CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterLogRecord, CanisterSettings,
@@ -283,10 +292,11 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick(&self) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, TickConfigs{blockmakers_configs: None}).await;
+        self.post::<(), _>(endpoint, TickConfigs::default()).await;
     }
 
-    /// Make the IC produce and progress by one block with configs
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
