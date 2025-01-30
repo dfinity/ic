@@ -1,5 +1,5 @@
 use crate::{
-    are_set_visibility_proposals_enabled, decoder_config,
+    decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -526,18 +526,6 @@ impl ManageNeuron {
             (None, Some(id)) => Ok(Some(id.clone())),
             (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(*nid))),
         }
-    }
-
-    // TODO(NNS1-3228): Delete this.
-    fn is_set_visibility(&self) -> bool {
-        let Some(Command::Configure(ref configure)) = self.command else {
-            return false;
-        };
-
-        matches!(
-            configure.operation,
-            Some(manage_neuron::configure::Operation::SetVisibility(_)),
-        )
     }
 }
 
@@ -4978,21 +4966,6 @@ impl Governance {
         &self,
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
-        // TODO(NNS1-3228): Delete this.
-        if manage_neuron.is_set_visibility() &&
-            // But SetVisibility proposals are disabled
-            !are_set_visibility_proposals_enabled()
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Setting neuron visibility via proposal is not allowed yet, \
-                 but it will be in the not too distant future. If you need \
-                 this sooner, please, start a new thread at forum.dfinity.org \
-                 and describe your use case."
-                    .to_string(),
-            ));
-        }
-
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
             .ok_or_else(|| {

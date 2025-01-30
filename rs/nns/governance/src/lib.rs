@@ -200,8 +200,6 @@ thread_local! {
 
     static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
-
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
@@ -246,22 +244,6 @@ pub fn temporarily_enable_prune_following() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_prune_following() -> Temporary {
     Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
-}
-
-pub fn are_set_visibility_proposals_enabled() -> bool {
-    ARE_SET_VISIBILITY_PROPOSALS_ENABLED.with(|ok| ok.get())
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
-    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
-    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
 }
 
 pub fn allow_active_neurons_in_stable_memory() -> bool {
