@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
+    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly, RwPolicy,
     SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
@@ -170,6 +170,7 @@ pub fn load_checkpoint_and_validate_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
+
     validate_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,

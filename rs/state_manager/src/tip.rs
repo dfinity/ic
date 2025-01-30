@@ -116,6 +116,9 @@ pub(crate) enum TipRequest {
         height: Height,
         replicated_state: Box<ReplicatedState>,
     },
+    MarkCheckpointReadOnlyAndSync {
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+    },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: *
     ComputeManifest {
@@ -214,11 +217,8 @@ pub(crate) fn spawn_tip_thread(
                                         continue;
                                     }
 
-                                    let cp_or_err = state_layout.scratchpad_to_checkpoint(
-                                        tip,
-                                        height,
-                                        Some(&mut thread_pool),
-                                    );
+                                    let cp_or_err =
+                                        state_layout.scratchpad_to_checkpoint(tip, height);
                                     match cp_or_err {
                                         Err(err) => {
                                             sender
@@ -452,6 +452,22 @@ pub(crate) fn spawn_tip_thread(
                                 &malicious_flags,
                             );
                             have_latest_manifest = true;
+                        }
+
+                        TipRequest::MarkCheckpointReadOnlyAndSync { checkpoint_layout } => {
+                            let _timer = request_timer(&metrics, "mark_files_readonly_and_sync");
+                            if let Err(err) = state_layout.mark_files_readonly_and_sync(
+                                &log,
+                                checkpoint_layout.raw_path(),
+                                Some(&mut thread_pool),
+                            ) {
+                                fatal!(
+                                    &log,
+                                    "Failed to mark checkpoint {} readonly and sync: {:#}",
+                                    checkpoint_layout.raw_path().display(),
+                                    err
+                                )
+                            }
                         }
 
                         TipRequest::ValidateReplicatedState {

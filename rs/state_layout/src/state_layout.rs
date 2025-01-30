@@ -337,7 +337,7 @@ struct CheckpointRefData {
 ///   1. Create state files directly in
 ///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
 ///
-///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///   2. When all the writes are complete, call mark_files_readonly_and_sync()
 ///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
 ///      syncs all the files and directories under the scratchpad directory,
 ///      including the scratchpad directory itself.
@@ -545,7 +545,7 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
             let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
-            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
+            mark_files_readonly_and_sync(&self.log, &path, &self.metrics, thread_pool.as_mut())
                 .map_err(|err| LayoutError::IoError {
                     path,
                     message: format!("Could not sync and mark readonly checkpoint {}", height),
@@ -664,22 +664,12 @@ impl StateLayout {
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
-            |err| LayoutError::IoError {
-                path: scratchpad.to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    height
-                ),
-                io_err: err,
-            },
-        )?;
+
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -719,7 +709,10 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height.
     /// If the checkpoint is not found, an error is returned.
-    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    fn checkpoint<Permissions: AccessPolicy>(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<Permissions>, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -748,7 +741,7 @@ impl StateLayout {
                 }
             }
         }
-        CheckpointLayout::new(path, height, self.clone())
+        CheckpointLayout::<Permissions>::new(path, height, self.clone())
     }
 
     /// Returns the layout of a verified checkpoint with the given height.
@@ -757,7 +750,7 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp = self.checkpoint(height)?;
+        let cp = self.checkpoint::<ReadOnly>(height)?;
         if !cp.is_checkpoint_verified() {
             return Err(LayoutError::CheckpointUnverified(height));
         };
@@ -773,7 +766,19 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        self.checkpoint(height)
+        self.checkpoint::<ReadOnly>(height)
+    }
+
+    // Draft notes:
+    // The checkpoint is rw so that we can write proto files.
+    // The checkpoint is rw but still tracked, which is different from untracked rw tip. This is because we want to prevent it from being accidentally deleted.
+    // Although remove_states_below remove checkpoints based on states metadata, it is still good to not fully rely on that implementation.
+    // Ideally, the checkpoint should be limited to only writing the proto files, but we don't have such precise control yet. It is to be discussed whether to introduce a new policy for this.
+    pub fn checkpoint_in_async_writing(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<RwPolicy<()>>, LayoutError> {
+        self.checkpoint::<RwPolicy<()>>(height)
     }
 
     /// Returns if a checkpoint with the given height is verified or not.
@@ -1180,6 +1185,27 @@ impl StateLayout {
 
     fn ensure_dir_exists(&self, p: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(p)
+    }
+
+    // Draft notes:
+    // It seems that this function can be implemented for CheckpointLayout instead of StateLayout.
+    // However, there is no simple workaround for the needed StateLayoutMetrics.
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        log: &ReplicaLogger,
+        path: &Path,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        mark_files_readonly_and_sync(log, path, &self.metrics, thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!(
+                    "Could not sync and mark readonly scratchpad for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        })
     }
 
     /// Atomically copies a checkpoint with the specified name located at src
@@ -2744,7 +2770,7 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
-fn sync_and_mark_files_readonly(
+fn mark_files_readonly_and_sync(
     #[allow(unused)] log: &ReplicaLogger,
     path: &Path,
     #[allow(unused)] metrics: &StateLayoutMetrics,

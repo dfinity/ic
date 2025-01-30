@@ -11,7 +11,7 @@ use crate::{
 
 use ic_base_types::CanisterId;
 use ic_config::state_manager::Config;
-use ic_logger::ReplicaLogger;
+use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
     difference, CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError,
@@ -197,9 +197,9 @@ fn write_checkpoint(
         )
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
-        log,
+        log.clone(),
         tip_handler,
-        state_layout,
+        state_layout.clone(),
         config.lsmt_config.clone(),
         metrics.clone(),
         MaliciousFlags::default(),
@@ -223,6 +223,11 @@ fn write_checkpoint(
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+
+    state_layout
+        .mark_files_readonly_and_sync(&log, cp_layout.raw_path(), Some(thread_pool))
+        .map_err(|e| format!("Failed to mark checkpoint readonly and sync: {}", e))?;
+
     validate_checkpoint_and_remove_unverified_marker(
         &cp_layout,
         None,

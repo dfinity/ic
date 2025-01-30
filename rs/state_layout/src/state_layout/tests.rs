@@ -286,7 +286,6 @@ fn test_removal_when_last_dropped() {
                 )
                 .unwrap(),
                 Height::new(1),
-                None,
             )
             .unwrap();
         let cp2 = state_layout
@@ -297,7 +296,6 @@ fn test_removal_when_last_dropped() {
                 )
                 .unwrap(),
                 Height::new(2),
-                None,
             )
             .unwrap();
         // Add one checkpoint so that we never remove the last one and crash
@@ -309,7 +307,6 @@ fn test_removal_when_last_dropped() {
                 )
                 .unwrap(),
                 Height::new(3),
-                None,
             )
             .unwrap();
         assert_eq!(
@@ -351,7 +348,6 @@ fn test_last_removal_panics_in_debug() {
                 )
                 .unwrap(),
                 Height::new(1),
-                None,
             )
             .unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
@@ -391,13 +387,13 @@ fn test_can_remove_unverified_marker_file_twice() {
         tip.create_unverified_checkpoint_marker().unwrap();
 
         let checkpoint = state_layout
-            .scratchpad_to_checkpoint(scratchpad_layout, height, None)
+            .scratchpad_to_checkpoint(scratchpad_layout, height)
             .unwrap();
         checkpoint.remove_unverified_checkpoint_marker().unwrap();
 
         // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
         // However, it can still access the checkpoint and try to remove the marker file again from its side.
-        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height, None);
+        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height);
         assert!(checkpoint_result.is_err());
 
         let res = state_layout
