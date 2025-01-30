@@ -3541,6 +3541,68 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CyclesBurn128, result, amount);
         result
     }
+
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                Ok(subnet_id.get_ref().as_slice().len())
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                valid_subslice("ic0.subnet_self_copy heap", dst, size, heap)?;
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                let id_bytes = subnet_id.get_ref().as_slice();
+                let slice = valid_subslice("ic0.subnet_self_copy id", offset, size, id_bytes)?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
+                Ok(())
+            }
+        };
+        trace_syscall!(
+            self,
+            SubnetSelfCopy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
+        result
+    }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.
