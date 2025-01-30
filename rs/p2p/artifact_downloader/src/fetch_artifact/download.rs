@@ -190,7 +190,6 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     ///
     /// The download fails iff:
     /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`AssembleResult::Unwanted`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`AssembleResult::Unwanted`]
     #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
