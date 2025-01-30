@@ -481,7 +481,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/metrics" => serve_metrics(|encoder| encode_metrics(encoder)),
+        "/metrics" => serve_metrics(encode_metrics),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
