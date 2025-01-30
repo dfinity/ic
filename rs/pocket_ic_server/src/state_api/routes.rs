@@ -40,7 +40,7 @@ use pocket_ic::common::rest::{
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
     RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, Topology,
+    RawSubnetId, RawTime, TickConfigs, Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -1073,11 +1073,11 @@ pub async fn handler_add_cycles(
 
 pub async fn handler_set_stable_memory(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime: _,
-        blob_store,
-    }): State<AppState>,
+              api_state,
+              min_alive_until: _,
+              runtime: _,
+              blob_store,
+          }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     axum::extract::Json(raw): axum::extract::Json<RawSetStableMemory>,
@@ -1101,9 +1101,10 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(raw): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick { configs: raw };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -1124,11 +1125,11 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
             config.fiduciary,
             config.bitcoin,
         ]
-        .into_iter()
-        .flatten()
-        .chain(config.system)
-        .chain(config.application)
-        .chain(config.verified_application),
+            .into_iter()
+            .flatten()
+            .chain(config.system)
+            .chain(config.application)
+            .chain(config.verified_application),
         |spec| !spec.is_supported(),
     )
 }
@@ -1137,11 +1138,11 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime,
-        blob_store: _,
-    }): State<AppState>,
+              api_state,
+              min_alive_until: _,
+              runtime,
+              blob_store: _,
+          }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let subnet_configs = instance_config.subnet_config_set;

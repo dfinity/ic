@@ -54,6 +54,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, Subnets,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -77,7 +78,8 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
+    RawSubnetBlockmakerMetrics, SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs,
+    Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
@@ -334,9 +336,9 @@ pub(crate) type CanisterHttpClient = Arc<
     Mutex<
         Box<
             dyn NonBlockingChannel<
-                    AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
-                > + Send,
+                AdapterCanisterHttpRequest,
+                Response = AdapterCanisterHttpResponse,
+            > + Send,
         >,
     >,
 >;
@@ -1579,19 +1581,94 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Tick;
+#[derive(Clone, Debug)]
+pub struct Tick {
+    pub configs: TickConfigs,
+}
+
+impl Tick {
+    fn set_subnets_blockmaker(
+        &self,
+        pic: &mut PocketIc,
+        subnets_blockmaker: &[SubnetBlockmakerMetrics],
+    ) -> Result<(), OpOut> {
+        for subnet_blockmaker in subnets_blockmaker {
+            let Some(state_machine) = pic.get_subnet_with_id(subnet_blockmaker.subnet) else {
+                return Err(OpOut::Error(PocketIcError::SubnetNotFound(
+                    subnet_blockmaker.subnet.get().0,
+                )));
+            };
+
+            let mut request_blockmakers = subnet_blockmaker.failed_blockmakers.clone();
+            request_blockmakers.push(subnet_blockmaker.blockmaker);
+            let subnet_nodes: Vec<_> = state_machine.nodes.iter().map(|n| n.node_id).collect();
+            for blockmaker in request_blockmakers {
+                if !subnet_nodes.contains(&blockmaker) {
+                    return Err(OpOut::Error(PocketIcError::BlockmakerNotFound(blockmaker)));
+                }
+            }
+
+            state_machine.set_blockmakers_metrics(BlockmakerMetrics {
+                blockmaker: subnet_blockmaker.blockmaker,
+                failed_blockmakers: subnet_blockmaker.failed_blockmakers.clone(),
+            });
+        }
+        Ok(())
+    }
+}
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        for subnet in pic.subnets.get_all() {
+        let subnets_blockmakers =
+            self.configs
+                .blockmakers_configs
+                .as_ref()
+                .map(|blockmaker_configs| {
+                    blockmaker_configs
+                        .subnets_blockmakers
+                        .iter()
+                        .map(|subnet| SubnetBlockmakerMetrics::from(subnet.clone()))
+                        .collect_vec()
+                });
+        if let Some(subnets_blockmakers) = subnets_blockmakers {
+            if let Err(error) = self.set_subnets_blockmaker(pic, &subnets_blockmakers) {
+                return error;
+            }
+        }
+
+        let subnets = pic.subnets.subnets.read().unwrap();
+        for (_, subnet) in subnets.iter() {
             subnet.state_machine.execute_round();
         }
         OpOut::NoOutput
     }
-
     fn id(&self) -> OpId {
         OpId("tick".to_string())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmakerMetrics {
+    pub subnet: SubnetId,
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
+    fn from(raw: RawSubnetBlockmakerMetrics) -> Self {
+        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
+        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
+        let failed_blockmakers: Vec<NodeId> = raw
+            .failed_blockmakers
+            .into_iter()
+            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
+            .collect();
+
+        SubnetBlockmakerMetrics {
+            subnet,
+            blockmaker,
+            failed_blockmakers,
+        }
     }
 }
 
@@ -1943,7 +2020,7 @@ impl Operation for CallRequest {
                     let HttpCallContent::Call { update: payload } = envelope.content;
                     payload.canister_id.0 == PrincipalId::default().to_vec()
                         && Ic00Method::from_str(&payload.method_name)
-                            == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
+                        == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
                 }
                 Err(_) => false,
             };
@@ -1971,7 +2048,7 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
-                .build();
+                    .build();
 
                 // Task that waits for call service to submit the ingress message, and
                 // forwards it to the state machine. The task will automatically terminate
@@ -2101,7 +2178,7 @@ impl Operation for QueryRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     query_handler,
                 )
-                .build_service();
+                    .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2156,7 +2233,7 @@ impl Operation for CanisterReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
                 )
-                .build_service();
+                    .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2207,7 +2284,7 @@ impl Operation for SubnetReadStateRequest {
                     Arc::new(OnceCell::new_with(delegation)),
                     subnet.state_manager.clone(),
                 )
-                .build_service();
+                    .build_service();
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
@@ -2798,7 +2875,7 @@ fn route_call(
                         &canister_call.payload,
                         ProvisionalCreateCanisterWithCyclesArgs
                     )
-                    .map_err(|e| format!("Error decoding candid: {:?}", e))?;
+                        .map_err(|e| format!("Error decoding candid: {:?}", e))?;
                     if let Some(specified_id) = payload.specified_id {
                         EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
                             specified_id,
@@ -2824,7 +2901,7 @@ fn route_call(
     };
     let is_provisional_create_canister = canister_call.canister_id == CanisterId::ic_00()
         && Ic00Method::from_str(&canister_call.method)
-            == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles);
+        == Ok(Ic00Method::ProvisionalCreateCanisterWithCycles);
     route(pic, effective_principal, is_provisional_create_canister)
 }
 
@@ -2882,7 +2959,7 @@ mod tests {
             assert_ne!(pic1.get_state_label(), pic1_state_label);
             assert_ne!(pic1.get_state_label(), pic0.get_state_label());
         })
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     }
 }

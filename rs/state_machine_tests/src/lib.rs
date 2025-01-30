@@ -785,7 +785,7 @@ impl StateMachineNode {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
             )
-            .into(),
+                .into(),
             node_signing_key,
             committee_signing_key,
             dkg_dealing_encryption_key,
@@ -834,6 +834,7 @@ pub struct StateMachine {
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
+    blockmaker_metrics: RwLock<Option<BlockmakerMetrics>>,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
@@ -1194,7 +1195,7 @@ impl StateMachineBuilder {
                         start: *id_range.start(),
                         end: *id_range.end(),
                     }])
-                    .expect("invalid canister range"),
+                        .expect("invalid canister range"),
                     subnet_id,
                 )
                 .expect("failed to assign a canister range");
@@ -1417,7 +1418,8 @@ impl StateMachine {
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
-            .with_self_validating(self_validating);
+            .with_self_validating(self_validating)
+            .with_blockmaker_metrics(self.blockmaker_metrics.read().unwrap().clone());
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1454,7 +1456,7 @@ impl StateMachine {
             registry_version,
             &self.replica_logger,
         )
-        .unwrap();
+            .unwrap();
         let cup_proto: pb::CatchUpPackage = cup.into();
         self.consensus_pool_cache.update_cup(cup_proto);
     }
@@ -1659,12 +1661,12 @@ impl StateMachine {
                     let private_key_bytes = hex::decode(
                         "fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920",
                     )
-                    .unwrap();
+                        .unwrap();
 
                     let private_key = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(
                         private_key_bytes.as_slice(),
                     )
-                    .unwrap();
+                        .unwrap();
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1808,6 +1810,7 @@ impl StateMachine {
             certified_height_tx,
             runtime,
             state_dir,
+            blockmaker_metrics: None.into(),
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
             checkpoint_interval_length: checkpoint_interval_length.into(),
@@ -2007,9 +2010,9 @@ impl StateMachine {
             msg_limit,
             byte_limit,
         )
-        .map(|certified_stream| XNetPayload {
-            stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
-        })
+            .map(|certified_stream| XNetPayload {
+                stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
+            })
     }
 
     /// Submit an ingress message into the ingress pool used by `PayloadBuilderImpl`
@@ -2041,7 +2044,7 @@ impl StateMachine {
             sender_sig: None,
             sender_delegation: None,
         })
-        .unwrap();
+            .unwrap();
         self.submit_signed_ingress(msg)
     }
 
@@ -2386,10 +2389,13 @@ impl StateMachine {
             current_time
         };
 
+        let blockmaker_metrics = payload.blockmaker_metrics.clone().unwrap_or(BlockmakerMetrics::new_for_test());
+
         let batch = Batch {
             batch_number,
             batch_summary,
             requires_full_state_hash,
+            blockmaker_metrics,
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -2405,7 +2411,6 @@ impl StateMachine {
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
         };
 
@@ -2448,8 +2453,8 @@ impl StateMachine {
             &self.metrics_registry,
             "scheduler_instructions_consumed_per_round",
         )
-        .map(|stats| stats.sum)
-        .unwrap_or(0.0)
+            .map(|stats| stats.sum)
+            .unwrap_or(0.0)
     }
 
     /// Returns the total number of Wasm instructions executed when executing subnet
@@ -2459,8 +2464,8 @@ impl StateMachine {
             &self.metrics_registry,
             "execution_round_subnet_queue_instructions",
         )
-        .map(|stats| stats.sum)
-        .unwrap_or(0.0)
+            .map(|stats| stats.sum)
+            .unwrap_or(0.0)
     }
 
     /// Returns the number of canisters that were uninstalled due to being low
@@ -2470,7 +2475,7 @@ impl StateMachine {
             &self.metrics_registry,
             "scheduler_num_canisters_uninstalled_out_of_cycles",
         )
-        .unwrap_or(0)
+            .unwrap_or(0)
     }
 
     /// Total number of running canisters.
@@ -2479,8 +2484,8 @@ impl StateMachine {
             &self.metrics_registry,
             "replicated_state_registered_canisters",
         )
-        .get(&Labels::from([("status".into(), "running".into())]))
-        .unwrap_or(&0)
+            .get(&Labels::from([("status".into(), "running".into())]))
+            .unwrap_or(&0)
     }
 
     /// Total memory footprint of all canisters on this subnet.
@@ -2550,6 +2555,11 @@ impl StateMachine {
                 .unwrap()
                 .as_nanos() as u64,
         )
+    }
+
+    /// Advances the state machine time by the given amount.
+    pub fn set_blockmakers_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
+        *self.blockmaker_metrics.write().unwrap() = Some(blockmaker_metrics);
     }
 
     /// Advances the state machine time by the given amount.
@@ -2661,7 +2671,7 @@ impl StateMachine {
             self.state_manager.state_layout().raw_path().join("tip"),
             ic_types::Height::new(0),
         )
-        .expect("failed to obtain tip");
+            .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)
             .expect("failed to obtain canister layout");
@@ -2709,14 +2719,14 @@ impl StateMachine {
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,
         )
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to load canister state from {}: {}",
-                canister_directory.display(),
-                e
-            )
-        })
-        .0;
+            .unwrap_or_else(|e| {
+                panic!(
+                    "failed to load canister state from {}: {}",
+                    canister_directory.display(),
+                    e
+                )
+            })
+            .0;
 
         let (h, mut state) = self.state_manager.take_tip();
 
@@ -2837,7 +2847,7 @@ impl StateMachine {
             Method::InstallCode,
             InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None).encode(),
         )
-        .map(|_| ())
+            .map(|_| ())
     }
 
     /// Compiles specified WAT to Wasm and installs it for the canister using
@@ -2855,7 +2865,7 @@ impl StateMachine {
             wat::parse_str(wat).expect("invalid WAT"),
             payload,
         )
-        .expect("failed to install canister");
+            .expect("failed to install canister");
     }
 
     /// Creates a new canister and returns the canister principal.
@@ -2880,7 +2890,7 @@ impl StateMachine {
                     specified_id,
                     sender_canister_version: None,
                 }
-                .encode(),
+                    .encode(),
             )
             .expect("failed to create canister");
         match wasm_result {
@@ -3011,9 +3021,9 @@ impl StateMachine {
                 settings,
                 sender_canister_version: None,
             }
-            .encode(),
+                .encode(),
         )
-        .map(|_| ())
+            .map(|_| ())
     }
 
     /// Create a canister snapshot.
@@ -3032,12 +3042,12 @@ impl StateMachine {
             Method::TakeCanisterSnapshot,
             args.encode(),
         )
-        .map(|res| match res {
-            WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
-            WasmResult::Reject(reason) => {
-                panic!("take_canister_snapshot call rejected: {}", reason)
-            }
-        })?
+            .map(|res| match res {
+                WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
+                WasmResult::Reject(reason) => {
+                    panic!("take_canister_snapshot call rejected: {}", reason)
+                }
+            })?
     }
 
     /// Load the canister state from a canister snapshot.
@@ -3056,12 +3066,12 @@ impl StateMachine {
             Method::LoadCanisterSnapshot,
             args.encode(),
         )
-        .map(|res| match res {
-            WasmResult::Reply(data) => Ok(data),
-            WasmResult::Reject(reason) => {
-                panic!("load_canister_snapshot call rejected: {}", reason)
-            }
-        })?
+            .map(|res| match res {
+                WasmResult::Reply(data) => Ok(data),
+                WasmResult::Reject(reason) => {
+                    panic!("load_canister_snapshot call rejected: {}", reason)
+                }
+            })?
     }
 
     /// Upload a chunk to the wasm chunk store.
@@ -3093,7 +3103,7 @@ impl StateMachine {
             Method::InstallChunkedCode,
             args.encode(),
         )
-        .map(|_| ())
+            .map(|_| ())
     }
 
     /// Clear the wasm chunk store.
@@ -3110,9 +3120,9 @@ impl StateMachine {
             ClearChunkStoreArgs {
                 canister_id: canister_id.into(),
             }
-            .encode(),
+                .encode(),
         )
-        .map(|_| ())
+            .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.
@@ -3270,7 +3280,7 @@ impl StateMachine {
             sender_sig: None,
             sender_delegation: None,
         })
-        .unwrap();
+            .unwrap();
 
         // Fetch ingress validation settings from the registry.
         let registry_version = self.registry_client.get_latest_version();
@@ -3396,10 +3406,10 @@ impl StateMachine {
             "canister_status",
             (CanisterIdRecord::from(canister_id)).encode(),
         )
-        .map(|wasm_result| match wasm_result {
-            WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
-            WasmResult::Reject(reject_msg) => Err(reject_msg),
-        })
+            .map(|wasm_result| match wasm_result {
+                WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
+                WasmResult::Reject(reject_msg) => Err(reject_msg),
+            })
     }
 
     /// Deletes the canister with the specified ID.
@@ -3444,7 +3454,7 @@ impl StateMachine {
                     start: *canister_range.start(),
                     end: *canister_range.end(),
                 }])
-                .unwrap(),
+                    .unwrap(),
                 destination,
             )
             .expect("ranges are not well formed");
@@ -3495,7 +3505,7 @@ impl StateMachine {
                     start: *canister_range.start(),
                     end: *canister_range.end(),
                 }])
-                .unwrap(),
+                    .unwrap(),
                 source,
                 destination,
             )
@@ -3536,7 +3546,7 @@ impl StateMachine {
                     start: *canister_range.start(),
                     end: *canister_range.end(),
                 }])
-                .unwrap(),
+                    .unwrap(),
                 migration_trace,
             )
             .expect("ranges are not well formed");
@@ -3814,6 +3824,7 @@ pub struct PayloadBuilder {
     consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
+    blockmaker_metrics: Option<BlockmakerMetrics>,
 }
 
 impl Default for PayloadBuilder {
@@ -3826,14 +3837,22 @@ impl Default for PayloadBuilder {
             consensus_responses: Default::default(),
             query_stats: Default::default(),
             self_validating: Default::default(),
+            blockmaker_metrics: Default::default(),
         }
-        .with_max_expiry_time_from_now(GENESIS.into())
+            .with_max_expiry_time_from_now(GENESIS.into())
     }
 }
 
 impl PayloadBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_blockmaker_metrics(self, blockmaker_metrics: Option<BlockmakerMetrics>) -> Self {
+        Self {
+            blockmaker_metrics,
+            ..self
+        }
     }
 
     pub fn with_max_expiry_time_from_now(self, now: SystemTime) -> Self {
@@ -3909,7 +3928,7 @@ impl PayloadBuilder {
             sender_sig: None,
             sender_delegation: None,
         })
-        .unwrap();
+            .unwrap();
 
         self.ingress_messages.push(msg);
         self.nonce = self.nonce.map(|n| n + 1);
