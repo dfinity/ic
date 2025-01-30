@@ -1421,6 +1421,7 @@ pub mod nns {
 
 pub mod sns {
     use super::*;
+    use ic_nervous_system_agent::sns::root::SnsCanisters;
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum SnsUpgradeError {
@@ -1442,7 +1443,10 @@ pub mod sns {
         expected_type_to_change: SnsCanisterType,
     ) -> Result<(), SnsUpgradeError> {
         // Ensure that we are working with knowledge of the latest archive canisters (if there are any).
-        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap().sns;
+        let sns = {
+            let response = sns.root.list_sns_canisters(pocket_ic).await.unwrap();
+            SnsCanisters::try_from(response).unwrap().sns
+        };
 
         let (canister_id, controller_id) = match expected_type_to_change {
             SnsCanisterType::Root => (sns.root.canister_id, sns.governance.canister_id),
@@ -1551,7 +1555,9 @@ pub mod sns {
         use super::*;
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
-        use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmitProposalError};
+        use ic_nervous_system_agent::sns::governance::{
+            GovernanceCanister, ProposalSubmissionError, SubmittedProposal,
+        };
         use ic_sns_governance_api::pb::v1::{
             get_neuron_response,
             neuron::DissolveState,
@@ -1641,11 +1647,15 @@ pub mod sns {
         ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
             let agent = PocketIcAgent::new(pocket_ic, sender);
             let governance = GovernanceCanister::new(canister_id);
-            let proposal_id = governance
+
+            let response = governance
                 .submit_proposal(&agent, neuron_id, proposal)
                 .await
-                .map_err(|err| match err {
-                    SubmitProposalError::GovernanceError(e) => e,
+                .unwrap();
+
+            let SubmittedProposal { proposal_id } =
+                SubmittedProposal::try_from(response).map_err(|err| match err {
+                    ProposalSubmissionError::GovernanceError(e) => e,
                     e => panic!("Unexpected error: {e}"),
                 })?;
 
@@ -1653,7 +1663,7 @@ pub mod sns {
         }
 
         /// This function assumes that the proposal submission succeeded (and panics otherwise).
-        async fn wait_for_proposal_execution(
+        pub async fn wait_for_proposal_execution(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,

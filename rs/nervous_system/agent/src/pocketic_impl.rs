@@ -1,9 +1,9 @@
 use crate::Request;
+use crate::{CallCanisters, CanisterInfo};
 use candid::Principal;
-use pocket_ic::nonblocking::PocketIc;
+use pocket_ic::management_canister::DefiniteCanisterSettings;
+use pocket_ic::{management_canister::CanisterStatusResult, nonblocking::PocketIc};
 use thiserror::Error;
-
-use crate::CallCanisters;
 
 /// A wrapper around PocketIc that specifies a sender for the requests.
 /// The name is an analogy for `ic_agent::Agent`, since each `ic_agent::Agent` specifies a sender.
@@ -54,6 +54,32 @@ impl CallCanisters for PocketIcAgent<'_> {
 
         candid::decode_one(response.as_slice()).map_err(PocketIcCallError::CandidDecode)
     }
+
+    async fn canister_info(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+    ) -> Result<CanisterInfo, Self::Error> {
+        let canister_id = canister_id.into();
+
+        let CanisterStatusResult {
+            module_hash,
+            settings: DefiniteCanisterSettings { controllers, .. },
+            ..
+        } = self
+            .pocket_ic
+            .canister_status(canister_id, Some(self.sender))
+            .await
+            .map_err(PocketIcCallError::PocketIc)?;
+
+        Ok(CanisterInfo {
+            module_hash,
+            controllers: controllers.into_iter().collect(),
+        })
+    }
+
+    fn caller(&self) -> Result<Principal, Self::Error> {
+        Ok(self.sender)
+    }
 }
 
 impl CallCanisters for PocketIc {
@@ -66,5 +92,18 @@ impl CallCanisters for PocketIc {
         PocketIcAgent::new(self, Principal::anonymous())
             .call(canister_id, request)
             .await
+    }
+
+    async fn canister_info(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+    ) -> Result<CanisterInfo, Self::Error> {
+        PocketIcAgent::new(self, Principal::anonymous())
+            .canister_info(canister_id)
+            .await
+    }
+
+    fn caller(&self) -> Result<Principal, Self::Error> {
+        Ok(Principal::anonymous())
     }
 }

@@ -21,6 +21,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
     "//rs/sns/governance/api",
+    "//rs/sns/cli",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
@@ -35,6 +36,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [

@@ -1,8 +1,10 @@
-use std::collections::BTreeSet;
-
 use candid::Principal;
 use canister_test::Wasm;
-use ic_management_canister_types::CanisterInstallMode;
+use ic_nervous_system_agent::nns::registry::get_subnet_for_canister;
+use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
+    find_neuron_with_majority_voting_power, wait_for_proposal_execution,
+};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     await_with_timeout, install_canister_on_subnet, nns, sns, NnsInstaller,
 };
@@ -12,38 +14,32 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::common::modify_wasm_bytes;
-use ic_sns_governance_api::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister};
+use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
+use ic_sns_cli::upgrade_sns_controlled_canister::{
+    self, UpgradeSnsControlledCanisterArgs, UpgradeSnsControlledCanisterInfo,
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+use url::Url;
 
 const MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 20;
 const MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 5 * 60;
 
 const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
-// TODO: Figure out how to best support uploading chunks into the target itself, which has
-// SNS Root as the controller but not SNS Governance.
-//
-// #[tokio::test]
-// async fn test_store_same_as_target() {
-//     let store_same_as_target = true;
-//     run_test(store_same_as_target).await;
-// }
-
-#[tokio::test]
-async fn test_store_different_from_target() {
-    let store_same_as_target = false;
-    run_test(store_same_as_target).await;
-}
-
-fn very_large_wasm_bytes() -> Vec<u8> {
+fn very_large_wasm_path() -> PathBuf {
     let image_classification_canister_wasm_path =
         std::env::var("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH")
             .expect("Please ensure that this Bazel test target correctly specifies env and data.");
 
-    let wasm_path = std::path::PathBuf::from(image_classification_canister_wasm_path);
+    PathBuf::from(image_classification_canister_wasm_path)
+}
 
+fn very_large_wasm_bytes() -> Vec<u8> {
+    let wasm_path = very_large_wasm_path();
     std::fs::read(&wasm_path).expect("Failed to read WASM file")
 }
 
@@ -102,7 +98,8 @@ async fn upload_wasm_as_chunks(
     uploaded_chunk_hashes
 }
 
-async fn run_test(store_same_as_target: bool) {
+#[tokio::test]
+async fn test_store_different_from_target() {
     // 1. Prepare the world
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -129,10 +126,24 @@ async fn run_test(store_same_as_target: bool) {
     };
 
     // Install a dapp canister.
-    let original_wasm = Wasm::from_bytes(very_large_wasm_bytes());
+    let original_wasm = {
+        // Modify the Wasm upfront, as we then upgrade to the (unmodified) Wasm on the file system.
+        let wasm_bytes = very_large_wasm_bytes();
+        let wasm_bytes = modify_wasm_bytes(&wasm_bytes, 42);
+        Wasm::from_bytes(&wasm_bytes[..])
+    };
     let original_wasm_hash = original_wasm.sha256_hash();
 
     let app_subnet = pocket_ic.topology().await.get_app_subnets()[0];
+    let ii_subnet = pocket_ic.topology().await.get_ii().unwrap();
+    assert_ne!(app_subnet, ii_subnet);
+
+    let root_subnet = get_subnet_for_canister(&pocket_ic, ROOT_CANISTER_ID.into())
+        .await
+        .unwrap();
+
+    println!("root_subnet = {}", root_subnet);
+    panic!("boo");
 
     let target_canister_id = install_canister_on_subnet(
         &pocket_ic,
@@ -174,59 +185,47 @@ async fn run_test(store_same_as_target: bool) {
         sns
     };
 
-    let store_canister_id = if store_same_as_target {
-        target_canister_id
-    } else {
-        install_canister_on_subnet(
-            &pocket_ic,
-            app_subnet,
-            vec![],
-            None,
-            vec![sns.root.canister_id],
+    // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+    // neuron either holds the majority of the voting power or the follow graph is set up
+    // s.t. when this neuron submits a proposal, that proposal gets through without the need
+    // for any voting.
+    let (sns_neuron_id, _) =
+        find_neuron_with_majority_voting_power(&pocket_ic, sns.governance.canister_id)
+            .await
+            .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+    let cli_arg = UpgradeSnsControlledCanisterArgs {
+        sns_neuron_id: Some(ParsedSnsNeuron(sns_neuron_id)),
+        target_canister_id,
+        wasm_path: very_large_wasm_path().clone(),
+        candid_arg: None,
+        proposal_url: Url::try_from(
+            "https://github.com/dfinity/examples/tree/master/rust/image-classification",
         )
+        .unwrap(),
+        summary: "Upgrade Image Classification canister.".to_string(),
+    };
+
+    // 2. Submit the upgrade proposal.
+    let pocket_ic_agent = PocketIcAgent {
+        pocket_ic: &pocket_ic,
+        sender: sns.root.canister_id.into(),
+    };
+    let UpgradeSnsControlledCanisterInfo {
+        wasm_module_hash,
+        proposal_id,
+    } = upgrade_sns_controlled_canister::exec(cli_arg, &pocket_ic_agent)
         .await
-    };
+        .unwrap();
 
-    let new_wasm = {
-        let new_wasm_bytes = modify_wasm_bytes(&original_wasm.bytes(), 42);
-        Wasm::from_bytes(&new_wasm_bytes[..])
-    };
-    let new_wasm_hash = new_wasm.sha256_hash();
+    let proposal_id = proposal_id.unwrap();
 
-    // Smoke test
-    assert_ne!(new_wasm_hash, original_wasm_hash);
+    // 3. Await proposal execution.
+    wait_for_proposal_execution(&pocket_ic, sns.governance.canister_id, proposal_id)
+        .await
+        .unwrap();
 
-    // WASM with 15_843_866 bytes (`image-classification.wasm.gz`) is split into 1 MiB chunks.
-    let num_chunks_expected = 16;
-
-    let chunk_hashes_list = upload_wasm_as_chunks(
-        &pocket_ic,
-        sns.root.canister_id.into(),
-        store_canister_id.into(),
-        new_wasm,
-        num_chunks_expected,
-    )
-    .await;
-
-    // 2. Run code under test.
-    sns::governance::propose_to_upgrade_sns_controlled_canister_and_wait(
-        &pocket_ic,
-        sns.governance.canister_id,
-        UpgradeSnsControlledCanister {
-            canister_id: Some(target_canister_id.get()),
-            new_canister_wasm: vec![],
-            canister_upgrade_arg: None,
-            mode: Some(CanisterInstallMode::Upgrade as i32),
-            chunked_canister_wasm: Some(ChunkedCanisterWasm {
-                wasm_module_hash: new_wasm_hash.clone().to_vec(),
-                store_canister_id: Some(store_canister_id.get()),
-                chunk_hashes_list,
-            }),
-        },
-    )
-    .await;
-
-    // 3. Inspect the resulting state.
+    // 4. Inspect the resulting state.
     await_with_timeout(
         &pocket_ic,
         MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS..MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS,
@@ -238,7 +237,7 @@ async fn run_test(store_same_as_target: bool) {
                 .expect("canister status must be available")
                 .module_hash
         },
-        &Some(new_wasm_hash.to_vec()),
+        &Some(wasm_module_hash),
     )
     .await
     .unwrap();

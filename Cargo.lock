@@ -10111,9 +10111,11 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
+ "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
  "serde",
+ "serde_cbor",
  "tempfile",
  "thiserror 2.0.11",
  "tokio",
@@ -10362,6 +10364,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-registry-transport",
+ "ic-sns-cli",
  "ic-sns-governance",
  "ic-sns-governance-api",
  "ic-sns-init",
@@ -10389,6 +10392,7 @@ dependencies = [
  "rustc-hash 1.1.0",
  "serde",
  "tokio",
+ "url",
  "xrc-mock",
 ]
 
@@ -12206,6 +12210,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.11",
  "tokio",
+ "url",
 ]
 
 [[package]]
