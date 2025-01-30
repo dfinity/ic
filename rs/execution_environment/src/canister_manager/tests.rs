@@ -8109,16 +8109,7 @@ fn helper_update_settings_updates_hook_status(
             compute_allocation_used: state.total_compute_allocation(),
         };
 
-        let mut wat = r#"
-        (module
-            (memory $memory "#
-            .to_owned();
-
-        wat.push_str(used_wasm_memory_pages.to_string().as_ref());
-        wat.push_str(
-            r#")
-        )"#,
-        );
+        let wat = format!("(module (memory {used_wasm_memory_pages}))");
 
         let wasm = wat::parse_str(wat).unwrap();
 
