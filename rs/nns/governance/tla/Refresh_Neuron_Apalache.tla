@@ -25,7 +25,7 @@ CONSTANTS
 
 CONSTANTS
     \* @type: Set($proc);
-    Claim_Neuron_Process_Ids
+    Refresh_Neuron_Process_Ids
 
 CONSTANTS
     \* Minimum stake a neuron can have
