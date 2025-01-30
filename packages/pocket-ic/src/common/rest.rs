@@ -661,18 +661,18 @@ impl ExtendedSubnetConfigSet {
             (self.fiduciary.clone(), Fiduciary),
             (self.bitcoin.clone(), Bitcoin),
         ]
-            .into_iter()
-            .filter(|(mb, _)| mb.is_some())
-            .map(|(mb, kind)| {
-                let spec = mb.unwrap();
-                (
-                    kind,
-                    spec.get_state_path(),
-                    spec.get_subnet_id(),
-                    spec.get_instruction_config(),
-                )
-            })
-            .collect()
+        .into_iter()
+        .filter(|(mb, _)| mb.is_some())
+        .map(|(mb, kind)| {
+            let spec = mb.unwrap();
+            (
+                kind,
+                spec.get_state_path(),
+                spec.get_subnet_id(),
+                spec.get_instruction_config(),
+            )
+        })
+        .collect()
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -786,9 +786,9 @@ impl Topology {
             .filter(|(_, config)| {
                 config.subnet_kind == kind
                     && instruction_config
-                    .as_ref()
-                    .map(|instruction_config| config.instruction_config == *instruction_config)
-                    .unwrap_or(true)
+                        .as_ref()
+                        .map(|instruction_config| config.instruction_config == *instruction_config)
+                        .unwrap_or(true)
             })
             .map(|(id, _)| *id)
             .collect()
