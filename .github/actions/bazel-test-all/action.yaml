@@ -65,8 +65,8 @@ runs:
           if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
               gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
                   --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
-              rm -f bazel-bep.pb
           fi
+          rm -f bazel-bep.pb
 
           # output node name to gihub step summary
           [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
