@@ -52,7 +52,7 @@ pub struct GetSuccessorsRequest {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<Arc<Block>>,
     /// Next set of headers to be sent to the canister.
     pub next: Vec<BlockHeader>,
 }
@@ -151,7 +151,7 @@ fn get_successor_blocks(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
-) -> Vec<Block> {
+) -> Vec<Arc<Block>> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
     let mut successor_blocks = vec![];
@@ -204,7 +204,7 @@ fn get_next_headers(
     state: &BlockchainState,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
-    blocks: &[Block],
+    blocks: &[Arc<Block>],
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
