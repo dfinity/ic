@@ -2220,15 +2220,12 @@ fn test_reject_response_type() {
 
 #[test]
 fn test_custom_blockmaker() {
-    // Setup PocketIC with initial subnets and records
     let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
-
     let topology = pocket_ic.topology();
     let application_subnet = topology.get_app_subnets()[0];
 
-    // We create a canister on the app subnet.
+    // Create and install test canister.
     let canister = pocket_ic.create_canister_on_subnet(None, None, application_subnet);
-    // We top up the canister with cycles and install the test canister WASM to them.
     pocket_ic.add_cycles(canister, INIT_CYCLES);
     pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
 
@@ -2241,29 +2238,22 @@ fn test_custom_blockmaker() {
 
     let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
         subnet: application_subnet.into(),
-        blockmaker: blockmaker_node,
+        blockmaker: blockmaker_node.clone(),
         failed_blockmakers: vec![],
     }];
-
     let tick_configs = TickConfigs {
         blockmakers: Some(BlockMakerConfigs {
             blockmakers_per_subnet: subnets_blockmakers,
         }),
     };
 
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
-    pocket_ic.tick_with_configs(tick_configs.clone());
+    for _ in 0..5 {
+        pocket_ic.tick_with_configs(tick_configs.clone());
+    }
 
-    pocket_ic
-        //go to next day it should have recorder the metrics
-        .advance_time(std::time::Duration::from_secs(60 * 60 * 25));
+    //advance time until next day so that management canister can record blockmaker metrics
+    pocket_ic.advance_time(std::time::Duration::from_secs(60 * 60 * 24));
 
-    pocket_ic.tick();
-    pocket_ic.tick();
-    pocket_ic.tick();
     pocket_ic.tick();
     pocket_ic.tick();
 
@@ -2280,7 +2270,14 @@ fn test_custom_blockmaker() {
         )
         .unwrap();
 
-    let res = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
-    println!("{:?}", res);
-    assert!(false);
+    let metrics = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
+    let blockmaker_node_metrics = metrics[0]
+        .node_metrics
+        .clone()
+        .into_iter()
+        .find(|x| x.node_id.0 == Principal::from(blockmaker_node.clone()))
+        .unwrap();
+
+    assert_eq!(blockmaker_node_metrics.num_blocks_proposed_total, 5);
+    assert_eq!(blockmaker_node_metrics.num_block_failures_total, 0);
 }
