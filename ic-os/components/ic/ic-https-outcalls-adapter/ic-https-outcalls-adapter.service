@@ -1,7 +1,5 @@
 [Unit]
 Description=IC Canister HTTP Provider
-# We must wait for IC bootstrap to complete: It writes various
-# state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 After=network-online.target
