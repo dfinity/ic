@@ -1,6 +1,7 @@
 use clap::Parser;
 use ic_sns_testing::pocket_ic::{
-    bootstrap_nns, create_sns, install_test_canister, TestCanisterInitArgs,
+    bootstrap_nns, create_sns, install_test_canister, upgrade_sns_controlled_test_canister,
+    TestCanisterInitArgs,
 };
 use pocket_ic::PocketIcBuilder;
 use reqwest::Url;
@@ -34,5 +35,18 @@ async fn main() {
     )
     .await;
     println!("Test canister ID: {}", test_canister_id);
-    let (_, _nns_proposal_id) = create_sns(&pocket_ic, vec![test_canister_id]).await;
+    println!("Creating SNS...");
+    let (sns, _nns_proposal_id) = create_sns(&pocket_ic, vec![test_canister_id]).await;
+    println!("SNS created");
+    println!("Upgrading SNS-controlled test canister...");
+    upgrade_sns_controlled_test_canister(
+        &pocket_ic,
+        sns,
+        test_canister_id,
+        TestCanisterInitArgs {
+            greeting: Some("Hi".to_string()),
+        },
+    )
+    .await;
+    println!("Test canister upgraded");
 }
