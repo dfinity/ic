@@ -17,6 +17,8 @@ RequiredBy=setup-ssh-user-keys.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/bootstrap-ic-node.sh
+Restart=on-failure
+RestartSec=10
 
 # All services that networking depends on log their outputs to the console 
 # and are piped to the host terminal if the verbose flag is enabled.

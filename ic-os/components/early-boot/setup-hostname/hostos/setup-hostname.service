@@ -12,6 +12,8 @@ RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-hostname.sh --type=host
 StandardOutput=journal+console
 StandardError=journal+console
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
