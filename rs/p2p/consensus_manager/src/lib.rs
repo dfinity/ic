@@ -29,6 +29,8 @@ type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
 /// Same order of magnitude as the number of active artifacts.
+/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
+/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
 const MAX_IO_CHANNEL_SIZE: usize = 100_000;
 
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
