@@ -160,7 +160,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
-    /// Waits until advert resolves to fetch. If all peers are removed or bouncer value becomes Unwanted, false is returned.
+    /// Waits until advert resolves to wanted. If the bouncer value becomes Unwanted, false is returned.
     #[instrument(skip_all)]
     async fn should_download(
         id: &Artifact::Id,
