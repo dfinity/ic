@@ -3,8 +3,6 @@ Description=IC Crypto Service Provider
 After=generate-ic-config.service
 Wants=generate-ic-config.service
 Requires=ic-crypto-csp.socket
-StartLimitBurst=5
-StartLimitIntervalSec=5
 
 [Service]
 UMask=066

@@ -2,8 +2,6 @@
 Description=Set up persistent storage permissions
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 [Service]
 Type=oneshot
