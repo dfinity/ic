@@ -32,7 +32,7 @@ use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::Client;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
@@ -256,6 +256,7 @@ pub enum PocketIcError {
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
+    BlockmakerNotFound(NodeId),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -285,13 +286,16 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
                 write!(f, "SubnetNotFound({})", sid)
             }
+            OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
+                write!(f, "BlockmakerNotFound({})", nid)
+            }
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)
             }
             OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
-                subnet_id,
-                canister_http_request_id,
-            ))) => {
+                                                                         subnet_id,
+                                                                         canister_http_request_id,
+                                                                     ))) => {
                 write!(
                     f,
                     "InvalidCanisterHttpRequestId({},{:?})",
@@ -576,7 +580,7 @@ async fn handler(
                 .map(|p| p.as_str())
                 .unwrap_or_default()
         ))
-        .unwrap();
+            .unwrap();
         proxy(url, request, &state.backend_client.clone())
             .await
             .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
@@ -656,8 +660,8 @@ impl ApiState {
                 instance_id,
                 AUTO_PROGRESS_OPERATION_TIMEOUT,
             )
-            .await
-            .unwrap()
+                .await
+                .unwrap()
             {
                 UpdateReply::Started { state_label, op_id } => {
                     break loop {
@@ -785,8 +789,8 @@ impl ApiState {
                     PathBuf::from(https_config.cert_path.clone()),
                     PathBuf::from(https_config.key_path.clone()),
                 )
-                .await
-                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+                    .await
+                    .map_err(|e| format!("TLS config could not be created: {}", e))?,
             )
         } else {
             None
@@ -986,8 +990,8 @@ impl ApiState {
                         op,
                         &mut rx,
                     )
-                    .await
-                    .is_none()
+                        .await
+                        .is_none()
                     {
                         break;
                     }
@@ -999,8 +1003,8 @@ impl ApiState {
                         op,
                         &mut rx,
                     )
-                    .await
-                    .is_none()
+                        .await
+                        .is_none()
                     {
                         break;
                     }
@@ -1009,7 +1013,7 @@ impl ApiState {
                         duration,
                         std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
                     ))
-                    .await;
+                        .await;
                     if received_stop_signal(&mut rx) {
                         break;
                     }
@@ -1104,7 +1108,7 @@ impl ApiState {
             instance_id,
             sync_wait_time,
         )
-        .await
+            .await
     }
 
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
