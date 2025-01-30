@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::ErrorCode;
 use ic_error_types::UserError;
 use ic_management_canister_types::CanisterStatusType;
@@ -3044,7 +3044,9 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     assert!(counters[1] < counters[2]);
 }
 
-fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResult, UserError> {
+fn test_best_effort_responses_feature_flag(
+    flag: BestEffortResponsesFeature,
+) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
         .with_best_effort_responses(flag)
         .build();
@@ -3073,16 +3075,22 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
 }
 
 #[test]
-fn test_best_effort_responses_feature_flag_enabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Enabled) {
-        Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
-        _ => panic!("Unexpected result"),
-    };
+fn test_best_effort_responses_feature_flag_not_disabled() {
+    for flag in &[
+        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        match test_best_effort_responses_feature_flag(*flag) {
+            Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
+            _ => panic!("Unexpected result"),
+        };
+    }
 }
 
 #[test]
 fn test_best_effort_responses_feature_flag_disabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
+    match test_best_effort_responses_feature_flag(BestEffortResponsesFeature::DisabledByTrap) {
         Err(e) => {
             e.assert_contains(
                 ErrorCode::CanisterContractViolation,
@@ -3094,7 +3102,7 @@ fn test_best_effort_responses_feature_flag_disabled() {
 }
 
 fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
-    flag: FlagStatus,
+    flag: BestEffortResponsesFeature,
 ) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
         .with_best_effort_responses(flag)
@@ -3112,18 +3120,26 @@ fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
 }
 
 #[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag_not_disabled() {
     let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
-    assert_eq!(
-        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
-        WasmResult::Reply(no_deadline.to_le_bytes().into())
-    );
+    for flag in &[
+        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        assert_eq!(
+            helper_ic0_msg_deadline_best_effort_responses_feature_flag(*flag).unwrap(),
+            WasmResult::Reply(no_deadline.to_le_bytes().into())
+        );
+    }
 }
 
 #[test]
 fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
-    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
-        .unwrap_err();
+    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(
+        BestEffortResponsesFeature::DisabledByTrap,
+    )
+    .unwrap_err();
 
     err.assert_contains(
         ErrorCode::CanisterContractViolation,

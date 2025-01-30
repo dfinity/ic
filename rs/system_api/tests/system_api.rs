@@ -2219,7 +2219,7 @@ fn get_system_api_for_best_effort_response_feature_test(
     let mut execution_parameters = execution_parameters(api_type.execution_mode());
     execution_parameters.subnet_type = cycles_account_manager.subnet_type();
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
-        &system_state,
+        system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
