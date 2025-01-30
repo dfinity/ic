@@ -22,7 +22,7 @@ pub struct AutoProgressConfig {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
 pub struct TickConfigs {
-    pub blockmakers_configs: Option<BlockMakerConfigs>,
+    pub blockmakers: Option<BlockMakerConfigs>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
