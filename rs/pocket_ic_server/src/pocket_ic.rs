@@ -1629,18 +1629,15 @@ impl Operation for Tick {
         let subnets = pic.subnets.subnets.read().unwrap();
 
         for (subnet_id, subnet) in subnets.iter() {
-            let blockmaker_metrics = blockmakers_per_subnet
-                .as_ref()
-                .map(|bm_per_subnet| {
-                    bm_per_subnet
-                        .iter()
-                        .find(|bm| bm.subnet == *subnet_id)
-                        .map(|bm| BlockmakerMetrics {
-                            blockmaker: bm.blockmaker,
-                            failed_blockmakers: bm.failed_blockmakers.clone(),
-                        })
-                })
-                .flatten();
+            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
+                bm_per_subnet
+                    .iter()
+                    .find(|bm| bm.subnet == *subnet_id)
+                    .map(|bm| BlockmakerMetrics {
+                        blockmaker: bm.blockmaker,
+                        failed_blockmakers: bm.failed_blockmakers.clone(),
+                    })
+            });
 
             subnet.state_machine.execute_round(blockmaker_metrics);
         }

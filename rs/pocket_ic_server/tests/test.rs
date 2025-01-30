@@ -1061,7 +1061,11 @@ fn test_query_stats_live() {
 #[test]
 fn test_custom_blockmaker() {
     // Setup PocketIC with initial subnets and records
-    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    let pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
     let topology = pocket_ic.topology();
     let application_subnet = topology.get_app_subnets()[0];
     let blockmaker_node = topology
