@@ -10316,14 +10316,18 @@ fn test_neuron_set_visibility() {
 
     // Step 3.2: Inspect neurons themselves (in particular, their visibility).
 
-    let assert_neuron_visibility =
-        |neuron_id: NeuronId, expected_visibility: Visibility| {
-            let neuron = governance
-                .with_neuron(&neuron_id, |neuron| neuron.clone())
-                .unwrap();
+    let assert_neuron_visibility = |neuron_id: NeuronId, expected_visibility: Visibility| {
+        let neuron = governance
+            .with_neuron(&neuron_id, |neuron| neuron.clone())
+            .unwrap();
 
-            assert_eq!(neuron.visibility() as i32, expected_visibility as i32, "{:#?}", neuron,);
-        };
+        assert_eq!(
+            neuron.visibility() as i32,
+            expected_visibility as i32,
+            "{:#?}",
+            neuron,
+        );
+    };
 
     assert_neuron_visibility(typical_neuron.id.unwrap(), Visibility::Public);
 
