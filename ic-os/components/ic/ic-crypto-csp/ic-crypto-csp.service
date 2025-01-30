@@ -9,7 +9,6 @@ UMask=066
 User=ic-csp-vault
 Environment=RUST_BACKTRACE=1
 ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic.json5
-NotifyAccess=main
 Restart=always
 
 [Install]
