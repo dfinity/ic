@@ -123,18 +123,7 @@ def write_partition_image(gpt_entry, partition_file, disk_image):
     if partition_file_size > gpt_entry["size"] * 512:
         raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
     print("partitaion:" + partition_file)
-    # subprocess.run(
-    #     ["time", "dd", f"if={partition_file}", f"of={disk_image}", f"seek={base}",
-    #      "conv=sparse,notrunc", "oflag=seek_bytes", "bs=64M"],
-    #     check=True)
     copy_file_with_holes(partition_file, disk_image, base)
-    # with open(partition_file, "rb") as source:
-    #     with open(disk_image, "r+b") as target:
-    #         sent = os.copy_file_range(source.fileno(), target.fileno(), partition_file_size, offset_dst=base)
-    # #         # # target.seek(base)
-    # #         # os.lseek(target.fileno(), base, os.SEEK_SET)
-    # #         # sent = os.sendfile(target.fileno(), source.fileno(), None, partition_file_size)
-    #         print("sent: %d" % sent)
 
 
 def select_partition_file(name, partition_files):

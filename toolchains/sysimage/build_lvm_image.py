@@ -176,10 +176,6 @@ def write_partition_image(lvm_entry, partition_image, lvm_image):
     if os.path.getsize(partition_image) > lvm_entry["size"] * EXTENT_SIZE_BYTES:
         raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
 
-    # subprocess.run(
-    #     ["dd", f"if={partition_image}", f"seek={base}", f"of={lvm_image}",
-    #      "conv=sparse,notrunc", "oflag=seek_bytes", "bs=4M"],
-    #     check=True)
     copy_file_with_holes(partition_image, lvm_image, base)
 
 
