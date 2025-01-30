@@ -267,7 +267,7 @@ async fn canister_http_with_transform() -> HttpResponse {
 
 // inter-canister calls
 
-#[query]
+#[update]
 async fn node_metrics_history_proxy(
     args: NodeMetricsHistoryArgs,
 ) -> Vec<NodeMetricsHistoryResponse> {

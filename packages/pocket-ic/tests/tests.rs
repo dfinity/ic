@@ -2268,7 +2268,7 @@ fn test_custom_blockmaker() {
     pocket_ic.tick();
 
     let response = pocket_ic
-        .query_call(
+        .update_call(
             canister,
             Principal::anonymous(),
             "node_metrics_history_proxy",

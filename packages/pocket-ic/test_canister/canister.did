@@ -123,7 +123,7 @@ service : {
   canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
-  node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse) query;
+  node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
   whoami : () -> (text);
   whois : (principal) -> (text);
   blob_len : (blob) -> (nat64);
