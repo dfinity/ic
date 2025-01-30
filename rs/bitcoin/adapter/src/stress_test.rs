@@ -1,5 +1,6 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
+use bitcoin::Network;
 use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
 use clap::Parser;
 use ic_btc_service::{
@@ -12,8 +13,6 @@ use tokio::{
 };
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
-
-use ic_btc_adapter::{cli::Cli, config::IncomingSource};
 
 async fn setup_channel(uds_path: PathBuf) -> Channel {
     Endpoint::try_from("http://[::]:50051")
@@ -36,23 +35,26 @@ async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
     BtcServiceClient::new(channel)
 }
 
+/// This struct is use to provide a command line interface to the adapter.
+#[derive(Parser)]
+#[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
+pub struct Cli {
+    /// This field contains the path to the config file.
+    pub network: Network,
+    pub uds_path: PathBuf,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let config = cli.get_config().expect("Error while reading config file.");
-    let uds_path = if let IncomingSource::Path(uds_path) = config.incoming_source {
-        uds_path
-    } else {
-        panic!("Cannot use systemd as a incoming source.");
-    };
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
-    let block_0 = genesis_block(config.network);
+    let block_0 = genesis_block(cli.network);
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
-    let mut rpc_client = setup_client(uds_path).await;
+    let mut rpc_client = setup_client(cli.uds_path).await;
     let total_timer = Instant::now();
 
     loop {

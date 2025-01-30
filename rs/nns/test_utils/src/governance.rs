@@ -156,10 +156,10 @@ pub async fn is_proposal_executed_or_failed(
         .await
         .unwrap();
     let pi = pi.expect("Proposal with id: {:?} not found.");
-    println!("Proposal {:?} status: {:?}", id, pi.status());
-    pi.status() == ProposalStatus::Executed
-        || pi.status() == ProposalStatus::Failed
-        || pi.status() == ProposalStatus::Rejected
+    println!("Proposal {:?} status: {:?}", id, pi.status);
+    pi.status == ProposalStatus::Executed as i32
+        || pi.status == ProposalStatus::Failed as i32
+        || pi.status == ProposalStatus::Rejected as i32
 }
 
 /// Thin-wrapper around get_closed_proposals to handle
@@ -241,8 +241,8 @@ pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvide
     assert_eq!(
         wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 }
 
@@ -374,8 +374,8 @@ async fn change_nns_canister_by_proposal(
         assert_eq!(
             wait_for_final_state(governance, ProposalId::from(proposal_id))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
     }
 
