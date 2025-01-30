@@ -773,7 +773,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
-                default_features = False,
             ),
             "libnss": crate.spec(
                 version = "^0.5.0",
