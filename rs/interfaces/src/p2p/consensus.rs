@@ -91,7 +91,11 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Aborted;
+pub enum AssembleResult<T> {
+    Unwanted,
+    Done { message: T, peer_id: NodeId },
+}
+
 pub trait Peers {
     fn peers(&self) -> Vec<NodeId>;
 }
@@ -109,7 +113,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
         id: <A2 as IdentifiableArtifact>::Id,
         artifact: Option<(A2, NodeId)>,
         peers: P,
-    ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
+    ) -> impl std::future::Future<Output = AssembleResult<A1>> + Send;
 }
 
 /// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
