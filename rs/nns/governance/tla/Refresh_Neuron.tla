@@ -83,7 +83,7 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
             if(answer.response /= Variant("Fail", UNIT)) {
                 with (b = VariantGetOrElse("BalanceQueryOk", answer.response, 0)) {
                     if(b >= MIN_STAKE) {
-                        neuron := [neuron EXCEPT ![neuron_id] = [@ EXCEPT !.cached_stake = b] ]
+                        neuron := [neuron EXCEPT ![neuron_id].cached_stake = b ]
                     };
                 };
             };
@@ -94,7 +94,7 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "5ba99437" /\ chksum(tla) = "546ae43c")
+\* BEGIN TRANSLATION (chksum(pcal) = "636537d3" /\ chksum(tla) = "126c20ca")
 VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, spawning_neurons, pc, account, neuron_id
 
@@ -133,7 +133,7 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                   /\ IF answer.response /= Variant("Fail", UNIT)
                                         THEN /\ LET b == VariantGetOrElse("BalanceQueryOk", answer.response, 0) IN
                                                   IF b >= MIN_STAKE
-                                                     THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = b] ]
+                                                     THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]].cached_stake = b ]
                                                      ELSE /\ TRUE
                                                           /\ UNCHANGED neuron
                                         ELSE /\ TRUE
