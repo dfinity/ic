@@ -286,11 +286,11 @@ impl BlockchainState {
         let mut cloning_duration = 0;
         let total_size = block.total_size();
 
-        let times = 200.min(2_000_000 / total_size);
+        let times = 100.min(2_000_000 / total_size);
 
         let mut buf_size = 0;
         let experiments = 1;
-        let mut value = std::sync::Arc::new(block);
+        let value = std::sync::Arc::new(block);
 
         if true || block_height == 1098 {
             let mut total_duration = 0;

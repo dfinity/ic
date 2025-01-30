@@ -174,7 +174,6 @@ fn get_successor_blocks(
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
-                        //TODO(mihailjianu): check if cloning here is expensive and if we can get rid of it
                         successor_blocks.push(Arc::clone(&block));
                         response_block_size += block_size;
                     } else {
