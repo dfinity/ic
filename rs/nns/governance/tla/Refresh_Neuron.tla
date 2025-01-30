@@ -17,8 +17,6 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     TRANSACTION_FEE
 
-OP_ACCOUNT_BALANCE == "account_balance"
-ACCOUNT_BALANCE_FAIL == "Err"
 DUMMY_ACCOUNT == ""
 
 \* @type: (a -> b, Set(a)) => a -> b;
@@ -43,8 +41,8 @@ variables
     spawning_neurons = FALSE;
 
 macro refresh_neuron_reset_local_vars() {
-    account := DUMMY_ACCOUNT;
     neuron_id := 0;
+    account := DUMMY_ACCOUNT;
 }
 
 
@@ -52,16 +50,16 @@ macro refresh_neuron_reset_local_vars() {
 \* A Refresh_Neuron process simulates a call to refresh_neuron
 process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
     variable
-        \* There are two ways that the user can invoke a neuron refresh: 
+        \* There are two ways that the user can invoke a neuron refresh:
         \* 1. by specifying an account ID
         \* 2. by specifying an existing neuron ID
-        \* We only model the second option; the second should follow from the invariant that 
+        \* We only model the second option; the second should follow from the invariant that
         \* \A nid aid : neuron_id_by_account[aid] = nid <=> neuron[nid].account = aid
 
-        \* The account is an argument; we let it be chosen non-deteministically
-        account = DUMMY_ACCOUNT;
-        \* The neuron_id is determined by account.
+        \* The neuron_id is an argument; we let it be chosen non-deteministically
         neuron_id = 0;
+        \* The account is determined by neuron_id.
+        account = DUMMY_ACCOUNT;
     {
     RefreshNeuron1:
         either {
@@ -94,12 +92,12 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "636537d3" /\ chksum(tla) = "126c20ca")
+\* BEGIN TRANSLATION (chksum(pcal) = "29371649" /\ chksum(tla) = "eb3a6fcf")
 VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, pc, account, neuron_id
+          ledger_to_governance, spawning_neurons, pc, neuron_id, account
 
 vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, pc, account, neuron_id >>
+           ledger_to_governance, spawning_neurons, pc, neuron_id, account >>
 
 ProcSet == (Refresh_Neuron_Process_Ids)
 
@@ -111,13 +109,13 @@ Init == (* Global variables *)
         /\ ledger_to_governance = {}
         /\ spawning_neurons = FALSE
         (* Process Refresh_Neuron *)
-        /\ account = [self \in Refresh_Neuron_Process_Ids |-> DUMMY_ACCOUNT]
         /\ neuron_id = [self \in Refresh_Neuron_Process_Ids |-> 0]
+        /\ account = [self \in Refresh_Neuron_Process_Ids |-> DUMMY_ACCOUNT]
         /\ pc = [self \in ProcSet |-> "RefreshNeuron1"]
 
 RefreshNeuron1(self) == /\ pc[self] = "RefreshNeuron1"
                         /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
-                              /\ UNCHANGED <<locks, governance_to_ledger, account, neuron_id>>
+                              /\ UNCHANGED <<locks, governance_to_ledger, neuron_id, account>>
                            \/ /\ \E nid \in DOMAIN(neuron) \ locks:
                                    /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
                                    /\ account' = [account EXCEPT ![self] = neuron[nid].account]
@@ -139,8 +137,8 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                         ELSE /\ TRUE
                                              /\ UNCHANGED neuron
                                   /\ locks' = locks \ {neuron_id[self]}
-                             /\ account' = [account EXCEPT ![self] = DUMMY_ACCOUNT]
                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
+                             /\ account' = [account EXCEPT ![self] = DUMMY_ACCOUNT]
                              /\ pc' = [pc EXCEPT ![self] = "Done"]
                              /\ UNCHANGED << neuron_id_by_account, 
                                              governance_to_ledger, 
