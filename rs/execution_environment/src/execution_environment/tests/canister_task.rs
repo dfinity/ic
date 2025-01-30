@@ -1443,3 +1443,87 @@ fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
         NumWasmPages::new(6)
     );
 }
+
+#[test]
+fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    let update_grow_mem_size = 10;
+    let hook_grow_mem_size = 5;
+
+    let wat: String =
+        get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size, true);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // Here we have:
+    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_threshold = 15 Wasm Pages
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+
+    // First ingress messages gets executed.
+    // wasm_memory.size = 1 + 10 = 11
+    // used_wasm_memory > wasm_memory_limit
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (5 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+}
