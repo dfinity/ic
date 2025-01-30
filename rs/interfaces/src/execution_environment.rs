@@ -219,6 +219,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -1170,6 +1174,19 @@ pub trait SystemApi {
         &mut self,
         amount: Cycles,
         dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }

@@ -1,45 +1,14 @@
-use candid::{CandidType, Principal};
+use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_nervous_system_clients::Request;
-use serde::Deserialize;
-use std::collections::BTreeSet;
 
 use crate::CallCanisters;
+use std::collections::BTreeSet;
+
+pub mod requests;
+
+use requests::*;
 
 pub const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
-
-// ```candid
-// type upload_chunk_args = record {
-//     canister_id : principal;
-//     chunk : blob;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-struct UploadChunkArgs {
-    pub canister_id: Principal,
-    pub chunk: Vec<u8>,
-}
-
-// ```candid
-// type chunk_hash = record {
-//   hash : blob;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct ChunkHash {
-    pub hash: Vec<u8>,
-}
-
-// ```candid
-// type upload_chunk_result = chunk_hash;
-// ```
-type UploadChunksResult = ChunkHash;
-
-impl Request for UploadChunkArgs {
-    type Response = UploadChunksResult;
-    const METHOD: &'static str = "upload_chunk";
-    const UPDATE: bool = true;
-}
 
 async fn upload_chunk<C: CallCanisters>(
     agent: &C,
@@ -57,30 +26,6 @@ async fn upload_chunk<C: CallCanisters>(
         .await?;
 
     Ok(response)
-}
-
-// ```candid
-// type stored_chunks_args = record {
-//     canister_id : canister_id;
-// };
-// ```
-#[derive(CandidType, Deserialize, Debug, Clone)]
-struct StoredChunksArgs {
-    pub canister_id: Principal,
-}
-
-// ```
-// type chunk_hash = record {
-//   hash : blob;
-// };
-// type stored_chunks_result = vec chunk_hash;
-// ```
-type StoredChunksResult = Vec<ChunkHash>;
-
-impl Request for StoredChunksArgs {
-    type Response = StoredChunksResult;
-    const METHOD: &'static str = "stored_chunks";
-    const UPDATE: bool = true;
 }
 
 pub async fn stored_chunks<C: CallCanisters>(

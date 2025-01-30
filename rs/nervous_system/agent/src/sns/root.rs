@@ -1,3 +1,7 @@
+use crate::{
+    sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
+    sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
+};
 use ic_base_types::PrincipalId;
 use ic_sns_root::{
     pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
@@ -5,10 +9,7 @@ use ic_sns_root::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
-    sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
-};
+pub mod requests;
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct RootCanister {

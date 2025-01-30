@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/registry/canister",
-    "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/types/base_types",

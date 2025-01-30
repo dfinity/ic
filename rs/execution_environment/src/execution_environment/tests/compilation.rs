@@ -1,10 +1,9 @@
 mod execution_tests {
     use std::path::PathBuf;
 
-    use ic_cycles_account_manager::WasmExecutionMode;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
-        canister_state::execution_state::{WasmBinary, WasmMetadata},
+        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
         ExecutionState, ExportedFunctions, Memory,
     };
     use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
