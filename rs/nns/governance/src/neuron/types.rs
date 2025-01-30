@@ -1353,6 +1353,7 @@ impl Neuron {
         let deciding_voting_power =
             Some(self.deciding_voting_power(voting_power_economics, now_seconds));
         let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+        let recent_ballots = self.sorted_recent_ballots();
 
         let Neuron {
             id,
@@ -1365,7 +1366,7 @@ impl Neuron {
             created_timestamp_seconds,
             spawn_at_timestamp_seconds,
             followees,
-            recent_ballots,
+            recent_ballots: _,
             kyc_verified,
             transfer,
             maturity_e8s_equivalent,
