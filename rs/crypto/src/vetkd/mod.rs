@@ -16,11 +16,13 @@ use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError
 use ic_crypto_internal_csp::{key_id::KeyId, vault::api::CspVault, CryptoServiceProvider};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, new_logger, ReplicaLogger};
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
@@ -333,21 +335,17 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         PublicCoefficients::Bls12_381(pub_coeffs) => &pub_coeffs.coefficients,
     };
     let reconstruction_threshold = pub_coeffs_from_store.len();
-    let master_public_key = {
-        let public_key_bytes = pub_coeffs_from_store
-            .iter()
-            .copied()
-            .next()
-            .ok_or_else(|| {
-                VetKdKeyShareCombinationError::InternalError(format!(
-                    "failed to determine master public key: public coefficients for NI-DKG ID {} are empty",
-                    &args.ni_dkg_id
-                ))
-            })?;
-        ic_crypto_internal_bls12_381_vetkd::G2Affine::deserialize(&public_key_bytes).map_err(
-            |_: PairingInvalidPoint| VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey,
-        )?
-    };
+    let master_public_key =
+        master_pubkey_from_trusted_coeffs(pub_coeffs_from_store, &args.ni_dkg_id).map_err(
+            |error| match error {
+                MasterPubkeyFromCoeffsError::InternalError(msg) => {
+                    VetKdKeyShareCombinationError::InternalError(msg)
+                }
+                MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
+                    VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
+                }
+            },
+        )?;
     let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
         .map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
@@ -477,22 +475,19 @@ fn verify_encrypted_key_internal(
                     },
                 )
             })?;
-        let public_key_bytes = match pub_coeffs_from_store {
-            PublicCoefficients::Bls12_381(pub_coeffs) => pub_coeffs
-                .coefficients
-                .iter()
-                .copied()
-                .next()
-                .ok_or_else(|| {
-                    VetKdKeyVerificationError::InternalError(format!(
-                        "public coefficients for NI-DKG ID {} are empty",
-                        &args.ni_dkg_id
-                    ))
-                })?,
-        };
-        ic_crypto_internal_bls12_381_vetkd::G2Affine::deserialize(&public_key_bytes).map_err(
-            |_: PairingInvalidPoint| VetKdKeyVerificationError::InvalidArgumentMasterPublicKey,
-        )?
+        match pub_coeffs_from_store {
+            PublicCoefficients::Bls12_381(bls_coeffs_trusted) => {
+                master_pubkey_from_trusted_coeffs(&bls_coeffs_trusted.coefficients, &args.ni_dkg_id)
+                    .map_err(|error| match error {
+                        MasterPubkeyFromCoeffsError::InternalError(msg) => {
+                            VetKdKeyVerificationError::InternalError(msg)
+                        }
+                        MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
+                            VetKdKeyVerificationError::InvalidArgumentMasterPublicKey
+                        }
+                    })?
+            }
+        }
     };
 
     let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
@@ -514,6 +509,28 @@ fn verify_encrypted_key_internal(
         true => Ok(()),
         false => Err(VetKdKeyVerificationError::VerificationError),
     }
+}
+
+fn master_pubkey_from_trusted_coeffs(
+    pub_coeffs: &[bls12_381::PublicKeyBytes],
+    ni_dkg_id: &NiDkgId,
+) -> Result<G2Affine, MasterPubkeyFromCoeffsError> {
+    let first_coeff = pub_coeffs.iter().copied().next().ok_or_else(|| {
+        MasterPubkeyFromCoeffsError::InternalError(format!(
+            "failed to determine master public key: public coefficients 
+            for NI-DKG ID {ni_dkg_id} are empty"
+        ))
+    })?;
+    let first_coeff_g2 =
+        G2Affine::deserialize_unchecked(&first_coeff).map_err(|_: PairingInvalidPoint| {
+            MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey
+        })?;
+    Ok(first_coeff_g2)
+}
+
+enum MasterPubkeyFromCoeffsError {
+    InternalError(String),
+    InvalidArgumentMasterPublicKey,
 }
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
