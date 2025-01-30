@@ -1,4 +1,5 @@
 #![allow(clippy::test_attr_in_doctest)]
+use crate::common::rest::TickConfigs;
 /// # PocketIC: A Canister Testing Platform
 ///
 /// PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
@@ -520,6 +521,14 @@ impl PocketIc {
     pub fn tick(&self) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.tick().await })
+    }
+
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn tick_with_configs(&self, configs: TickConfigs) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
     }
 
     /// Configures the IC to make progress automatically,

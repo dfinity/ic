@@ -1,11 +1,13 @@
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use ic_agent::agent::CallResponse;
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_management_canister_types::{
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, ProvisionalCreateCanisterWithCyclesArgs,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
@@ -13,8 +15,9 @@ use ic_registry_transport::pb::v1::{
 use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
-    CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
+    BlockMakerConfigs, CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig,
+    HttpGatewayDetails, HttpsConfig, InstanceConfig, RawSubnetBlockmakerMetrics, SubnetConfigSet,
+    SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
@@ -1053,6 +1056,65 @@ fn test_query_stats_live() {
             }
         }
     })
+}
+
+#[test]
+fn test_custom_blockmaker() {
+    // Setup PocketIC with initial subnets and records
+    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    let topology = pocket_ic.topology();
+    let application_subnet = topology.get_app_subnets()[0];
+    let blockmaker_node = topology
+        .subnet_configs
+        .get(&application_subnet)
+        .unwrap()
+        .node_ids[0]
+        .clone();
+
+    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
+        subnet: application_subnet.into(),
+        blockmaker: blockmaker_node,
+        failed_blockmakers: vec![],
+    }];
+
+    let tick_configs = TickConfigs {
+        blockmakers: Some(BlockMakerConfigs {
+            blockmakers_per_subnet: subnets_blockmakers,
+        }),
+    };
+
+    pocket_ic.tick_with_configs(tick_configs.clone());
+    pocket_ic.tick_with_configs(tick_configs.clone());
+    pocket_ic.tick_with_configs(tick_configs.clone());
+    pocket_ic.tick_with_configs(tick_configs.clone());
+    pocket_ic.tick_with_configs(tick_configs.clone());
+
+    pocket_ic
+        //go to next day it should have recorder the metrics
+        .advance_time(std::time::Duration::from_secs(60 * 60 * 25));
+
+    pocket_ic.tick();
+    pocket_ic.tick();
+    pocket_ic.tick();
+    pocket_ic.tick();
+    pocket_ic.tick();
+
+    let response = pocket_ic
+        .query_call(
+            Principal::management_canister(),
+            Principal::anonymous(),
+            "node_metrics_history",
+            Encode!(&NodeMetricsHistoryArgs {
+                subnet_id: application_subnet.into(),
+                start_at_timestamp_nanos: 0,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let res = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
+    println!("{:?}", res);
+    assert!(false)
 }
 
 /// Tests subnet read state requests.
