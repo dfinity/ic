@@ -320,10 +320,10 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    shard_count = 10,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
-    shard_count = 10,
 )
 
 rust_test(
