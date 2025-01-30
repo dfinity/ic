@@ -297,7 +297,10 @@ impl EncryptedKey {
     }
 
     /// Deserialize an encrypted key
-    pub fn deserialize(val: [u8; Self::BYTES]) -> Result<Self, EncryptedKeyDeserializationError> {
+    pub fn deserialize(val: &[u8]) -> Result<Self, EncryptedKeyDeserializationError> {
+        if val.len() != Self::BYTES {
+            return Err(EncryptedKeyDeserializationError::InvalidEncryptedKey);
+        }
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;
 
@@ -407,9 +410,10 @@ impl EncryptedKeyShare {
     }
 
     /// Deserialize an encrypted key share
-    pub fn deserialize(
-        val: [u8; Self::BYTES],
-    ) -> Result<Self, EncryptedKeyShareDeserializationError> {
+    pub fn deserialize(val: &[u8]) -> Result<Self, EncryptedKeyShareDeserializationError> {
+        if val.len() != Self::BYTES {
+            return Err(EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare);
+        }
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;
 

@@ -4,16 +4,11 @@ use crate::sign::BasicSigVerifierInternal;
 use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
-use ic_crypto_internal_bls12_381_vetkd::DerivationPath;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKey;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyCombinationError;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShareDeserializationError;
-use ic_crypto_internal_bls12_381_vetkd::G2Affine;
-use ic_crypto_internal_bls12_381_vetkd::NodeIndex;
-use ic_crypto_internal_bls12_381_vetkd::PairingInvalidPoint;
-use ic_crypto_internal_bls12_381_vetkd::TransportPublicKey;
-use ic_crypto_internal_bls12_381_vetkd::TransportPublicKeyDeserializationError;
+use ic_crypto_internal_bls12_381_vetkd::{
+    DerivationPath, EncryptedKeyCombinationError, EncryptedKeyShare,
+    EncryptedKeyShareDeserializationError, G2Affine, NodeIndex, PairingInvalidPoint,
+    TransportPublicKey, TransportPublicKeyDeserializationError,
+};
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
@@ -369,7 +364,13 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     args.ni_dkg_id
                 )),
             )?;
-            let clib_share = share_to_clib_share(share)?;
+            let clib_share = EncryptedKeyShare::deserialize(&share.encrypted_key_share.0).map_err(
+                |e| match e {
+                    EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare => {
+                        VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare
+                    }
+                },
+            )?;
             Ok((node_id, *node_index, clib_share))
         })
         .collect::<Result<_, _>>()?;
@@ -453,46 +454,16 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
     })
 }
 
-fn share_to_clib_share(
-    share: &ic_types::crypto::vetkd::VetKdEncryptedKeyShare,
-) -> Result<ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare, VetKdKeyShareCombinationError> {
-    let encrypted_key_share_192_bytes = {
-        if share.encrypted_key_share.0.len() != EncryptedKeyShare::BYTES {
-            return Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare);
-        }
-        let mut encrypted_key = [0u8; EncryptedKeyShare::BYTES];
-        encrypted_key.copy_from_slice(&share.encrypted_key_share.0);
-        encrypted_key
-    };
-    ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare::deserialize(
-        encrypted_key_share_192_bytes,
-    )
-    .map_err(|e| match e {
-        EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare => {
-            VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare
-        }
-    })
-}
-
 fn verify_encrypted_key_internal(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     key: &VetKdEncryptedKey,
     args: &VetKdArgs,
 ) -> Result<(), VetKdKeyVerificationError> {
-    let encrypted_key = {
-        let encrypted_key_192_bytes = {
-            if key.encrypted_key.len() != EncryptedKey::BYTES {
-                return Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey);
-            }
-            let mut encrypted_key = [0u8; EncryptedKey::BYTES];
-            encrypted_key.copy_from_slice(&key.encrypted_key);
-            encrypted_key
-        };
-        ic_crypto_internal_bls12_381_vetkd::EncryptedKey::deserialize(encrypted_key_192_bytes)
+    let encrypted_key =
+        ic_crypto_internal_bls12_381_vetkd::EncryptedKey::deserialize(&key.encrypted_key)
         .map_err(|e| match e {
             ic_crypto_internal_bls12_381_vetkd::EncryptedKeyDeserializationError::InvalidEncryptedKey => VetKdKeyVerificationError::InvalidArgumentEncryptedKey,
-        })?
-    };
+        })?;
 
     let master_public_key = {
         let pub_coeffs_from_store = lockable_threshold_sig_data_store
