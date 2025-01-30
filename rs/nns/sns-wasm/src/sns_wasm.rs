@@ -2034,6 +2034,7 @@ mod test {
     use crate::{canister_stable_memory::TestCanisterStableMemory, pb::v1::SnsUpgrade};
     use async_trait::async_trait;
     use ic_base_types::PrincipalId;
+    use ic_cdk::println;
     use ic_crypto_sha2::Sha256;
     use ic_nervous_system_common_test_utils::wasm_helpers;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};

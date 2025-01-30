@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{api::Funds, over, over_async, over_init};
+use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
     Method, UpdateSettingsArgs,
@@ -11,7 +12,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
 };
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
@@ -34,7 +35,6 @@ use ic_sns_wasm::{
     sns_wasm::SnsWasmCanister,
 };
 use ic_types::{CanisterId, Cycles};
-use std::time::{Duration, SystemTime};
 use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 use ic_cdk::println;
@@ -71,15 +71,15 @@ impl CanisterApi for CanisterApiImpl {
         let settings = CanisterSettingsArgsBuilder::new()
             .with_controllers(vec![controller_id])
             .with_wasm_memory_limit(wasm_memory_limit);
-        let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
-            target_subnet.into(),
+
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+            target_subnet.get().0,
             &Method::CreateCanister.to_string(),
-            candid_one,
-            CreateCanisterArgs {
+            (CreateCanisterArgs {
                 settings: Some(settings.build()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
-            },
-            Funds::new(cycles.get().try_into().unwrap()),
+            },),
+            cycles.get().try_into().unwrap(),
         )
         .await;
 
@@ -88,7 +88,7 @@ impl CanisterApi for CanisterApiImpl {
                 "Creating canister in subnet {} failed",
                 target_subnet
             )))
-            .map(|record| record.get_canister_id())
+            .map(|record| record.0.get_canister_id())
     }
 
     /// See CanisterApi::delete_canister
@@ -97,11 +97,10 @@ impl CanisterApi for CanisterApiImpl {
         self.stop_canister(canister).await?;
 
         // TODO(NNS1-1524) We need to collect the cycles from the canister before we delete it
-        let response: Result<(), (Option<i32>, String)> = dfn_core::call(
-            CanisterId::ic_00(),
+        let response: CallResult<()> = ic_cdk::call(
+            CanisterId::ic_00().get().0,
             "delete_canister",
-            candid_one,
-            CanisterIdRecord::from(canister),
+            (CanisterIdRecord::from(canister),),
         )
         .await;
 
@@ -127,13 +126,9 @@ impl CanisterApi for CanisterApiImpl {
             memory_allocation: None,
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
-        let install_res: Result<(), (Option<i32>, String)> = dfn_core::call(
-            CanisterId::ic_00(),
-            "install_code",
-            dfn_candid::candid_multi_arity,
-            (install_args,),
-        )
-        .await;
+        let install_res: CallResult<()> =
+            ic_cdk::call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
+
         install_res.map_err(handle_call_error(format!(
             "Failed to install WASM on canister {}",
             target_canister
@@ -154,8 +149,8 @@ impl CanisterApi for CanisterApiImpl {
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
 
-        let result: Result<(), (Option<i32>, String)> =
-            dfn_core::call(CanisterId::ic_00(), "update_settings", candid_one, args).await;
+        let result: CallResult<()> =
+            ic_cdk::call(CanisterId::ic_00().get().0, "update_settings", (args,)).await;
 
         result.map_err(handle_call_error(format!(
             "Failed to update controllers for canister {}",
@@ -196,12 +191,11 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     async fn send_cycles_to_canister(&self, target: CanisterId, cycles: u64) -> Result<(), String> {
-        let response: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds(
-            CanisterId::ic_00(),
+        let response: CallResult<()> = ic_cdk::api::call::call_with_payment(
+            CanisterId::ic_00().get().0,
             "deposit_cycles",
-            candid_one,
-            CanisterIdRecord::from(target),
-            Funds::new(cycles),
+            (CanisterIdRecord::from(target),),
+            cycles,
         )
         .await;
 
@@ -213,15 +207,9 @@ impl CanisterApi for CanisterApiImpl {
 }
 
 /// This handles the errors returned from ic_cdk::call (and related methods)
-fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> String {
+fn handle_call_error(prefix: String) -> impl FnOnce((RejectionCode, String)) -> String {
     move |(code, msg)| {
-        let err = format!(
-            "{}: {}{}",
-            prefix,
-            code.map(|c| format!("error code {}: ", c))
-                .unwrap_or_default(),
-            msg
-        );
+        let err = format!("{}: error code {}: {}", prefix, code as i32, msg);
         println!("{}{}", LOG_PREFIX, err);
         err
     }
@@ -229,19 +217,16 @@ fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> St
 
 impl CanisterApiImpl {
     async fn stop_canister(&self, canister: CanisterId) -> Result<(), String> {
-        () = dfn_core::call(
-            CanisterId::ic_00(),
+        () = ic_cdk::call(
+            CanisterId::ic_00().get().0,
             "stop_canister",
-            candid_one,
-            CanisterIdRecord::from(canister),
+            (CanisterIdRecord::from(canister),),
         )
         .await
         .map_err(|(code, msg)| {
             format!(
-                "{}{}",
-                code.map(|c| format!("Unable to stop target canister: error code {}: ", c))
-                    .unwrap_or_default(),
-                msg
+                "Unable to stop target canister: error code {}: {}",
+                code as i32, msg
             )
         })?;
 
@@ -249,7 +234,7 @@ impl CanisterApiImpl {
         // Wait until canister is in the stopped state.
         loop {
             let status: CanisterStatusResultV2 =
-                canister_status::<DfnRuntime>(CanisterIdRecord::from(canister))
+                canister_status::<CdkRuntime>(CanisterIdRecord::from(canister))
                     .await
                     .map(CanisterStatusResultV2::from)
                     .map_err(|(code, msg)| {
