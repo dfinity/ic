@@ -1642,6 +1642,7 @@ impl Operation for Tick {
         }
         OpOut::NoOutput
     }
+
     fn id(&self) -> OpId {
         OpId("tick".to_string())
     }

@@ -785,7 +785,7 @@ impl StateMachineNode {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
             )
-                .into(),
+            .into(),
             node_signing_key,
             committee_signing_key,
             dkg_dealing_encryption_key,

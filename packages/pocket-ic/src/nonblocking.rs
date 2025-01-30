@@ -892,9 +892,9 @@ impl PocketIc {
                 sender_canister_version: None,
             },),
         )
-            .await
-            .map(|(x,)| x)
-            .unwrap();
+        .await
+        .map(|(x,)| x)
+        .unwrap();
         canister_id
     }
 
