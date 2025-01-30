@@ -86,7 +86,7 @@ anchors:
       if-no-files-found: ignore
       compression-level: 9
       path: |
-        bazel-bep.pb
+        bazel-bep.pb.gpg
         profile.json
 
 jobs:
@@ -153,6 +153,8 @@ jobs:
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS: ${{ env.BAZEL_EXTRA_ARGS }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - <<: *bazel-bep
       - <<: *bazel-upload
 
   bazel-build-all-config-check:
@@ -169,6 +171,8 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - <<: *bazel-bep
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -200,6 +204,8 @@ jobs:
           BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${{ github.run_id }}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - <<: *bazel-bep
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -218,6 +224,8 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -231,6 +239,8 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - <<: *bazel-bep
 
   python-ci-tests:
     name: Python CI Tests
