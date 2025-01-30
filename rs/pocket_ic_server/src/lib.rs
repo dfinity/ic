@@ -38,8 +38,10 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmakerMetrics};
 use axum::async_trait;
+use candid::Principal;
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
@@ -90,4 +92,29 @@ pub fn copy_dir(
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmakerMetrics {
+    pub subnet: SubnetId,
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
+    fn from(raw: RawSubnetBlockmakerMetrics) -> Self {
+        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
+        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
+        let failed_blockmakers: Vec<NodeId> = raw
+            .failed_blockmakers
+            .into_iter()
+            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
+            .collect();
+
+        SubnetBlockmakerMetrics {
+            subnet,
+            blockmaker,
+            failed_blockmakers,
+        }
+    }
 }

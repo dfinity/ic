@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmakerMetrics};
 use askama::Template;
 use axum::{
     extract::State,
@@ -78,8 +78,7 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    RawSubnetBlockmakerMetrics, SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs,
-    Topology,
+    SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
@@ -1632,8 +1631,7 @@ impl Operation for Tick {
             }
         }
 
-        let subnets = pic.subnets.subnets.read().unwrap();
-        for (_, subnet) in subnets.iter() {
+        for subnet in pic.subnets.get_all() {
             subnet.state_machine.execute_round();
         }
         OpOut::NoOutput
@@ -1641,31 +1639,6 @@ impl Operation for Tick {
 
     fn id(&self) -> OpId {
         OpId("tick".to_string())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SubnetBlockmakerMetrics {
-    pub subnet: SubnetId,
-    pub blockmaker: NodeId,
-    pub failed_blockmakers: Vec<NodeId>,
-}
-
-impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
-    fn from(raw: RawSubnetBlockmakerMetrics) -> Self {
-        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
-        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
-        let failed_blockmakers: Vec<NodeId> = raw
-            .failed_blockmakers
-            .into_iter()
-            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
-            .collect();
-
-        SubnetBlockmakerMetrics {
-            subnet,
-            blockmaker,
-            failed_blockmakers,
-        }
     }
 }
 
