@@ -110,5 +110,4 @@ sh_test(
         "networking/setup-networking/99-setup-netplan.yaml.template",
         "networking/setup-networking/setup-networking.sh",
     ],
-    tags = ["manual"],
 )
