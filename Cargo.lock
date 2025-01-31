@@ -7306,6 +7306,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
+ "ic-crypto-internal-bls12-381-vetkd",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-csp-proptest-utils",
  "ic-crypto-internal-csp-test-utils",
@@ -7359,6 +7360,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-types",
  "ic-types-test-utils",
+ "ic-vetkd-utils",
  "k256 0.13.4",
  "maplit",
  "mockall",
@@ -16327,6 +16329,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "slog",
+ "url",
 ]
 
 [[package]]

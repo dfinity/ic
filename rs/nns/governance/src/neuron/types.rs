@@ -3,7 +3,7 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_private_neuron_enforcement_enabled, is_voting_power_adjustment_enabled,
+    is_voting_power_adjustment_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -265,11 +265,7 @@ impl Neuron {
             return Some(Visibility::Public);
         }
 
-        if is_private_neuron_enforcement_enabled() {
-            return self.visibility.or(Some(Visibility::Private));
-        }
-
-        self.visibility
+        self.visibility.or(Some(Visibility::Private))
     }
 
     /// Sets a neuron's dissolve state and age.
@@ -955,8 +951,7 @@ impl Neuron {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
-        let show_full = !is_private_neuron_enforcement_enabled()
-            || self.visibility() == Some(Visibility::Public)
+        let show_full = self.visibility() == Some(Visibility::Public)
             || self.is_hotkey_or_controller(&requester);
         if show_full {
             let mut additional_recent_ballots = self
@@ -1190,16 +1185,9 @@ impl Neuron {
     }
 }
 
-impl Neuron {
-    pub fn into_proto(
-        self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-    ) -> NeuronProto {
-        let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power =
-            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
-        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+impl From<Neuron> for NeuronProto {
+    fn from(neuron: Neuron) -> NeuronProto {
+        let visibility = neuron.visibility().map(i32::from);
 
         let Neuron {
             id,
@@ -1225,7 +1213,7 @@ impl Neuron {
             visibility: _,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-        } = self;
+        } = neuron;
 
         let id = Some(id);
         let controller = Some(controller);
@@ -1263,8 +1251,6 @@ impl Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-            deciding_voting_power,
-            potential_voting_power,
         }
     }
 }
@@ -1298,11 +1284,6 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-
-            // Derived Fields (and therefore, no need to transcribe).
-            // --------------
-            deciding_voting_power: _,
-            potential_voting_power: _,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;
@@ -1350,6 +1331,113 @@ impl TryFrom<NeuronProto> for Neuron {
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as usize),
         })
+    }
+}
+
+impl TryFrom<api::Neuron> for Neuron {
+    type Error = String;
+
+    fn try_from(neuron: api::Neuron) -> Result<Self, Self::Error> {
+        let neuron = NeuronProto::from(neuron);
+        Neuron::try_from(neuron)
+    }
+}
+
+impl Neuron {
+    pub fn into_api(
+        self,
+        now_seconds: u64,
+        voting_power_economics: &VotingPowerEconomics,
+    ) -> api::Neuron {
+        let visibility = self.visibility().map(i32::from);
+        let deciding_voting_power =
+            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
+        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+        let recent_ballots = self.sorted_recent_ballots();
+
+        let Neuron {
+            id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots: _,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+            voting_power_refreshed_timestamp_seconds,
+
+            // Not used.
+            visibility: _,
+            recent_ballots_next_entry_index: _,
+        } = self;
+
+        let id = Some(id);
+        let controller = Some(controller);
+        let account = subaccount.to_vec();
+        let StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
+
+        // Conversions of the form foo.map(api::Foo::from).
+        let recent_ballots = recent_ballots
+            .into_iter()
+            .map(api::BallotInfo::from)
+            .collect();
+        let transfer = transfer.map(api::NeuronStakeTransfer::from);
+        let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
+
+        // Almost the same as above, with the only minor difference being that
+        // Foo is in some inner (sub)module within api, not directly within api.
+        let dissolve_state = dissolve_state.map(api::neuron::DissolveState::from);
+
+        let followees = followees
+            .into_iter()
+            .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
+            .collect();
+
+        api::Neuron {
+            id,
+            account,
+            controller,
+            dissolve_state,
+            aging_since_timestamp_seconds,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+            visibility,
+            voting_power_refreshed_timestamp_seconds,
+
+            potential_voting_power,
+            deciding_voting_power,
+        }
     }
 }
 
