@@ -33,7 +33,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{self, WasmMetadata},
+    canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
@@ -199,7 +199,7 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        use ic_cycles_account_manager::WasmExecutionMode;
+        use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
@@ -1336,7 +1336,7 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
-                system_state.is_wasm64_execution.into(),
+                WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager

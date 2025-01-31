@@ -46,7 +46,7 @@ fn test_list_neurons_with_paging() {
     let mut request = ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
-        include_empty_neurons_readable_by_caller: None,
+        include_empty_neurons_readable_by_caller: Some(true),
         include_public_neurons_in_full_neurons: None,
         page_number: None,
         page_size: None,
@@ -64,7 +64,7 @@ fn test_list_neurons_with_paging() {
         &ListNeurons {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
+            include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
             page_number: Some(1),
             page_size: None,
@@ -80,7 +80,7 @@ fn test_list_neurons_with_paging() {
         &ListNeurons {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
+            include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
             page_number: Some(0),
             page_size: Some(501),

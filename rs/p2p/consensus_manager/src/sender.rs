@@ -109,14 +109,14 @@ impl<
                 _ = cancellation_token.cancelled() => {
                     error!(
                         self.log,
-                        "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
+                        "Sender event loop for the P2P client `{:?}` terminated. No more transmits will be sent for this client.",
                         uri_prefix::<WireArtifact>()
                     );
                     break;
                 }
-                Some(advert) = self.outbound_transmits.recv() => {
-                    match advert {
-                        ArtifactTransmit::Deliver(new_artifact) => self.handle_deliver_transmit(new_artifact, cancellation_token.clone()),
+                Some(outbound_transmit) = self.outbound_transmits.recv() => {
+                    match outbound_transmit {
+                        ArtifactTransmit::Deliver(artifact) => self.handle_deliver_transmit(artifact, cancellation_token.clone()),
                         ArtifactTransmit::Abort(id) => self.handle_abort_transmit(&id),
                     }
 
@@ -407,6 +407,7 @@ mod available_slot_set {
 mod tests {
     use anyhow::anyhow;
     use axum::http::Response;
+    use ic_interfaces::p2p::consensus::{AssembleResult, Peers};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
@@ -414,8 +415,6 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use tokio::{runtime::Handle, time::timeout};
-
-    use ic_interfaces::p2p::consensus::{Aborted, Peers};
 
     use super::*;
 
@@ -431,7 +430,7 @@ mod tests {
             _id: <U64Artifact as IdentifiableArtifact>::Id,
             _artifact: Option<(U64Artifact, NodeId)>,
             _peers: P,
-        ) -> Result<(U64Artifact, NodeId), Aborted> {
+        ) -> AssembleResult<U64Artifact> {
             todo!()
         }
     }
