@@ -128,6 +128,20 @@ impl GetSuccessorsHandler {
                 &request.processed_block_hashes,
                 &blocks,
             );
+            if blocks.is_empty() {
+                //TODO(mihailjianu): add a metric here
+                // If blocks are empty, it meens that there is nothing in the cache above the anchor.
+                // Thus we can prune everything that is the cache.
+                // These are blocks that are bove the anchor in terms of height, but are not descendants of the anchor.
+                let forked_blocks = state.get_cached_blocks();
+                //TODO(mihailjianu): perhaps use another message.
+                self.blockchain_manager_tx
+                    .try_send(BlockchainManagerRequest::PruneBlocks(
+                        request.anchor,
+                        forked_blocks,
+                    ))
+                    .ok();
+                }
             (blocks, next)
         };
         //extract the first MAX_NEXT_BLOCK_HEADERS_LENGTH and return them to the caller
@@ -139,12 +153,6 @@ impl GetSuccessorsHandler {
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
-
-        if response.blocks.is_empty() {
-            // No blocks found in cache while BFS'ing from the anchor.
-            // We can prune the cache, as it contains outdated blocks.
-            //self.blockchain_manager_tx.try_send(BlockchainManagerRequest::PruneAllBlocks).ok();
-        }
 
         if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.

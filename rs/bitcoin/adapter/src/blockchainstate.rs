@@ -128,6 +128,10 @@ impl BlockchainState {
         }
     }
 
+    pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().cloned().collect()
+    }
+
     /// Returns the genesis header that the store is initialized with.
     pub fn genesis(&self) -> &BlockHeader {
         &self.genesis_block_header
