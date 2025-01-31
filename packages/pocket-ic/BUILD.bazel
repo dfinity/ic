@@ -33,7 +33,6 @@ MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/error_types",
-    "//rs/types/management_canister_types",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",
