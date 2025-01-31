@@ -296,6 +296,11 @@ where
             .metrics
             .handle_artifact_processor_joined_duration
             .start_timer();
+
+        let manual_drop_timer = self
+            .metrics
+            .handle_artifact_processor_joined_duration_manual_drop
+            .start_timer();
         // Invariant: Peer sender should only be dropped in this task..
         debug_assert!(peer_rx.has_changed().is_ok());
 
@@ -320,6 +325,8 @@ where
             self.active_assembles.remove(&id);
         }
 
+        drop(manual_drop_timer);
+
         debug_assert!(
             self.slot_table
                 .values()
@@ -327,8 +334,6 @@ where
                 .all(|v| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
-
-        debug_assert!(false);
     }
 
     #[instrument(skip_all)]
