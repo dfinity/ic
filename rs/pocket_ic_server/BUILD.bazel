@@ -179,8 +179,8 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "//rs/registry/canister:registry-canister",
         "//rs/pocket_ic_server/test_canister:test_canister.wasm",
+        "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
         "@mozilla_root_ca_store//file",
     ],

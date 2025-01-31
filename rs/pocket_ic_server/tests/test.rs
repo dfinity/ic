@@ -1508,12 +1508,12 @@ fn test_custom_blockmaker() {
         .node_ids[0]
         .clone();
 
-    let mut subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
+    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
         subnet: application_subnet.into(),
         blockmaker: blockmaker_node.clone(),
         failed_blockmakers: vec![],
     }];
-    let mut tick_configs = TickConfigs {
+    let tick_configs = TickConfigs {
         blockmakers: Some(BlockMakerConfigs {
             blockmakers_per_subnet: subnets_blockmakers,
         }),
