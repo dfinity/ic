@@ -321,6 +321,7 @@ pub async fn add_wasms_to_sns_wasm(
 }
 
 /// A builder for fine-tuning and installing the NNS canister suite in PocketIc.
+#[derive(Default)]
 pub struct NnsInstaller {
     mainnet_nns_canister_versions: Option<bool>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
@@ -330,25 +331,7 @@ pub struct NnsInstaller {
     with_cycles_ledger: bool,
 }
 
-impl Default for NnsInstaller {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl NnsInstaller {
-    fn new() -> Self {
-        Self {
-            // Enforce an explicit decision.
-            mainnet_nns_canister_versions: None,
-            neurons_fund_hotkeys: vec![],
-            custom_registry_mutations: None,
-            initial_balances: vec![],
-            with_cycles_minting_canister: false,
-            with_cycles_ledger: false,
-        }
-    }
-
     /// Requests the mainnet Wasm versions for all NNS canisters being installed.
     pub fn with_mainnet_nns_canister_versions(&mut self) -> &mut Self {
         self.mainnet_nns_canister_versions = Some(true);
@@ -361,8 +344,9 @@ impl NnsInstaller {
         self
     }
 
-    /// Requests that the NNS Governance is initialized with a Neurons' Fund neuron controlled
-    /// by `neurons_fund_hotkeys`.
+    /// Requests that the NNS Governance is initialized with a Neurons' Fund neuron with hotkeys
+    /// taken from `neurons_fund_hotkeys`. Hotkeys are principals that can control the neuron
+    /// in various ways, but generally less powerful than the neuron controller.
     pub fn with_neurons_fund_hotkeys(
         &mut self,
         neurons_fund_hotkeys: Vec<PrincipalId>,
