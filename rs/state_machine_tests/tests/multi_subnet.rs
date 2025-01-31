@@ -239,7 +239,7 @@ fn counter_canister_call_test() {
     // to process the callback of the inter-canister call and finish processing
     // the ingress message.
     env1.execute_round(None);
-    env1.execute_round(None);
+    env2.execute_round(None);
     env1.execute_round(None);
 
     let wasm_result = env1.await_ingress(msg3_id, MAX_TICKS).unwrap();

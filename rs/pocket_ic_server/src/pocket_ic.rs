@@ -1592,6 +1592,15 @@ impl Tick {
         subnets_blockmaker: &[SubnetBlockmakerMetrics],
     ) -> Result<(), OpOut> {
         for subnet_blockmaker in subnets_blockmaker {
+            if subnet_blockmaker
+                .failed_blockmakers
+                .contains(&subnet_blockmaker.blockmaker)
+            {
+                return Err(OpOut::Error(PocketIcError::BlockmakerContainedInFailed(
+                    subnet_blockmaker.blockmaker,
+                )));
+            }
+
             let Some(state_machine) = pic.get_subnet_with_id(subnet_blockmaker.subnet) else {
                 return Err(OpOut::Error(PocketIcError::SubnetNotFound(
                     subnet_blockmaker.subnet.get().0,

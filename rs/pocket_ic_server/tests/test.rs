@@ -1491,6 +1491,7 @@ fn test_canister_wasm() -> Vec<u8> {
 #[test]
 fn test_custom_blockmaker() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
+    const HOURS_IN_SECONDS: u64 = 60 * 60;
 
     let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
     let topology = pocket_ic.topology();
@@ -1501,38 +1502,54 @@ fn test_custom_blockmaker() {
     pocket_ic.add_cycles(canister, INIT_CYCLES);
     pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    let blockmaker_node = topology
+    let nodes = topology
         .subnet_configs
         .get(&application_subnet)
         .unwrap()
-        .node_ids[0]
         .clone();
+
+    let blockmaker_1 = nodes.node_ids[0].clone();
+    let blockmaker_2 = nodes.node_ids[1].clone();
 
     let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
         subnet: application_subnet.into(),
-        blockmaker: blockmaker_node.clone(),
+        blockmaker: Principal::anonymous().into(),
         failed_blockmakers: vec![],
     }];
-    let tick_configs = TickConfigs {
+
+    let mut tick_configs = TickConfigs {
         blockmakers: Some(BlockMakerConfigs {
             blockmakers_per_subnet: subnets_blockmakers,
         }),
     };
+    let daily_blocks = 5;
 
-    for _ in 0..5 {
+    // Blockmaker metrics are recorded in the management canister
+    tick_configs
+        .blockmakers
+        .as_mut()
+        .unwrap()
+        .blockmakers_per_subnet[0]
+        .blockmaker = blockmaker_1.clone();
+    tick_configs
+        .blockmakers
+        .as_mut()
+        .unwrap()
+        .blockmakers_per_subnet[0]
+        .failed_blockmakers = vec![blockmaker_2.clone()];
+
+    for _ in 0..daily_blocks {
         pocket_ic.tick_with_configs(tick_configs.clone());
     }
-
-    //advance time until next day so that management canister can record blockmaker metrics
-    pocket_ic.advance_time(std::time::Duration::from_secs(60 * 60 * 24));
-
-    pocket_ic.tick();
+    // Advance time until next day so that management canister can record blockmaker metrics
+    pocket_ic.advance_time(std::time::Duration::from_secs(HOURS_IN_SECONDS * 24));
     pocket_ic.tick();
 
     let response = pocket_ic
         .update_call(
             canister,
             Principal::anonymous(),
+            // Calls the node_metrics_history method on the management canister
             "node_metrics_history_proxy",
             Encode!(&NodeMetricsHistoryArgs {
                 subnet_id: PrincipalId::from(application_subnet),
@@ -1542,14 +1559,24 @@ fn test_custom_blockmaker() {
         )
         .unwrap();
 
-    let metrics = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
-    let blockmaker_node_metrics = metrics[0]
-        .node_metrics
-        .clone()
+    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryResponse>)
+        .unwrap()
+        .remove(0)
+        .node_metrics;
+
+    let blockmaker_1_metrics = first_node_metrics
+        .iter()
+        .find(|x| x.node_id.0 == Principal::from(blockmaker_1.clone()))
+        .unwrap()
+        .clone();
+    let blockmaker_2_metrics = first_node_metrics
         .into_iter()
-        .find(|x| x.node_id.0 == Principal::from(blockmaker_node.clone()))
+        .find(|x| x.node_id.0 == Principal::from(blockmaker_2.clone()))
         .unwrap();
 
-    assert_eq!(blockmaker_node_metrics.num_blocks_proposed_total, 5);
-    assert_eq!(blockmaker_node_metrics.num_block_failures_total, 0);
+    assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
+    assert_eq!(blockmaker_1_metrics.num_block_failures_total, 0);
+
+    assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
+    assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
 }

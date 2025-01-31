@@ -257,6 +257,7 @@ pub enum PocketIcError {
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
     BlockmakerNotFound(NodeId),
+    BlockmakerContainedInFailed(NodeId),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -288,6 +289,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
                 write!(f, "BlockmakerNotFound({})", nid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
+                write!(f, "BlockmakerContainedInFailed({})", nid)
             }
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)
