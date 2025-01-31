@@ -723,18 +723,15 @@ impl BlockchainManager {
         }
     }
 
-    pub fn prune_all_blocks(&mut self) {
-        {
-            let mut blockchain = self.blockchain.lock().unwrap();
-            blockchain.prune_all_blocks();
-        }
-        self.getdata_request_info.clear();
-        self.block_sync_queue.clear();
-    }
-
     /// Wrapper function to access the blockchain state to prune blocks that are no longer
     /// needed.
     pub fn prune_blocks(&mut self, anchor: BlockHash, processed_block_hashes: Vec<BlockHash>) {
+        info!(
+            self.logger,
+            "Pruning blocks below anchor: {}, processed_block_hashes: {:?}",
+            anchor,
+            processed_block_hashes
+        );
         {
             let mut blockchain = self.blockchain.lock().unwrap();
             let anchor_height = blockchain

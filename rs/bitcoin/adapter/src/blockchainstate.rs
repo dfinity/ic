@@ -129,7 +129,10 @@ impl BlockchainState {
     }
 
     pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
-        self.block_cache.keys().cloned().collect()
+
+        let x = self.block_cache.keys().cloned().collect();
+        
+        x
     }
 
     /// Returns the genesis header that the store is initialized with.
@@ -262,10 +265,6 @@ impl BlockchainState {
         // `add_headers` sorts the tips by total work. The zero index will always be
         // the active tip.
         &self.tips[0]
-    }
-
-    pub fn prune_all_blocks(&mut self) {
-        self.block_cache.clear();
     }
 
     /// This method is used to remove blocks in the `header_cache` that are found in the given

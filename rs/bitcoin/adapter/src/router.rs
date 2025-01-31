@@ -94,9 +94,6 @@ pub fn start_main_event_loop(
                         BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
                             blockchain_manager.prune_blocks(anchor, processed_block_hashes);
                         }
-                        BlockchainManagerRequest::PruneAllBlocks => {
-                            blockchain_manager.prune_all_blocks();
-                        }
                     };
                 }
                 transaction_manager_request = transaction_manager_rx.recv() => {
