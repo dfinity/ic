@@ -16,9 +16,9 @@ use ic_certification::{
 };
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
-use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::Runtime;
+use ic_ledger_canister_core::{archive::Archive, blockchain::BlockData};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::{Blockchain, HeapBlockData},
@@ -56,7 +56,7 @@ use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Range};
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -1292,5 +1292,67 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(transparent)]
+pub struct StableBlockData {
+    blocks: Vec<EncodedBlock>,
+}
+
+impl BlockData for StableBlockData {
+    fn add_block(&mut self, block: EncodedBlock) {
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+            let index = blocks.last_key_value().unwrap_or((0, vec![])).0;
+            let _ = blocks.insert(index, block.into_vec());
+        });
+    }
+
+    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            let mut result = vec![];
+            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
+            let range_offset = range_utils::offset(&range, first_index);
+            for block in blocks.range(range_offset) {
+                result.push(EncodedBlock::from_vec(block.1));
+            }
+            result
+        })
+    }
+
+    fn get_block(&self, index: u64) -> Option<EncodedBlock> {
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
+            blocks
+                .get(&index.saturating_sub(first_index))
+                .map(EncodedBlock::from_vec)
+        })
+    }
+
+    fn remove_blocks(&mut self, num_blocks: u64) {
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+            let mut removed = 0;
+            while !blocks.is_empty() && removed < num_blocks {
+                blocks.pop_first();
+                removed += 1;
+            }
+        });
+    }
+
+    fn len(&self) -> u64 {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
+    }
+
+    fn is_empty(&self) -> bool {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.is_empty())
+    }
+
+    fn last(&self) -> Option<EncodedBlock> {
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            blocks
+                .last_key_value()
+                .map(|kv| EncodedBlock::from_vec(kv.1))
+        })
     }
 }

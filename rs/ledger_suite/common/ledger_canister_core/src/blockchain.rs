@@ -12,8 +12,8 @@ use ic_ledger_hash_of::HashOf;
 use std::ops::Range;
 
 pub trait BlockData {
-    fn add_block(&mut self, index: u64, block: EncodedBlock) -> Result<(), String>;
-    fn get_blocks(&self, range: Range<usize>) -> Vec<EncodedBlock>;
+    fn add_block(&mut self, block: EncodedBlock);
+    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
     fn remove_blocks(&mut self, num_blocks: u64);
     fn len(&self) -> u64;
@@ -28,12 +28,15 @@ pub struct HeapBlockData {
 }
 
 impl BlockData for HeapBlockData {
-    fn add_block(&mut self, _index: u64, block: EncodedBlock) -> Result<(), String> {
+    fn add_block(&mut self, block: EncodedBlock) {
         self.blocks.push(block);
-        Ok(())
     }
 
-    fn get_blocks(&self, range: Range<usize>) -> Vec<EncodedBlock> {
+    fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
+        let range = Range {
+            start: range.start as usize,
+            end: range.end as usize,
+        };
         self.blocks[range].to_vec()
     }
 
@@ -127,7 +130,7 @@ where
         self.last_timestamp = block.timestamp();
         let encoded_block = block.encode();
         self.last_hash = Some(B::block_hash(&encoded_block));
-        self.blocks.add_block(self.chain_length(), encoded_block)?;
+        self.blocks.add_block(encoded_block);
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
 
@@ -154,7 +157,7 @@ where
 
     /// The range of block indices that are not archived yet.
     pub fn local_block_range(&self) -> std::ops::Range<u64> {
-        self.num_archived_blocks..self.num_archived_blocks + self.blocks.len() as u64
+        self.num_archived_blocks..self.num_archived_blocks + self.blocks.len()
     }
 
     /// Returns the slice of blocks stored locally.
@@ -204,16 +207,16 @@ where
         // archiving will trigger when there are 2000 blocks in the ledger and
         // the 1000 oldest bocks will be archived, leaving the remaining 1000
         // blocks in place.
-        let num_blocks_before = self.num_unarchived_blocks() as usize;
+        let num_blocks_before = self.num_unarchived_blocks();
 
-        if num_blocks_before < trigger_threshold {
+        if num_blocks_before < trigger_threshold as u64 {
             return VecDeque::new();
         }
 
         let blocks_to_archive: VecDeque<EncodedBlock> =
             VecDeque::from(self.blocks.get_blocks(Range {
                 start: 0,
-                end: num_blocks_to_archive.min(num_blocks_before),
+                end: (num_blocks_to_archive as u64).min(num_blocks_before),
             }));
 
         println!(
