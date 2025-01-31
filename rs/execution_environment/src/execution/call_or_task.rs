@@ -148,7 +148,7 @@ pub fn execute_call_or_task(
         log_dirty_pages,
     };
 
-    let helper = match UpdateHelper::new(&clean_canister, &original, deallocation_sender) {
+    let helper = match CallOrTaskHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
             return finish_err(
@@ -324,24 +324,24 @@ struct OriginalContext {
     log_dirty_pages: FlagStatus,
 }
 
-/// Contains fields of `UpdateHelper` that are necessary for resuming an update
+/// Contains fields of `CallOrTaskHelper` that are necessary for resuming an update
 /// call execution.
 #[derive(Debug)]
-struct PausedUpdateHelper {
+struct PausedCallOrTaskHelper {
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
 }
 
 /// A helper that implements and keeps track of update call steps.
 /// It is used to safely pause and resume an update call execution.
-struct UpdateHelper {
+struct CallOrTaskHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
     deallocation_sender: DeallocationSender,
 }
 
-impl UpdateHelper {
+impl CallOrTaskHelper {
     /// Applies the initial state changes and performs the initial validation.
     fn new(
         clean_canister: &CanisterState,
@@ -420,9 +420,9 @@ impl UpdateHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// performed update call steps in subsequent rounds.
-    fn pause(self) -> PausedUpdateHelper {
+    fn pause(self) -> PausedCallOrTaskHelper {
         self.deallocation_sender.send(Box::new(self.canister));
-        PausedUpdateHelper {
+        PausedCallOrTaskHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
         }
@@ -434,7 +434,7 @@ impl UpdateHelper {
     fn resume(
         clean_canister: &CanisterState,
         original: &OriginalContext,
-        paused: PausedUpdateHelper,
+        paused: PausedCallOrTaskHelper,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
         let helper = Self::new(clean_canister, original, deallocation_sender)?;
@@ -685,7 +685,7 @@ impl UpdateHelper {
 #[derive(Debug)]
 struct PausedCallOrTaskExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
-    paused_helper: PausedUpdateHelper,
+    paused_helper: PausedCallOrTaskHelper,
     original: OriginalContext,
 }
 
@@ -705,7 +705,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        let helper = match UpdateHelper::resume(
+        let helper = match CallOrTaskHelper::resume(
             &clean_canister,
             &self.original,
             self.paused_helper,

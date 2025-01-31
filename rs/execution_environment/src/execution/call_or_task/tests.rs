@@ -116,9 +116,9 @@ fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
 }
 
 // Helper function to allow testing both update and query methods with the same test.
-fn with_update_and_replicated_query<F: FnOnce(String) + Clone>(test: F) {
-    test.clone()("update".to_string());
-    test("query".to_string());
+fn with_update_and_replicated_query<F: Fn(&str)>(test: F) {
+    test("update");
+    test("query");
 }
 
 #[test]
@@ -443,7 +443,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     // 2. While canister A is paused, we emulate a postponed charge
     //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
     // 3. The query method resumes and burns 1000 cycles.
-    // 4. The query method succeeds because there are enough cycles
+    // 4. The query method fails because there are not enough cycles
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
@@ -807,7 +807,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
             .stable64_fill(0, 0, 10_000)
             .build();
 
-        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
         test.execute_slice(a_id);
         assert_eq!(
@@ -829,7 +829,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         );
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-        let message = if &method == "update" {
+        let message = if method == "update" {
             "an update call"
         } else {
             "a replicated query"
@@ -869,7 +869,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
             .stable64_fill(0, 0, 10_000)
             .build();
 
-        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a);
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
 
         test.execute_slice(a_id);
         assert_eq!(
@@ -898,7 +898,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
 
         let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
         assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
-        let message = if &method == "update" {
+        let message = if method == "update" {
             "an update call"
         } else {
             "a replicated query"
@@ -937,7 +937,7 @@ fn dts_replicated_execution_does_not_expire_while_executing() {
             .append_and_reply()
             .build();
 
-        let (ingress_id, _) = test.ingress_raw(a_id, method.clone(), a.clone());
+        let (ingress_id, _) = test.ingress_raw(a_id, method, a.clone());
 
         test.execute_slice(a_id);
         assert_eq!(
@@ -1016,7 +1016,7 @@ fn dts_abort_of_replicated_execution_works() {
         let a = wasm()
             .call_with_cycles(
                 b_id,
-                method.clone(),
+                method,
                 call_args()
                     .other_side(b.clone())
                     .on_reject(wasm().reject_message().reject()),
