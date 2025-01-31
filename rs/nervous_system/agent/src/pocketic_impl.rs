@@ -43,7 +43,7 @@ impl PocketIcAgent<'_> {
         &self,
         canister_id: Principal,
     ) -> Result<RawEffectivePrincipal, PocketIcCallError> {
-        let Some(subnet_id) = self.pocket_ic.get_subnet(canister_id.into()).await else {
+        let Some(subnet_id) = self.pocket_ic.get_subnet(canister_id).await else {
             return Err(PocketIcCallError::CanisterSubnetNotFound(canister_id));
         };
 
