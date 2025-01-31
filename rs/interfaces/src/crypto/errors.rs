@@ -52,8 +52,8 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::InconsistentAlgorithms { .. } => true,
             // true, as the set of supported algorithms is stable (bound to code version)
             CryptoError::AlgorithmNotSupported { .. } => true,
-            // true, as the result will not change upon retrying, unless the correct DKG transcript is loaded.
-            CryptoError::ThresholdSigDataNotFound { .. } => true,
+            // false, as the result may change if the DKG transcript is reloaded.
+            CryptoError::ThresholdSigDataNotFound { .. } => false,
             CryptoError::RegistryClient(registry_client_error) => {
                 registry_client_error.is_reproducible()
             }
