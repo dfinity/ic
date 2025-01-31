@@ -260,6 +260,10 @@ impl BlockchainState {
         &self.tips[0]
     }
 
+    pub fn prune_all_blocks(&mut self) {
+        self.block_cache.clear();
+    }
+
     /// This method is used to remove blocks in the `header_cache` that are found in the given
     /// block hashes.
     pub fn prune_blocks(&mut self, block_hashes: &[BlockHash]) {

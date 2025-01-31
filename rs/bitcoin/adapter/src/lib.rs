@@ -127,6 +127,8 @@ pub(crate) enum BlockchainManagerRequest {
     EnqueueNewBlocksToDownload(Vec<BlockHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
     PruneBlocks(BlockHash, Vec<BlockHash>),
+    /// Inform the adapter to prune all block hashes from the cache.
+    PruneAllBlocks,
 }
 
 /// The transaction manager is owned by a single thread which listens on a channel
