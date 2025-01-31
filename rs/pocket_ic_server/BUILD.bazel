@@ -180,6 +180,7 @@ rust_test(
     data = [
         ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
+        "//rs/pocket_ic_server/test_canister:test_canister.wasm",
         "@ii_dev_canister//file",
         "@mozilla_root_ca_store//file",
     ],
@@ -189,6 +190,7 @@ rust_test(
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+        "TEST_WASM": "$(rootpath //rs/pocket_ic_server/test_canister:test_canister.wasm)",
     },
     tags = [
         "cpu:8",
