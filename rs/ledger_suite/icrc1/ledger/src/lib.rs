@@ -21,7 +21,7 @@ use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{archive::Archive, blockchain::BlockData};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
-    blockchain::{Blockchain, HeapBlockData},
+    blockchain::Blockchain,
     ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,
 };
@@ -82,14 +82,15 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
+///   * 3 - the blocks are stored in stable structures.
 // TODO: When moving to version 3 consider adding `#[serde(default, skip_serializing)]`
 // to `balances` and `approvals` fields of the `Ledger` struct.
 // Since `balances` don't use a default, this can only be done with an incompatible change.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 2;
+pub const LEDGER_VERSION: u64 = 3;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 3;
+pub const LEDGER_VERSION: u64 = 4;
 
 #[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
@@ -534,6 +535,7 @@ pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
     Balances,
+    Blocks,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -560,7 +562,7 @@ pub struct Ledger {
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
-    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, HeapBlockData>,
+    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockData>,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -724,6 +726,10 @@ impl Ledger {
         }
     }
 
+    pub fn migrate_one_block(&mut self) -> bool {
+        self.blockchain.migrate_one_block()
+    }
+
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
     }
@@ -769,7 +775,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction<Tokens>;
     type Block = Block<Tokens>;
-    type BlockData = HeapBlockData;
+    type BlockData = StableBlockData;
 
     fn transaction_window(&self) -> Duration {
         TRANSACTION_WINDOW
@@ -1304,8 +1310,11 @@ pub struct StableBlockData {
 impl BlockData for StableBlockData {
     fn add_block(&mut self, block: EncodedBlock) {
         BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            let index = blocks.last_key_value().unwrap_or((0, vec![])).0;
-            let _ = blocks.insert(index, block.into_vec());
+            let index = match blocks.last_key_value() {
+                None => 0u64,
+                Some(kv) => kv.0 + 1,
+            };
+            assert!(blocks.insert(index, block.into_vec()).is_none());
         });
     }
 
@@ -1313,8 +1322,9 @@ impl BlockData for StableBlockData {
         BLOCKS_MEMORY.with_borrow(|blocks| {
             let mut result = vec![];
             let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
-            let range_offset = range_utils::offset(&range, first_index);
-            for block in blocks.range(range_offset) {
+            let start = range.start + first_index;
+            let end = range.end + first_index;
+            for block in blocks.range(start..end) {
                 result.push(EncodedBlock::from_vec(block.1));
             }
             result
@@ -1325,7 +1335,7 @@ impl BlockData for StableBlockData {
         BLOCKS_MEMORY.with_borrow(|blocks| {
             let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
             blocks
-                .get(&index.saturating_sub(first_index))
+                .get(&(index + first_index))
                 .map(EncodedBlock::from_vec)
         })
     }
@@ -1354,5 +1364,21 @@ impl BlockData for StableBlockData {
                 .last_key_value()
                 .map(|kv| EncodedBlock::from_vec(kv.1))
         })
+    }
+
+    fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {
+        let migrated_len = self.len();
+        if migrated_len < self.blocks.len() as u64 {
+            BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+                blocks.insert(
+                    num_archived_blocks + migrated_len,
+                    self.blocks[migrated_len as usize].clone().into_vec(),
+                )
+            });
+            true
+        } else {
+            self.blocks.clear();
+            false
+        }
     }
 }

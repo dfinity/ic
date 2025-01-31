@@ -238,6 +238,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    if upgrade_from_version < 3 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+    }
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
         log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
@@ -272,6 +275,7 @@ fn migrate_next_part(instruction_limit: u64) {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
     let mut migrated_balances = 0;
+    let mut migrated_blocks = 0;
 
     log_message("Migrating part of the ledger state.");
 
@@ -302,13 +306,20 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_balance() {
                         migrated_balances += 1;
                     } else {
+                        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+                    }
+                }
+                LedgerField::Blocks => {
+                    if ledger.migrate_one_block() {
+                        migrated_blocks += 1;
+                    } else {
                         set_ledger_state(LedgerState::Ready);
                     }
                 }
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(

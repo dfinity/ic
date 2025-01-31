@@ -19,6 +19,7 @@ pub trait BlockData {
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
     fn last(&self) -> Option<EncodedBlock>;
+    fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool;
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -58,6 +59,10 @@ impl BlockData for HeapBlockData {
 
     fn last(&self) -> Option<EncodedBlock> {
         self.blocks.last().cloned()
+    }
+
+    fn migrate_one_block(&mut self, _num_archived_blocks: u64) -> bool {
+        panic!("HeapBlockData cannot perform migration!");
     }
 }
 
@@ -228,5 +233,9 @@ where
         );
 
         blocks_to_archive
+    }
+
+    pub fn migrate_one_block(&mut self) -> bool {
+        self.blocks.migrate_one_block(self.num_archived_blocks)
     }
 }

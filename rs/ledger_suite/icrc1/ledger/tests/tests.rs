@@ -248,6 +248,20 @@ fn encode_init_args_with_small_sized_archive(
     }
 }
 
+fn encode_init_args_with_large_archive_trigger_threshold(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.archive_options.trigger_threshold = 1000;
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
 fn encode_upgrade_args() -> LedgerArgument {
     LedgerArgument::Upgrade(None)
 }
@@ -510,7 +524,7 @@ fn test_block_transformation() {
 
 #[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
-    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), false);
+    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), true);
 }
 
 #[test]
@@ -538,6 +552,15 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
         minter,
         true,
         mainnet_on_prev_version,
+    );
+}
+
+#[test]
+fn icrc1_test_multi_step_migration_from_mainnet() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args_with_large_archive_trigger_threshold,
     );
 }
 
@@ -575,7 +598,7 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
