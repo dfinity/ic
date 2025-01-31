@@ -688,7 +688,7 @@ pub mod cycles_ledger {
             created_at_time: None,
         };
 
-        let block_index = nns::ledger::transfer(&pocket_ic, beneficiary, transfer_args)
+        let block_index = nns::ledger::transfer(pocket_ic, beneficiary, transfer_args)
             .await
             .unwrap();
 
@@ -1402,7 +1402,7 @@ pub mod nns {
                 // Non-Operative
                 // -------------
                 fee: Tokens::ZERO, // Because we are minting.
-                memo: memo.unwrap_or_else(|| Memo(0)),
+                memo: memo.unwrap_or(Memo(0)),
                 from_subaccount: None,
                 created_at_time: None,
             };
