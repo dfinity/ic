@@ -1,5 +1,5 @@
 use candid::{define_function, CandidType, Principal};
-use ic_cdk::api::call::{accept_message, arg_data_raw, reject, CallResult, RejectionCode};
+use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
