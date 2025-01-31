@@ -686,15 +686,11 @@ where
 }
 
 pub fn lsmt_with_sharding() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
-        shard_num_pages: 1,
-    }
+    LsmtConfig { shard_num_pages: 1 }
 }
 
 pub fn lsmt_without_sharding() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         shard_num_pages: u64::MAX,
     }
 }

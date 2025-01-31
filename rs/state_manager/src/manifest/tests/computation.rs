@@ -1137,7 +1137,6 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
                 Height::new(0),
             )
             .unwrap(),
-            lsmt_status: FlagStatus::Enabled,
         },
         &CheckpointLayout::new_untracked(checkpoint1.to_path_buf(), Height::new(1)).unwrap(),
         &[
@@ -1381,7 +1380,6 @@ fn all_same_inodes_are_detected() {
         dirty_memory_pages: DirtyPages::default(),
         base_checkpoint: CheckpointLayout::new_untracked(base.path().to_path_buf(), Height::new(0))
             .unwrap(),
-        lsmt_status: FlagStatus::Enabled,
     };
 
     let mut files = Vec::new();

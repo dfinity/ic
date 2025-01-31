@@ -123,21 +123,15 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
 
 /// Combined size of wasm chunk store including overlays.
 fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-        canister_layout
-            .wasm_chunk_store()
-            .existing_overlays()
-            .unwrap()
-            .into_iter()
-            .map(|p| std::fs::metadata(p).unwrap().len())
-            .sum::<u64>()
-            + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map_or(0, |metadata| metadata.len())
-    } else {
-        std::fs::metadata(canister_layout.wasm_chunk_store().base())
-            .unwrap()
-            .len()
-    }
+    canister_layout
+        .wasm_chunk_store()
+        .existing_overlays()
+        .unwrap()
+        .into_iter()
+        .map(|p| std::fs::metadata(p).unwrap().len())
+        .sum::<u64>()
+        + std::fs::metadata(canister_layout.wasm_chunk_store().base())
+            .map_or(0, |metadata| metadata.len())
 }
 
 /// Whether the base file for vmemory0 exists.
@@ -451,12 +445,6 @@ fn skipping_flushing_is_invisible_for_state() {
         read_and_assert_eq(&env, canister_id2, 1);
 
         env.await_state_hash()
-    }
-
-    // We only skip flushes nondetermistically when `lsmt_storage` is disabled, so this test
-    // makes no sense otherwise.
-    if lsmt_config_default().lsmt_status == FlagStatus::Disabled {
-        assert_eq!(execute(false), execute(true));
     }
 }
 
@@ -3589,15 +3577,11 @@ fn can_recover_from_corruption_on_state_sync() {
             // The code below prepares all 5 types of corruption.
 
             let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_90_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0)
-            } else {
-                canister_90_layout.vmemory_0().base()
-            };
+            let canister_90_memory = canister_90_layout
+                .vmemory_0()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
             make_readonly(&canister_90_memory).unwrap();
@@ -3609,29 +3593,20 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
-            let canister_100_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_100_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0)
-            } else {
-                canister_100_layout.vmemory_0().base()
-            };
+            let canister_100_memory = canister_100_layout
+                .vmemory_0()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
-            let canister_100_stable_memory =
-                if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                    canister_100_layout
-                        .stable_memory()
-                        .existing_overlays()
-                        .unwrap()
-                        .remove(0)
-                } else {
-                    canister_100_layout.stable_memory().base()
-                };
+            let canister_100_stable_memory = canister_100_layout
+                .stable_memory()
+                .existing_overlays()
+                .unwrap()
+                .remove(0);
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
@@ -3755,15 +3730,11 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 let canister_layout = state_sync_scratchpad_layout
                     .canister(&canister_test_id(90))
                     .unwrap();
-                let canister_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                    canister_layout
-                        .vmemory_0()
-                        .existing_overlays()
-                        .unwrap()
-                        .remove(0)
-                } else {
-                    canister_layout.vmemory_0().base()
-                };
+                let canister_memory = canister_layout
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0);
                 make_mutable(&canister_memory).unwrap();
                 std::fs::write(&canister_memory, b"Garbage").unwrap();
 
@@ -4366,19 +4337,11 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
-        if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-            let expected_size_estimate =
-                PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
-            let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
-            assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
-            assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
-        } else {
-            assert_eq!(
-                PAGE_SIZE as u64 * ((NEW_WASM_PAGE + 1) + (NEW_STABLE_PAGE + 1))
-                    + empty_wasm_size() as u64,
-                chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
-            );
-        }
+        let expected_size_estimate =
+            PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
+        let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
+        assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
+        assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
 
         let checkpoint = state_manager
             .state_layout()

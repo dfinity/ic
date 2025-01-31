@@ -56,7 +56,6 @@ pub(crate) fn make_unvalidated_checkpoint(
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics

@@ -378,7 +378,6 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
-        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -398,20 +397,11 @@ impl TipHandler {
                 CopyInstruction::Skip
             } else if path == cp.unverified_checkpoint_marker() {
                 // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
-                debug_assert_eq!(lsmt_storage, FlagStatus::Disabled);
+                debug_assert!(false);
                 // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
                 // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
                 // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin"))
-                && lsmt_storage == FlagStatus::Disabled
-                && !path.starts_with(cp.raw_path().join(SNAPSHOTS_DIR))
-            {
-                // PageMap files need to be modified in the tip,
-                // but only with non-LSMT storage layer that modifies these files.
-                // With LSMT we always write additional overlay files instead.
-                // PageMap files that belong to snapshots are not modified even without LSMT.
-                CopyInstruction::ReadWrite
             } else {
                 // Everything else should be readonly.
                 CopyInstruction::ReadOnly

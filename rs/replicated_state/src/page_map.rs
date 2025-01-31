@@ -590,16 +590,13 @@ impl PageMap {
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        match lsmt_config.lsmt_status {
-            FlagStatus::Disabled => self.persist_to_file(&self.page_delta, &storage_layout.base()),
-            FlagStatus::Enabled => self.persist_to_overlay(
-                &self.page_delta,
-                storage_layout,
-                height,
-                lsmt_config,
-                metrics,
-            ),
-        }
+        self.persist_to_overlay(
+            &self.page_delta,
+            storage_layout,
+            height,
+            lsmt_config,
+            metrics,
+        )
     }
 
     /// Persists the unflushed delta contained in this page map to the specified

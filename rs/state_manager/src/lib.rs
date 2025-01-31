@@ -825,7 +825,6 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
-    lsmt_status: FlagStatus,
 }
 
 #[cfg(debug_assertions)]
@@ -1732,7 +1731,6 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            lsmt_status: config.lsmt_config.lsmt_status,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2564,7 +2562,6 @@ impl StateManagerImpl {
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
-                self.lsmt_status,
             )
         };
         let (cp_layout, has_downgrade) = match result {
@@ -2665,7 +2662,6 @@ impl StateManagerImpl {
                         target_height: height,
                         dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
-                        lsmt_status: self.lsmt_status,
                     }
                 },
             )

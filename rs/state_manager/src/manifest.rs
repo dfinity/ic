@@ -232,7 +232,6 @@ pub struct ManifestDelta {
     /// state at `base_height`.
     pub(crate) dirty_memory_pages: DirtyPages,
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
-    pub(crate) lsmt_status: FlagStatus,
 }
 
 /// Groups small files into larger chunks.
@@ -786,42 +785,7 @@ fn dirty_pages_to_dirty_chunks(
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
 
-    // If `lsmt_status` is enabled, we shouldn't have populated `dirty_memory_pages` in the first place.
-    debug_assert!(
-        manifest_delta.lsmt_status == FlagStatus::Disabled
-            || manifest_delta.dirty_memory_pages.is_empty()
-    );
-
-    // Any information on dirty pages is not relevant to what files might have changed with
-    // `lsmt_status` enabled.
-    if manifest_delta.lsmt_status == FlagStatus::Disabled {
-        for dirty_page in &manifest_delta.dirty_memory_pages {
-            if dirty_page.height != manifest_delta.base_height {
-                continue;
-            }
-
-            let path = dirty_page
-                .page_type
-                .layout(checkpoint)
-                .map(|layout| layout.base());
-
-            if let Ok(path) = path {
-                let relative_path = path
-                    .strip_prefix(checkpoint.raw_path())
-                    .expect("failed to strip path prefix");
-
-                if let Some(chunks_bitmap) = dirty_chunks_of_file(
-                    relative_path,
-                    &dirty_page.page_delta_indices,
-                    files,
-                    max_chunk_size,
-                    &manifest_delta.base_manifest,
-                ) {
-                    dirty_chunks.insert(relative_path.to_path_buf(), chunks_bitmap);
-                }
-            }
-        }
-    }
+    debug_assert!(manifest_delta.dirty_memory_pages.is_empty());
 
     // The files with the same inode and device IDs are hardlinks, hence contain exactly the same
     // data.
