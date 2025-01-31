@@ -16319,6 +16319,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "slog",
+ "url",
 ]
 
 [[package]]
