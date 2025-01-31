@@ -292,6 +292,10 @@ where
         cancellation_token: CancellationToken,
     ) {
         self.metrics.assemble_task_finished_total.inc();
+        let _timer = self
+            .metrics
+            .handle_artifact_processor_joined_duration
+            .start_timer();
         // Invariant: Peer sender should only be dropped in this task..
         debug_assert!(peer_rx.has_changed().is_ok());
 
@@ -315,6 +319,7 @@ where
         } else {
             self.active_assembles.remove(&id);
         }
+
         debug_assert!(
             self.slot_table
                 .values()
@@ -322,6 +327,8 @@ where
                 .all(|v| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
+
+        debug_assert!(false);
     }
 
     #[instrument(skip_all)]

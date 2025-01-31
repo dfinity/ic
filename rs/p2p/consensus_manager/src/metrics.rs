@@ -19,6 +19,8 @@ pub(crate) struct ConsensusManagerMetrics {
     pub assemble_task_result_total: IntCounterVec,
     pub assemble_task_restart_after_join_total: IntCounter,
 
+    pub handle_artifact_processor_joined_duration: Histogram,
+
     // Slot table
     pub slot_table_updates_total: IntCounter,
     pub slot_table_updates_with_artifact_total: IntCounter,
@@ -253,6 +255,16 @@ impl ConsensusManagerMetrics {
                     "ic_consensus_manager_slot_set_allocated_slots_total",
                     "Maximum of slots simultaneously used.",
                     const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+
+            handle_artifact_processor_joined_duration: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_consensus_manager_handle_artifact_processor_joined_duration",
+                    "Duration of handle_artifact_processor_joined.",
+                    decimal_buckets(0, 2),
+                    const_labels_string.clone(),
                 ))
                 .unwrap(),
             ),
