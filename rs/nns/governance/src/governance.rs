@@ -2332,7 +2332,7 @@ impl Governance {
                 self.neuron_store
                     .with_neuron(&neuron_id, |n| KnownNeuron {
                         id: Some(n.id()),
-                        known_neuron_data: n.known_neuron_data.clone(),
+                        known_neuron_data: n.known_neuron_data().cloned(),
                     })
                     .map_err(|e| {
                         println!(
@@ -6259,7 +6259,7 @@ impl Governance {
                 "No neuron ID specified in the request to register a known neuron.",
             )
         })?;
-        let known_neuron_data = known_neuron.known_neuron_data.as_ref().ok_or_else(|| {
+        let known_neuron_data = known_neuron.known_neuron_data.ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 "No known neuron data specified in the register neuron request.",
@@ -6300,10 +6300,7 @@ impl Governance {
         }
 
         self.with_neuron_mut(&neuron_id, |neuron| {
-            neuron
-                .known_neuron_data
-                .replace(known_neuron_data.clone())
-                .map(|old_known_neuron_data| old_known_neuron_data.name)
+            neuron.set_known_neuron_data(known_neuron_data)
         })?;
 
         Ok(())

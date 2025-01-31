@@ -135,14 +135,14 @@ pub struct Neuron {
     /// a proposal to open an SNS token swap is executed, maturity from this neuron
     /// will be used to participate in the SNS token swap.
     pub joined_community_fund_timestamp_seconds: Option<u64>,
-    /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
-    pub known_neuron_data: Option<KnownNeuronData>,
     /// The type of the Neuron. See \[NeuronType\] for a description
     /// of the different states.
     pub neuron_type: Option<i32>,
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
     visibility: Visibility,
+    /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
+    known_neuron_data: Option<KnownNeuronData>,
     /// The last time that voting power was "refreshed". There are two ways to
     /// refresh the voting power of a neuron: set following, or vote directly.
     /// When this becomes > 6 months ago, the amount of voting power that this
@@ -1119,6 +1119,22 @@ impl Neuron {
         } else {
             Some(new_staked_maturity_e8s)
         };
+    }
+
+    pub fn known_neuron_data(&self) -> Option<&KnownNeuronData> {
+        self.known_neuron_data.as_ref()
+    }
+
+    /// In addition to what the name says, this also sets visibility to Public.
+    //
+    /// See also set_visibiliy, as well as the getters for known_neuron_data and
+    /// visibility.
+    ///
+    /// Currently, there is no way to set self.known_neuron_data to None (but
+    /// that would be easy to add if the need arises).
+    pub fn set_known_neuron_data(&mut self, new_known_neuron_data: KnownNeuronData) {
+        self.visibility = Visibility::Public;
+        self.known_neuron_data = Some(new_known_neuron_data);
     }
 }
 
