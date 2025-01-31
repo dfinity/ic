@@ -699,13 +699,6 @@ pub fn lsmt_without_sharding() -> LsmtConfig {
     }
 }
 
-pub fn lsmt_disabled() -> LsmtConfig {
-    LsmtConfig {
-        lsmt_status: FlagStatus::Disabled,
-        shard_num_pages: u64::MAX,
-    }
-}
-
 pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_config: LsmtConfig, test: Test)
 where
     Test: FnOnce(

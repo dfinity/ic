@@ -2532,14 +2532,8 @@ impl StateManagerImpl {
                 })
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
-                        // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
-                        // new, or identical (same inode) to before.
-                        let dirty_pages = match self.lsmt_status {
-                            FlagStatus::Enabled => Vec::new(),
-                            FlagStatus::Disabled => get_dirty_pages(&state),
-                        };
                         Some(PreviousCheckpointInfo {
-                            dirty_pages,
+                            dirty_pages: Vec::new(),
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2686,18 +2680,11 @@ impl StateManagerImpl {
                 .start_timer();
             // With lsmt, we do not need the defrag.
             // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
-            let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
-                vec![TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
-                    is_initializing_tip: false,
-                }]
-            } else {
-                vec![TipRequest::DefragTip {
-                    height,
-                    page_map_types: PageMapType::list_all_without_snapshots(&state),
-                }]
-            };
+            let tip_requests = vec![TipRequest::ResetTipAndMerge {
+                checkpoint_layout: cp_layout.clone(),
+                pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+                is_initializing_tip: false,
+            }];
 
             CreateCheckpointResult {
                 tip_requests,
@@ -3420,29 +3407,18 @@ impl StateManager for StateManagerImpl {
                 state
             }
             CertificationScope::Metadata => {
-                match self.lsmt_status {
-                    FlagStatus::Enabled => {
-                        // We want to balance writing too many overlay files with having too many unflushed pages at
-                        // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                        // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                        // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                        if let Some(batch_summary) = batch_summary {
-                            if batch_summary
-                                .next_checkpoint_height
-                                .get()
-                                .saturating_sub(height.get())
-                                == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                            {
-                                self.flush_canister_snapshots_and_page_maps(&mut state, height);
-                            }
-                        }
-                    }
-                    FlagStatus::Disabled => {
-                        if self.tip_channel.is_empty() {
-                            self.flush_canister_snapshots_and_page_maps(&mut state, height);
-                        } else {
-                            self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
-                        }
+                // We want to balance writing too many overlay files with having too many unflushed pages at
+                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+                if let Some(batch_summary) = batch_summary {
+                    if batch_summary
+                        .next_checkpoint_height
+                        .get()
+                        .saturating_sub(height.get())
+                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                    {
+                        self.flush_canister_snapshots_and_page_maps(&mut state, height);
                     }
                 }
 

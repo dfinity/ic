@@ -92,30 +92,8 @@ pub(crate) fn make_unvalidated_checkpoint(
             })
             .unwrap();
         let (cp, has_downgrade) = recv.recv().unwrap()?;
-        // With lsmt storage, ResetTipAndMerge happens later (after manifest).
-        if lsmt_storage == FlagStatus::Disabled {
-            tip_channel
-                .send(TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
-                    is_initializing_tip: false,
-                })
-                .unwrap();
-        }
         (cp, has_downgrade)
     };
-
-    if lsmt_storage == FlagStatus::Disabled {
-        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["wait_for_reflinking"])
-            .start_timer();
-        #[allow(clippy::disallowed_methods)]
-        let (send, recv) = unbounded();
-        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-        recv.recv().unwrap();
-    }
 
     Ok((cp, has_downgrade))
 }

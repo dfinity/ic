@@ -374,37 +374,15 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
-                            match lsmt_config.lsmt_status {
-                                FlagStatus::Enabled => merge(
-                                    &mut tip_handler,
-                                    &pagemaptypes,
-                                    height,
-                                    &mut thread_pool,
-                                    &log,
-                                    &lsmt_config,
-                                    &metrics,
-                                ),
-                                FlagStatus::Disabled => {
-                                    if is_initializing_tip
-                                        && merge_to_base(
-                                            &mut tip_handler,
-                                            &pagemaptypes,
-                                            height,
-                                            &mut thread_pool,
-                                            &log,
-                                            &metrics,
-                                        )
-                                    {
-                                        info!(
-                                            log,
-                                            "tip_downgrade changes from {:?} to {:?}",
-                                            tip_downgrade,
-                                            HasDowngrade::Yes,
-                                        );
-                                        tip_downgrade = HasDowngrade::Yes;
-                                    }
-                                }
-                            };
+                            merge(
+                                &mut tip_handler,
+                                &pagemaptypes,
+                                height,
+                                &mut thread_pool,
+                                &log,
+                                &lsmt_config,
+                                &metrics,
+                            );
                             tip_state = TipState::ReadyForPageDeltas(height);
                         }
                         TipRequest::DefragTip {
