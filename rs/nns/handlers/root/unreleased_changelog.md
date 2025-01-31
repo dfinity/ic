@@ -9,9 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added the `query_status` field for the `canister_status` method.
+
 ## Changed
 
-- The `LogVisibility` returned from `canister_status` has one more variant `allowed_viewers`,
+* The `LogVisibility` returned from `canister_status` has one more variant `allowed_viewers`,
   consistent with the corresponding management canister API. Calling `canister_status` for a
   canister with such a log visibility setting will no longer panic.
 

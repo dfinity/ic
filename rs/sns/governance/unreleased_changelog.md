@@ -37,6 +37,7 @@ proposal, e.g.:
     ```
 
 * Do not redact chunked Wasm data in `ProposalInfo` served from `SnsGov.list_proposals`.
+* Added the `query_status` field for `canister_status`/`get_sns_canisters_summary` methods.
 
 ## Changed
 
