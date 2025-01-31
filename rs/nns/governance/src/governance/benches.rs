@@ -1,3 +1,4 @@
+use crate::pb::v1::VotingPowerEconomics;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
@@ -541,7 +542,7 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 )
-                .into_proto(&VotingPowerEconomics::DEFAULT, 123_456_789);
+                .into();
                 neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
                 neuron
             })

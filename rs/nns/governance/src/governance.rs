@@ -95,7 +95,6 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::list_neurons::NeuronSubaccount;
 use ic_nns_governance_api::{
     pb::v1::{
         self as api,
@@ -2219,7 +2218,7 @@ impl Governance {
     /// See `ListNeurons`.
     pub fn list_neurons(
         &self,
-        list_neurons: &ListNeuronsCandid,
+        list_neurons: &ListNeurons,
         caller: PrincipalId,
     ) -> ListNeuronsResponse {
         let now = self.env.now();
