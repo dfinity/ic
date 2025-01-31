@@ -1,6 +1,5 @@
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -27,7 +26,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
     CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };

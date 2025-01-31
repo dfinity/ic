@@ -195,7 +195,6 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
-    page_map_flush_skips: IntCounter,
     num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
@@ -243,11 +242,6 @@ impl CheckpointMetrics {
             "state_manager_page_map_flushes",
             "Amount of sent FlushPageMap requests.",
         );
-        let page_map_flush_skips = metrics_registry.int_counter(
-            "state_manager_page_map_flush_skips",
-            "Amount of FlushPageMap requests that were skipped.",
-        );
-
         let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
             "state_manager_num_page_maps_by_load_status",
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
@@ -261,7 +255,6 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             page_map_flushes,
-            page_map_flush_skips,
             num_page_maps_by_load_status,
             log: replica_logger,
         }
@@ -916,7 +909,6 @@ fn initialize_tip(
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
             pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
-            is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
@@ -2492,7 +2484,6 @@ impl StateManagerImpl {
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
         struct PreviousCheckpointInfo {
-            dirty_pages: DirtyPages,
             base_manifest: Manifest,
             base_height: Height,
             checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -2531,7 +2522,6 @@ impl StateManagerImpl {
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
                         Some(PreviousCheckpointInfo {
-                            dirty_pages: Vec::new(),
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2651,7 +2641,6 @@ impl StateManagerImpl {
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
-                     dirty_pages,
                      checkpoint_layout,
                      base_manifest,
                      base_height,
@@ -2660,7 +2649,6 @@ impl StateManagerImpl {
                         base_manifest,
                         base_height,
                         target_height: height,
-                        dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
                     }
                 },
@@ -2679,7 +2667,6 @@ impl StateManagerImpl {
             let tip_requests = vec![TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
                 pagemaptypes: PageMapType::list_all_including_snapshots(&state),
-                is_initializing_tip: false,
             }];
 
             CreateCheckpointResult {

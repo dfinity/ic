@@ -8,7 +8,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds, SnapshotId};
-use ic_config::{flag_status::FlagStatus, state_manager::lsmt_config_default};
+use ic_config::state_manager::lsmt_config_default;
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;

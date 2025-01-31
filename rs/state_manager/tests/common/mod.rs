@@ -1,9 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::{
-    flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
-};
+use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},

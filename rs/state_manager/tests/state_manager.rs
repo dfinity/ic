@@ -1,9 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
-use ic_config::{
-    flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
-};
+use ic_config::state_manager::{lsmt_config_default, Config};
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
     Path as LabelPath,
@@ -134,40 +131,6 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map_or(0, |metadata| metadata.len())
 }
 
-/// Whether the base file for vmemory0 exists.
-fn vmemory0_base_exists(
-    state_manager: &StateManagerImpl,
-    canister_id: &CanisterId,
-    height: Height,
-) -> bool {
-    state_manager
-        .state_layout()
-        .checkpoint_verified(height)
-        .unwrap()
-        .canister(canister_id)
-        .unwrap()
-        .vmemory_0()
-        .base()
-        .exists()
-}
-
-/// Number of overlays for vmemory0.
-fn vmemory0_num_overlays(
-    state_manager: &StateManagerImpl,
-    canister_id: &CanisterId,
-    height: Height,
-) -> usize {
-    state_manager
-        .state_layout()
-        .checkpoint_verified(height)
-        .unwrap()
-        .canister(canister_id)
-        .unwrap()
-        .vmemory_0()
-        .existing_overlays()
-        .unwrap()
-        .len()
-}
 /// This is a canister that keeps a counter on the heap and allows to increment it.
 /// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
@@ -358,94 +321,6 @@ fn lsmt_merge_overhead() {
     assert_ne!(state_in_memory(&env), 0.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
-}
-
-#[allow(clippy::disallowed_methods)]
-#[test]
-fn skipping_flushing_is_invisible_for_state() {
-    fn skips(env: &StateMachine) -> f64 {
-        env.metrics_registry()
-            .prometheus_registry()
-            .gather()
-            .into_iter()
-            .filter(|x| x.get_name() == "state_manager_page_map_flush_skips")
-            .map(|x| x.get_metric()[0].get_counter().get_value())
-            .next()
-            .unwrap()
-    }
-    fn execute(block_tip: bool) -> CryptoHashOfState {
-        let env = StateMachine::new();
-        env.set_checkpoints_enabled(false);
-
-        let canister_id0 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-        let canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-        let canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-
-        // One wait occupies the TipHandler thread, the second (nop) makes queue non-empty
-        // to cause flush skips. 0-size channel blocks send in the TipHandler until we call recv()
-        let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
-        let (send_nop, recv_nop) = crossbeam_channel::unbounded();
-        env.state_manager
-            .test_only_send_wait_to_tip_channel(send_wait);
-        env.state_manager
-            .test_only_send_wait_to_tip_channel(send_nop);
-        if !block_tip {
-            recv_wait.recv().unwrap();
-            recv_nop.recv().unwrap();
-        }
-
-        let wait = || {
-            let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
-            env.state_manager
-                .test_only_send_wait_to_tip_channel(send_wait);
-            recv_wait.recv().unwrap();
-        };
-
-        let skips_before = skips(&env);
-        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-        env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-        env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-
-        // Second inc on canister_id0 to trigger overwriting a previously written page.
-        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
-        if !block_tip {
-            wait();
-        }
-
-        let skips_after = skips(&env);
-        if block_tip {
-            recv_wait.recv().unwrap();
-            recv_nop.recv().unwrap();
-        }
-        env.set_checkpoints_enabled(true);
-        if block_tip {
-            assert_eq!(skips_after - skips_before, 4.0)
-        } else {
-            assert_eq!(skips_after - skips_before, 0.0)
-        }
-        env.tick();
-        read_and_assert_eq(&env, canister_id0, 2);
-        read_and_assert_eq(&env, canister_id1, 1);
-        read_and_assert_eq(&env, canister_id2, 1);
-
-        let env = env.restart_node();
-        env.tick();
-
-        read_and_assert_eq(&env, canister_id0, 2);
-        read_and_assert_eq(&env, canister_id1, 1);
-        read_and_assert_eq(&env, canister_id2, 1);
-
-        env.await_state_hash()
-    }
 }
 
 #[test]
