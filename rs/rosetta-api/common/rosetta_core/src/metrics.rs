@@ -4,6 +4,7 @@ use prometheus::{
     register_int_counter_vec, register_int_gauge, Gauge, Histogram, HistogramTimer, HistogramVec,
     IntCounter, IntCounterVec, IntGauge,
 };
+use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
@@ -41,6 +42,8 @@ lazy_static! {
         "ledger_sync_blocks_fetch_retries_total",
         "Number of retries when fetching blocks from the ledger"
     ).unwrap();
+
+    static ref METRICS: Mutex<Option<PrometheusMetrics>> = Mutex::new(None);
 }
 
 struct RosettaEndpointsMetrics {
@@ -117,12 +120,21 @@ impl RosettaMetrics {
     }
 
     pub fn http_metrics_wrapper(expose: bool) -> PrometheusMetrics {
+        let mut metrics_guard = METRICS.lock().unwrap();
+        if let Some(metrics) = &*metrics_guard {
+            return metrics.clone();
+        }
+
         let metrics = PrometheusMetricsBuilder::new("rosetta")
             .registry(prometheus::default_registry().clone());
-        if expose {
+
+        let metrics = if expose {
             metrics.endpoint("/metrics").build().unwrap()
         } else {
             metrics.build().unwrap()
-        }
+        };
+
+        *metrics_guard = Some(metrics.clone());
+        metrics
     }
 }
