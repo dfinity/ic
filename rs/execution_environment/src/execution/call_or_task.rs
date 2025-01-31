@@ -497,7 +497,6 @@ impl CallOrTaskHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -570,27 +569,23 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                if output.wasm_result.is_ok() {
-                    match canister_state_changes
-                        .system_state_modifications
-                        .apply_changes(
-                            round.time,
-                            &mut self.canister.system_state,
-                            round.network_topology,
-                            round.hypervisor.subnet_id(),
-                            round.log,
-                        ) {
-                        Ok(_) => self.canister.system_state.canister_version += 1,
-                        Err(err) => {
-                            return finish_err(
-                                clean_canister,
-                                output.num_instructions_left,
-                                err.into_user_error(&original.canister_id),
-                                original,
-                                round,
-                            );
-                        }
-                    }
+                if let Err(err) = canister_state_changes
+                    .system_state_modifications
+                    .apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
+                    )
+                {
+                    return finish_err(
+                        clean_canister,
+                        output.num_instructions_left,
+                        err.into_user_error(&original.canister_id),
+                        original,
+                        round,
+                    );
                 }
                 NumBytes::from(0)
             }
