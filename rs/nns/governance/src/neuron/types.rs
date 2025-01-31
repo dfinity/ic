@@ -1129,12 +1129,16 @@ impl Neuron {
     //
     /// See also set_visibiliy, as well as the getters for known_neuron_data and
     /// visibility.
-    ///
-    /// Currently, there is no way to set self.known_neuron_data to None (but
-    /// that would be easy to add if the need arises).
     pub fn set_known_neuron_data(&mut self, new_known_neuron_data: KnownNeuronData) {
         self.visibility = Visibility::Public;
         self.known_neuron_data = Some(new_known_neuron_data);
+    }
+
+    /// Does NOT touch visiblity. If you want to go private, call set_visibility
+    /// after calling this.
+    #[cfg(test)] // This can be used in production, but so far, it is not needed.
+    pub(crate) fn clear_known_neuron_data(&mut self) {
+        self.known_neuron_data = None;
     }
 }
 
