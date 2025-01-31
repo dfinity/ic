@@ -28,7 +28,7 @@ message DkgDataPayload {
 }
 
 message Summary {
-  reserved 5,6,8;
+  reserved 5, 6, 8;
   reserved "transcripts_for_new_subnets";
   uint64 registry_version = 1;
   uint64 interval_length = 2;
