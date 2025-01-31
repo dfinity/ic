@@ -8,8 +8,6 @@ BindsTo=setup-certificate-issuer.service
 [Service]
 LogRateLimitIntervalSec=1ms
 LogRateLimitBurst=1000
-User=root
-Group=root
 Restart=always
 EnvironmentFile=/run/ic-node/etc/default/certificate-issuer
 ExecStart=/bin/bash -c '                                                               \

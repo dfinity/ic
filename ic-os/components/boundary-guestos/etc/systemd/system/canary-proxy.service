@@ -6,8 +6,6 @@ After=setup-canary-proxy.service
 BindsTo=setup-canary-proxy.service
 
 [Service]
-User=root
-Group=root
 LimitNOFILE=524288
 EnvironmentFile=/run/ic-node/etc/default/canary-proxy
 ExecStart=/opt/ic/bin/canary-proxy \
