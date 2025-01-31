@@ -263,7 +263,11 @@ fn process_messages<
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 pub fn create_ingress_handlers<
-    PoolIngress: MutablePool<ReplicaSignedIngress> + Send + Sync + ValidatedPoolReader<ReplicaSignedIngress> + 'static,
+    PoolIngress: MutablePool<ReplicaSignedIngress>
+        + Send
+        + Sync
+        + ValidatedPoolReader<ReplicaSignedIngress>
+        + 'static,
 >(
     channel: AbortableBroadcastChannel<ReplicaSignedIngress>,
     user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
@@ -383,8 +387,10 @@ pub(crate) struct IngressProcessor<P: MutablePool<ReplicaSignedIngress>> {
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations>
-            + Send
+        dyn PoolMutationsProducer<
+                P,
+                Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations,
+            > + Send
             + Sync,
     >,
 }
@@ -393,8 +399,10 @@ impl<P: MutablePool<ReplicaSignedIngress>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations>
-                + Send
+            dyn PoolMutationsProducer<
+                    P,
+                    Mutations = <P as MutablePool<ReplicaSignedIngress>>::Mutations,
+                > + Send
                 + Sync,
         >,
     ) -> Self {
@@ -405,8 +413,8 @@ impl<P: MutablePool<ReplicaSignedIngress>> IngressProcessor<P> {
     }
 }
 
-impl<P: MutablePool<ReplicaSignedIngress> + Send + Sync + 'static> ArtifactProcessor<ReplicaSignedIngress>
-    for IngressProcessor<P>
+impl<P: MutablePool<ReplicaSignedIngress> + Send + Sync + 'static>
+    ArtifactProcessor<ReplicaSignedIngress> for IngressProcessor<P>
 {
     /// The method processes changes in the ingress pool.
     #[instrument(skip_all)]

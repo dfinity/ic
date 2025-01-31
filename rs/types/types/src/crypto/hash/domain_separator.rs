@@ -7,6 +7,7 @@ pub enum DomainSeparator {
     // This variant is only defined to check in tests that there are no
     // collisions in separators. The used variable is defined in DOMAIN_IC_REQUEST
     IcRequest,
+    IngressMessageId,
     NotarizationContent,
     Notarization,
     NotarizationShare,
@@ -128,6 +129,7 @@ impl DomainSeparator {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
+            DomainSeparator::IngressMessageId => "ic-ingress-message-id",
         }
     }
 }

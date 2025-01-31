@@ -16,6 +16,11 @@ mod read_state;
 mod status;
 mod tracing_flamegraph;
 
+pub trait IngressSignerVerifier:
+    BasicSigner<IngressMessageId> + BasicSigVerifier<IngressMessageId>
+{
+}
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod call;
@@ -26,7 +31,8 @@ cfg_if::cfg_if! {
 
 pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
-use ic_interfaces::crypto::Crypto;
+use ic_interfaces::crypto::{BasicSigVerifier, Crypto};
+use ic_types::artifact::IngressMessageId;
 use ic_types::consensus::ReplicaSignedIngress;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -302,7 +308,7 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
-    crypto: Arc<dyn Crypto + Send + Sync>,
+    crypto: Arc<dyn IngressSignerVerifier + Send + Sync>,
 ) {
     info!(log, "Starting HTTP server...");
     let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);

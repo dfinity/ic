@@ -223,6 +223,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "axum": crate.spec(
                 version = "^0.7.9",
+                features = ["macros"],
             ),
             "axum-extra": crate.spec(
                 version = "^0.9.6",

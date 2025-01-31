@@ -7,12 +7,12 @@ pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
     common::{build_validator, validation_error_to_http_error},
-    HttpError, IngressFilterService,
+    HttpError, IngressFilterService, IngressSignerVerifier,
 };
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::{IngressSigVerifier, IngressSignerVerifier};
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
-use ic_interfaces::{crypto::Crypto, ingress_pool::IngressPoolThrottler};
+use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -22,9 +22,9 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
-    artifact::UnvalidatedArtifactMutation, consensus::ReplicaSignedIngress, malicious_flags::MaliciousFlags, messages::{
+    artifact::{IngressMessageId, UnvalidatedArtifactMutation}, consensus::ReplicaSignedIngress, malicious_flags::MaliciousFlags, messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
-    }, time::current_time, CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId
+    }, signature::BasicSignature, time::current_time, CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId
 };
 use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
@@ -42,7 +42,7 @@ pub struct IngressValidatorBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    crypto: Arc<dyn IngressSignerVerifier+ Send + Sync>,
+    crypto: Arc<dyn IngressSignerVerifier + Send + Sync>,
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
 }
 
@@ -56,7 +56,7 @@ impl IngressValidatorBuilder {
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<ReplicaSignedIngress>>,
-        crypto: Arc<dyn IngressSignerVerifier+ Send + Sync>,
+        crypto: Arc<dyn IngressSignerVerifier + Send + Sync>,
     ) -> Self {
         Self {
             log,
@@ -301,9 +301,19 @@ impl IngressMessageSubmitter {
             crypto,
         } = self;
 
-        match crypto.sign_simple(&message, node_id, todo!()) {
-        }
+        let message = match crypto.sign_basic(&IngressMessageId::from(&message), node_id, todo!()) {
+            Ok(signature) => ReplicaSignedIngress { content: message, signature: BasicSignature {
+                signature,
+                signer: node_id,
+            }},
+            Err(_) => {
 
+            return Err(HttpError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Failed to sign the ingress message.".to_string(),
+            });
+            }
+        };
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.

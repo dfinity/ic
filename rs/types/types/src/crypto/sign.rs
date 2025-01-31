@@ -1,6 +1,7 @@
 //! Defines signature types.
 
 use super::hash::domain_separator::DomainSeparator;
+use crate::artifact::IngressMessageId;
 use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
@@ -49,6 +50,7 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
 mod private {
     use super::*;
     use crate::{
+        artifact::IngressMessageId,
         crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
         messages::QueryResponseHash,
     };
@@ -56,6 +58,7 @@ mod private {
     pub trait SignatureDomainSeal {}
 
     impl SignatureDomainSeal for BlockMetadata {}
+    impl SignatureDomainSeal for IngressMessageId {}
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
@@ -87,6 +90,12 @@ impl SignatureDomain for CanisterHttpResponseMetadata {
 impl SignatureDomain for BlockMetadata {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::BlockMetadata.as_str())
+    }
+}
+
+impl SignatureDomain for IngressMessageId {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::IngressMessageId.as_str())
     }
 }
 

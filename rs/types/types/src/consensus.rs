@@ -306,6 +306,12 @@ impl SignedBytesWithoutDomainSeparator for BlockMetadata {
     }
 }
 
+impl SignedBytesWithoutDomainSeparator for IngressMessageId {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
 /// [`HashedBlock`] contains a [`Block`] together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 

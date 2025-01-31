@@ -17,6 +17,7 @@ use crate::{
     HttpError,
 };
 use axum::{
+    debug_handler,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
@@ -58,7 +59,7 @@ pub(crate) enum CallV3Response {
 }
 
 #[derive(Clone)]
-
+#[debug_handler]
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
@@ -127,6 +128,7 @@ pub(crate) fn route() -> &'static str {
     "/api/v3/canister/:effective_canister_id/call"
 }
 
+#[debug_handler]
 pub(crate) fn new_router(
     call_handler: IngressValidator,
     ingress_watcher_handle: IngressWatcherHandle,
@@ -172,6 +174,7 @@ pub fn new_service(
 }
 
 /// Handles a call to /api/v3/canister/../call
+#[debug_handler]
 async fn call_sync_v3(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SynchronousCallHandlerState {
