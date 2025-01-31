@@ -3495,66 +3495,6 @@ pub struct ListNodeProvidersResponse {
     #[prost(message, repeated, tag = "1")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
-/// The arguments to the method `claim_or_refresh_neuron_from_account`.
-///
-/// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ClaimOrRefreshNeuronFromAccount {
-    /// The principal for which to refresh the account. If not specified,
-    /// defaults to the caller.
-    #[prost(message, optional, tag = "1")]
-    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The memo of the staking transaction.
-    #[prost(uint64, tag = "2")]
-    pub memo: u64,
-}
-/// Response to claim_or_refresh_neuron_from_account.
-///
-/// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ClaimOrRefreshNeuronFromAccountResponse {
-    #[prost(
-        oneof = "claim_or_refresh_neuron_from_account_response::Result",
-        tags = "1, 2"
-    )]
-    pub result: ::core::option::Option<claim_or_refresh_neuron_from_account_response::Result>,
-}
-/// Nested message and enum types in `ClaimOrRefreshNeuronFromAccountResponse`.
-pub mod claim_or_refresh_neuron_from_account_response {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Oneof,
-    )]
-    pub enum Result {
-        /// Specified in case of error.
-        #[prost(message, tag = "1")]
-        Error(super::GovernanceError),
-        /// The ID of the neuron that was created or empty in the case of error.
-        #[prost(message, tag = "2")]
-        NeuronId(::ic_nns_common::pb::v1::NeuronId),
-    }
-}
 /// The monthly Node Provider rewards as of a point in time.
 #[derive(
     candid::CandidType,
