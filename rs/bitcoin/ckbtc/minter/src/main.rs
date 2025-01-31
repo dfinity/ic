@@ -199,6 +199,22 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .0
 }
 
+#[update]
+async fn upload_events(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+    }
+}
+
+#[update]
+async fn finish_upload() -> (u64, Option<u64>) {
+    let count_start = ic_cdk::api::instruction_counter();
+    let removed = storage::migrate_old_events_if_not_empty();
+    // lifecycle::upgrade::post_upgrade(Default::default());
+    let count_end = ic_cdk::api::instruction_counter();
+    (count_end - count_start, removed)
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {

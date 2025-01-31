@@ -117,12 +117,19 @@ pub fn events() -> impl Iterator<Item = Event> {
 
 pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
+    #[cfg(feature = "canbench-rs")]
+    let _p = canbench_rs::bench_scope("v0_events_with");
     V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
         if old.len() > 0 {
+            #[cfg(feature = "canbench-rs")]
+            let _p = canbench_rs::bench_scope("migrate_events");
             V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });
+
+            #[cfg(feature = "canbench-rs")]
+            let _p = canbench_rs::bench_scope("replace_memory");
             *old = MEMORY_MANAGER.with(|m| {
                 StableLog::new(
                     m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
@@ -172,4 +179,28 @@ pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
             .append(&bytes)
             .expect("failed to append an entry to the event log");
     })
+}
+
+pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+    let bytes = encode_event(&Event {
+        timestamp: Some(runtime.time()),
+        payload,
+    });
+    V0_EVENTS.with(|events| {
+        events
+            .borrow()
+            .append(&bytes)
+            .expect("failed to append an entry to the event log");
+    })
+}
+
+#[cfg(feature = "canbench-rs")]
+mod benches {
+    use super::*;
+    use canbench_rs::bench;
+
+    #[bench(raw)]
+    fn migrate_events_bench() -> canbench_rs::BenchResult {
+        canbench_rs::bench_fn(migrate_old_events_if_not_empty)
+    }
 }
