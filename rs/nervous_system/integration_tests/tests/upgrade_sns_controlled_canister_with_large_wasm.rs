@@ -1,12 +1,11 @@
-use candid::Principal;
 use canister_test::Wasm;
-use ic_nervous_system_agent::nns::registry::get_subnet_for_canister;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout, install_canister_on_subnet, nns, sns, NnsInstaller,
+    await_with_timeout, cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns,
+    sns, NnsInstaller,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -19,16 +18,14 @@ use ic_sns_cli::upgrade_sns_controlled_canister::{
     self, UpgradeSnsControlledCanisterArgs, UpgradeSnsControlledCanisterInfo,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
-use pocket_ic::nonblocking::PocketIc;
+use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
-use std::collections::BTreeSet;
 use std::path::PathBuf;
+use tempfile::TempDir;
 use url::Url;
 
 const MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 20;
 const MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS: u64 = 5 * 60;
-
-const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
 
 fn very_large_wasm_path() -> PathBuf {
     let image_classification_canister_wasm_path =
@@ -43,65 +40,14 @@ fn very_large_wasm_bytes() -> Vec<u8> {
     std::fs::read(&wasm_path).expect("Failed to read WASM file")
 }
 
-fn format_full_hash(hash: &[u8]) -> String {
-    hash.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-/// Uploads `wasm` into the store canister, one [`CHUNK_SIZE`]-sized chunk at a time.
-///
-/// Returns the vector of uploaded chunk hashes.
-async fn upload_wasm_as_chunks(
-    pocket_ic: &PocketIc,
-    store_controller_id: Principal,
-    store_canister_id: Principal,
-    wasm: Wasm,
-    num_chunks_expected: usize,
-) -> Vec<Vec<u8>> {
-    let sender = Some(store_controller_id);
-
-    let mut uploaded_chunk_hashes = Vec::new();
-
-    for chunk in wasm.bytes().chunks(CHUNK_SIZE) {
-        let uploaded_chunk_hash = pocket_ic
-            .upload_chunk(store_canister_id, sender, chunk.to_vec())
-            .await
-            .unwrap();
-
-        uploaded_chunk_hashes.push(uploaded_chunk_hash);
-    }
-
-    // Smoke test
-    {
-        let stored_chunk_hashes = pocket_ic
-            .stored_chunks(store_canister_id, sender)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|hash| format_full_hash(&hash[..]))
-            .collect::<Vec<_>>();
-
-        let stored_chunk_hashes = BTreeSet::from_iter(stored_chunk_hashes.iter());
-
-        let uploaded_chunk_hashes = uploaded_chunk_hashes
-            .iter()
-            .map(|hash| format_full_hash(&hash[..]))
-            .collect::<Vec<_>>();
-        let uploaded_chunk_hashes = BTreeSet::from_iter(uploaded_chunk_hashes.iter());
-
-        assert!(uploaded_chunk_hashes.is_subset(&stored_chunk_hashes));
-        assert_eq!(uploaded_chunk_hashes.len(), num_chunks_expected);
-    }
-
-    uploaded_chunk_hashes
-}
-
 #[tokio::test]
-async fn test_store_different_from_target() {
+async fn upgrade_sns_controlled_canister_with_large_wasm() {
     // 1. Prepare the world
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
     let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir.clone())
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
@@ -111,19 +57,22 @@ async fn test_store_different_from_target() {
 
     // Install the NNS canisters.
     {
+        let registry_proto_path = state_dir.join("registry.proto");
+        let initial_mutations = load_registry_mutations(registry_proto_path);
+
         let mut nns_installer = NnsInstaller::default();
-        nns_installer.with_tip_nns_canister_versions();
+        nns_installer.with_current_nns_canister_versions();
+        nns_installer.with_cycles_minting_canister();
         nns_installer.with_cycles_ledger();
+        nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
         nns_installer.install(&pocket_ic).await;
     }
 
     // Publish SNS Wasms to SNS-W.
-    {
-        let with_mainnet_sns_canisters = false;
-        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
-            .await
-            .unwrap();
-    };
+    let with_mainnet_sns_canisters = false;
+    add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
+        .await
+        .unwrap();
 
     // Install a dapp canister.
     let original_wasm = {
@@ -132,19 +81,9 @@ async fn test_store_different_from_target() {
         let wasm_bytes = modify_wasm_bytes(&wasm_bytes, 42);
         Wasm::from_bytes(&wasm_bytes[..])
     };
-    let original_wasm_hash = original_wasm.sha256_hash();
+    let original_wasm_hash = original_wasm.sha256_hash().to_vec();
 
     let app_subnet = pocket_ic.topology().await.get_app_subnets()[0];
-    let ii_subnet = pocket_ic.topology().await.get_ii().unwrap();
-    assert_ne!(app_subnet, ii_subnet);
-
-    let root_subnet = get_subnet_for_canister(&pocket_ic, ROOT_CANISTER_ID.into())
-        .await
-        .unwrap();
-
-    println!("root_subnet = {}", root_subnet);
-    panic!("boo");
-
     let target_canister_id = install_canister_on_subnet(
         &pocket_ic,
         app_subnet,
@@ -175,6 +114,7 @@ async fn test_store_different_from_target() {
         sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
             .await
             .unwrap();
+
         sns::swap::smoke_test_participate_and_finalize(
             &pocket_ic,
             sns.swap.canister_id,
@@ -189,10 +129,16 @@ async fn test_store_different_from_target() {
     // neuron either holds the majority of the voting power or the follow graph is set up
     // s.t. when this neuron submits a proposal, that proposal gets through without the need
     // for any voting.
-    let (sns_neuron_id, _) =
+    let (sns_neuron_id, sender) =
         find_neuron_with_majority_voting_power(&pocket_ic, sns.governance.canister_id)
             .await
             .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+    // Ensure the user controlling the SNS neuron can also create a canister with enough cycles
+    // so that it can host the large Wasm. To that end, the GM grants this user 10 ICP, for
+    // the sake of testing, out of thin air.
+    let icp = Tokens::from_tokens(10).unwrap();
+    cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
 
     let cli_arg = UpgradeSnsControlledCanisterArgs {
         sns_neuron_id: Some(ParsedSnsNeuron(sns_neuron_id)),
@@ -207,9 +153,10 @@ async fn test_store_different_from_target() {
     };
 
     // 2. Submit the upgrade proposal.
+
     let pocket_ic_agent = PocketIcAgent {
         pocket_ic: &pocket_ic,
-        sender: sns.root.canister_id.into(),
+        sender: sender.into(),
     };
     let UpgradeSnsControlledCanisterInfo {
         wasm_module_hash,
@@ -217,6 +164,9 @@ async fn test_store_different_from_target() {
     } = upgrade_sns_controlled_canister::exec(cli_arg, &pocket_ic_agent)
         .await
         .unwrap();
+
+    // Smoke test.
+    assert_ne!(wasm_module_hash, original_wasm_hash);
 
     let proposal_id = proposal_id.unwrap();
 

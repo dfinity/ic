@@ -36,7 +36,7 @@ const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 // The cycle fee for create request is 0.1T cycles.
 pub const CANISTER_CREATE_FEE: u128 = 100_000_000_000_u128;
 
-pub const STORE_CANISTER_INITIAL_CYCLES_BALANCE: u128 = 500_000_000_000_u128; // 0.5T
+pub const STORE_CANISTER_INITIAL_CYCLES_BALANCE: u128 = 5_000_000_000_000_u128; // 5T
 
 /// The arguments used to configure the upgrade_sns_controlled_canister command.
 #[derive(Debug, Parser)]

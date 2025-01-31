@@ -2,6 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::{
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
@@ -12,8 +13,9 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
@@ -24,10 +26,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
+        build_cmc_wasm, build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
+        build_mainnet_cmc_wasm, build_mainnet_governance_wasm, build_mainnet_ledger_wasm,
+        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
+        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+        NnsInitPayloadsBuilder,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
@@ -37,7 +40,10 @@ use ic_nns_test_utils::{
         build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_transport::pb::v1::{
+    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+};
 use ic_sns_governance_api::pb::v1::{
     self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
 };
@@ -69,7 +75,7 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::{collections::BTreeMap, fmt::Write, ops::Range, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, ops::Range, path::Path, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -318,8 +324,9 @@ pub async fn add_wasms_to_sns_wasm(
 pub struct NnsInstaller {
     mainnet_nns_canister_versions: Option<bool>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
-    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
+    with_cycles_minting_canister: bool,
     with_cycles_ledger: bool,
 }
 
@@ -335,8 +342,9 @@ impl NnsInstaller {
             // Enforce an explicit decision.
             mainnet_nns_canister_versions: None,
             neurons_fund_hotkeys: vec![],
-            custom_initial_registry_mutations: None,
+            custom_registry_mutations: None,
             initial_balances: vec![],
+            with_cycles_minting_canister: false,
             with_cycles_ledger: false,
         }
     }
@@ -348,7 +356,7 @@ impl NnsInstaller {
     }
 
     /// Requests tip-of-this-branch Wasm versions for all NNS canisters being installed.
-    pub fn with_tip_nns_canister_versions(&mut self) -> &mut Self {
+    pub fn with_current_nns_canister_versions(&mut self) -> &mut Self {
         self.mainnet_nns_canister_versions = Some(false);
         self
     }
@@ -363,27 +371,32 @@ impl NnsInstaller {
         self
     }
 
-    /// Requests that the NNS Registry is initialized with `custom_initial_registry_mutations`.
+    /// Requests that the NNS Registry is initialized with `custom_registry_mutations`.
     ///
     /// The custom mutations must result in an invariant-compliant Registry state.
     ///
     /// Without this specification, default initial Registry mutations will be used, which are
     /// guaranteed to be compliant.
-    pub fn with_custom_initial_registry_mutations(
+    pub fn with_custom_registry_mutations(
         &mut self,
-        custom_initial_registry_mutations: Vec<RegistryAtomicMutateRequest>,
+        custom_registry_mutations: Vec<RegistryAtomicMutateRequest>,
     ) -> &mut Self {
-        self.custom_initial_registry_mutations = Some(custom_initial_registry_mutations);
+        self.custom_registry_mutations = Some(custom_registry_mutations);
         self
     }
 
     /// Requests `initial_balances` as a Vec of `(test_user_icp_ledger_account,
     /// test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
-    pub fn with_initial_balances(
+    pub fn with_ledger_balances(
         &mut self,
         initial_balances: Vec<(AccountIdentifier, Tokens)>,
     ) -> &mut Self {
         self.initial_balances = initial_balances;
+        self
+    }
+
+    pub fn with_cycles_minting_canister(&mut self) -> &mut Self {
+        self.with_cycles_minting_canister = true;
         self
     }
 
@@ -411,8 +424,8 @@ impl NnsInstaller {
 
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
-        if let Some(custom_initial_registry_mutations) = self.custom_initial_registry_mutations {
-            nns_init_payload_builder.with_initial_mutations(custom_initial_registry_mutations);
+        if let Some(custom_registry_mutations) = self.custom_registry_mutations {
+            nns_init_payload_builder.with_initial_mutations(custom_registry_mutations);
         } else {
             nns_init_payload_builder.with_initial_invariant_compliant_mutations();
         }
@@ -513,6 +526,39 @@ impl NnsInstaller {
         )
         .await;
 
+        if self.with_cycles_minting_canister {
+            let cycles_minting_wasm = if with_mainnet_canister_versions {
+                build_mainnet_cmc_wasm()
+            } else {
+                build_cmc_wasm()
+            };
+            install_canister(
+                pocket_ic,
+                "Cycles Minting",
+                CYCLES_MINTING_CANISTER_ID,
+                Encode!(&nns_init_payload.cycles_minting).unwrap(),
+                cycles_minting_wasm,
+                Some(ROOT_CANISTER_ID.get()),
+            )
+            .await;
+
+            // Authorize canister creation on application subnets.
+            let application_subnets = pocket_ic
+                .topology()
+                .await
+                .subnet_configs
+                .keys()
+                .map(|subnet_id| SubnetId::from(PrincipalId(*subnet_id)))
+                .collect();
+            nns::cmc::set_authorized_subnetwork_list(
+                pocket_ic,
+                GOVERNANCE_CANISTER_ID.get(),
+                None,
+                application_subnets,
+            )
+            .await;
+        }
+
         if self.with_cycles_ledger {
             cycles_ledger::install(pocket_ic).await;
         }
@@ -526,11 +572,48 @@ impl NnsInstaller {
     }
 }
 
+pub fn load_registry_mutations<P: AsRef<Path>>(path: P) -> RegistryAtomicMutateRequest {
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(path.as_ref());
+    let updates = registry_data_provider
+        .get_updates_since(ZERO_REGISTRY_VERSION)
+        .unwrap();
+
+    let mutations = updates
+        .into_iter()
+        .map(|update| {
+            let mut mutation = RegistryMutation::default();
+
+            let typ = if update.value.is_none() {
+                registry_mutation::Type::Delete
+            } else {
+                registry_mutation::Type::Insert
+            };
+            mutation.set_mutation_type(typ);
+            mutation.key = update.key.as_bytes().to_vec();
+            mutation.value = update.value.unwrap_or_default();
+            mutation
+        })
+        .collect::<Vec<_>>();
+
+    RegistryAtomicMutateRequest {
+        mutations,
+        ..Default::default()
+    }
+}
+
 pub mod cycles_ledger {
-    use super::install_canister;
+    use super::{install_canister, nns};
     use candid::{CandidType, Encode, Principal};
     use canister_test::Wasm;
-    use ic_nns_constants::{CYCLES_LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
+    use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
+    use ic_base_types::PrincipalId;
+    use ic_nns_constants::{
+        CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, ROOT_CANISTER_ID,
+    };
+    use icp_ledger::{
+        account_identifier::Subaccount, AccountIdentifier, Tokens, TransferArgs,
+        DEFAULT_TRANSFER_FEE,
+    };
     use pocket_ic::nonblocking::PocketIc;
 
     #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
@@ -577,6 +660,44 @@ pub mod cycles_ledger {
         )
         .await;
     }
+
+    pub async fn mint_icp_and_convert_to_cycles(
+        pocket_ic: &PocketIc,
+        beneficiary: PrincipalId,
+        amount: Tokens,
+    ) {
+        nns::ledger::mint_icp(
+            pocket_ic,
+            AccountIdentifier::new(beneficiary, None),
+            amount.saturating_add(DEFAULT_TRANSFER_FEE),
+            None,
+        )
+        .await;
+
+        let beneficiary_cmc_account = AccountIdentifier::new(
+            CYCLES_MINTING_CANISTER_ID.into(),
+            Some(Subaccount::from(&beneficiary)),
+        );
+
+        let transfer_args = TransferArgs {
+            memo: MEMO_MINT_CYCLES,
+            amount,
+            fee: Tokens::from_e8s(10_000),
+            from_subaccount: None,
+            to: beneficiary_cmc_account.to_address(),
+            created_at_time: None,
+        };
+
+        let block_index = nns::ledger::transfer(&pocket_ic, beneficiary, transfer_args)
+            .await
+            .unwrap();
+
+        let NotifyMintCyclesSuccess {
+            block_index: _,
+            minted: _,
+            balance: _,
+        } = nns::cmc::notify_mint_cycles(pocket_ic, beneficiary, None, None, block_index).await;
+    }
 }
 
 /// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
@@ -587,7 +708,7 @@ pub mod cycles_ledger {
 ///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
 /// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
-/// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
+/// 3. `custom_registry_mutations` are custom mutations for the inital Registry. These
 ///    should mutations should comply with Registry invariants, otherwise this function will fail.
 /// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
@@ -597,23 +718,23 @@ pub async fn install_nns_canisters(
     pocket_ic: &PocketIc,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_mainnet_nns_canister_versions: bool,
-    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     neurons_fund_hotkeys: Vec<PrincipalId>,
 ) -> Vec<PrincipalId> {
     let mut nns_installer = NnsInstaller::default();
 
     nns_installer
-        .with_initial_balances(initial_balances)
+        .with_ledger_balances(initial_balances)
         .with_neurons_fund_hotkeys(neurons_fund_hotkeys);
 
     if with_mainnet_nns_canister_versions {
         nns_installer.with_mainnet_nns_canister_versions();
     } else {
-        nns_installer.with_tip_nns_canister_versions();
+        nns_installer.with_current_nns_canister_versions();
     }
 
-    if let Some(custom_initial_registry_mutations) = custom_initial_registry_mutations {
-        nns_installer.with_custom_initial_registry_mutations(custom_initial_registry_mutations);
+    if let Some(custom_registry_mutations) = custom_registry_mutations {
+        nns_installer.with_custom_registry_mutations(custom_registry_mutations);
     }
 
     nns_installer.install(pocket_ic).await
@@ -1247,14 +1368,32 @@ pub mod nns {
             Decode!(&result, Tokens).unwrap()
         }
 
+        pub async fn transfer(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            args: TransferArgs,
+        ) -> Result<u64, icp_ledger::TransferError> {
+            let result = pocket_ic
+                .update_call(
+                    LEDGER_CANISTER_ID.into(),
+                    sender.into(),
+                    "transfer",
+                    Encode!(&args).unwrap(),
+                )
+                .await
+                .unwrap();
+
+            Decode!(&result, Result<u64, icp_ledger::TransferError>).unwrap()
+        }
+
         // Test method to mint ICP to a principal
         pub async fn mint_icp(
             pocket_ic: &PocketIc,
             destination: AccountIdentifier,
             amount: Tokens,
-        ) {
-            // Construct request.
-            let transfer_request = TransferArgs {
+            memo: Option<Memo>,
+        ) -> u64 {
+            let args = TransferArgs {
                 to: destination.to_address(),
                 // An overwhelmingly large number, but not so large as to cause serious risk of
                 // addition overflow.
@@ -1263,25 +1402,14 @@ pub mod nns {
                 // Non-Operative
                 // -------------
                 fee: Tokens::ZERO, // Because we are minting.
-                memo: Memo(0),
+                memo: memo.unwrap_or_else(|| Memo(0)),
                 from_subaccount: None,
                 created_at_time: None,
             };
-            // Call ledger.
-            let result = pocket_ic
-                .update_call(
-                    LEDGER_CANISTER_ID.into(),
-                    GOVERNANCE_CANISTER_ID.get().0,
-                    "transfer",
-                    Encode!(&transfer_request).unwrap(),
-                )
-                .await;
 
-            // Assert result is ok.
-            match result {
-                Ok(_reply) => (), // Ok,
-                _ => panic!("{:?}", result),
-            }
+            let result = transfer(pocket_ic, GOVERNANCE_CANISTER_ID.into(), args).await;
+
+            result.unwrap()
         }
     }
 
@@ -1415,6 +1543,61 @@ pub mod nns {
                 .unwrap();
             version.insert(canister_type, wasm);
             version
+        }
+    }
+
+    pub mod cmc {
+        use super::*;
+        use cycles_minting_canister::{
+            NotifyMintCyclesArg, NotifyMintCyclesResult, NotifyMintCyclesSuccess,
+            SetAuthorizedSubnetworkListArgs,
+        };
+        use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+        use icrc_ledger_types::icrc1::account::Subaccount;
+
+        pub async fn set_authorized_subnetwork_list(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            who: Option<PrincipalId>,
+            subnets: Vec<SubnetId>,
+        ) {
+            let result = pocket_ic
+                .update_call(
+                    CYCLES_MINTING_CANISTER_ID.into(),
+                    sender.into(),
+                    "set_authorized_subnetwork_list",
+                    Encode!(&SetAuthorizedSubnetworkListArgs { who, subnets }).unwrap(),
+                )
+                .await
+                .unwrap();
+
+            Decode!(&result, ()).unwrap();
+        }
+
+        pub async fn notify_mint_cycles(
+            pocket_ic: &PocketIc,
+            sender: PrincipalId,
+            deposit_memo: Option<Vec<u8>>,
+            to_subaccount: Option<Subaccount>,
+            block_index: u64,
+        ) -> NotifyMintCyclesSuccess {
+            let result = pocket_ic
+                .update_call(
+                    CYCLES_MINTING_CANISTER_ID.into(),
+                    sender.into(),
+                    "notify_mint_cycles",
+                    Encode!(&NotifyMintCyclesArg {
+                        block_index,
+                        to_subaccount,
+                        deposit_memo
+                    })
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let result = Decode!(&result, NotifyMintCyclesResult).unwrap();
+            result.unwrap()
         }
     }
 }
@@ -3034,6 +3217,7 @@ pub mod sns {
                     pocket_ic,
                     AccountIdentifier::new(participant_id, None),
                     amount.saturating_add(DEFAULT_TRANSFER_FEE),
+                    None,
                 )
                 .await;
                 participate_in_swap(
