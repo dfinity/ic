@@ -187,8 +187,7 @@ fn canister_post_upgrade() {
 
     let registry_storage: RegistryCanisterStableStorage =
         if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-            with_upgrades_memory(|memory| load_protobuf(memory))
-                .expect("Failed to decode protobuf post-upgrade")
+            with_upgrades_memory(load_protobuf).expect("Failed to decode protobuf post-upgrade")
         } else {
             let stable_storage = stable::get();
             RegistryCanisterStableStorage::decode(stable_storage.as_slice())
