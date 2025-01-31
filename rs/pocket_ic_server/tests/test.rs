@@ -1513,8 +1513,8 @@ fn test_custom_blockmaker() {
 
     let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
         subnet: application_subnet.into(),
-        blockmaker: Principal::anonymous().into(),
-        failed_blockmakers: vec![],
+        blockmaker: blockmaker_1.clone(),
+        failed_blockmakers: vec![blockmaker_2.clone()],
     }];
 
     let mut tick_configs = TickConfigs {
@@ -1525,19 +1525,6 @@ fn test_custom_blockmaker() {
     let daily_blocks = 5;
 
     // Blockmaker metrics are recorded in the management canister
-    tick_configs
-        .blockmakers
-        .as_mut()
-        .unwrap()
-        .blockmakers_per_subnet[0]
-        .blockmaker = blockmaker_1.clone();
-    tick_configs
-        .blockmakers
-        .as_mut()
-        .unwrap()
-        .blockmakers_per_subnet[0]
-        .failed_blockmakers = vec![blockmaker_2.clone()];
-
     for _ in 0..daily_blocks {
         pocket_ic.tick_with_configs(tick_configs.clone());
     }
