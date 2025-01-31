@@ -10,9 +10,9 @@ use ic_cdk::api::management_canister::http_request::{
     TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{inspect_message, query, trap, update};
-use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+
 // HTTP gateway interface
 
 pub type HeaderField = (String, String);
@@ -266,21 +266,6 @@ async fn canister_http_with_transform() -> HttpResponse {
 }
 
 // inter-canister calls
-
-#[update]
-async fn node_metrics_history_proxy(
-    args: NodeMetricsHistoryArgs,
-) -> Vec<NodeMetricsHistoryResponse> {
-    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
-        candid::Principal::management_canister(),
-        "node_metrics_history",
-        (args,),
-        0_u128,
-    )
-    .await
-    .unwrap()
-    .0
-}
 
 #[update]
 async fn whoami() -> String {

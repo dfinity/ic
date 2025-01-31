@@ -17886,7 +17886,6 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk 0.16.0",
- "ic-management-canister-types",
  "serde",
  "serde_bytes",
 ]

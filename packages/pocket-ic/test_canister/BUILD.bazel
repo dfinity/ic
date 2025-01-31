@@ -6,7 +6,6 @@ rust_canister(
     service_file = ":canister.did",
     deps = [
         # Keep sorted.
-        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
