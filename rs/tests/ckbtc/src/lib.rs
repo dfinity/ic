@@ -284,7 +284,7 @@ async fn execute_update_subnet_proposal(
     )
     .await;
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 fn empty_subnet_update() -> UpdateSubnetPayload {

@@ -45,8 +45,6 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 jobs:
   system-tests-k8s:
@@ -83,13 +81,25 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json
 
   system-tests-k8s-hourly:
     name: System Tests K8s Hourly
@@ -141,10 +151,22 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb.gpg
+            profile.json

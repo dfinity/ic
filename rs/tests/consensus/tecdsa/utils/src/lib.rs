@@ -460,7 +460,7 @@ pub async fn execute_update_subnet_proposal(
         logger,
         "Subnet Update proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn execute_create_subnet_proposal(
@@ -489,7 +489,7 @@ pub async fn execute_create_subnet_proposal(
         logger,
         "Subnet Creation proposal result: {:?}", proposal_result
     );
-    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+    assert_eq!(proposal_result.status, ProposalStatus::Executed as i32);
 }
 
 pub async fn get_signature_with_logger(

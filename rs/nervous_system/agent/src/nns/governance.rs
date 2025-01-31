@@ -5,6 +5,8 @@ use ic_nns_governance_api::pb::v1::{
     GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
 };
 
+pub mod requests;
+
 pub async fn get_neurons_fund_audit_info<C: CallCanisters>(
     agent: &C,
     nns_proposal_id: ProposalId,

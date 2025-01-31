@@ -2007,6 +2007,69 @@ fn ic0_canister_self_copy_works() {
 }
 
 #[test]
+fn ic0_subnet_self_size_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_size"
+                (func $subnet_self_size (result i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0] = $subnet_self_size()
+                (i32.store (i32.const 0) (call $subnet_self_size))
+                ;; return heap[0-4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(vec![
+            test.get_own_subnet_id().get().as_slice().len() as u8,
+            0,
+            0,
+            0
+        ]),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_copy_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_copy"
+                (func $subnet_self_copy (param i32 i32 i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0..4] = subnet_id_bytes[0..4]
+                (call $subnet_self_copy (i32.const 0) (i32.const 0) (i32.const 4))
+                ;; heap[4..10] = subnet_id_bytes[4..8]
+                (call $subnet_self_copy (i32.const 4) (i32.const 4) (i32.const 6))
+                ;; return heap[0..10]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 10))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(test.get_own_subnet_id().get().into_vec()),
+        result
+    );
+}
+
+#[test]
 fn ic0_call_has_no_effect_on_trap() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -8053,7 +8116,8 @@ fn check_correct_execution_state(is_wasm64: bool) {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     let execution_state = test.execution_state(canister_id);
-    assert_eq!(execution_state.is_wasm64, is_wasm64);
+    let bool_wasm_exec_mode: bool = execution_state.wasm_execution_mode.is_wasm64();
+    assert_eq!(bool_wasm_exec_mode, is_wasm64);
 }
 
 #[test]
