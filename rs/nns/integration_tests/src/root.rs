@@ -77,8 +77,8 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
     assert_eq!(
         wait_for_final_state(&nns_canisters.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 
     // No proposals should be pending now.

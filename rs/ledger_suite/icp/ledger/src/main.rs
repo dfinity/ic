@@ -57,9 +57,9 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
-    Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
-    UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    panic_if_not_ready, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION,
+    MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -113,8 +113,6 @@ fn init(
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
-    maximum_number_of_accounts: Option<usize>,
-    accounts_overflow_trim_quantity: Option<usize>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -131,8 +129,6 @@ fn init(
         token_symbol,
         token_name,
         feature_flags,
-        maximum_number_of_accounts,
-        accounts_overflow_trim_quantity,
     );
     match max_message_size_bytes {
         None => {
@@ -712,8 +708,6 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.token_symbol,
             arg.token_name,
             arg.feature_flags,
-            arg.maximum_number_of_accounts,
-            arg.accounts_overflow_trim_quantity,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -745,8 +739,6 @@ fn main() {
                         arg.token_symbol,
                         arg.token_name,
                         arg.feature_flags,
-                        arg.maximum_number_of_accounts,
-                        arg.accounts_overflow_trim_quantity,
                     ),
                     Err(old_err) =>
                     trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
@@ -760,7 +752,7 @@ fn main() {
 const BUFFER_SIZE: usize = 8388608;
 
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 300_000_000_000;
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
 
@@ -839,6 +831,12 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+        if upgrade_from_version < 2 {
+            set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+            print(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+            clear_stable_balances_data();
+            ledger.copy_token_pool();
+        }
         if upgrade_from_version == 0 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
             print("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
@@ -864,6 +862,7 @@ fn migrate_next_part(instruction_limit: u64) {
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
+    let mut migrated_balances = 0;
 
     print("Migrating part of the ledger state.");
 
@@ -885,14 +884,21 @@ fn migrate_next_part(instruction_limit: u64) {
                 if ledger.migrate_one_expiration() {
                     migrated_expirations += 1;
                 } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+                }
+            }
+            LedgerField::Balances => {
+                if ledger.migrate_one_balance() {
+                    migrated_balances += 1;
+                } else {
                     set_ledger_state(LedgerState::Ready);
                 }
             }
         }
     }
     let instructions_migration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
-            instruction_counter());
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
+        instruction_counter());
     if !is_ready() {
         print(format!(
             "Migration partially done. Scheduling the next part. {msg}"
@@ -1500,7 +1506,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         w.encode_gauge(
             "ledger_balance_store_entries",
-            ledger.balances().store.len() as f64,
+            balances_len() as f64,
             "Total number of accounts in the balance store.",
         )?;
     }

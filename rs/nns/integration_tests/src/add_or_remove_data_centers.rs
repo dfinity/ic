@@ -76,8 +76,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.
@@ -144,8 +144,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.

@@ -14,7 +14,7 @@ use ic_ledger_suite_state_machine_tests::{
     wait_ledger_ready, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -32,6 +32,9 @@ const TRANSFER_MULTIPLIER: u64 = 1000;
 const APPROVE_MULTIPLIER: u64 = 100;
 const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
+// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
+// migrated to stable structures
+const LEDGER_VERSION_2: u64 = 2;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -51,6 +54,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
+        LEDGER_VERSION_2,
         None,
     );
     pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
@@ -63,6 +67,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
+        LEDGER_VERSION_2,
         Some(Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
         ))),
@@ -71,8 +76,13 @@ lazy_static! {
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
         Wasm::from_bytes(archive_wasm()),
+        ic_icrc1_ledger::LEDGER_VERSION,
         None,
     );
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-01-07
+    // This shall be the ledger version referenced using
+    // `CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` and
+    // `IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
     pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
         hex::decode("3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822").unwrap();
 }
@@ -89,14 +99,19 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
+        LEDGER_VERSION_2,
         None,
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
         Wasm::from_bytes(archive_wasm()),
+        ic_icrc1_ledger::LEDGER_VERSION,
         None,
     );
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-01-07
+    // This shall be the ledger version referenced using
+    // `CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
     pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
         hex::decode("8b2e3e596a147780b0e99ce36d0b8f1f3ba41a98b819b42980a7c08c309b44c1").unwrap();
 }
@@ -105,6 +120,7 @@ pub struct Wasms {
     index_wasm: Wasm,
     ledger_wasm: Wasm,
     archive_wasm: Wasm,
+    ledger_version: u64,
     ledger_wasm_v2: Option<Wasm>,
 }
 
@@ -113,12 +129,14 @@ impl Wasms {
         index_wasm: Wasm,
         ledger_wasm: Wasm,
         archive_wasm: Wasm,
+        ledger_version: u64,
         ledger_wasm_v2: Option<Wasm>,
     ) -> Self {
         Self {
             index_wasm,
             ledger_wasm,
             archive_wasm,
+            ledger_version,
             ledger_wasm_v2,
         }
     }
@@ -229,7 +247,7 @@ impl LedgerSuiteConfig {
             ));
         }
         // Downgrade back to the mainnet canister versions
-        self.upgrade_to_mainnet(state_machine);
+        self.downgrade_to_mainnet(state_machine);
         if self.extended_testing {
             let _ = LedgerState::verify_state_and_generate_transactions(
                 state_machine,
@@ -347,22 +365,39 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
-        // Upgrade each canister twice to exercise pre-upgrade
+    fn downgrade_to_mainnet(&self, state_machine: &StateMachine) {
+        // Downgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
-        match self.upgrade_ledger(
+        let expected_downgrade_result =
+            self.mainnet_wasms.ledger_version == self.master_wasms.ledger_version;
+        let ledger_upgrade_res = self.upgrade_ledger(
             state_machine,
             &self.mainnet_wasms.ledger_wasm,
             ExpectMigration::No,
-        ) {
-            Ok(_) => {
-                panic!("should not successfully downgrade ledger");
+        );
+        match (expected_downgrade_result, ledger_upgrade_res) {
+            (true, Ok(_)) => {
+                // Perform another downgrade to exercise the pre-upgrade
+                self.upgrade_ledger(
+                    state_machine,
+                    &self.mainnet_wasms.ledger_wasm,
+                    ExpectMigration::No,
+                )
+                .expect("should downgrade to mainnet ledger version");
             }
-            Err(user_error) => user_error.assert_contains(
-                ErrorCode::CanisterCalledTrap,
-                "Trying to downgrade from incompatible version",
-            ),
+            (true, Err(e)) => {
+                panic!(
+                    "should successfully downgrade to mainnet ledger version: {}",
+                    e
+                );
+            }
+            (false, Ok(_)) => {
+                panic!("should not successfully downgrade to mainnet ledger version");
+            }
+            (false, Err(_)) => {
+                println!("Failed to downgrade to mainnet ledger version as expected");
+            }
         }
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
         self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);

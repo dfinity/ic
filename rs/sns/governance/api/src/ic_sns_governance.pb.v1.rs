@@ -11,7 +11,16 @@ pub struct NeuronPermission {
 /// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
 /// (the account that holds the neuron's staked tokens).
 #[derive(
-    Default, candid::CandidType, candid::Deserialize, Debug, Eq, std::hash::Hash, Clone, PartialEq,
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
 )]
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
@@ -259,6 +268,29 @@ pub struct Motion {
     /// The text of the motion, which can at most be 100kib.
     pub motion_text: String,
 }
+
+/// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ChunkedCanisterWasm {
+    /// Obligatory check sum of the overall WASM to be reassembled from chunks.
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// Obligatory; indicates which canister stores the WASM chunks.
+    #[prost(message, optional, tag = "2")]
+    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+    /// one chunk.
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+
 /// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -273,6 +305,9 @@ pub struct UpgradeSnsControlledCanister {
     pub canister_upgrade_arg: Option<Vec<u8>>,
     /// Canister install_code mode.
     pub mode: Option<i32>,
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -561,6 +596,7 @@ pub mod governance_error {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ErrorType {
@@ -1050,6 +1086,9 @@ pub struct NervousSystemParameters {
     /// that the PB default (bool fields are false) and our application default
     /// (enabled) agree.
     pub maturity_modulation_disabled: Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    pub automatically_advance_target_version: Option<bool>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {
@@ -2210,6 +2249,7 @@ pub mod upgrade_journal_entry {
     pub struct TargetVersionSet {
         pub old_target_version: Option<super::governance::Version>,
         pub new_target_version: Option<super::governance::Version>,
+        pub is_advanced_automatically: Option<bool>,
     }
     #[derive(
         candid::CandidType, candid::Deserialize, Debug, serde::Serialize, Clone, PartialEq,
@@ -2350,6 +2390,7 @@ pub struct Account {
     Hash,
     PartialOrd,
     Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum NeuronPermissionType {

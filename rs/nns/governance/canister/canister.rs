@@ -167,9 +167,6 @@ fn schedule_timers() {
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
-
-    // Schedule the fix for the locked neuron
-    schedule_locked_spawning_neuron_fix();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -321,18 +318,6 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
         spawn(governance_mut().process_voting_state_machines());
-    });
-}
-
-// TODO(NNS1-3526): Remove this method once it is released.
-fn schedule_locked_spawning_neuron_fix() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-        spawn(async {
-            governance_mut()
-                .fix_locked_spawn_neuron()
-                .await
-                .expect("Failed to fix locked neuron");
-        });
     });
 }
 
@@ -718,20 +703,20 @@ async fn transfer_gtc_neuron(
 #[update]
 async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    ManageNeuronResponse::from(
-        governance_mut()
-            .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
-            .await,
-    )
+    governance_mut()
+        .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
+        .await
 }
 
 #[cfg(feature = "test")]
 #[update]
 /// Internal method for calling update_neuron.
+///
+/// *_voting_power fields are ignored, because the value in those fields is derived.
 fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
     debug_log("update_neuron");
     governance_mut()
-        .update_neuron(gov_pb::Neuron::from(neuron))
+        .update_neuron(neuron)
         .err()
         .map(GovernanceError::from)
 }
@@ -739,9 +724,7 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
-    let response =
-        governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
-    ManageNeuronResponse::from(response)
+    governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
 }
 
 #[query]
@@ -754,7 +737,6 @@ fn get_full_neuron_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             &caller(),
         )
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 
@@ -793,9 +775,7 @@ fn get_neuron_info_by_id_or_subaccount(
 #[query]
 fn get_proposal_info(id: ProposalId) -> Option<ProposalInfo> {
     debug_log("get_proposal_info");
-    governance()
-        .get_proposal_info(&caller(), id)
-        .map(ProposalInfo::from)
+    GOVERNANCE.with_borrow(|governance| governance.get_proposal_info(&caller(), id))
 }
 
 #[query]
@@ -811,23 +791,19 @@ fn get_neurons_fund_audit_info(
 #[query]
 fn get_pending_proposals() -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    governance()
-        .get_pending_proposals(&caller())
-        .into_iter()
-        .map(ProposalInfo::from)
-        .collect()
+    GOVERNANCE.with_borrow(|governance| governance.get_pending_proposals(&caller()))
 }
 
 #[query]
 fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     debug_log("list_proposals");
-    governance().list_proposals(&caller(), &(req.into())).into()
+    GOVERNANCE.with_borrow(|governance| governance.list_proposals(&caller(), &req.into()))
 }
 
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
-    governance().list_neurons(&(req.into()), caller()).into()
+    governance().list_neurons(&req, caller())
 }
 
 #[query]
@@ -903,7 +879,10 @@ fn get_latest_reward_event() -> RewardEvent {
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
-    let votable = governance().get_neuron_ids_by_principal(&caller());
+    let votable = governance()
+        .get_neuron_ids_by_principal(&caller())
+        .into_iter()
+        .collect();
 
     governance()
         .get_managed_neuron_ids_for(votable)

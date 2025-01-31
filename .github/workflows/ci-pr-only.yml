@@ -20,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -44,24 +44,13 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
   lock-generate:
     name: Lock Generate
     timeout-minutes: 30
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -102,7 +91,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -150,7 +139,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')

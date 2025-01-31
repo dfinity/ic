@@ -34,11 +34,16 @@ const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
 pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
 
+pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
+    pub outbound_tx: AbortableBroadcastSender<T>,
+    pub inbound_rx: AbortableBroadcastReceiver<T>,
+}
+
 pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
-    clients: Vec<StartConsensusManagerFn>,
+    managers: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
 }
 
@@ -48,7 +53,7 @@ impl AbortableBroadcastChannelBuilder {
             log,
             metrics_registry,
             rt_handle,
-            clients: Vec::new(),
+            managers: Vec::new(),
             router: None,
         }
     }
@@ -63,12 +68,7 @@ impl AbortableBroadcastChannelBuilder {
         &mut self,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
-    ) -> (
-        AbortableBroadcastSender<Artifact>,
-        AbortableBroadcastReceiver<Artifact>,
-        // TODO: remove this by introducing a new channel from the http handler into the processor
-        UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    ) {
+    ) -> AbortableBroadcastChannel<Artifact> {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
         // Making this channel bounded can be problematic since we don't have true multiplexing
         // of P2P messages.
@@ -88,7 +88,6 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
-        let inbound_tx_c = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
@@ -112,22 +111,25 @@ impl AbortableBroadcastChannelBuilder {
                 .merge(assembler_router),
         );
 
-        self.clients.push(Box::new(builder));
-        (outbound_tx, inbound_rx, inbound_tx_c)
+        self.managers.push(Box::new(builder));
+        AbortableBroadcastChannel {
+            outbound_tx,
+            inbound_rx,
+        }
     }
 
-    pub fn router(&mut self) -> Router {
-        self.router.take().unwrap_or_default()
+    pub fn router(&self) -> Router {
+        self.router.clone().unwrap_or_default()
     }
 
-    pub fn run(
+    pub fn start(
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) -> Vec<Shutdown> {
         let mut ret = vec![];
-        for client in self.clients {
-            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
+        for m in self.managers {
+            ret.append(&mut m(transport.clone(), topology_watcher.clone()));
         }
         ret
     }
@@ -139,8 +141,8 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
     outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
-    // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+    // Slot updates received from peers
+    slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
@@ -167,7 +169,7 @@ where
         log,
         metrics,
         rt_handle,
-        adverts_received,
+        slot_updates_rx,
         assembler,
         sender,
         topology_watcher,
