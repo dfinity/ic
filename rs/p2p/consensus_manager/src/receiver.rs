@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
@@ -28,7 +26,7 @@ use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{Receiver, Sender, UnboundedSender},
+        mpsc::{Receiver, Sender},
         watch,
     },
     task::JoinSet,
@@ -181,7 +179,8 @@ pub(crate) struct ConsensusManagerReceiver<
 
     // Receive side:
     slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
-    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
+
     artifact_assembler: Assembler,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
@@ -207,7 +206,7 @@ where
         rt_handle: Handle,
         slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
         artifact_assembler: Assembler,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
         topology_watcher: watch::Receiver<SubnetTopology>,
         slot_limit: usize,
     ) -> Shutdown {
@@ -449,7 +448,7 @@ where
         // Only first peer for specific artifact ID is considered for push
         artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
         artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
         cancellation_token: CancellationToken,
@@ -480,8 +479,11 @@ where
                 match assemble_result {
                     AssembleResult::Done { message, peer_id } => {
                         let id = message.id();
-                        // Send artifact to pool
-                        if sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id))).is_err() {
+                        // Sends artifact to the pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
+                        if sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id))).await.is_err() {
+
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
 
@@ -489,8 +491,10 @@ where
                         // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
-                        // Purge from the unvalidated pool
-                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).is_err() {
+                        // Purge artifact from the unvalidated pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
+                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).await.is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
                         metrics
@@ -596,7 +600,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
+    use tokio::time::timeout;
     use tower::util::ServiceExt;
 
     use super::*;
@@ -606,7 +610,7 @@ mod tests {
     struct ReceiverManagerBuilder {
         // Slot updates received from peers
         slot_updates_rx: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
+        sender: Sender<UnvalidatedArtifactMutation<U64Artifact>>,
         artifact_assembler: MockArtifactAssembler,
         topology_watcher: watch::Receiver<SubnetTopology>,
         slot_limit: usize,
@@ -618,7 +622,7 @@ mod tests {
         ConsensusManagerReceiver<U64Artifact, U64Artifact, MockArtifactAssembler>;
 
     struct Channels {
-        unvalidated_artifact_receiver: UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
+        unvalidated_artifact_receiver: Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
     }
 
     impl ReceiverManagerBuilder {
@@ -634,8 +638,7 @@ mod tests {
 
         fn new() -> Self {
             let (_, slot_updates_rx) = tokio::sync::mpsc::channel(100);
-            #[allow(clippy::disallowed_methods)]
-            let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::channel(1000);
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
             let artifact_assembler =
                 Self::make_mock_artifact_assembler_with_clone(MockArtifactAssembler::default);
