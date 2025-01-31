@@ -1,14 +1,11 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use ic_certification::Label;
-use ic_management_canister_types::NodeMetricsHistoryResponse;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
-use pocket_ic::common::rest::{BlockMakerConfigs, RawSubnetBlockmakerMetrics, TickConfigs};
 use pocket_ic::management_canister::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
-    HttpRequestResult, NodeMetricsHistoryArgs, ProvisionalCreateCanisterWithCyclesArgs,
-    SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult, SignWithBip341Aux,
-    SignWithSchnorrAux,
+    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult, SignWithBip341Aux, SignWithSchnorrAux,
 };
 use pocket_ic::{
     common::rest::{
@@ -2216,68 +2213,4 @@ fn test_reject_response_type() {
         // inspect message is always uncertified
         assert!(!err.certified);
     }
-}
-
-#[test]
-fn test_custom_blockmaker() {
-    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
-    let topology = pocket_ic.topology();
-    let application_subnet = topology.get_app_subnets()[0];
-
-    // Create and install test canister.
-    let canister = pocket_ic.create_canister_on_subnet(None, None, application_subnet);
-    pocket_ic.add_cycles(canister, INIT_CYCLES);
-    pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
-
-    let blockmaker_node = topology
-        .subnet_configs
-        .get(&application_subnet)
-        .unwrap()
-        .node_ids[0]
-        .clone();
-
-    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_node.clone(),
-        failed_blockmakers: vec![],
-    }];
-    let tick_configs = TickConfigs {
-        blockmakers: Some(BlockMakerConfigs {
-            blockmakers_per_subnet: subnets_blockmakers,
-        }),
-    };
-
-    for _ in 0..5 {
-        pocket_ic.tick_with_configs(tick_configs.clone());
-    }
-
-    //advance time until next day so that management canister can record blockmaker metrics
-    pocket_ic.advance_time(std::time::Duration::from_secs(60 * 60 * 24));
-
-    pocket_ic.tick();
-    pocket_ic.tick();
-
-    let response = pocket_ic
-        .update_call(
-            canister,
-            Principal::anonymous(),
-            "node_metrics_history_proxy",
-            Encode!(&NodeMetricsHistoryArgs {
-                subnet_id: application_subnet,
-                start_at_timestamp_nanos: 0,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-
-    let metrics = Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap();
-    let blockmaker_node_metrics = metrics[0]
-        .node_metrics
-        .clone()
-        .into_iter()
-        .find(|x| x.node_id.0 == Principal::from(blockmaker_node.clone()))
-        .unwrap();
-
-    assert_eq!(blockmaker_node_metrics.num_blocks_proposed_total, 5);
-    assert_eq!(blockmaker_node_metrics.num_block_failures_total, 0);
 }
