@@ -12,6 +12,7 @@ use actix_web::{
     get, post, web, App, HttpResponse, HttpServer,
 };
 
+use rosetta_core::metrics::RosettaMetrics;
 use std::{
     io,
     mem::replace,
@@ -27,7 +28,6 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
-use rosetta_core::metrics::RosettaMetrics;
 
 #[post("/account/balance")]
 async fn account_balance(
@@ -263,7 +263,8 @@ impl RosettaApiServer {
         let stopped = Arc::new(AtomicBool::new(false));
         let http_metrics_wrapper = RosettaMetrics::http_metrics_wrapper(expose_metrics);
         let server = HttpServer::new(move || {
-            App::new().wrap(http_metrics_wrapper.clone())
+            App::new()
+                .wrap(http_metrics_wrapper.clone())
                 .app_data(web::Data::new(
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
