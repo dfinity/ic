@@ -419,7 +419,7 @@ pub async fn exec<C: CallCanisters>(
     let Some(sns) = &sns else {
         unimplemented!(
             "Direct canister upgrades are not implemented yet. Please use DFX:\n{}",
-            suggested_install_command(&wasm.path(), &candid_arg)
+            suggested_install_command(wasm.path(), &candid_arg)
         );
     };
 
@@ -591,7 +591,7 @@ fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) 
     };
     format!(
         "dfx canister install --mode auto --wasm {} CANISTER_NAME{}",
-        wasm_path_str.display().to_string(),
+        wasm_path_str.display(),
         arg_suggestion,
     )
 }
