@@ -11871,10 +11871,7 @@ async fn test_known_neurons() {
         .flat_map(|neuron_id| {
             gov.neuron_store
                 .with_neuron(&neuron_id, |neuron| {
-                    neuron
-                        .known_neuron_data
-                        .as_ref()
-                        .map(|data| data.name.clone())
+                    neuron.known_neuron_data().map(|data| data.name.clone())
                 })
                 .unwrap()
         })
