@@ -1,8 +1,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::candid_method;
 use candid::types::number::Nat;
+use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
@@ -16,8 +16,8 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
-    LEDGER_VERSION, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -238,6 +238,14 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    if upgrade_from_version < 2 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
+        clear_stable_balances_data();
+        Access::with_ledger_mut(|ledger| {
+            ledger.copy_token_pool();
+        });
+    }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
         log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
@@ -263,6 +271,7 @@ fn migrate_next_part(instruction_limit: u64) {
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
+    let mut migrated_balances = 0;
 
     log_message("Migrating part of the ledger state.");
 
@@ -286,13 +295,20 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_expiration() {
                         migrated_expirations += 1;
                     } else {
+                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+                    }
+                }
+                LedgerField::Balances => {
+                    if ledger.migrate_one_balance() {
+                        migrated_balances += 1;
+                    } else {
                         set_ledger_state(LedgerState::Ready);
                     }
                 }
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(
@@ -404,7 +420,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             )?;
             w.encode_gauge(
                 "ledger_balance_store_entries",
-                ledger.balances().store.len() as f64,
+                balances_len() as f64,
                 "Total number of accounts in the balance store.",
             )?;
         }
@@ -794,15 +810,13 @@ fn get_data_certificate() -> DataCertificate {
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
     panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
-            owner: ic_cdk::api::caller(),
+            owner: caller,
             subaccount: arg.from_subaccount,
         };
         if from_account.owner == arg.spender.owner {
@@ -864,6 +878,14 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             })?;
         Ok(block_idx)
     })?;
+
+    Ok(block_idx)
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.

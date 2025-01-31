@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 
 use macaddr::MacAddr6;

@@ -77,14 +77,92 @@ fn ledger_mainnet_wasm() -> Vec<u8> {
     mainnet_wasm
 }
 
+fn ledger_mainnet_v2_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_v2_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_v2_u256_wasm();
+    mainnet_wasm
+}
+
+fn ledger_mainnet_v2_noledgerversion_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_v2_noledgerversion_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_v2_noledgerversion_u256_wasm();
+    mainnet_wasm
+}
+
+fn ledger_mainnet_v3_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_v3_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_v3_u256_wasm();
+    mainnet_wasm
+}
+
+fn ledger_mainnet_v1_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_v1_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_v1_u256_wasm();
+    mainnet_wasm
+}
+
 fn ledger_mainnet_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
         .unwrap()
 }
 
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v2_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v2_noledgerversion_u64_wasm() -> Vec<u8> {
+    std::fs::read(
+        std::env::var("CKBTC_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH").unwrap(),
+    )
+    .unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v3_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_mainnet_v1_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_mainnet_u256_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
         .unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_mainnet_v2_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_mainnet_v2_noledgerversion_u256_wasm() -> Vec<u8> {
+    std::fs::read(
+        std::env::var("CKETH_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH").unwrap(),
+    )
+    .unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_mainnet_v3_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_mainnet_v1_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 fn ledger_wasm() -> Vec<u8> {
@@ -153,8 +231,6 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         },
         max_memo_length: None,
         feature_flags: args.feature_flags,
-        maximum_number_of_accounts: args.maximum_number_of_accounts,
-        accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
     })
 }
 
@@ -391,11 +467,6 @@ fn test_transfer_from_burn() {
 }
 
 #[test]
-fn test_balances_overflow() {
-    ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_ledger_suite_state_machine_tests::test_archive_controllers(ledger_wasm());
 }
@@ -438,7 +509,21 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn icrc1_test_upgrade_serialization() {
+fn icrc1_test_upgrade_serialization_from_mainnet() {
+    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), false);
+}
+
+#[test]
+fn icrc1_test_upgrade_serialization_from_v2() {
+    icrc1_test_upgrade_serialization(ledger_mainnet_v2_wasm(), true);
+}
+
+#[test]
+fn icrc1_test_upgrade_serialization_from_v3() {
+    icrc1_test_upgrade_serialization(ledger_mainnet_v3_wasm(), true);
+}
+
+fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_prev_version: bool) {
     let minter = Arc::new(minter_identity());
     let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(minter.sender().unwrap())
@@ -446,20 +531,38 @@ fn icrc1_test_upgrade_serialization() {
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
     ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_wasm,
         ledger_wasm(),
         init_args,
         upgrade_args,
         minter,
         true,
+        mainnet_on_prev_version,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_multi_step_migration() {
+fn icrc1_test_multi_step_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_v3_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_multi_step_migration_from_v2() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_multi_step_migration_from_v2_noledgerversion() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_mainnet_v2_noledgerversion_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
@@ -476,53 +579,121 @@ fn icrc1_test_downgrade_from_incompatible_version() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_stable_migration_endpoints_disabled() {
+fn icrc1_test_stable_migration_endpoints_disabled_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
         vec![],
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_incomplete_migration() {
+fn icrc1_test_stable_migration_endpoints_disabled_from_v2() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+        vec![],
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_incomplete_migration_to_current() {
+fn icrc1_test_incomplete_migration_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_from_v2_noledgerversion() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_mainnet_v2_noledgerversion_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_to_current_from_v3() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_migration_resumes_from_frozen() {
+fn icrc1_test_incomplete_migration_to_current_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_to_current_from_v2_noledgerversion() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_mainnet_v2_noledgerversion_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_migration_resumes_from_frozen_from_v3() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_metrics_while_migrating() {
-    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
-        ledger_mainnet_wasm(),
+fn icrc1_test_migration_resumes_from_frozen_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
+        ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_metrics_while_migrating_from_v3() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_mainnet_v3_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_metrics_while_migrating_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_upgrade_from_v1_not_possible() {
+    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+        ledger_mainnet_v1_wasm(),
+        ledger_wasm(),
         encode_init_args,
     );
 }
@@ -638,8 +809,6 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         },
         max_memo_length: None,
         feature_flags: Some(FeatureFlags { icrc2: false }),
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -814,8 +983,6 @@ fn test_icrc3_get_archives() {
         },
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -891,8 +1058,6 @@ fn test_icrc3_get_blocks() {
         },
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1167,8 +1332,6 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
         },
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     });
 
     let args = Encode!(&args).unwrap();
@@ -1603,8 +1766,6 @@ mod verify_written_blocks {
                 },
                 max_memo_length: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
-                maximum_number_of_accounts: None,
-                accounts_overflow_trim_quantity: None,
             });
 
             let args = Encode!(&ledger_arg_init).unwrap();
@@ -1821,12 +1982,12 @@ mod incompatible_token_type_upgrade {
             },
             max_memo_length: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
-            maximum_number_of_accounts: None,
-            accounts_overflow_trim_quantity: None,
         }))
         .unwrap()
     }
 
+    // TODO: enable and rewrite when FI-1653 is fixed.
+    #[ignore]
     #[test]
     fn should_successfully_upgrade_ledger_from_u64_to_u256_to_u64_wasm() {
         let env = StateMachine::new();

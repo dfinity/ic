@@ -1,4 +1,5 @@
 pub mod agent_impl;
+pub mod management_canister;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
@@ -22,22 +23,8 @@ mod sealed {
 pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
-    fn payload(&self) -> Vec<u8>;
+    fn payload(&self) -> Result<Vec<u8>, candid::Error>;
     type Response: CandidType + DeserializeOwned;
-}
-
-impl<R: ic_nervous_system_clients::Request> Request for R {
-    fn method(&self) -> &'static str {
-        Self::METHOD
-    }
-    fn update(&self) -> bool {
-        Self::UPDATE
-    }
-    fn payload(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
-    }
-
-    type Response = <Self as ic_nervous_system_clients::Request>::Response;
 }
 
 pub trait CallCanisters: sealed::Sealed {

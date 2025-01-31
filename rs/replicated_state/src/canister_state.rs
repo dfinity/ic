@@ -375,6 +375,13 @@ impl CanisterState {
             + self.system_state.snapshots_memory_usage
     }
 
+    /// Returns the amount of Wasm memory currently used by the canister in bytes.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.wasm_memory_usage())
+    }
+
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
     /// currently used by the canister in bytes.
     pub fn execution_memory_usage(&self) -> NumBytes {
@@ -424,13 +431,6 @@ impl CanisterState {
         execution_usage
             + self.wasm_chunk_store_memory_usage()
             + NumBytes::from(self.system_state.certified_data.len() as u64)
-    }
-
-    /// Sets the (transient) size in bytes of guaranteed responses from this
-    /// canister routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.system_state
-            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     /// Returns the current memory allocation of the canister.
@@ -563,6 +563,12 @@ impl CanisterState {
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.heap_delta())
             + self.system_state.wasm_chunk_store.heap_delta()
+    }
+
+    /// Updates status of `OnLowWasmMemory` hook.
+    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
+        self.system_state
+            .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
     }
 }
 

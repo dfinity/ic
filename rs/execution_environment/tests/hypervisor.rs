@@ -992,9 +992,9 @@ fn ic0_canister_version_returns_correct_value() {
     );
 
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Update increases the `canister_version` only AFTER the execution,
-    // so the result is plus 0, as no update has been finished yet.
-    let expected_ctr: u64 = 1;
+    // Canister version is 2 since both a replicated query and an update
+    // call will bump the canister version.
+    let expected_ctr: u64 = 2;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1005,7 +1005,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 1 for the previous ingress message.
-    let expected_ctr: u64 = 2 + 1;
+    let expected_ctr: u64 = 3 + 1;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1017,7 +1017,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 2 for the previous ingress messages.
-    let expected_ctr: u64 = 4 + 2;
+    let expected_ctr: u64 = 5 + 2;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1034,7 +1034,7 @@ fn ic0_canister_version_returns_correct_value() {
     .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 3 for the previous ingress messages.
-    let expected_ctr: u64 = 6 + 3;
+    let expected_ctr: u64 = 7 + 3;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1045,7 +1045,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 4 for the previous ingress messages.
-    let expected_ctr: u64 = 7 + 4;
+    let expected_ctr: u64 = 8 + 4;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1055,7 +1055,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
-    let expected_ctr: u64 = 8 + 5;
+    let expected_ctr: u64 = 9 + 5;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1065,7 +1065,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 6 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 6;
+    let expected_ctr: u64 = 10 + 6;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1075,7 +1075,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap_err();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 7 for the previous ingress messages.
-    let expected_ctr: u64 = 9 + 7;
+    let expected_ctr: u64 = 10 + 7;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1091,7 +1091,7 @@ fn ic0_canister_version_returns_correct_value() {
         .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 8 for the previous (successful) ingress messages.
-    let expected_ctr: u64 = 12 + 8;
+    let expected_ctr: u64 = 13 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1101,7 +1101,7 @@ fn ic0_canister_version_returns_correct_value() {
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 13 + 9;
+    let expected_ctr: u64 = 14 + 9;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1111,7 +1111,7 @@ fn ic0_canister_version_returns_correct_value() {
         .expect_err("Uninstall code should fail as the controller has changed.");
     let result = test.ingress(canister_id, "update", ctr).unwrap();
     // Plus 10 for the previous ingress messages.
-    let expected_ctr: u64 = 13 + 10;
+    let expected_ctr: u64 = 14 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1119,7 +1119,7 @@ fn ic0_canister_version_returns_correct_value() {
 }
 
 #[test]
-fn ic0_canister_version_does_not_change_on_trap_or_queries() {
+fn ic0_canister_version_does_not_change_on_trap_or_non_replicated_queries() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let trap = wasm().trap().build();
@@ -1132,7 +1132,7 @@ fn ic0_canister_version_does_not_change_on_trap_or_queries() {
         let result = test
             .non_replicated_query(canister_id, "query", ctr.clone())
             .unwrap();
-        // Neither the trap nor the query should change the version.
+        // Neither the trap nor the non replicated query should change the version.
         let expected_ctr: u64 = 1;
         assert_eq!(
             result,
@@ -2004,6 +2004,69 @@ fn ic0_canister_self_copy_works() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(WasmResult::Reply(canister_id.get().into_vec()), result);
+}
+
+#[test]
+fn ic0_subnet_self_size_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_size"
+                (func $subnet_self_size (result i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0] = $subnet_self_size()
+                (i32.store (i32.const 0) (call $subnet_self_size))
+                ;; return heap[0-4]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(vec![
+            test.get_own_subnet_id().get().as_slice().len() as u8,
+            0,
+            0,
+            0
+        ]),
+        result
+    );
+}
+
+#[test]
+fn ic0_subnet_self_copy_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "subnet_self_copy"
+                (func $subnet_self_copy (param i32 i32 i32))
+            )
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                ;; heap[0..4] = subnet_id_bytes[0..4]
+                (call $subnet_self_copy (i32.const 0) (i32.const 0) (i32.const 4))
+                ;; heap[4..10] = subnet_id_bytes[4..8]
+                (call $subnet_self_copy (i32.const 4) (i32.const 4) (i32.const 6))
+                ;; return heap[0..10]
+                (call $msg_reply_data_append (i32.const 0) (i32.const 10))
+                (call $msg_reply)
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(
+        WasmResult::Reply(test.get_own_subnet_id().get().into_vec()),
+        result
+    );
 }
 
 #[test]
@@ -7586,9 +7649,7 @@ fn declaring_too_many_tables_fails() {
 // produces a reply from `bytes`.
 fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
     wasm()
-        .stable64_grow(
-            (bytes + WASM_PAGE_SIZE_IN_BYTES as u64 - 1) / WASM_PAGE_SIZE_IN_BYTES as u64,
-        )
+        .stable64_grow(bytes.div_ceil(WASM_PAGE_SIZE_IN_BYTES as u64))
         .stable64_read(0, bytes)
         .blob_length()
         .reply_int()
@@ -8055,7 +8116,8 @@ fn check_correct_execution_state(is_wasm64: bool) {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     let execution_state = test.execution_state(canister_id);
-    assert_eq!(execution_state.is_wasm64, is_wasm64);
+    let bool_wasm_exec_mode: bool = execution_state.wasm_execution_mode.is_wasm64();
+    assert_eq!(bool_wasm_exec_mode, is_wasm64);
 }
 
 #[test]

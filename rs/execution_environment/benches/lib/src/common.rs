@@ -38,8 +38,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
@@ -282,7 +281,7 @@ where
     };
 
     // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,
@@ -300,6 +299,7 @@ where
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         Arc::new(FakeStateManager::new()),
+        Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

@@ -9,7 +9,7 @@ load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -139,37 +139,53 @@ def icos_build(
 
     # -------------------- Extract root partition --------------------
 
+    # Note that we defer injecting the files from images_deps["rootfs"]. These are mostly slower to build.
+
+    # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
+    # these only occur in firmware that we do not use.
+    PARTITION_ROOT_STRIP_PATHS = [
+        "/run",
+        "/boot",
+        "/var",
+        "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
+    ]
     ext4_image(
-        name = "static-partition-root-unsigned.tzst",
+        name = "partition-root-unsigned.tzst",
+        testonly = malicious,
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
-        # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
-        # there are only two in our build.
-        strip_paths = [
-            "/run",
-            "/boot",
-            "/var",
-            "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
-            "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Xiaomi Inc-Mipad2.txt.zst",
-        ],
+        strip_paths = PARTITION_ROOT_STRIP_PATHS,
+        extra_files = {
+            k: v
+            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+        },
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
+    )
+
+    component_file_references_test(
+        name = name + "_component_file_references_test",
+        image = ":partition-root-unsigned.tzst",
+        component_files = image_deps["component_files"].keys(),
+        # Inherit tags for this test, to avoid triggering builds for local base images
+        tags = tags,
     )
 
     # -------------------- Extract boot partition --------------------
 
     ext4_image(
-        name = "static-partition-boot.tzst",
+        name = "partition-boot.tzst",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
@@ -177,52 +193,43 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
-    )
-
-    # Defer injection to this point to allow caching most of the built images
-    # -------------------- Inject extra files --------------------
-
-    inject_files(
-        name = "partition-root-unsigned.tzst",
-        testonly = malicious,
-        base = "static-partition-root-unsigned.tzst",
-        file_contexts = ":file_contexts",
         extra_files = {
             k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+            for k, v in (
+                image_deps["bootfs"].items() + [
+                    (":version.txt", "/version.txt:0644"),
+                    (":extra_boot_args", "/extra_boot_args:0644"),
+                ]
+            )
         },
-        tags = ["manual"],
-    )
-
-    # Inherit tags for this test, to avoid triggering builds for local base images
-    component_file_references_test(
-        name = name + "_component_file_references_test",
-        image = ":partition-root-unsigned.tzst",
-        component_files = image_deps["component_files"].keys(),
-        tags = tags,
+        tags = ["manual", "no-cache"],
     )
 
     if upgrades:
-        inject_files(
+        ext4_image(
             name = "partition-root-test-unsigned.tzst",
             testonly = malicious,
-            base = "static-partition-root-unsigned.tzst",
+            src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
+            partition_size = image_deps["rootfs_size"],
+            strip_paths = PARTITION_ROOT_STRIP_PATHS,
             extra_files = {
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
             },
-            tags = ["manual"],
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
+            tags = ["manual", "no-cache"],
         )
 
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual"])
+        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual", "no-cache"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual"])
+            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual", "no-cache"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
         native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
@@ -235,7 +242,7 @@ def icos_build(
             cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
             tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
         native.genrule(
@@ -257,7 +264,7 @@ def icos_build(
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
                 cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
                 tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-                tags = ["manual"],
+                tags = ["manual", "no-cache"],
             )
 
             native.genrule(
@@ -271,29 +278,16 @@ def icos_build(
                 tags = ["manual"],
             )
 
-    inject_files(
-        name = "partition-boot.tzst",
-        base = "static-partition-boot.tzst",
-        file_contexts = ":file_contexts",
-        prefix = "/boot",
-        extra_files = {
-            k: v
-            for k, v in (
-                image_deps["bootfs"].items() + [
-                    (":version.txt", "/version.txt:0644"),
-                    (":extra_boot_args", "/extra_boot_args:0644"),
-                ]
-            )
-        },
-        tags = ["manual"],
-    )
-
     if upgrades:
-        inject_files(
+        ext4_image(
             name = "partition-boot-test.tzst",
-            base = "static-partition-boot.tzst",
+            src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
-            prefix = "/boot",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot",
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
             extra_files = {
                 k: v
                 for k, v in (
@@ -303,7 +297,7 @@ def icos_build(
                     ]
                 )
             },
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
         )
 
     # -------------------- Assemble disk partitions ---------------
@@ -326,7 +320,7 @@ def icos_build(
             ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -343,7 +337,7 @@ def icos_build(
             ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-remote-cache"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -363,7 +357,7 @@ def icos_build(
             name = "update-img.tar",
             boot_partition = ":partition-boot.tzst",
             root_partition = ":partition-root.tzst",
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -381,7 +375,7 @@ def icos_build(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
             root_partition = ":partition-root-test.tzst",
-            tags = ["manual"],
+            tags = ["manual", "no-cache"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -717,20 +711,13 @@ EOF
     )
 
     ext4_image(
-        name = "static-partition-boot.tzst",
+        name = "partition-boot.tzst",
         src = ":rootfs-tree.tar",
         partition_size = "1G",
         subdir = "boot/",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
-    )
-
-    inject_files(
-        name = "partition-boot.tzst",
-        base = "static-partition-boot.tzst",
-        prefix = "/boot",
         extra_files = {
             k: v
             for k, v in (
@@ -740,31 +727,25 @@ EOF
                 ]
             )
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     ext4_image(
-        name = "static-partition-root-unsigned.tzst",
+        name = "partition-root-unsigned.tzst",
         src = ":rootfs-tree.tar",
         partition_size = "3G",
         strip_paths = [
             "/run",
             "/boot",
         ],
-        tags = ["manual"],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-    )
-
-    inject_files(
-        name = "partition-root-unsigned.tzst",
-        base = "static-partition-root-unsigned.tzst",
         extra_files = {
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
         },
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
     )
 
     native.genrule(
@@ -774,7 +755,7 @@ EOF
         cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
         tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
     )
 
     native.genrule(
@@ -799,7 +780,7 @@ EOF
             ":partition-root.tzst",
         ],
         expanded_size = "50G",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],

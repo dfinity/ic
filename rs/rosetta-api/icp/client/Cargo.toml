@@ -24,6 +24,7 @@ ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
 
 [dev-dependencies]
 ic-icp-rosetta-runner = { path = "../runner" }

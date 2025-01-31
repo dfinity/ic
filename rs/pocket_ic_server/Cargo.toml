@@ -12,7 +12,7 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
-bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
+bitcoin = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
@@ -38,7 +38,7 @@ ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
-ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", tag = "0.1.0-b0" }
+ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -84,7 +84,7 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }

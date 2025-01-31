@@ -59,6 +59,14 @@ fn ledger_wasm_mainnet() -> Vec<u8> {
     std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
+fn ledger_wasm_mainnet_v1() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V1_WASM_PATH").unwrap()).unwrap()
+}
+
+fn ledger_wasm_mainnet_v2() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V2_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -91,8 +99,6 @@ fn encode_init_args(
         .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
         .feature_flags(FeatureFlags { icrc2: true })
-        .maximum_number_of_accounts(args.maximum_number_of_accounts)
-        .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
 }
@@ -509,8 +515,6 @@ fn check_old_init() {
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     })
     .unwrap();
     env.install_canister(ledger_wasm(), old_init, None)
@@ -1227,8 +1231,16 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn test_upgrade_serialization() {
-    let ledger_wasm_mainnet = ledger_wasm_mainnet();
+fn test_upgrade_serialization_from_mainnet() {
+    test_upgrade_serialization(ledger_wasm_mainnet());
+}
+
+#[test]
+fn test_upgrade_serialization_from_v2() {
+    test_upgrade_serialization(ledger_wasm_mainnet_v2());
+}
+
+fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
     let ledger_wasm_current = ledger_wasm();
 
     let minter = Arc::new(minter_identity());
@@ -1250,14 +1262,23 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
+        true,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_multi_step_migration() {
+fn test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_multi_step_migration_from_v2() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_wasm_mainnet_v2(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
@@ -1270,13 +1291,21 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_stable_migration_endpoints_disabled() {
+fn test_stable_migration_endpoints_disabled_from_mainnet() {
+    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet());
+}
+
+#[test]
+fn test_stable_migration_endpoints_disabled_from_v2() {
+    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet_v2());
+}
+
+fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     let send_args = SendArgs {
         memo: icp_ledger::Memo::default(),
         amount: Tokens::from_e8s(1),
@@ -1301,7 +1330,7 @@ fn test_stable_migration_endpoints_disabled() {
     .unwrap();
 
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet,
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
         vec![
@@ -1312,9 +1341,8 @@ fn test_stable_migration_endpoints_disabled() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_incomplete_migration() {
+fn test_incomplete_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
@@ -1322,9 +1350,17 @@ fn test_incomplete_migration() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_incomplete_migration_to_current() {
+fn test_incomplete_migration_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_wasm_mainnet_v2(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_incomplete_migration_to_current_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
@@ -1332,12 +1368,38 @@ fn test_incomplete_migration_to_current() {
     );
 }
 
-#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn test_metrics_while_migrating() {
+fn test_incomplete_migration_to_current_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_wasm_mainnet_v2(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_metrics_while_migrating_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_metrics_while_migrating_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_wasm_mainnet_v2(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_upgrade_from_v1_not_possible() {
+    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+        ledger_wasm_mainnet_v1(),
+        ledger_wasm(),
         encode_init_args,
     );
 }
@@ -1503,11 +1565,6 @@ fn test_transfer_from_minter() {
 #[test]
 fn test_transfer_from_burn() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
-}
-
-#[test]
-fn test_balances_overflow() {
-    ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
 }
 
 #[test]

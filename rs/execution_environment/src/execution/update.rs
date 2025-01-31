@@ -18,7 +18,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallOrigin,
+    CanisterState,
+};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -26,6 +29,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 #[cfg(test)]
@@ -45,6 +49,7 @@ pub fn execute_update(
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
+    deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -58,13 +63,14 @@ pub fn execute_update(
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
 
-                let is_wasm64_execution = canister
+                let wasm_execution_mode = canister
                     .execution_state
                     .as_ref()
-                    .map_or(false, |es| es.is_wasm64);
+                    .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
-                let prepaid_execution_cycles =
-                    match round.cycles_account_manager.prepay_execution_cycles(
+                let prepaid_execution_cycles = match round
+                    .cycles_account_manager
+                    .prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
                         message_memory_usage,
@@ -72,21 +78,37 @@ pub fn execute_update(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
-                        is_wasm64_execution.into(),
+                        wasm_execution_mode,
                     ) {
-                        Ok(cycles) => cycles,
-                        Err(err) => {
-                            return finish_call_with_error(
-                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                                canister,
-                                call_or_task,
-                                NumInstructions::from(0),
-                                round.time,
-                                execution_parameters.subnet_type,
-                                round.log,
-                            );
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
+                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            canister
+                                .system_state
+                                .task_queue
+                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                            canister
+                                .system_state
+                                .task_queue
+                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
-                    };
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            call_or_task,
+                            NumInstructions::from(0),
+                            round.time,
+                            execution_parameters.subnet_type,
+                            round.log,
+                        );
+                    }
+                };
                 (canister, prepaid_execution_cycles, false)
             }
         };
@@ -122,7 +144,7 @@ pub fn execute_update(
         log_dirty_pages,
     };
 
-    let helper = match UpdateHelper::new(&clean_canister, &original) {
+    let helper = match UpdateHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
             return finish_err(
@@ -246,10 +268,10 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
-    let is_wasm64_execution = canister
+    let wasm_execution_mode = canister
         .execution_state
         .as_ref()
-        .map_or(false, |es| es.is_wasm64);
+        .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -259,7 +281,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution.into(),
+        wasm_execution_mode,
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -305,11 +327,16 @@ struct UpdateHelper {
     canister: CanisterState,
     call_context_id: CallContextId,
     initial_cycles_balance: Cycles,
+    deallocation_sender: DeallocationSender,
 }
 
 impl UpdateHelper {
     /// Applies the initial state changes and performs the initial validation.
-    fn new(clean_canister: &CanisterState, original: &OriginalContext) -> Result<Self, UserError> {
+    fn new(
+        clean_canister: &CanisterState,
+        original: &OriginalContext,
+        deallocation_sender: &DeallocationSender,
+    ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
         validate_message(&canister, &original.method)?;
@@ -363,12 +390,14 @@ impl UpdateHelper {
             canister,
             call_context_id,
             initial_cycles_balance,
+            deallocation_sender: deallocation_sender.clone(),
         })
     }
 
     /// Returns a struct with all the necessary information to replay the
     /// performed update call steps in subsequent rounds.
     fn pause(self) -> PausedUpdateHelper {
+        self.deallocation_sender.send(Box::new(self.canister));
         PausedUpdateHelper {
             call_context_id: self.call_context_id,
             initial_cycles_balance: self.initial_cycles_balance,
@@ -382,8 +411,9 @@ impl UpdateHelper {
         clean_canister: &CanisterState,
         original: &OriginalContext,
         paused: PausedUpdateHelper,
+        deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let helper = Self::new(clean_canister, original)?;
+        let helper = Self::new(clean_canister, original, deallocation_sender)?;
         if helper.initial_cycles_balance != paused.initial_cycles_balance {
             let msg = "Mismatch in cycles balance when resuming an update call".to_string();
             let err = HypervisorError::WasmEngineError(FailedToApplySystemChanges(msg));
@@ -403,7 +433,7 @@ impl UpdateHelper {
         mut self,
         mut output: WasmExecutionOutput,
         clean_canister: CanisterState,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -420,39 +450,41 @@ impl UpdateHelper {
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            let reveal_top_up = self
-                .canister
-                .controllers()
-                .contains(&original.call_origin.get_principal());
-            if old_balance < requested + original.freezing_threshold {
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                    reveal_top_up,
-                };
-                let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
-                info!(
-                    round.log,
-                    "[DTS] Failed {:?} execution of canister {} due to concurrent cycle change: {:?}.",
-                    original.method,
-                    clean_canister.canister_id(),
-                    err,
-                );
-                // Perf counter: no need to update the call context, as it won't be saved.
-                return finish_err(
-                    clean_canister,
-                    output.num_instructions_left,
-                    err,
-                    original,
-                    round,
-                );
-            }
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        let reveal_top_up = self
+            .canister
+            .controllers()
+            .contains(&original.call_origin.get_principal());
+        if old_balance < requested + original.freezing_threshold {
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+            info!(
+                round.log,
+                "[DTS] Failed {:?} execution of canister {} due to concurrent cycle change: {:?}.",
+                original.method,
+                clean_canister.canister_id(),
+                err,
+            );
+            self.deallocation_sender.send(Box::new(self.canister));
+            // Perf counter: no need to update the call context, as it won't be saved.
+            return finish_err(
+                clean_canister,
+                output.num_instructions_left,
+                err,
+                original,
+                round,
+            );
         }
+        self.deallocation_sender.send(Box::new(clean_canister));
 
         apply_canister_state_changes(
             canister_state_changes,
@@ -467,6 +499,7 @@ impl UpdateHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
         let heap_delta = if output.wasm_result.is_ok() {
@@ -503,11 +536,11 @@ impl UpdateHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -516,7 +549,7 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 
@@ -564,6 +597,7 @@ impl PausedExecution for PausedCallExecution {
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -571,8 +605,12 @@ impl PausedExecution for PausedCallExecution {
             self.original.method,
             clean_canister.canister_id(),
         );
-        let helper = match UpdateHelper::resume(&clean_canister, &self.original, self.paused_helper)
-        {
+        let helper = match UpdateHelper::resume(
+            &clean_canister,
+            &self.original,
+            self.paused_helper,
+            deallocation_sender,
+        ) {
             Ok(helper) => helper,
             Err(err) => {
                 info!(

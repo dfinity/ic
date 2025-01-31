@@ -1,11 +1,10 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use config::config_ini::config_map_from_path;
-use config::deployment_json::get_deployment_settings;
-use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
+use config::{deserialize_config, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH};
+use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::info::NetworkInfo;
@@ -26,12 +25,8 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct SetupOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH.to_string(), value_name = "FILE")]
-    config: String,
-
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH.to_string(), value_name = "FILE")]
-    /// deployment.json file path
-    deployment_file: String,
+    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
+    setupos_config_object_path: String,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -47,27 +42,17 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
-                "Failed to get config.ini settings for path: {}",
-                &opts.config
-            ))?;
-            eprintln!("Using config: {:?}", config_map);
+            let setupos_config: SetupOSConfig =
+                deserialize_config(&opts.setupos_config_object_path)?;
 
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            eprintln!(
+                "Network settings config: {:?}",
+                &setupos_config.network_settings
+            );
 
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context(format!(
-                    "Failed to get deployment settings for file: {}",
-                    &opts.deployment_file
-                ))?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
-            let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
-                &mgmt_mac,
-                deployment_environment,
+                &setupos_config.icos_settings.mgmt_mac,
+                setupos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
                 node_type,
             );
@@ -76,27 +61,17 @@ pub fn main() -> Result<()> {
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
-                "Failed to get config.ini settings for path: {}",
-                &opts.config
-            ))?;
-            eprintln!("Using config: {:?}", config_map);
+            let setupos_config: SetupOSConfig =
+                deserialize_config(&opts.setupos_config_object_path)?;
 
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            eprintln!(
+                "Network settings config: {:?}",
+                &setupos_config.network_settings
+            );
 
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context(format!(
-                    "Failed to get deployment settings for file: {}",
-                    &opts.deployment_file
-                ))?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
-            let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
-                &mgmt_mac,
-                deployment_environment,
+                &setupos_config.icos_settings.mgmt_mac,
+                setupos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
                 node_type,
             );
