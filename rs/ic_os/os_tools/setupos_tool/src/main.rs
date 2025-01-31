@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
@@ -7,8 +5,6 @@ use config::{deserialize_config, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
-use network::info::NetworkInfo;
-use network::resolve_mgmt_mac;
 use utils::to_cidr;
 
 #[derive(Subcommand)]
@@ -56,8 +52,18 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 node_type,
             );
-            let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-            println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
+            eprintln!("Using generated mac address {}", generated_mac);
+
+            let Ipv6Config::Deterministic(ipv6_config) =
+                &setupos_config.network_settings.ipv6_config
+            else {
+                return Err(anyhow!(
+                    "Ipv6Config is not of type Deterministic. Cannot generate IPv6 address."
+                ));
+            };
+
+            let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
+            println!("{}", to_cidr(ipv6_address, ipv6_config.prefix_length));
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
