@@ -143,7 +143,7 @@ impl GetSuccessorsHandler {
         if response.blocks.is_empty() {
             // No blocks found in cache while BFS'ing from the anchor.
             // We can prune the cache, as it contains outdated blocks.
-            self.blockchain_manager_tx.try_send(BlockchainManagerRequest::PruneAllBlocks).ok();
+            //self.blockchain_manager_tx.try_send(BlockchainManagerRequest::PruneAllBlocks).ok();
         }
 
         if !next.is_empty() {
