@@ -5,7 +5,7 @@ Before=network.target network-online.target
 
 [Service]
 Type=oneshot
-RemainAfterExit=true
+RemainAfterExit=yes
 ExecStart=/opt/ic/bin/setup-networking.sh SetupOS
 
 [Install]
