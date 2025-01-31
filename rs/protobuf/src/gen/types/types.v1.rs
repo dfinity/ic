@@ -389,15 +389,6 @@ pub struct Summary {
     pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TaggedNiDkgTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub transcript: ::core::option::Option<NiDkgTranscript>,
-    #[prost(enumeration = "NiDkgTag", tag = "2")]
-    pub tag: i32,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<MasterPublicKeyId>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
     #[prost(message, optional, tag = "1")]
     pub dkg_id: ::core::option::Option<NiDkgId>,

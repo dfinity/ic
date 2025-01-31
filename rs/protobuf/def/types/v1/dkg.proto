@@ -41,12 +41,6 @@ message Summary {
   repeated NiDkgTranscript next_transcripts = 12;
 }
 
-message TaggedNiDkgTranscript {
-  NiDkgTranscript transcript = 1;
-  NiDkgTag tag = 2;
-  optional MasterPublicKeyId key_id = 3;
-}
-
 message CallbackIdedNiDkgTranscript {
   NiDkgId dkg_id = 1;
   NiDkgTranscriptResult transcript_result = 2;
