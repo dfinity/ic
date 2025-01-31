@@ -89,7 +89,7 @@ type DefiniteCanisterSettings = record {
   freezing_threshold : opt nat;
   controllers : vec principal;
   reserved_cycles_limit : opt nat;
-  log_visibility : opt LogVisibilityInCanisterStatus;
+  log_visibility : opt CanisterStatusLogVisibility;
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
@@ -101,7 +101,7 @@ type LogVisibility = variant {
   public;
 };
 
-type LogVisibilityInCanisterStatus = variant {
+type CanisterStatusLogVisibility = variant {
   controllers;
   public;
   allowed_viewers : vec principal;
