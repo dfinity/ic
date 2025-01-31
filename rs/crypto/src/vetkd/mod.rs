@@ -533,12 +533,12 @@ fn ensure_sufficient_shares_to_fail_fast(
         })?;
     let share_count = shares.len();
     if share_count < reconstruction_threshold {
-        return Err(
+        Err(
             VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
                 threshold: reconstruction_threshold,
                 share_count,
             },
-        );
+        )
     } else {
         Ok(())
     }
