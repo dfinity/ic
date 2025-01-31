@@ -4,16 +4,11 @@ use crate::sign::BasicSigVerifierInternal;
 use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
-use ic_crypto_internal_bls12_381_vetkd::DerivationPath;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKey;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyCombinationError;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare;
-use ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShareDeserializationError;
-use ic_crypto_internal_bls12_381_vetkd::G2Affine;
-use ic_crypto_internal_bls12_381_vetkd::NodeIndex;
-use ic_crypto_internal_bls12_381_vetkd::PairingInvalidPoint;
-use ic_crypto_internal_bls12_381_vetkd::TransportPublicKey;
-use ic_crypto_internal_bls12_381_vetkd::TransportPublicKeyDeserializationError;
+use ic_crypto_internal_bls12_381_vetkd::{
+    DerivationPath, EncryptedKeyCombinationError, EncryptedKeyShare,
+    EncryptedKeyShareDeserializationError, G2Affine, NodeIndex, PairingInvalidPoint,
+    TransportPublicKey, TransportPublicKeyDeserializationError,
+};
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
@@ -21,11 +16,13 @@ use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError
 use ic_crypto_internal_csp::{key_id::KeyId, vault::api::CspVault, CryptoServiceProvider};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, new_logger, ReplicaLogger};
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
@@ -323,6 +320,12 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
     shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
     args: &VetKdArgs,
 ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+    ensure_sufficient_shares_to_fail_fast(
+        shares,
+        lockable_threshold_sig_data_store,
+        &args.ni_dkg_id,
+    )?;
+
     let transcript_data_from_store = lockable_threshold_sig_data_store
         .read()
         .transcript_data(&args.ni_dkg_id)
@@ -338,21 +341,15 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         PublicCoefficients::Bls12_381(pub_coeffs) => &pub_coeffs.coefficients,
     };
     let reconstruction_threshold = pub_coeffs_from_store.len();
-    let master_public_key = {
-        let public_key_bytes = pub_coeffs_from_store
-            .iter()
-            .copied()
-            .next()
-            .ok_or_else(|| {
-                VetKdKeyShareCombinationError::InternalError(format!(
-                    "failed to determine master public key: public coefficients for NI-DKG ID {} are empty",
-                    &args.ni_dkg_id
-                ))
-            })?;
-        ic_crypto_internal_bls12_381_vetkd::G2Affine::deserialize(&public_key_bytes).map_err(
-            |_: PairingInvalidPoint| VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey,
-        )?
-    };
+    let master_public_key = master_pubkey_from_coeffs(pub_coeffs_from_store, &args.ni_dkg_id)
+        .map_err(|error| match error {
+            MasterPubkeyFromCoeffsError::InternalError(msg) => {
+                VetKdKeyShareCombinationError::InternalError(msg)
+            }
+            MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
+                VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
+            }
+        })?;
     let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
         .map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
@@ -369,7 +366,13 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     args.ni_dkg_id
                 )),
             )?;
-            let clib_share = share_to_clib_share(share)?;
+            let clib_share = EncryptedKeyShare::deserialize(&share.encrypted_key_share.0).map_err(
+                |e| match e {
+                    EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare => {
+                        VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare
+                    }
+                },
+            )?;
             Ok((node_id, *node_index, clib_share))
         })
         .collect::<Result<_, _>>()?;
@@ -416,8 +419,6 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     })?;
                     let node_public_key_g2affine = match node_public_key {
                         CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes) => {
-                            ///////////////////////////////////////////////////////////////
-                            // TODO: Can/should we use G2Affine::deserialize_unchecked here
                             G2Affine::deserialize(&public_key_bytes.0)
                             .map_err(|_: PairingInvalidPoint| VetKdKeyShareCombinationError::InternalError(
                                 format!("individual public key of node with ID {node_id} in threshold sig data store")
@@ -453,46 +454,16 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
     })
 }
 
-fn share_to_clib_share(
-    share: &ic_types::crypto::vetkd::VetKdEncryptedKeyShare,
-) -> Result<ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare, VetKdKeyShareCombinationError> {
-    let encrypted_key_share_192_bytes = {
-        if share.encrypted_key_share.0.len() != EncryptedKeyShare::BYTES {
-            return Err(VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare);
-        }
-        let mut encrypted_key = [0u8; EncryptedKeyShare::BYTES];
-        encrypted_key.copy_from_slice(&share.encrypted_key_share.0);
-        encrypted_key
-    };
-    ic_crypto_internal_bls12_381_vetkd::EncryptedKeyShare::deserialize(
-        encrypted_key_share_192_bytes,
-    )
-    .map_err(|e| match e {
-        EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare => {
-            VetKdKeyShareCombinationError::InvalidArgumentEncryptedKeyShare
-        }
-    })
-}
-
 fn verify_encrypted_key_internal(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     key: &VetKdEncryptedKey,
     args: &VetKdArgs,
 ) -> Result<(), VetKdKeyVerificationError> {
-    let encrypted_key = {
-        let encrypted_key_192_bytes = {
-            if key.encrypted_key.len() != EncryptedKey::BYTES {
-                return Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey);
-            }
-            let mut encrypted_key = [0u8; EncryptedKey::BYTES];
-            encrypted_key.copy_from_slice(&key.encrypted_key);
-            encrypted_key
-        };
-        ic_crypto_internal_bls12_381_vetkd::EncryptedKey::deserialize(encrypted_key_192_bytes)
+    let encrypted_key =
+        ic_crypto_internal_bls12_381_vetkd::EncryptedKey::deserialize(&key.encrypted_key)
         .map_err(|e| match e {
             ic_crypto_internal_bls12_381_vetkd::EncryptedKeyDeserializationError::InvalidEncryptedKey => VetKdKeyVerificationError::InvalidArgumentEncryptedKey,
-        })?
-    };
+        })?;
 
     let master_public_key = {
         let pub_coeffs_from_store = lockable_threshold_sig_data_store
@@ -506,22 +477,19 @@ fn verify_encrypted_key_internal(
                     },
                 )
             })?;
-        let public_key_bytes = match pub_coeffs_from_store {
-            PublicCoefficients::Bls12_381(pub_coeffs) => pub_coeffs
-                .coefficients
-                .iter()
-                .copied()
-                .next()
-                .ok_or_else(|| {
-                    VetKdKeyVerificationError::InternalError(format!(
-                        "public coefficients for NI-DKG ID {} are empty",
-                        &args.ni_dkg_id
-                    ))
-                })?,
-        };
-        ic_crypto_internal_bls12_381_vetkd::G2Affine::deserialize(&public_key_bytes).map_err(
-            |_: PairingInvalidPoint| VetKdKeyVerificationError::InvalidArgumentMasterPublicKey,
-        )?
+        match pub_coeffs_from_store {
+            PublicCoefficients::Bls12_381(bls_coeffs_trusted) => {
+                master_pubkey_from_coeffs(&bls_coeffs_trusted.coefficients, &args.ni_dkg_id)
+                    .map_err(|error| match error {
+                        MasterPubkeyFromCoeffsError::InternalError(msg) => {
+                            VetKdKeyVerificationError::InternalError(msg)
+                        }
+                        MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey => {
+                            VetKdKeyVerificationError::InvalidArgumentMasterPublicKey
+                        }
+                    })?
+            }
+        }
     };
 
     let transport_public_key = TransportPublicKey::deserialize(&args.encryption_public_key)
@@ -543,6 +511,59 @@ fn verify_encrypted_key_internal(
         true => Ok(()),
         false => Err(VetKdKeyVerificationError::VerificationError),
     }
+}
+
+fn ensure_sufficient_shares_to_fail_fast(
+    shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+    lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
+    ni_dkg_id: &NiDkgId,
+) -> Result<(), VetKdKeyShareCombinationError> {
+    let reconstruction_threshold = lockable_threshold_sig_data_store
+        .read()
+        .transcript_data(ni_dkg_id)
+        .map(|data| match data.public_coefficients() {
+            PublicCoefficients::Bls12_381(bls_pub_coeffs) => bls_pub_coeffs.coefficients.len(),
+        })
+        .ok_or_else(|| {
+            VetKdKeyShareCombinationError::ThresholdSigDataNotFound(
+                ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
+                    dkg_id: ni_dkg_id.clone(),
+                },
+            )
+        })?;
+    let share_count = shares.len();
+    if share_count < reconstruction_threshold {
+        Err(
+            VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
+                threshold: reconstruction_threshold,
+                share_count,
+            },
+        )
+    } else {
+        Ok(())
+    }
+}
+
+fn master_pubkey_from_coeffs(
+    pub_coeffs: &[bls12_381::PublicKeyBytes],
+    ni_dkg_id: &NiDkgId,
+) -> Result<G2Affine, MasterPubkeyFromCoeffsError> {
+    let first_coeff = pub_coeffs.iter().copied().next().ok_or_else(|| {
+        MasterPubkeyFromCoeffsError::InternalError(format!(
+            "failed to determine master public key: public coefficients 
+            for NI-DKG ID {ni_dkg_id} are empty"
+        ))
+    })?;
+    let first_coeff_g2 =
+        G2Affine::deserialize(&first_coeff).map_err(|_: PairingInvalidPoint| {
+            MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey
+        })?;
+    Ok(first_coeff_g2)
+}
+
+enum MasterPubkeyFromCoeffsError {
+    InternalError(String),
+    InvalidArgumentMasterPublicKey,
 }
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {

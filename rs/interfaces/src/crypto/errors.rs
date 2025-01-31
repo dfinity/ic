@@ -434,8 +434,8 @@ impl ErrorReproducibility for VetKdKeyShareVerificationError {
 
         match self {
             Self::VerificationError(crypto_error) => crypto_error.is_reproducible(),
-            // true, as the result will not change upon retrying, unless the correct DKG transcript is loaded.
-            Self::ThresholdSigDataNotFound(_) => true,
+            // false, as the result may change if the DKG transcript is reloaded.
+            Self::ThresholdSigDataNotFound(_) => false,
         }
     }
 }
