@@ -565,6 +565,7 @@ impl TryFrom<pb::DkgPayload> for Payload {
 mod tests {
 
     use super::*;
+    use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
     use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
     use strum::EnumCount;
     use strum::IntoEnumIterator;
