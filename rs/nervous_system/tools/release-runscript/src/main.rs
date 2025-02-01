@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug, Parser)]
 struct DetermineTargets {
@@ -32,7 +32,12 @@ struct CreateProposalTexts {
 }
 
 #[derive(Debug, Parser)]
-struct SubmitProposals;
+struct SubmitProposals {
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_text_paths: Vec<PathBuf>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_text_paths: Vec<PathBuf>,
+}
 
 #[derive(Debug, Parser)]
 struct CreateForumPost;
@@ -363,17 +368,115 @@ SNS proposal texts: {}",
         )
     );
 
-    run_submit_proposals(SubmitProposals);
+    run_submit_proposals(SubmitProposals {
+        nns_proposal_text_paths,
+        sns_proposal_text_paths,
+    });
 }
 
-fn run_submit_proposals(_: SubmitProposals) {
+fn run_submit_proposals(cmd: SubmitProposals) {
+    let SubmitProposals {
+        nns_proposal_text_paths,
+        sns_proposal_text_paths,
+    } = cmd;
+
+    // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
+    if input_yes_or_no("Do you want to submit upgrade proposals?", false) {
+        println!("Skipping upgrade proposal submission and all following steps.");
+        return;
+    }
+    println!();
+
+    println!("We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>.");
+    let neuron_id = input("Enter your neuron ID (e.g. 51)");
+
+    println!("Plug in your HSM key. Unplug your Ubikey.");
+    println!("Once you have done that, you can test your key hardware with the following command:");
+    println!("    pkcs11-tool --list-slots");
+    println!("And you can practice entering your password with: ");
+    println!("    pkcs11-tool --login --test");
+    input("Press Enter to continue...");
+
+    let ic = ic_dir();
+
+    let mut sns_proposal_ids = Vec::new();
+    let mut nns_proposal_ids = Vec::new();
+
+    // For each NNS proposal, run the submission script.
+    for proposal_path in &nns_proposal_text_paths {
+        println!("Submitting NNS proposal: {}", proposal_path.display());
+        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh");
+        let output = Command::new(script)
+            .arg(proposal_path.to_str().expect("Invalid proposal path"))
+            .arg(&neuron_id)
+            .current_dir(&ic)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
+        if !output.status.success() {
+            panic!(
+                "Submission failed for {}: {}",
+                proposal_path.display(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        println!("Submission successful for {}", proposal_path.display());
+        nns_proposal_ids.push(input("Enter the proposal ID"));
+    }
+
+    // For each SNS proposal, run the submission script.
+    for proposal_path in &sns_proposal_text_paths {
+        println!("Submitting SNS proposal: {}", proposal_path.display());
+        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh");
+        let output = Command::new(script)
+            .arg(proposal_path.to_str().expect("Invalid proposal path"))
+            .arg(&neuron_id)
+            .current_dir(&ic)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
+        if !output.status.success() {
+            panic!(
+                "Submission failed for {}: {}",
+                proposal_path.display(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        println!("Submission successful for {}", proposal_path.display());
+        sns_proposal_ids.push(input("Enter the proposal ID"));
+    }
+
+    use std::fmt::Write;
     print_step(
         5,
         "Submit Proposals",
-        "Submit the proposals on Friday
-
-Follow detailed instructions at:
-testnet/tools/nns-tools/README.md#submit-the-proposals",
+        &format!(
+            "I submitted the following proposals: 
+            NNS: {}
+            SNS: {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
+                    id
+                );
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
+                    id
+                );
+                acc
+            })
+        ),
     );
 
     run_create_forum_post(CreateForumPost);
