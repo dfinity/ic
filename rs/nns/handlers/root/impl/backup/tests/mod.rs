@@ -9,11 +9,11 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::crypto::canister_threshold_sig::PublicKey;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use registry_canister::{
+    // common::test_helpers::{
+    //     add_fake_subnet, get_invariant_compliant_subnet_record,
+    //     prepare_registry_with_nodes_and_node_operator_id,
+    // },
     init::RegistryCanisterInitPayload,
-    test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record,
-        prepare_registry_with_nodes_and_node_operator_id,
-    },
 };
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
@@ -30,10 +30,11 @@ fn prepare_registry(nns_id: PrincipalId, app_id: PrincipalId) -> Vec<RegistryAto
 
     for no in 0..11 {
         let no_principal = PrincipalId::new_user_test_id(total_mutations.len() as u64);
-        let (mutation, no_nodes) =
-            prepare_registry_with_nodes_and_node_operator_id(no, 4, no_principal.clone());
+        let (mutation, no_nodes): (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) =
+            (RegistryAtomicMutateRequest::default(), BTreeMap::new());
+        // prepare_registry_with_nodes_and_node_operator_id(no, 4, no_principal.clone());
 
-        operators_with_nodes.insert(&no_principal, no_nodes);
+        operators_with_nodes.insert(no_principal, no_nodes);
         total_mutations.push(mutation);
     }
 
@@ -44,16 +45,16 @@ fn prepare_registry(nns_id: PrincipalId, app_id: PrincipalId) -> Vec<RegistryAto
             .values()
             .take(10)
             .fold(BTreeMap::new(), |mut acc, next| {
-                acc.extend(next);
+                acc.extend(next.clone());
                 acc
             });
 
-    add_fake_subnet(
-        nns_id,
-        &mut subnet_list_record,
-        get_invariant_compliant_subnet_record(nns_nodes.keys().cloned().collect()),
-        &nns_nodes,
-    );
+    // add_fake_subnet(
+    //     nns_id,
+    //     &mut subnet_list_record,
+    //     get_invariant_compliant_subnet_record(nns_nodes.keys().cloned().collect()),
+    //     &nns_nodes,
+    // );
 
     total_mutations
 }

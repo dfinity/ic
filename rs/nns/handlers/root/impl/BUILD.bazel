@@ -79,7 +79,7 @@ DEV_DEPENDENCIES = [
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",
-        "//rs/registry/canister",
+        "//rs/registry/canister:canister--test_feature",
         "@crate_index//:tempfile",
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
@@ -167,17 +167,18 @@ rust_test(
     data = [
         ":backup-root-canister",
         "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/registry/canister"
     ],
     crate_root = "backup/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":root",
+        ":root--test_feature",
         "//packages/pocket-ic",
-        "//rs/test_utilities/load_wasm",
     ],
     env = {
         "BACKUP_ROOT_WASM_PATH": "$(rootpath :backup-root-canister)",
+        "REGISTRY_WASM_PATH": "$(rootpath //rs/registry/canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
     }
 )
