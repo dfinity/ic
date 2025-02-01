@@ -1,4 +1,3 @@
-use crate::pb::v1::VotingPowerEconomics;
 use crate::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
