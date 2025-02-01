@@ -887,6 +887,7 @@ http_file(
 
 # Set up hermetic cc toolchains for binaries and canisters
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(
