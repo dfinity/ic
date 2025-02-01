@@ -14,6 +14,10 @@ path = "canister/canister.rs"
 name = "upgrade-test-canister"
 path = "test_canisters/upgrade_test_canister.rs"
 
+[[bin]]
+name = "backup-root-canister"
+path = "backup/canister.rs"
+
 [lib]
 path = "src/lib.rs"
 
@@ -70,3 +74,6 @@ candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }
+pocket-ic.path = "../../../../../packages/pocket-ic"
+ic-test-utilities-load-wasm.path = "../../../../test_utilities/load_wasm"
+

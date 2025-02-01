@@ -14,6 +14,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+pub mod backup_root_proposals;
 pub mod canister_management;
 pub mod init;
 pub mod pb;

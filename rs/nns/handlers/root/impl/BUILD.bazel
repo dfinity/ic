@@ -150,6 +150,39 @@ rust_canister(
 )
 
 rust_canister(
+    name = "backup-root-canister",
+    srcs = ["backup/canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":backup/backup-root.did",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
+)
+
+rust_test(
+    name = "backup-root-canister-tests",
+    srcs = glob(["backup/**/*.rs"]),
+    data = [
+        ":backup-root-canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    crate_root = "backup/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":root",
+        "//packages/pocket-ic",
+        "//rs/test_utilities/load_wasm",
+    ],
+    env = {
+        "BACKUP_ROOT_WASM_PATH": "$(rootpath :backup-root-canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
+    }
+)
+
+rust_canister(
     name = "upgrade-test-canister",
     srcs = ["test_canisters/upgrade_test_canister.rs"],
     aliases = ALIASES,
