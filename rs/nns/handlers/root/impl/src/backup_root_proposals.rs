@@ -4,10 +4,7 @@ use candid::CandidType;
 use ic_base_types::NodeId;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_common::registry::get_value;
-use ic_protobuf::{
-    registry::subnet::{self, v1::SubnetRecord},
-    types::v1::EquivocationProof,
-};
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
 use serde::Deserialize;
 
@@ -131,7 +128,7 @@ pub async fn submit_root_proposal_to_change_subnet_halt_status(
         .any(|(_, ballot)| ballot.eq(&RootProposalBallot::Yes))
     {
         let message = format!(
-            "[Backup root canister] Invalid proposal. Caller: {} must be among the node operators of the nns subnet.",caller
+            "[Backup root canister] Invalid proposal. Caller: {} must be among the node operators of the subnet.",caller
         );
         println!("{}", message);
         return Err(message);
