@@ -84,6 +84,37 @@ struct RegistryPreparationArguments {
     subnet_node_operators: Vec<SubnetNodeOperatorArg>,
 }
 
+impl Default for RegistryPreparationArguments {
+    fn default() -> Self {
+        Self {
+            subnet_node_operators: vec![
+                SubnetNodeOperatorArg {
+                    subnet_id: PrincipalId::new_subnet_test_id(0),
+                    subnet_type: SubnetType::System,
+                    node_operators: vec![
+                        // Each has 4 nodes so this is 40 nodes in total
+                        PrincipalId::new_user_test_id(0),
+                        PrincipalId::new_user_test_id(1),
+                        PrincipalId::new_user_test_id(2),
+                        PrincipalId::new_user_test_id(3),
+                        PrincipalId::new_user_test_id(4),
+                        PrincipalId::new_user_test_id(5),
+                        PrincipalId::new_user_test_id(6),
+                        PrincipalId::new_user_test_id(7),
+                        PrincipalId::new_user_test_id(8),
+                        PrincipalId::new_user_test_id(9),
+                    ],
+                },
+                SubnetNodeOperatorArg {
+                    subnet_id: PrincipalId::new_subnet_test_id(0),
+                    subnet_type: SubnetType::Application,
+                    node_operators: vec![PrincipalId::new_user_test_id(999)],
+                },
+            ],
+        }
+    }
+}
+
 fn prepare_registry(
     registry_preparation_args: &mut RegistryPreparationArguments,
 ) -> Vec<RegistryAtomicMutateRequest> {
@@ -199,52 +230,28 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
     (pic, canister)
 }
 
-#[test]
-fn fetch_pending_proposals_submited_one() {
-    let mut args = RegistryPreparationArguments {
-        subnet_node_operators: vec![
-            SubnetNodeOperatorArg {
-                subnet_id: PrincipalId::new_subnet_test_id(0),
-                subnet_type: SubnetType::System,
-                node_operators: vec![
-                    // Each has 4 nodes so this is 40 nodes in total
-                    PrincipalId::new_user_test_id(0),
-                    PrincipalId::new_user_test_id(1),
-                    PrincipalId::new_user_test_id(2),
-                    PrincipalId::new_user_test_id(3),
-                    PrincipalId::new_user_test_id(4),
-                    PrincipalId::new_user_test_id(5),
-                    PrincipalId::new_user_test_id(6),
-                    PrincipalId::new_user_test_id(7),
-                    PrincipalId::new_user_test_id(8),
-                    PrincipalId::new_user_test_id(9),
-                ],
-            },
-            SubnetNodeOperatorArg {
-                subnet_id: PrincipalId::new_subnet_test_id(0),
-                subnet_type: SubnetType::Application,
-                node_operators: vec![PrincipalId::new_user_test_id(999)],
-            },
-        ],
-    };
-    let (pic, canister) = init_pocket_ic(&mut args);
-
-    let subnet_id = pic.get_subnet(canister).unwrap();
-
+fn submit_proposal(
+    pic: &PocketIc,
+    canister: Principal,
+    sender: Principal,
+    subnet_id: Principal,
+    to_halt: bool,
+) -> Result<(), String> {
     let response = pic.update_call(
-        canister,
-        Principal::anonymous(),
+        canister.into(),
+        sender,
         "submit_root_proposal_to_change_subnet_halt_status",
-        candid::encode_args((subnet_id, true)).unwrap(),
+        candid::encode_args((subnet_id, to_halt)).unwrap(),
     );
     let response: Result<(), String> = candid::decode_one(response.unwrap().as_slice()).unwrap();
     println!("{:?}", response);
+    response
+}
 
-    assert!(response.is_ok());
-
+fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<ChangeSubnetHaltStatus> {
     let response = pic
         .update_call(
-            canister,
+            canister.into(),
             Principal::anonymous(),
             "get_pending_root_proposals_to_change_subnet_halt_status",
             candid::encode_one(()).unwrap(),
@@ -254,5 +261,55 @@ fn fetch_pending_proposals_submited_one() {
     let response: Vec<ChangeSubnetHaltStatus> =
         candid::decode_one(&response).expect("Should be able to decode response");
 
+    response
+}
+
+#[test]
+fn fetch_pending_proposals_submited_one() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let nns = pic.topology().get_nns().unwrap();
+    let no_in_subnet = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|arg| match arg.subnet_id.0 == nns {
+            true => arg.node_operators.first(),
+            false => None,
+        })
+        .expect("Should be able to find subnet and a node operator with nodes in it");
+
+    let response = submit_proposal(&pic, canister, no_in_subnet.0.clone(), nns, true);
+    assert!(response.is_ok());
+
+    let response = get_pending(&pic, canister);
+
     assert!(response.len() == 1)
+}
+
+#[test]
+fn disallow_proposals_from_node_operators_not_in_subnet() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let nns = pic.topology().get_nns().unwrap();
+    let no_not_in_subnet = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|arg| match arg.subnet_id.0 != nns {
+            true => arg.node_operators.first(),
+            false => None,
+        })
+        .expect("Should be able to find subnet and a node operator with nodes in it");
+
+    // Try with a node operator that is not in the subnet
+    let response = submit_proposal(&pic, canister, no_not_in_subnet.0.clone(), nns, true);
+    assert!(response.is_err());
+
+    // Try with anonymous principal
+    let response = submit_proposal(&pic, canister, Principal::anonymous(), nns, true);
+    assert!(response.is_err());
+
+    let response = get_pending(&pic, canister);
+    assert!(response.len() == 0)
 }
