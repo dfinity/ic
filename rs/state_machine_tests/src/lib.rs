@@ -1331,11 +1331,22 @@ impl StateMachine {
         StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
+    pub fn execute_round_with_blockmaker_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
+        let mut payload = self.build_payload();
+        payload = payload.with_blockmaker_metrics(blockmaker_metrics);
+        self.execute_payload(payload);
+    }
+
+    pub fn execute_round(&self) {
+        let payload = self.build_payload();
+        self.execute_payload(payload);
+    }
+
     /// Assemble a payload for a new round using `PayloadBuilderImpl`
     /// and execute a round with this payload.
     /// Note that only ingress messages submitted via `Self::submit_ingress`
     /// will be considered during payload building.
-    pub fn execute_round(&self, blockmaker_metrics: Option<BlockmakerMetrics>) {
+    fn build_payload(&self) -> PayloadBuilder {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
@@ -1417,8 +1428,7 @@ impl StateMachine {
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
-            .with_self_validating(self_validating)
-            .with_blockmaker_metrics(blockmaker_metrics);
+            .with_self_validating(self_validating);
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1429,8 +1439,7 @@ impl StateMachine {
             self.process_threshold_signing_request(id, context, &mut payload);
         }
 
-        // Finally execute the payload.
-        self.execute_payload(payload);
+        payload
     }
 
     /// Reload registry derived from a *shared* registry data provider
@@ -3843,9 +3852,9 @@ impl PayloadBuilder {
         Self::default()
     }
 
-    pub fn with_blockmaker_metrics(self, blockmaker_metrics: Option<BlockmakerMetrics>) -> Self {
+    pub fn with_blockmaker_metrics(self, blockmaker_metrics: BlockmakerMetrics) -> Self {
         Self {
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             ..self
         }
     }

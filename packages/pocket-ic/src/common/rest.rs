@@ -20,23 +20,6 @@ pub struct AutoProgressConfig {
     pub artificial_delay_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
-pub struct TickConfigs {
-    pub blockmakers: Option<BlockMakerConfigs>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockMakerConfigs {
-    pub blockmakers_per_subnet: Vec<RawSubnetBlockmakerMetrics>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RawSubnetBlockmakerMetrics {
-    pub subnet: RawSubnetId,
-    pub blockmaker: RawNodeId,
-    pub failed_blockmakers: Vec<RawNodeId>,
-}
-
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum HttpGatewayBackend {
     Replica(String),
@@ -371,6 +354,23 @@ impl From<Principal> for RawNodeId {
             node_id: principal.as_slice().to_vec(),
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
+pub struct TickConfigs {
+    pub blockmakers: Option<BlockMakerConfigs>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BlockMakerConfigs {
+    pub blockmakers_per_subnet: Vec<RawSubnetBlockmakerMetrics>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RawSubnetBlockmakerMetrics {
+    pub subnet: RawSubnetId,
+    pub blockmaker: RawNodeId,
+    pub failed_blockmakers: Vec<RawNodeId>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]

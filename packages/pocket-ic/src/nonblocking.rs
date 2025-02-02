@@ -290,8 +290,7 @@ impl PocketIc {
     /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick(&self) {
-        let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, TickConfigs::default()).await;
+        self.tick_with_configs(TickConfigs::default()).await;
     }
 
     /// Make the IC produce and progress by one block with custom

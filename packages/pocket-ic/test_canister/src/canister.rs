@@ -10,6 +10,7 @@ use ic_cdk::api::management_canister::http_request::{
     TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{inspect_message, query, trap, update};
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
@@ -291,6 +292,21 @@ async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
         .await
         .unwrap()
         .0
+}
+
+#[update]
+async fn node_metrics_history_proxy(
+    args: NodeMetricsHistoryArgs,
+) -> Vec<NodeMetricsHistoryResponse> {
+    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+        candid::Principal::management_canister(),
+        "node_metrics_history",
+        (args,),
+        0_u128,
+    )
+    .await
+    .unwrap()
+    .0
 }
 
 // executing many instructions

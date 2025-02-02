@@ -1101,10 +1101,12 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
-    axum::extract::Json(raw): axum::extract::Json<TickConfigs>,
+    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick { configs: raw };
+    let op = Tick {
+        configs: ticks_configs,
+    };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
