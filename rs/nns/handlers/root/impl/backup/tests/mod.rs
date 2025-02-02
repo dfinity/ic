@@ -77,7 +77,8 @@ fn add_routing_table_record(total_mutations: &mut Vec<RegistryMutation>, nns_id:
 struct SubnetNodeOperatorArg {
     subnet_id: PrincipalId,
     subnet_type: SubnetType,
-    node_operators: Vec<PrincipalId>,
+    // Operator id : number of nodes in subnet
+    node_operators: BTreeMap<PrincipalId, u8>,
 }
 
 struct RegistryPreparationArguments {
@@ -93,22 +94,26 @@ impl Default for RegistryPreparationArguments {
                     subnet_type: SubnetType::System,
                     node_operators: vec![
                         // Each has 4 nodes so this is 40 nodes in total
-                        PrincipalId::new_user_test_id(0),
-                        PrincipalId::new_user_test_id(1),
-                        PrincipalId::new_user_test_id(2),
-                        PrincipalId::new_user_test_id(3),
-                        PrincipalId::new_user_test_id(4),
-                        PrincipalId::new_user_test_id(5),
-                        PrincipalId::new_user_test_id(6),
-                        PrincipalId::new_user_test_id(7),
-                        PrincipalId::new_user_test_id(8),
-                        PrincipalId::new_user_test_id(9),
-                    ],
+                        (PrincipalId::new_user_test_id(0), 4),
+                        (PrincipalId::new_user_test_id(1), 4),
+                        (PrincipalId::new_user_test_id(2), 4),
+                        (PrincipalId::new_user_test_id(3), 4),
+                        (PrincipalId::new_user_test_id(4), 4),
+                        (PrincipalId::new_user_test_id(5), 4),
+                        (PrincipalId::new_user_test_id(6), 4),
+                        (PrincipalId::new_user_test_id(7), 4),
+                        (PrincipalId::new_user_test_id(8), 4),
+                        (PrincipalId::new_user_test_id(9), 4),
+                    ]
+                    .into_iter()
+                    .collect(),
                 },
                 SubnetNodeOperatorArg {
                     subnet_id: PrincipalId::new_subnet_test_id(0),
                     subnet_type: SubnetType::Application,
-                    node_operators: vec![PrincipalId::new_user_test_id(999)],
+                    node_operators: vec![(PrincipalId::new_user_test_id(999), 4)]
+                        .into_iter()
+                        .collect(),
                 },
             ],
         }
@@ -118,8 +123,6 @@ impl Default for RegistryPreparationArguments {
 fn prepare_registry(
     registry_preparation_args: &mut RegistryPreparationArguments,
 ) -> Vec<RegistryAtomicMutateRequest> {
-    // let nns_id: SubnetId = SubnetId::from(PrincipalId(nns_id));
-    // let app_id: SubnetId = SubnetId::from(PrincipalId(app_id));
     let mut total_mutations = vec![];
     let mut subnet_list_record = SubnetListRecord::default();
 
@@ -128,13 +131,13 @@ fn prepare_registry(
     let mut operator_mutation_ids: u8 = 0;
     for arg in &registry_preparation_args.subnet_node_operators {
         let mut current_subnet_nodes = BTreeMap::new();
-        for operator in &arg.node_operators {
+        for (operator, num_nodes) in &arg.node_operators {
             let (mutation, nodes) = prepare_registry_with_nodes_and_node_operator_id(
-                operator_mutation_ids * 4,
-                4,
+                operator_mutation_ids,
+                *num_nodes as u64,
                 operator.clone(),
             );
-            operator_mutation_ids += 1;
+            operator_mutation_ids += num_nodes;
 
             total_mutations.extend(mutation.mutations);
             current_subnet_nodes.extend(nodes);
@@ -274,7 +277,15 @@ fn fetch_pending_proposals_submited_one() {
         .subnet_node_operators
         .iter()
         .find_map(|arg| match arg.subnet_id.0 == nns {
-            true => arg.node_operators.first(),
+            true => {
+                let operator_principals = arg
+                    .node_operators
+                    .iter()
+                    .map(|(principal, _)| principal)
+                    .collect::<Vec<_>>();
+
+                operator_principals.first().cloned()
+            }
             false => None,
         })
         .expect("Should be able to find subnet and a node operator with nodes in it");
@@ -284,7 +295,58 @@ fn fetch_pending_proposals_submited_one() {
 
     let response = get_pending(&pic, canister);
 
-    assert!(response.len() == 1)
+    assert!(response.len() == 1);
+    let proposal = response.first().unwrap();
+
+    let node_operators_in_subnet = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|arg| {
+            if arg.subnet_id.0 == nns {
+                Some(arg.node_operators.clone())
+            } else {
+                None
+            }
+        })
+        .expect("Should find the corresponding number of node operators");
+
+    let expected_ballots: u8 = node_operators_in_subnet.values().sum();
+    assert_eq!(
+        proposal.node_operator_ballots.len(),
+        expected_ballots as usize,
+        "Received:\n{:?}\nExpected (key * value):\n{:?}",
+        proposal.node_operator_ballots,
+        node_operators_in_subnet
+    );
+    assert!(proposal.proposer.eq(no_in_subnet));
+
+    let voted_yes: Vec<_> = proposal
+        .node_operator_ballots
+        .iter()
+        .filter(|(_, ballot)| {
+            ballot.eq(&ic_nns_handler_root::root_proposals::RootProposalBallot::Yes)
+        })
+        .collect();
+
+    let (no_principal, _) = voted_yes.first().unwrap();
+    assert_eq!(no_principal, no_in_subnet);
+    assert_eq!(
+        voted_yes.len(),
+        *node_operators_in_subnet.get(no_in_subnet).unwrap() as usize
+    );
+
+    let voted_undecided: Vec<_> = proposal
+        .node_operator_ballots
+        .iter()
+        .filter(|(_, ballot)| {
+            ballot.eq(&ic_nns_handler_root::root_proposals::RootProposalBallot::Undecided)
+        })
+        .collect();
+    // All others still didn't vote since its just been proposed
+    assert_eq!(
+        voted_undecided.len() as u8,
+        expected_ballots - voted_yes.len() as u8
+    );
 }
 
 #[test]
@@ -297,7 +359,15 @@ fn disallow_proposals_from_node_operators_not_in_subnet() {
         .subnet_node_operators
         .iter()
         .find_map(|arg| match arg.subnet_id.0 != nns {
-            true => arg.node_operators.first(),
+            true => {
+                let operator_principals = arg
+                    .node_operators
+                    .iter()
+                    .map(|(principal, _)| principal)
+                    .collect::<Vec<_>>();
+
+                operator_principals.first().cloned()
+            }
             false => None,
         })
         .expect("Should be able to find subnet and a node operator with nodes in it");
