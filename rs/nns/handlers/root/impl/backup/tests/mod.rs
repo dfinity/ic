@@ -1,20 +1,30 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use candid::Principal;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_root::backup_root_proposals::ChangeSubnetHaltStatus;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_types::crypto::canister_threshold_sig::PublicKey;
-use pocket_ic::{PocketIc, PocketIcBuilder};
-use registry_canister::{
-    // common::test_helpers::{
-    //     add_fake_subnet, get_invariant_compliant_subnet_record,
-    //     prepare_registry_with_nodes_and_node_operator_id,
-    // },
-    init::RegistryCanisterInitPayload,
+use ic_protobuf::registry::{
+    crypto::v1::PublicKey,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    routing_table::v1::RoutingTable as RoutingTablePB,
+    subnet::v1::SubnetListRecord,
 };
+use ic_registry_keys::{
+    make_blessed_replica_versions_key, make_replica_version_key, make_routing_table_record_key,
+};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use maplit::btreemap;
+use pocket_ic::{PocketIc, PocketIcBuilder};
+use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayload;
+use test_helpers::{
+    add_fake_subnet, get_invariant_compliant_subnet_record,
+    prepare_registry_with_nodes_and_node_operator_id,
+};
+
+mod test_helpers;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     let path: PathBuf = std::env::var(env)
@@ -24,18 +34,40 @@ fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     std::fs::read(&path).expect(&format!("Failed to read path {}", path.display()))
 }
 
-fn prepare_registry(nns_id: PrincipalId, app_id: PrincipalId) -> Vec<RegistryAtomicMutateRequest> {
+fn prepare_registry(nns_id: Principal, app_id: Principal) -> Vec<RegistryAtomicMutateRequest> {
+    let nns_id: SubnetId = SubnetId::from(PrincipalId(nns_id));
+    let app_id: SubnetId = SubnetId::from(PrincipalId(app_id));
     let mut total_mutations = vec![];
     let mut operators_with_nodes = BTreeMap::new();
 
+    const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+    let release_package_url = "http://release_package.tar.zst".to_string();
+    let replica_version = insert(
+        make_replica_version_key(env!("CARGO_PKG_VERSION")).as_bytes(),
+        ReplicaVersionRecord {
+            release_package_sha256_hex: MOCK_HASH.into(),
+            release_package_urls: vec![release_package_url],
+            guest_launch_measurement_sha256_hex: None,
+        }
+        .encode_to_vec(),
+    );
+    total_mutations.push(replica_version);
+    let blessed_replica_versions = insert(
+        make_blessed_replica_versions_key().as_bytes(),
+        BlessedReplicaVersions {
+            blessed_version_ids: vec![env!("CARGO_PKG_VERSION").to_string()],
+        }
+        .encode_to_vec(),
+    );
+    total_mutations.push(blessed_replica_versions);
+
     for no in 0..11 {
         let no_principal = PrincipalId::new_user_test_id(total_mutations.len() as u64);
-        let (mutation, no_nodes): (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) =
-            (RegistryAtomicMutateRequest::default(), BTreeMap::new());
-        // prepare_registry_with_nodes_and_node_operator_id(no, 4, no_principal.clone());
+        let (mutation, no_nodes) =
+            prepare_registry_with_nodes_and_node_operator_id(no * 4, 4, no_principal.clone());
 
         operators_with_nodes.insert(no_principal, no_nodes);
-        total_mutations.push(mutation);
+        total_mutations.extend(mutation.mutations);
     }
 
     // First 40 nodes goes to nns => 10 node operators * 4 nodes each
@@ -49,14 +81,53 @@ fn prepare_registry(nns_id: PrincipalId, app_id: PrincipalId) -> Vec<RegistryAto
                 acc
             });
 
-    // add_fake_subnet(
-    //     nns_id,
-    //     &mut subnet_list_record,
-    //     get_invariant_compliant_subnet_record(nns_nodes.keys().cloned().collect()),
-    //     &nns_nodes,
-    // );
+    let mutations = add_fake_subnet(
+        nns_id,
+        &mut subnet_list_record,
+        get_invariant_compliant_subnet_record(
+            nns_nodes.keys().cloned().collect(),
+            ic_registry_subnet_type::SubnetType::System,
+        ),
+        &nns_nodes,
+    );
+    total_mutations.extend(mutations);
 
-    total_mutations
+    let app_nodes: BTreeMap<NodeId, PublicKey> = operators_with_nodes
+        .values()
+        .skip(10)
+        .take(1)
+        .fold(BTreeMap::new(), |mut acc, next| {
+            acc.extend(next.clone());
+            acc
+        });
+
+    let mutations = add_fake_subnet(
+        app_id,
+        &mut subnet_list_record,
+        get_invariant_compliant_subnet_record(
+            app_nodes.keys().cloned().collect(),
+            ic_registry_subnet_type::SubnetType::Application,
+        ),
+        &app_nodes,
+    );
+    total_mutations.extend(mutations);
+
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {
+           start: CanisterId::from(0),
+           end: CanisterId::from(u64::MAX),
+        } => nns_id,
+    })
+    .unwrap();
+    total_mutations.push(insert(
+        make_routing_table_record_key().as_bytes(),
+        RoutingTablePB::from(routing_table).encode_to_vec(),
+    ));
+
+    vec![RegistryAtomicMutateRequest {
+        mutations: total_mutations,
+        ..Default::default()
+    }]
 }
 
 fn init_pocket_ic() -> (PocketIc, Principal) {
@@ -69,10 +140,15 @@ fn init_pocket_ic() -> (PocketIc, Principal) {
         .unwrap();
     pic.add_cycles(registry, 100_000_000_000_000);
 
+    let nns_id = pic.topology().get_nns().unwrap();
+    let app_subnets = pic.topology().get_app_subnets();
     pic.install_canister(
         registry,
         fetch_canister_wasm("REGISTRY_WASM_PATH"),
-        candid::encode_one(RegistryCanisterInitPayload { mutations: vec![] }).unwrap(),
+        candid::encode_one(RegistryCanisterInitPayload {
+            mutations: prepare_registry(nns_id, app_subnets.first().unwrap().clone()),
+        })
+        .unwrap(),
         None,
     );
 

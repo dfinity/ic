@@ -76,4 +76,5 @@ pretty_assertions = { workspace = true }
 tokio = { workspace = true }
 pocket-ic.path = "../../../../../packages/pocket-ic"
 ic-test-utilities-load-wasm.path = "../../../../test_utilities/load_wasm"
+ic-registry-subnet-type.path = "../../../../registry/subnet_type"
 

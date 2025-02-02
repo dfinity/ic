@@ -167,20 +167,22 @@ rust_test(
     data = [
         ":backup-root-canister",
         "//rs/pocket_ic_server:pocket-ic-server",
-        "//rs/registry/canister"
+        "//rs/registry/canister:registry-canister"
     ],
     crate_root = "backup/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":root--test_feature",
+        ":root",
         "//packages/pocket-ic",
+        "//rs/registry/subnet_type"
     ],
     env = {
         "BACKUP_ROOT_WASM_PATH": "$(rootpath :backup-root-canister)",
-        "REGISTRY_WASM_PATH": "$(rootpath //rs/registry/canister)",
+        "REGISTRY_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
-    }
+    },
+    version = "0.9.0"
 )
 
 rust_canister(

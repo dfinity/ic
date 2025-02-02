@@ -10833,6 +10833,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-routing-table",
+ "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-state-machine-tests",
  "ic-test-utilities",
