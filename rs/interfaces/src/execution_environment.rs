@@ -1253,7 +1253,7 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// This system call indicates the cycle cost of threshold key derivation,
     /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
     /// with name given by `src` + `size`.
     ///
