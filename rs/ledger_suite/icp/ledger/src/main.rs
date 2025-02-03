@@ -16,6 +16,7 @@ use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
+    blockchain::BlockData,
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
         TransferError as CoreTransferError,
@@ -1329,7 +1330,8 @@ fn iter_blocks_() {
             .read()
             .unwrap()
             .blockchain
-            .block_slice(std::ops::Range {
+            .blocks
+            .get_blocks(std::ops::Range {
                 start: start as u64,
                 end: end as u64,
             });
