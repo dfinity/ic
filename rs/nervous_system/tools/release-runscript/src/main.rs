@@ -1,16 +1,94 @@
+use anyhow::{bail, Result};
+use clap::{Parser, Subcommand};
 use colored::*;
 use std::io::{self, Write};
 
-struct Step {
-    title: &'static str,
-    description: &'static str,
+#[derive(Debug, Parser)]
+struct DetermineTargets;
+
+#[derive(Debug, Parser)]
+struct RunTests;
+
+#[derive(Debug, Parser)]
+struct CreateProposalTexts;
+
+#[derive(Debug, Parser)]
+struct SubmitProposals;
+
+#[derive(Debug, Parser)]
+struct CreateForumPost;
+
+#[derive(Debug, Parser)]
+struct ScheduleVote;
+
+#[derive(Debug, Parser)]
+struct UpdateCanistersJson;
+
+#[derive(Debug, Parser)]
+struct UpdateChangelog;
+
+#[derive(Debug, Subcommand)]
+enum Step {
+    #[command(about = "Step 1: Pick Release Candidate Commit")]
+    PickReleaseCandidateCommit,
+    #[command(about = "Step 2: Determine Upgrade Targets")]
+    DetermineTargets(DetermineTargets),
+    #[command(about = "Step 3: Run NNS Upgrade Tests")]
+    RunTests(RunTests),
+    #[command(about = "Step 4: Create Proposal Texts")]
+    CreateProposalTexts(CreateProposalTexts),
+    #[command(about = "Step 5: Submit Proposals")]
+    SubmitProposals(SubmitProposals),
+    #[command(about = "Step 6: Create Forum Post")]
+    CreateForumPost(CreateForumPost),
+    #[command(about = "Step 7: Schedule Trusted Neurons Vote")]
+    ScheduleVote(ScheduleVote),
+    #[command(about = "Step 8: Update Mainnet Canisters")]
+    UpdateCanistersJson(UpdateCanistersJson),
+    #[command(about = "Step 9: Update Changelog")]
+    UpdateChangelog(UpdateChangelog),
 }
 
-fn main() {
-    let steps = vec![
-        Step {
-            title: "Pick Release Candidate Commit",
-            description: "Run `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.
+#[derive(Debug, Parser)]
+#[clap(
+    name = "release-runscript",
+    about = "Release NNS and SNS canisters.",
+    version
+)]
+struct ReleaseRunscript {
+    #[command(subcommand)]
+    step: Option<Step>,
+}
+
+fn main() -> Result<()> {
+    let args = match ReleaseRunscript::try_parse_from(std::env::args()) {
+        Ok(args) => args,
+        Err(e) => {
+            bail!("{}", e);
+        }
+    };
+
+    print_header();
+
+    match args.step {
+        None | Some(Step::PickReleaseCandidateCommit) => run_pick_commit(),
+        Some(Step::DetermineTargets(cmd)) => run_determine_targets(cmd),
+        Some(Step::RunTests(cmd)) => run_run_tests(cmd),
+        Some(Step::CreateProposalTexts(cmd)) => run_create_proposal_texts(cmd),
+        Some(Step::SubmitProposals(cmd)) => run_submit_proposals(cmd),
+        Some(Step::CreateForumPost(cmd)) => run_create_forum_post(cmd),
+        Some(Step::ScheduleVote(cmd)) => run_schedule_vote(cmd),
+        Some(Step::UpdateCanistersJson(cmd)) => run_update_canisters_json(cmd),
+        Some(Step::UpdateChangelog(cmd)) => run_update_changelog(cmd),
+    }
+
+    Ok(())
+}
+
+fn run_pick_commit() {
+    print_step(1,
+      "Pick Release Candidate Commit",
+      "Run `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.
 If you would like to pick a different commit, follow these steps:
 2. Go to https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch%3Amaster+event%3Apush+is%3Asuccess
 3. Find a recent commit with passing CI Main in the master branch
@@ -19,12 +97,17 @@ If you would like to pick a different commit, follow these steps:
 Pre-built artifacts check:
 - Install aws tool if needed
 - List available files: 
-  aws s3 ls --no-sign-request s3://dfinity-download-public/ic/${COMMIT}/canisters/
+aws s3 ls --no-sign-request s3://dfinity-download-public/ic/${COMMIT}/canisters/
 - Note: Our tools download from the analogous https://download.dfinity.systems/... URL",
-        },
-        Step {
-            title: "Determine Upgrade Targets",
-            description: "Determine which NNS canisters and/or SNS WASMs need to be upgraded/published.
+    );
+    run_determine_targets(DetermineTargets);
+}
+
+fn run_determine_targets(_: DetermineTargets) {
+    print_step(
+        2,
+        "Determine Upgrade Targets",
+        "Determine which NNS canisters and/or SNS WASMs need to be upgraded/published.
 Only those with 'interesting' changes need to be released.
 
 Required checks:
@@ -38,10 +121,14 @@ For SNS ledger suite (ledger, archive, and index canisters):
 - FI team should provide the 'Features' section of proposals
 - This agreement is new - you may need to remind them
 - This applies to ledger, archive, and index canisters",
-        },
-        Step {
-            title: "Run NNS Upgrade Tests",
-            description: "Verify the commit you chose at the previous step has a green check on this page: https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch:master+event:push+is:success
+    );
+    run_run_tests(RunTests);
+}
+
+fn run_run_tests(_: RunTests) {
+    print_step(3,
+        "Run NNS Upgrade Tests",
+        "Verify the commit you chose at the previous step has a green check on this page: https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch:master+event:push+is:success
 
 If not, you can also run the upgrade tests manually:
     - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
@@ -50,10 +137,16 @@ If not, you can also run the upgrade tests manually:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
    - Example: Test at rs/nervous_system/integration_tests/tests/sns_release_qualification.rs",
-        },
-        Step {
-            title: "Create Proposal Texts",
-            description: "Create proposal text for each canister to be upgraded.
+    );
+
+    run_create_proposal_texts(CreateProposalTexts);
+}
+
+fn run_create_proposal_texts(_: CreateProposalTexts) {
+    print_step(
+        4,
+        "Create Proposal Texts",
+        "Create proposal text for each canister to be upgraded.
 This can be done in parallel with the previous testing step.
 
 Instructions:
@@ -65,17 +158,27 @@ Instructions:
    - Put all proposal files in a dedicated directory
    - Keep directory clean (nothing else in there)
    - This will help with forum post generation later",
-        },
-        Step {
-            title: "Submit Proposals",
-            description: "Submit the proposals on Friday
+    );
+    run_submit_proposals(SubmitProposals);
+}
+
+fn run_submit_proposals(_: SubmitProposals) {
+    print_step(
+        5,
+        "Submit Proposals",
+        "Submit the proposals on Friday
 
 Follow detailed instructions at:
 testnet/tools/nns-tools/README.md#submit-the-proposals",
-        },
-        Step {
-            title: "Create Forum Post",
-            description: "Create a forum post with the following specifications:
+    );
+
+    run_create_forum_post(CreateForumPost);
+}
+
+fn run_create_forum_post(_: CreateForumPost) {
+    print_step(6,
+        "Create Forum Post",
+        "Create a forum post with the following specifications:
 
 1. Title Format: 
    'NNS Updates <ISO 8601 DATE>(: <Anything interesting to announce>)'
@@ -117,10 +220,15 @@ testnet/tools/nns-tools/README.md#submit-the-proposals",
    - Reply to NNS Updates Aggregation Thread (https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551)
    - If SNS canister WASMs were published, update SNS Upgrades Aggregation Thread
      (https://forum.dfinity.org/t/sns-upgrade-aggregation-thread/24259/2)",
-        },
-        Step {
-            title: "Schedule Trusted Neurons Vote",
-            description: "Schedule calendar event for Trusted Neurons to vote the following Monday.
+    );
+
+    run_schedule_vote(ScheduleVote);
+}
+
+fn run_schedule_vote(_: ScheduleVote) {
+    print_step(7,
+        "Schedule Trusted Neurons Vote",
+        "Schedule calendar event for Trusted Neurons to vote the following Monday.
 
 Calendar Event Setup:
 1. Duplicate a past event from:
@@ -141,10 +249,16 @@ Calendar Event Setup:
    - Click 'Save' to create event
    - Send email invitations when prompted
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
-        },
-        Step {
-            title: "Update Mainnet Canisters",
-            description: "After proposal execution, update mainnet-canisters.json:
+    );
+
+    run_update_canisters_json(UpdateCanistersJson);
+}
+
+fn run_update_canisters_json(_: UpdateCanistersJson) {
+    print_step(
+        8,
+        "Update Mainnet Canisters",
+        "After proposal execution, update mainnet-canisters.json:
 
 1. Run the sync command:
    bazel run //rs/nervous_system/tools/sync-with-released-nevous-system-wasms
@@ -159,10 +273,16 @@ Calendar Event Setup:
 3. Note on automation:
    - There was a ticket for automating this (NNS1-2201)
    - Currently marked as won't do",
-        },
-        Step {
-            title: "Update Changelog",
-            description: "Update CHANGELOG.md file(s) for each proposal:
+    );
+
+    run_update_changelog(UpdateChangelog);
+}
+
+fn run_update_changelog(_: UpdateChangelog) {
+    print_step(
+        9,
+        "Update Changelog",
+        "Update CHANGELOG.md file(s) for each proposal:
 
 1. For each proposal ID:
    ```bash
@@ -176,35 +296,29 @@ Calendar Event Setup:
 
 2. Best Practice:
    - Combine this change with mainnet-canisters.json update in the same PR",
-        },
-    ];
-
-    println!("{}", "\nNNS Release Runscript".bright_green().bold());
-    println!("{}", "===================".bright_green());
-    println!("This script will guide you through the NNS release process.\n");
-
-    for (index, step) in steps.iter().enumerate() {
-        print_step(index + 1, step);
-
-        print!("\nPress Enter to continue to next step...");
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        // Clear screen for next step
-        print!("\x1B[2J\x1B[1;1H");
-    }
+    );
 
     println!("{}", "\nRelease process complete!".bright_green().bold());
     println!("Please verify that all steps were completed successfully.");
 }
 
-fn print_step(number: usize, step: &Step) {
+fn print_header() {
+    println!("{}", "\nNNS Release Runscript".bright_green().bold());
+    println!("{}", "===================".bright_green());
+    println!("This script will guide you through the NNS release process.\n");
+}
+
+fn print_step(number: usize, title: &str, description: &str) {
     println!(
         "{} {}",
         format!("Step {}:", number).bright_blue().bold(),
-        step.title.white().bold()
+        title.white().bold()
     );
     println!("{}", "---".bright_blue());
-    println!("{}\n", step.description);
+    println!("{}\n", description);
+    print!("\nPress Enter to continue to next step...");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    print!("\x1B[2J\x1B[1;1H");
 }
