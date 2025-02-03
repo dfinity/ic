@@ -207,14 +207,14 @@ fn persisted_map_is_equivalent_to_the_original() {
         Height::new(3),
         &tmp,
     );
-    persist_check_eq_and_load(
+    let pagemap = persist_check_eq_and_load(
         &mut pagemap,
         &[(PageIndex::new(103), [103u8; PAGE_SIZE])],
         &metrics,
         Height::new(4),
         &tmp,
     );
-    //assert_eq!(105 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len()); // FIXME:
+    assert_eq!(105, pagemap.num_host_pages());
 }
 
 #[test]
@@ -429,7 +429,6 @@ fn calc_dirty_pages_matches_actual_change() {
 }
 
 // TODO fix the test
-#[ignore]
 #[test]
 fn get_memory_instructions_returns_deltas() {
     let mut page_map = PageMap::new_for_testing();
@@ -484,7 +483,7 @@ fn get_memory_instructions_returns_deltas() {
 
     assert!(matches!(
         page_map.get_base_memory_instructions().instructions[..],
-        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+        [(ref range, _)] if *range == (PageIndex::new(1)..PageIndex::new(2))
     ));
     assert_eq!(
         MemoryInstructions {
@@ -503,7 +502,7 @@ fn get_memory_instructions_returns_deltas() {
 
     assert!(matches!(
         page_map.get_base_memory_instructions().instructions[..],
-        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+        [(ref range, _)] if *range == (PageIndex::new(1)..PageIndex::new(2))
     ));
     assert_eq!(
         MemoryInstructions {

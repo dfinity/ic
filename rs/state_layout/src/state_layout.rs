@@ -1,5 +1,4 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -2935,8 +2934,6 @@ struct CopyAndSyncFile {
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,
-    /// The file needs to be copied and should be writeable at the destination
-    ReadWrite,
     /// The file needs to be copied and should be readonly at the destination
     ReadOnly,
 }
@@ -2973,7 +2970,6 @@ where
             CopyInstruction::Skip => {
                 return Ok(());
             }
-            CopyInstruction::ReadWrite => FilePermissions::ReadWrite,
             CopyInstruction::ReadOnly => FilePermissions::ReadOnly,
         };
         plan.copy_and_sync_file.push(CopyAndSyncFile {

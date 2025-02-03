@@ -7048,3 +7048,102 @@ fn query_stats_are_collected() {
     // (incorrectly) report query statistics for this canister.
     check_query_stats_unmodified(&env, &malicious_overreporting);
 }
+
+/// An operation against a state machine running a single `TEST_CANISTER`,
+/// including various update calls, checkpointing, canister upgrades and replica upgrades
+/// with different LSMT flags.
+#[derive(Clone, Debug)]
+enum TestCanisterOp {
+    UpdateCall(&'static str),
+    TriggerMerge,
+    CanisterUpgrade,
+    CanisterReinstall,
+    Checkpoint,
+    Restart,
+}
+
+/// A strategy with an arbitrary enum element, including a selection of update functions
+/// on TEST_CANISTER.
+fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
+    prop_oneof! {
+        Just(TestCanisterOp::UpdateCall("inc")),
+        Just(TestCanisterOp::UpdateCall("persist")),
+        Just(TestCanisterOp::UpdateCall("load")),
+        Just(TestCanisterOp::UpdateCall("write_heap_64k")),
+        Just(TestCanisterOp::UpdateCall("write_heap_60k")),
+        Just(TestCanisterOp::TriggerMerge),
+        Just(TestCanisterOp::CanisterUpgrade),
+        Just(TestCanisterOp::CanisterReinstall),
+        Just(TestCanisterOp::Checkpoint),
+        Just(TestCanisterOp::Restart),
+    }
+}
+
+proptest! {
+#![proptest_config(ProptestConfig {
+    // Fork to prevent flaky timeouts due to closed sandbox fds
+    fork: true,
+    // We go for fewer, but longer runs
+    ..ProptestConfig::with_cases(5)
+})]
+
+#[test]
+fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
+    /// Execute op against the state machine `env`
+    fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
+        match op {
+            TestCanisterOp::UpdateCall(func) => {
+                env.execute_ingress(canister_id, func, vec![]).unwrap();
+                env
+            }
+            TestCanisterOp::TriggerMerge => {
+                // This writes 10 overlay files if LSMT is enabled, so that it has to merge.
+                // In principle the same pattern can occur without this op, but this makes
+                // it much more likely to be covered each run.
+                let mut env = env;
+                for _ in 0..10 {
+                    env = execute_op(env, canister_id, TestCanisterOp::UpdateCall("inc"));
+                    env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
+                }
+                env
+            }
+            TestCanisterOp::CanisterUpgrade => {
+                env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
+                env
+            }
+            TestCanisterOp::CanisterReinstall => {
+                env.reinstall_canister_wat(canister_id, TEST_CANISTER, vec![]);
+                env.execute_ingress(canister_id, "grow_page", vec![]).unwrap();
+                env
+            }
+            TestCanisterOp::Checkpoint => {
+                env.set_checkpoints_enabled(true);
+                env.tick();
+                env.set_checkpoints_enabled(false);
+                env
+            }
+            TestCanisterOp::Restart => {
+                let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
+
+                env.restart_node_with_lsmt_override(Some(lsmt_with_sharding()))
+            }
+        }
+    }
+
+    // Setup two state machines with a single TEST_CANISTER installed.
+    let mut env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(lsmt_with_sharding()))
+        .build();
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env
+        .execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+
+    // Execute all operations against both state machines, except never enable LSTM on `base_env`.
+    for op in ops {
+        env = execute_op(env, canister_id, op.clone());
+    }
+}
+}
