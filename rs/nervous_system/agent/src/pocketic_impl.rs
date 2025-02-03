@@ -1,5 +1,5 @@
 use crate::management_canister::requests::{
-    CanisterStatusArgs, DeleteCanisterArgs, StoredChunksArgs, UploadChunkArgs,
+    CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
 };
 use crate::Request;
 use crate::{CallCanisters, CanisterInfo};
@@ -73,6 +73,11 @@ impl PocketIcAgent<'_> {
             }
             "canister_status" => {
                 candid::decode_one::<CanisterStatusArgs>(payload.as_slice())
+                    .map_err(PocketIcCallError::CandidDecode)?
+                    .canister_id
+            }
+            "stop_canister" => {
+                candid::decode_one::<StopCanisterArgs>(payload.as_slice())
                     .map_err(PocketIcCallError::CandidDecode)?
                     .canister_id
             }

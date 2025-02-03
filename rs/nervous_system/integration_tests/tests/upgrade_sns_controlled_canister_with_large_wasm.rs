@@ -1,11 +1,11 @@
 use assert_matches::assert_matches;
-use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_agent::management_canister::canister_status;
-use ic_nervous_system_agent::management_canister::requests::CanisterStatusResult;
-use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
+use ic_nervous_system_agent::pocketic_impl::{
+    PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
+};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
@@ -228,7 +228,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     .await
     .unwrap();
 
-    // 6. Request refunds for unused cycles.
+    // 6. Clean-up.
     let refund_arg = RefundAfterSnsControlledCanisterUpgradeArgs {
         target_canister_id,
         proposal_id: proposal_id.id,
@@ -238,18 +238,11 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         .unwrap();
 
     // 7. Assert that store canister has zero cycles left on its balance.
-    let CanisterStatusResult {
-        memory_size,
-        cycles,
-        reserved_cycles,
-        ..
-    } = canister_status(
+    let err = canister_status(
         &pocket_ic_agent,
         CanisterId::unchecked_from_principal(store_canister_id),
     )
     .await
-    .unwrap();
-    assert_eq!(cycles, Nat::from(0_u64));
-    assert_eq!(reserved_cycles, Nat::from(0_u64));
-    assert_eq!(memory_size, Nat::from(0_u64));
+    .unwrap_err();
+    assert_matches!(err, CanisterSubnetNotFound { .. });
 }
