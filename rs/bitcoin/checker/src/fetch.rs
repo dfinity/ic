@@ -308,15 +308,16 @@ pub fn check_for_blocked_input_addresses(fetched: &FetchedTx) -> Result<(), Chec
     if fetched.input_addresses.iter().any(|x| x.is_none()) {
         return Err(CheckTxInputsError::MissingInputAddresses);
     }
-    match fetched
+    let blocked: Vec<String> = fetched
         .input_addresses
         .iter()
         .flatten()
-        .find(|address| is_blocked(address))
-    {
-        None => Ok(()),
-        Some(blocked) => Err(CheckTxInputsError::BlockedInputAddresses(vec![
-            blocked.to_string()
-        ])),
+        .filter(|address| is_blocked(address))
+        .map(|address| address.to_string())
+        .collect();
+    if blocked.is_empty() {
+        Ok(())
+    } else {
+        Err(CheckTxInputsError::BlockedInputAddresses(blocked))
     }
 }
