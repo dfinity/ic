@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
+clap = { workspace = true }
 colored = "2.0.0"
 futures = { workspace = true }
 ic-agent = { workspace = true }

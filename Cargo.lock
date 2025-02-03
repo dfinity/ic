@@ -19069,6 +19069,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "clap 4.5.27",
  "colored",
  "futures",
  "ic-agent",
