@@ -1208,7 +1208,6 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(7)
     );
-    println!("canister upgrade");
 
     let result = test.upgrade_canister_v2(
         canister_id,
@@ -1219,7 +1218,6 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
         },
     );
     assert_eq!(result, Ok(()));
-    println!("canister upgrade");
 
     // Upgrade is executed, and the wasm_memory size reset to 1.
     // Hook condition is not triggered.
