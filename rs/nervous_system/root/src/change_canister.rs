@@ -372,35 +372,40 @@ where
 
 /// Stops the given canister, and polls until the `Stopped` state is reached.
 ///
-/// Warning: there's no guarantee that this ever finishes!
-/// TODO(IC-1099)
+// This function relies on the ICP details specified
+// in https://internetcomputer.org/docs/current/references/ic-interface-spec
+// which, however, may not be apparent from the Rust SDK used to instantiate `Rt`.
 pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
 {
-    // stop_canister returns the candid empty type, which cannot be parsed using
-    // dfn_candid::candid
-    () = Rt::call_with_cleanup(
-        CanisterId::ic_00(),
-        "stop_canister",
-        (CanisterIdRecord::from(canister_id),),
-    )
-    .await?;
-
     loop {
+        // The underlying implementation, `CanisterManager.get_canister_status`, does not panic.
+        // The only apparent error case is that the canister doesn't exist.
         let status: CanisterStatusResultFromManagementCanister =
-            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
-                .await
-                .unwrap();
+            canister_status::<Rt>(CanisterIdRecord::from(canister_id)).await?;
 
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
+        match status.status {
+            CanisterStatusType::Stopped => {
+                return Ok(());
+            }
+            CanisterStatusType::Stopping => {
+                println!("{}Awaiting for {:?} to stop.", LOG_PREFIX, canister_id);
+            }
+            CanisterStatusType::Running => {
+                // Either we are in the first iteration, or someone must have re-started it again.
+                //
+                // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-stop_canister:
+                // > The immediate effect [of calling stop_canister] is that the status of
+                // > the canister is changed to stopping (unless the canister is already stopped).
+                () = Rt::call_with_cleanup(
+                    CanisterId::ic_00(),
+                    "stop_canister",
+                    (CanisterIdRecord::from(canister_id),),
+                )
+                .await?;
+            }
         }
-
-        println!(
-            "{}Waiting for {:?} to stop. Current status: {}",
-            LOG_PREFIX, canister_id, status.status
-        );
     }
 }
 
