@@ -33,7 +33,7 @@ const MAX_TIME_FOR_GOVERNANCE_UPGRADE_ROOT_PROPOSAL: u64 = 60 * 60 * 24 * 7;
 /// Root proposals are initialized with one ballot per node at creation
 /// in the "Undecided" state. These ballots are then changed when the node
 /// operators vote.
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum RootProposalBallot {
     Yes,
     No,
@@ -529,7 +529,7 @@ async fn get_nns_membership(subnet_id: &SubnetId) -> Result<(Vec<NodeId>, u64), 
 }
 
 /// Returns the principal corresponding to the node operator of the given node.
-pub async fn get_node_operator_pid_of_node(
+async fn get_node_operator_pid_of_node(
     node_id: &NodeId,
     version: u64,
 ) -> Result<PrincipalId, String> {

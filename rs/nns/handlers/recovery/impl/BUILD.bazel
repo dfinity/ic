@@ -6,12 +6,7 @@ load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["canister/root.did"])
-
-filegroup(
-    name = "protos",
-    srcs = glob(["proto/**/*.proto"]),
-)
+exports_files(["canister/recovery.did"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
@@ -79,7 +74,7 @@ DEV_DEPENDENCIES = [
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",
-        "//rs/registry/canister",
+        "//rs/registry/canister:canister--test_feature",
         "@crate_index//:tempfile",
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
@@ -106,122 +101,64 @@ cargo_build_script(
 )
 
 rust_library(
-    name = "root",
+    name = "recovery",
     srcs = LIB_SRCS,
     aliases = ALIASES,
-    crate_name = "ic_nns_handler_root",
+    crate_name = "ic_nns_handler_recovery",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_library(
-    name = "root--test_feature",
+    name = "recovery--test_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
-    crate_name = "ic_nns_handler_root",
+    crate_name = "ic_nns_handler_recovery",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_test(
-    name = "root_test",
+    name = "recovery_test",
     srcs = glob(["src/**/*.rs"]),
     deps = [":root--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_doc_test(
-    name = "root_doc_test",
-    crate = ":root",
-)
-
 rust_canister(
-    name = "root-canister",
+    name = "recovery-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":canister/root.did",
+    service_file = ":canister/recovery.did",
     deps = DEPENDENCIES + [
         ":build_script",
-        ":root",
-    ],
-)
-
-rust_canister(
-    name = "upgrade-test-canister",
-    srcs = ["test_canisters/upgrade_test_canister.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":test_canisters/upgrade_test_canister.did",
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":root",
+        ":recovery",
     ],
 )
 
 rust_test(
-    name = "canister_unit_test",
-    srcs = glob(["canister/**/*.rs"]),
-    compile_data = ["canister/root.did"],
-    crate_root = "canister/canister.rs",
+    name = "recovery-canister-tests",
+    srcs = glob(["backup/**/*.rs"]),
+    data = [
+        ":backup-root-canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/registry/canister:registry-canister"
+    ],
+    crate_root = "recovery/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":root",
-    ],
-)
-
-generated_files_check(
-    name = "check_generated_files",
-    srcs = ["tests/check_generated_files.rs"],
-    data = glob(["src/gen/**"]) + [
-        ":protos",
-        "//rs/nns/common:protos",
-        "//rs/types/base_types:protos",
-    ],
-    manifest_dir = "rs/nns/handlers/root/impl",
-    deps = [
-        # Keep sorted.
-        "//rs/nns/handlers/root/impl/protobuf_generator:lib",
-        "//rs/test_utilities/compare_dirs",
-        "@crate_index//:tempfile",
-    ],
-)
-
-rust_ic_test_suite(
-    name = "root_integration_test",
-    srcs = glob(
-        ["tests/**/*.rs"],
-        exclude = ["tests/check_generated_files.rs"],
-    ),
-    aliases = ALIASES,
-    data = [
-        ":root-canister",
-        ":upgrade-test-canister",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
-        "//rs/nns/cmc:cycles-minting-canister",
-        "//rs/nns/governance:governance-canister-test",
-        "//rs/nns/gtc:genesis-token-canister",
-        "//rs/nns/handlers/lifeline/impl:lifeline_canister",
-        "//rs/nns/sns-wasm:sns-wasm-canister",
-        "//rs/registry/canister:registry-canister",
-        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        ":recovery",
+        "//packages/pocket-ic",
+        "//rs/registry/subnet_type"
     ],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",
-        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
-        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
-        "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
-        "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
-        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-        "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-        "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
-        "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "BACKUP_ROOT_WASM_PATH": "$(rootpath :recovery-canister)",
+        "REGISTRY_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    version = "0.9.0"
 )

@@ -211,6 +211,7 @@ members = [
     "rs/nns/governance/protobuf_generator",
     "rs/nns/handlers/lifeline/impl",
     "rs/nns/handlers/lifeline/interface",
+    "rs/nns/handlers/recovery/impl",
     "rs/nns/handlers/root/impl",
     "rs/nns/handlers/root/impl/protobuf_generator",
     "rs/nns/handlers/root/interface",

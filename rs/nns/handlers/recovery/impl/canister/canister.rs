@@ -1,15 +1,12 @@
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_common::serve_metrics;
-use ic_nns_handler_root::{
-    backup_root_proposals::ChangeSubnetHaltStatus, encode_metrics,
-    root_proposals::RootProposalBallot,
-};
 
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
 
 use ic_cdk::{post_upgrade, query, update};
+use ic_nns_handler_recovery::metrics::encode_metrics;
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -32,34 +29,36 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[update(hidden = true)]
 async fn submit_root_proposal_to_change_subnet_halt_status(
-    subnet_id: SubnetId,
-    halt: bool,
+    _subnet_id: SubnetId,
+    _halt: bool,
 ) -> Result<(), String> {
     //TODO: Create a separate thing that polls nns for node operators and store them in memory
     // If nns is down we won't be able to call registry canister
-    ic_nns_handler_root::backup_root_proposals::submit_root_proposal_to_change_subnet_halt_status(
-        caller(),
-        subnet_id,
-        halt,
-    )
-    .await
+    // ic_nns_handler_root::backup_root_proposals::submit_root_proposal_to_change_subnet_halt_status(
+    //     caller(),
+    //     subnet_id,
+    //     halt,
+    // )
+    // .await
+    Ok(())
 }
 
 #[update(hidden = true)]
 async fn vote_on_root_proposal_to_change_subnet_halt_status(
-    proposer: PrincipalId,
-    ballot: RootProposalBallot,
+    _proposer: PrincipalId,
 ) -> Result<(), String> {
-    ic_nns_handler_root::backup_root_proposals::vote_on_root_proposal_to_change_subnet_halt_status(
-        caller(),
-        proposer,
-        ballot,
-    )
+    // ic_nns_handler_root::backup_root_proposals::vote_on_root_proposal_to_change_subnet_halt_status(
+    //     caller(),
+    //     proposer,
+    //     ballot,
+    // )
+    Ok(())
 }
 
 #[update(hidden = true)]
-fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<ChangeSubnetHaltStatus> {
-    ic_nns_handler_root::backup_root_proposals::get_pending_root_proposals_to_change_subnet_halt_status()
+fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<u8> {
+    // ic_nns_handler_root::backup_root_proposals::get_pending_root_proposals_to_change_subnet_halt_status()
+    vec![]
 }
 
 /// Resources to serve for a given http_request
