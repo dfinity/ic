@@ -65,7 +65,7 @@ function setup_storage() {
         log_and_halt_installation_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
         echo "Creating physical volume on /dev/${drive}."
-        pvcreate "/dev/${drive}"
+        pvcreate --force --force --yes "/dev/${drive}"
         log_and_halt_installation_on_error "${?}" "Unable to setup PV on drive '/dev/${drive}'."
         echo "Physical volume created on /dev/${drive}."
     done
