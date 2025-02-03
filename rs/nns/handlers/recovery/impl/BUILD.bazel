@@ -29,7 +29,9 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/nns/handlers/root/impl:root",
     "@crate_index//:build-info",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
@@ -141,13 +143,13 @@ rust_canister(
 
 rust_test(
     name = "recovery-canister-tests",
-    srcs = glob(["backup/**/*.rs"]),
+    srcs = glob(["canister/**/*.rs"]),
     data = [
-        ":backup-root-canister",
+        ":recovery-canister",
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/registry/canister:registry-canister"
     ],
-    crate_root = "recovery/canister.rs",
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",

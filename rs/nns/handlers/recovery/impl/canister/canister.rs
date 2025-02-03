@@ -1,28 +1,25 @@
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk_macros::init;
 use ic_nervous_system_common::serve_metrics;
 
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
 
 use ic_cdk::{post_upgrade, query, update};
-use ic_nns_handler_recovery::metrics::encode_metrics;
+use ic_nns_handler_recovery::{
+    metrics::encode_metrics,
+    node_operator_sync::{get_node_operators_in_nns, sync_node_operators, SimpleNodeRecord},
+};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
 }
 
-// canister_init and canister_post_upgrade are needed here
-// to ensure that printer hook is set up, otherwise error
-// messages are quite obscure.
-#[export_name = "canister_init"]
-fn canister_init() {
-    println!("canister_init");
-}
-
 #[post_upgrade]
 fn canister_post_upgrade() {
     println!("canister_post_upgrade");
+    init();
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
@@ -61,6 +58,11 @@ fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<u8> {
     vec![]
 }
 
+#[query]
+fn get_current_nns_node_operators() -> Vec<SimpleNodeRecord> {
+    get_node_operators_in_nns()
+}
+
 /// Resources to serve for a given http_request
 /// Serve an HttpRequest made to this canister
 #[query(hidden = true, decoding_quota = 10000)]
@@ -89,6 +91,24 @@ fn main() {
 
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
+
+#[init]
+fn init() {
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(0), || {
+        ic_cdk::spawn(setup_node_operator_update());
+    });
+    ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(60 * 60 * 24), || {
+        ic_cdk::spawn(setup_node_operator_update());
+    });
+}
+
+async fn setup_node_operator_update() {
+    ic_cdk::println!("Started Sync for new node operators on NNS");
+    if let Err(e) = sync_node_operators().await {
+        ic_cdk::println!("{}", e);
+    }
+    ic_cdk::println!("Sync completed")
+}
 
 #[cfg(test)]
 mod tests;

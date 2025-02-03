@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_handler_recovery::node_operator_sync::SimpleNodeRecord;
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
@@ -229,6 +230,15 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
         candid::encode_one(()).unwrap(),
         None,
     );
+
+    // Tick for initial sync
+    // 1 - fetch nns
+    // 1 - fetch membership
+    // 40 - fetch node operators for nodes
+    for _ in 0..42 {
+        pic.tick();
+    }
+
     (pic, canister)
 }
 
@@ -287,6 +297,30 @@ fn vote(
         candid::decode_one(&response).expect("Should be able to decode response");
     println!("{:?}", response);
     response
+}
+
+fn get_current_node_operators(pic: &PocketIc, canister: Principal) -> Vec<SimpleNodeRecord> {
+    let response = pic
+        .query_call(
+            canister.into(),
+            Principal::anonymous(),
+            "get_current_nns_node_operators",
+            candid::encode_one(()).unwrap(),
+        )
+        .expect("Should be able to fetch nns node operators");
+
+    let response = candid::decode_one(&response).expect("Should be able to decode response");
+    println!("{:?}", response);
+    response
+}
+
+#[test]
+fn node_providers_are_synced_from_registry() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let current_node_operators = get_current_node_operators(&pic, canister);
+    assert!(!current_node_operators.is_empty())
 }
 
 // #[test]

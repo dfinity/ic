@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime};
 use ic_cdk::api::time;
 
 pub mod metrics;
+pub mod node_operator_sync;
 pub mod update_nns_status_proposal;
 
 pub fn now_nanoseconds() -> u64 {

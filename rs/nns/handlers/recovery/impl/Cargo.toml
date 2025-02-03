@@ -21,6 +21,7 @@ ic-base-types = { path = "../../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
 ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
@@ -30,6 +31,7 @@ ic-nervous-system-common-build-metadata = { path = "../../../../nervous_system/c
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../../../../nervous_system/proxied_canister_calls_tracker" }
 ic-nervous-system-root = { path = "../../../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../../../nervous_system/runtime" }
+ic-nns-handler-root = { path = "../../root/impl" }
 ic-nns-common = { path = "../../../common" }
 ic-nns-constants = { path = "../../../constants" }
 ic-protobuf = { path = "../../../../protobuf" }
