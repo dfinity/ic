@@ -2,7 +2,6 @@
 pub use crate::prometheus::{get_counter, get_gauge, get_samples};
 
 use async_trait::async_trait;
-use ic_base_types::CanisterId;
 use futures::{
     channel::{
         mpsc::{UnboundedReceiver, UnboundedSender},
@@ -10,6 +9,7 @@ use futures::{
     },
     StreamExt,
 };
+use ic_base_types::CanisterId;
 use ic_nervous_system_common::{
     ledger::{ICRC1Ledger, IcpLedger},
     NervousSystemError,
