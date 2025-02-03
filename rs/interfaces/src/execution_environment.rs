@@ -1254,7 +1254,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with ecdsa,
-    /// i.e., the management canister's `vetkd_encrypted_key` for the key
+    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
     /// with name given by `src` + `size`.
     ///
     /// Traps if `src`/`size` cannot be decoded to a valid key name.
