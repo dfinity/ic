@@ -317,7 +317,7 @@ impl BlockchainState {
         hashes
     }
 
-    /// This method takes a hash block
+    /// This method takes a block hash
     /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
     pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<Block>> {
         self.block_cache.get(block_hash).cloned()
