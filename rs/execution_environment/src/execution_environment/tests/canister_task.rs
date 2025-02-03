@@ -1517,12 +1517,13 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
     // At the same time:
     // `wasm_memory_limit` - `used_wasm_memory` < `wasm_memory_threshold`
     // condition for `low_wasm_memory` hook remains satisfied.
-    // Hence, `low_wasm_memory` hook will be executed next.
+    // Hence, `low_wasm_memory` hook execution will follow.
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
         (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
         (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-    );
+    )
+    .unwrap();
 
     test.execute_slice(canister_id);
 
