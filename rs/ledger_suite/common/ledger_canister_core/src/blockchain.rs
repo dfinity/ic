@@ -12,7 +12,7 @@ use ic_ledger_hash_of::HashOf;
 use std::ops::Range;
 
 pub trait BlockData {
-    fn add_block(&mut self, block: EncodedBlock);
+    fn add_block(&mut self, index: u64, block: EncodedBlock);
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
     fn remove_blocks(&mut self, num_blocks: u64);
@@ -29,7 +29,7 @@ pub struct HeapBlockData {
 }
 
 impl BlockData for HeapBlockData {
-    fn add_block(&mut self, block: EncodedBlock) {
+    fn add_block(&mut self, _index: u64, block: EncodedBlock) {
         self.blocks.push(block);
     }
 
@@ -135,7 +135,7 @@ where
         self.last_timestamp = block.timestamp();
         let encoded_block = block.encode();
         self.last_hash = Some(B::block_hash(&encoded_block));
-        self.blocks.add_block(encoded_block);
+        self.blocks.add_block(self.chain_length(), encoded_block);
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
 

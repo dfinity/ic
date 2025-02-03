@@ -1308,12 +1308,8 @@ pub struct StableBlockData {
 }
 
 impl BlockData for StableBlockData {
-    fn add_block(&mut self, block: EncodedBlock) {
+    fn add_block(&mut self, index: u64, block: EncodedBlock) {
         BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-            let index = match blocks.last_key_value() {
-                None => 0u64,
-                Some(kv) => kv.0 + 1,
-            };
             assert!(blocks.insert(index, block.into_vec()).is_none());
         });
     }
@@ -1367,14 +1363,12 @@ impl BlockData for StableBlockData {
     }
 
     fn migrate_one_block(&mut self, num_archived_blocks: u64) -> bool {
-        let migrated_len = self.len();
-        if migrated_len < self.blocks.len() as u64 {
-            BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-                blocks.insert(
-                    num_archived_blocks + migrated_len,
-                    self.blocks[migrated_len as usize].clone().into_vec(),
-                )
-            });
+        let num_migrated = self.len();
+        if num_migrated < self.blocks.len() as u64 {
+            self.add_block(
+                num_archived_blocks + num_migrated,
+                self.blocks[num_migrated as usize].clone(),
+            );
             true
         } else {
             self.blocks.clear();
