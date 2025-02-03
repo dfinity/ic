@@ -38,7 +38,6 @@ mod tests;
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
     PublicKeyNotFound,
-    KeyIdInstantiationError,
     SecretKeyNotFound {
         algorithm: AlgorithmId,
         key_id: KeyId,
@@ -68,7 +67,6 @@ pub enum CspBasicSignatureKeygenError {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspMultiSignatureError {
     PublicKeyNotFound,
-    KeyIdInstantiationError,
     SecretKeyNotFound {
         algorithm: AlgorithmId,
         key_id: KeyId,

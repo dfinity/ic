@@ -1,5 +1,5 @@
 //! Multi-Signature operations provided by the CSP vault.
-use crate::key_id::{KeyId, KeyIdInstantiationError};
+use crate::key_id::KeyId;
 use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
@@ -124,15 +124,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .public_key_store_read_lock()
             .committee_signing_pubkey()
             .ok_or(CspMultiSignatureError::PublicKeyNotFound)?;
-        let key_id = KeyId::try_from((
+        let key_id = KeyId::from((
             AlgorithmId::MultiBls12_381,
             &commitee_signing_pubkey.key_value,
-        ))
-        .map_err(|e| match e {
-            KeyIdInstantiationError::InvalidArguments(_) => {
-                CspMultiSignatureError::KeyIdInstantiationError
-            }
-        })?;
+        ));
 
         let maybe_secret_key = self.sks_read_lock().get(&key_id);
         let secret_key: CspSecretKey =

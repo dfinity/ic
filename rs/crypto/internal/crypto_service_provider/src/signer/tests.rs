@@ -54,8 +54,7 @@ mod sign_ed25519 {
     fn should_correctly_sign() {
         let (sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
         let node_signing_public_key = node_signing_pk_to_proto(pk);
-        let key_id =
-            KeyId::try_from((AlgorithmId::Ed25519, &node_signing_public_key.key_value)).unwrap();
+        let key_id = KeyId::from((AlgorithmId::Ed25519, &node_signing_public_key.key_value));
 
         let csp = Csp::builder_for_test()
             .with_vault(

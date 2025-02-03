@@ -177,8 +177,7 @@ fn should_correctly_sign_compared_to_testvec() {
 
     let csp_vault = {
         let node_signing_public_key = node_signing_pk_to_proto(pk);
-        let key_id =
-            KeyId::try_from((AlgorithmId::Ed25519, &node_signing_public_key.key_value)).unwrap();
+        let key_id = KeyId::from((AlgorithmId::Ed25519, &node_signing_public_key.key_value));
 
         let mut node_pks = TempPublicKeyStore::new();
         node_pks
