@@ -1456,17 +1456,6 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
 
     let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
-    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
-        canister_id,
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-    )
-    .unwrap();
-
-    // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
-    // wasm_memory_threshold = 15 Wasm Pages
-
     // Initially wasm_memory.size = 1
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1477,7 +1466,6 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 10 = 11
-    // used_wasm_memory > wasm_memory_limit
     test.execute_slice(canister_id);
 
     assert_eq!(
@@ -1485,17 +1473,7 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
         NumWasmPages::new(11)
     );
 
-    assert_eq!(
-        test.state()
-            .canister_states
-            .get(&canister_id)
-            .unwrap()
-            .system_state
-            .task_queue
-            .peek_hook_status(),
-        OnLowWasmMemoryHookStatus::Ready
-    );
-
+    // We update `wasm_memory_limit` to be smaller than `used_wasm_memory`.
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
         (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
@@ -1503,6 +1481,7 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
     )
     .unwrap();
 
+    // The update will also trigger `low_wasm_memory` hook.
     assert_eq!(
         test.state()
             .canister_states
@@ -1514,8 +1493,15 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
         OnLowWasmMemoryHookStatus::Ready
     );
 
+    // Hook execution will not succeed since `used_wasm_memory` > `wasm_memory_limit`.
     test.execute_slice(canister_id);
 
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
+
+    // After execution of the hook fails, hook status will remain `Ready`.
     assert_eq!(
         test.state()
             .canister_states
@@ -1525,5 +1511,34 @@ fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
             .task_queue
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
+    );
+
+    // We fix the error by setting `wasm_memory_limit` > `used_wasm_memory`.
+    // At the same time:
+    // `wasm_memory_limit` - `used_wasm_memory` < `wasm_memory_threshold`
+    // condition for `low_wasm_memory` hook remains satisfied.
+    // Hence, `low_wasm_memory` hook will be executed next.
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    );
+
+    test.execute_slice(canister_id);
+
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(16)
+    );
+
+    assert_eq!(
+        test.state()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Executed
     );
 }
