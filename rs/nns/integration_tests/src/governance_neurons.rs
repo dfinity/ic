@@ -604,6 +604,6 @@ fn test_list_neurons() {
             page_size: None,
         },
     );
-    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
-    assert_eq!(list_neurons_response.full_neurons.len(), 2);
+    assert_eq!(list_neurons_response.neuron_infos.len(), 2);
+    assert_eq!(list_neurons_response.full_neurons.len(), 1);
 }

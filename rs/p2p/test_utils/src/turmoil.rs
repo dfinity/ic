@@ -36,7 +36,7 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch, Notify},
 };
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::wrappers::ReceiverStream;
 use turmoil::Sim;
 
 pub struct CustomUdp {
@@ -443,16 +443,13 @@ pub fn waiter_fut(
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
     outbound_tx: mpsc::Sender<ArtifactTransmit<U64Artifact>>,
-    inbound_rx: mpsc::UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
+    inbound_rx: mpsc::Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> Box<dyn JoinGuard> {
     let time_source = Arc::new(SysTimeSource::new());
     let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
-    run_artifact_processor::<
-        U64Artifact,
-        UnboundedReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>,
-    >(
+    run_artifact_processor::<U64Artifact, ReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>>(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),

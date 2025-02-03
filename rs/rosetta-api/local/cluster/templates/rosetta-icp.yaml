@@ -1,0 +1,76 @@
+{{- range $.Values.icpRosettaServices }}
+# Only add the service if not locally built or locally built is enabled for it
+{{- if or (not .isLocallyBuilt) $.Values.icpConfig.useLocallyBuilt }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app: {{ .name }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .containerPort }}"
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .containerPort }}
+      targetPort: {{ .containerPort }}
+      nodePort: {{ .nodePort }}
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  replicas: {{ $.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      containers:
+      - name: {{ .name }}
+        image: "{{ .image }}"
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--mainnet"
+          - "--expose-metrics"
+          - "--store-location"
+          - {{ $.Values.icpConfig.storeLocation | quote }}
+          - "--token-sybol"
+          - {{ $.Values.icpConfig.tokenSymbol | quote }}
+          - "--canister-id"
+          - {{ $.Values.icpConfig.canisterId | quote }}
+          - "--port"
+          - {{ .containerPort | quote}}
+        ports:
+        - containerPort: {{ .containerPort }}
+        volumeMounts:
+          {{- range $.Values.volumeMounts }}
+          - name: {{ .name }}
+            mountPath: {{ .mountPath }}
+          {{- end }}
+        resources:
+          limits:
+            memory: {{ .resources.limits.memory }}
+            cpu: {{ .resources.limits.cpu }}
+          requests:
+            memory: {{ .resources.requests.memory }}
+            cpu: {{ .resources.requests.cpu }}
+      volumes:
+        {{- range $.Values.volumes }}
+        - name: {{ .name }}
+          emptyDir: {}
+        {{- end }}
+---
+{{- end }}
+{{- end }}

@@ -1331,11 +1331,19 @@ impl StateMachine {
         StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
+    pub fn execute_round(&self) {
+        self.do_execute_round(None);
+    }
+
+    pub fn execute_round_with_blockmaker_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
+        self.do_execute_round(Some(blockmaker_metrics));
+    }
+
     /// Assemble a payload for a new round using `PayloadBuilderImpl`
     /// and execute a round with this payload.
     /// Note that only ingress messages submitted via `Self::submit_ingress`
     /// will be considered during payload building.
-    pub fn execute_round(&self) {
+    pub fn do_execute_round(&self, blockmaker_metrics: Option<BlockmakerMetrics>) {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
@@ -1418,6 +1426,9 @@ impl StateMachine {
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating);
+        if let Some(blockmaker_metrics) = blockmaker_metrics {
+            payload = payload.with_blockmaker_metrics(blockmaker_metrics);
+        }
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -2386,10 +2397,15 @@ impl StateMachine {
             current_time
         };
 
+        let blockmaker_metrics = payload
+            .blockmaker_metrics
+            .unwrap_or(BlockmakerMetrics::new_for_test());
+
         let batch = Batch {
             batch_number,
             batch_summary,
             requires_full_state_hash,
+            blockmaker_metrics,
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -2405,7 +2421,6 @@ impl StateMachine {
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
         };
 
@@ -2511,6 +2526,26 @@ impl StateMachine {
         self.time_source
             .set_time(time)
             .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
+    }
+
+    /// Certifies the specified time by modifying the time in the replicated state
+    /// and certifying that new state.
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let t = time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let time = Time::from_nanos_since_unix_epoch(t);
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        replicated_state.metadata.batch_time = time;
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+        self.set_time(time.into());
+        *self.time_of_last_round.write().unwrap() = time;
     }
 
     /// Returns the current state machine time.
@@ -3794,6 +3829,7 @@ pub struct PayloadBuilder {
     consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
+    blockmaker_metrics: Option<BlockmakerMetrics>,
 }
 
 impl Default for PayloadBuilder {
@@ -3806,6 +3842,7 @@ impl Default for PayloadBuilder {
             consensus_responses: Default::default(),
             query_stats: Default::default(),
             self_validating: Default::default(),
+            blockmaker_metrics: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -3814,6 +3851,13 @@ impl Default for PayloadBuilder {
 impl PayloadBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_blockmaker_metrics(self, blockmaker_metrics: BlockmakerMetrics) -> Self {
+        Self {
+            blockmaker_metrics: Some(blockmaker_metrics),
+            ..self
+        }
     }
 
     pub fn with_max_expiry_time_from_now(self, now: SystemTime) -> Self {

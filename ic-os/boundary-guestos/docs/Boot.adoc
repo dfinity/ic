@@ -108,16 +108,6 @@ Depends on `bootstrap-ic-node.service`, runs before  `systemd-networkd.service `
 
 Sets hostname as defined in the `config` partition.
 
-== IPv6 address monitor / retry
-
-Service: `retry-ipv6-config.service`, script `/opt/ic/bin/retry-ipv6-config.sh`.
-
-Periodically checks whether an IPv6 address has been assigned to the primary
-interface and issues `networkctl reconfigure` as needed. The reason is that
-`systemd-networkd` gives up on trying SLAAC autoconfiguration after a while,
-so systems will fail to receive network configuration under certain conditions
-if the router in their network is down at boot.
-
 == Start node_exporter
 
 Service: `node_exporter.service`. Depends on `setup-node_exporter-keys.service`.
