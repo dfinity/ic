@@ -358,16 +358,16 @@ impl From<Principal> for RawNodeId {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
 pub struct TickConfigs {
-    pub blockmakers: Option<BlockMakerConfigs>,
+    pub blockmakers: Option<BlockmakerConfigs>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockMakerConfigs {
-    pub blockmakers_per_subnet: Vec<RawSubnetBlockmakerMetrics>,
+pub struct BlockmakerConfigs {
+    pub blockmakers_per_subnet: Vec<RawSubnetBlockmaker>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RawSubnetBlockmakerMetrics {
+pub struct RawSubnetBlockmaker {
     pub subnet: RawSubnetId,
     pub blockmaker: RawNodeId,
     pub failed_blockmakers: Vec<RawNodeId>,

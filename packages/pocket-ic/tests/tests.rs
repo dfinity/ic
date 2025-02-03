@@ -2,7 +2,7 @@ use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Pr
 use ic_certification::Label;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
-use pocket_ic::common::rest::{BlockMakerConfigs, RawSubnetBlockmakerMetrics, TickConfigs};
+use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::management_canister::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryResultItem,
@@ -2239,14 +2239,14 @@ fn test_custom_blockmaker_metrics() {
     let blockmaker_1 = nodes.node_ids[0].clone();
     let blockmaker_2 = nodes.node_ids[1].clone();
 
-    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
+    let subnets_blockmakers = vec![RawSubnetBlockmaker {
         subnet: application_subnet.into(),
         blockmaker: blockmaker_1.clone(),
         failed_blockmakers: vec![blockmaker_2.clone()],
     }];
 
     let tick_configs = TickConfigs {
-        blockmakers: Some(BlockMakerConfigs {
+        blockmakers: Some(BlockmakerConfigs {
             blockmakers_per_subnet: subnets_blockmakers,
         }),
     };

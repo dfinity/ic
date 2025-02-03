@@ -38,7 +38,7 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmakerMetrics};
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmaker};
 use axum::async_trait;
 use candid::Principal;
 use ic_types::{NodeId, PrincipalId, SubnetId};
@@ -95,14 +95,14 @@ pub fn copy_dir(
 }
 
 #[derive(Clone, Debug)]
-pub struct SubnetBlockmakerMetrics {
+pub struct SubnetBlockmaker {
     pub subnet: SubnetId,
     pub blockmaker: NodeId,
     pub failed_blockmakers: Vec<NodeId>,
 }
 
-impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
-    fn from(raw: RawSubnetBlockmakerMetrics) -> Self {
+impl From<RawSubnetBlockmaker> for SubnetBlockmaker {
+    fn from(raw: RawSubnetBlockmaker) -> Self {
         let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
         let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
         let failed_blockmakers: Vec<NodeId> = raw
@@ -111,7 +111,7 @@ impl From<RawSubnetBlockmakerMetrics> for SubnetBlockmakerMetrics {
             .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
             .collect();
 
-        SubnetBlockmakerMetrics {
+        SubnetBlockmaker {
             subnet,
             blockmaker,
             failed_blockmakers,

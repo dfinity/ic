@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmakerMetrics};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -1589,7 +1589,7 @@ impl Tick {
     fn validate_blockmakers_per_subnet(
         &self,
         pic: &mut PocketIc,
-        subnets_blockmaker: &[SubnetBlockmakerMetrics],
+        subnets_blockmaker: &[SubnetBlockmaker],
     ) -> Result<(), OpOut> {
         for subnet_blockmaker in subnets_blockmaker {
             if subnet_blockmaker
@@ -1626,7 +1626,7 @@ impl Operation for Tick {
             cfg.blockmakers_per_subnet
                 .iter()
                 .cloned()
-                .map(SubnetBlockmakerMetrics::from)
+                .map(SubnetBlockmaker::from)
                 .collect_vec()
         });
 
@@ -1652,7 +1652,7 @@ impl Operation for Tick {
                 Some(metrics) => subnet
                     .state_machine
                     .execute_round_with_blockmaker_metrics(metrics),
-                _ => subnet.state_machine.execute_round(),
+                None => subnet.state_machine.execute_round(),
             }
         }
 
