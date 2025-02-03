@@ -1,7 +1,8 @@
 use super::NeuronStore;
 use crate::{
+    neuron::Visibility,
     neuron_store::Neuron,
-    pb::v1::{NeuronState, Visibility, VotingPowerEconomics},
+    pb::v1::{NeuronState, VotingPowerEconomics},
     storage::{neurons::NeuronSections, with_stable_neuron_store},
 };
 use ic_base_types::PrincipalId;
@@ -92,7 +93,7 @@ impl NeuronMetrics {
         now_seconds: u64,
         neuron: &Neuron,
     ) {
-        let is_public = neuron.visibility() == Some(Visibility::Public);
+        let is_public = neuron.visibility() == Visibility::Public;
         if !is_public {
             return;
         }
