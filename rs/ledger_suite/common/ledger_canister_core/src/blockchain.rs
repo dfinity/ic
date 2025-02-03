@@ -74,7 +74,7 @@ where
     BD: BlockData + Serialize + Default,
     for<'a> BD: Deserialize<'a>,
 {
-    blocks: BD,
+    pub blocks: BD,
     pub last_hash: Option<HashOf<EncodedBlock>>,
 
     /// The timestamp of the most recent block. Must be monotonically

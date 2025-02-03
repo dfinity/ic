@@ -35,8 +35,8 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs, IterBlocksArgs,
-    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
@@ -1345,29 +1345,7 @@ fn get_blocks_() {
         let length = std::cmp::min(length, max_blocks_per_request(&caller()) as u64);
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
-        let range_from_offset = start;
-        let range_from = start_offset;
-        // Inclusive end of the range of *requested* blocks
-        let requested_range_to = range_from as usize + length as usize - 1;
-        // Inclusive end of the range of *available* blocks
-        let range_to = range_from_offset as usize + blocks_len - 1;
-        // Example: If the Node stores 10 blocks beginning at BlockIndex 100, i.e.
-        // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
-        // > 109 is an error
-        if range_from < range_from_offset || requested_range_to > range_to {
-            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to)));
-        }
-        // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
-        // is 100 and the Block with BlockIndex 100 is at index 0
-        let offset = (range_from - range_from_offset) as usize;
-        GetBlocksRes(Ok(LEDGER.read().unwrap().blockchain.block_slice(
-            std::ops::Range {
-                start: offset as u64,
-                end: offset as u64 + length as u64,
-            },
-        )))
+        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
     });
 }
 
