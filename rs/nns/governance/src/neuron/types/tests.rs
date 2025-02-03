@@ -69,7 +69,7 @@ fn test_neuron_into_api() {
         Neuron {
             recent_ballots: vec![],
             recent_ballots_next_entry_index: None,
-            visibility: Some(pb::Visibility::Private),
+            visibility: Visibility::Private,
             ..original_neuron.clone()
         }
     );
@@ -560,9 +560,9 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
     // Case 1: visibility is explicitly set.
     for visibility in [Visibility::Public, Visibility::Private] {
-        let neuron = builder.clone().with_visibility(Some(visibility)).build();
+        let neuron = builder.clone().with_visibility(visibility).build();
 
-        assert_eq!(neuron.visibility(), Some(visibility),);
+        assert_eq!(neuron.visibility(), visibility);
 
         let neuron_info = neuron.get_neuron_info(
             &VotingPowerEconomics::DEFAULT,
@@ -578,7 +578,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
     let neuron = builder.clone().build();
 
-    assert_eq!(neuron.visibility(), Some(Visibility::Private),);
+    assert_eq!(neuron.visibility(), Visibility::Private);
 
     let neuron_info = neuron.get_neuron_info(
         &VotingPowerEconomics::DEFAULT,
@@ -600,7 +600,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         }))
         .build();
 
-    assert_eq!(neuron.visibility(), Some(Visibility::Public),);
+    assert_eq!(neuron.visibility(), Visibility::Public);
 
     let neuron_info = neuron.get_neuron_info(
         &VotingPowerEconomics::DEFAULT,
