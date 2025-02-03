@@ -79,6 +79,8 @@ pub fn construct_ic_stack(
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
+    debug_assert!(false, "Panic caused by system test running debug assert.");
+
     // Determine the correct catch-up package.
     let (catch_up_package, catch_up_package_proto) = {
         match catch_up_package {
