@@ -1529,7 +1529,7 @@ impl PocketIc {
         result.into()
     }
 
-    pub(crate) async fn update_call_with_effective_principal(
+    pub async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
