@@ -839,7 +839,7 @@ fn test_check_transaction_query_already_fetched() {
         )
         .expect("submit_call failed to return call id");
     mock_fetch_txids_responses(&setup.env);
-    let result = &setup
+    let result = setup
         .env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
