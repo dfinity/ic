@@ -37,16 +37,9 @@ function purge_partitions() {
     for drive in "${large_drives[@]}"; do
         echo "Wiping partitions on drive: /dev/${drive}."
 
-        # Wipe the entire drive
-        wipefs --all --force "/dev/${drive}"
-        if [ "${?}" -ne 0 ]; then
-            echo "WARNING: Unable to purge signature on drive: /dev/${drive}"
-        fi
-
-        # Also wipe any partition devices that might exist
         wipefs --all --force "/dev/${drive}"*
         if [ "${?}" -ne 0 ]; then
-            echo "WARNING: Unable to purge partitions on drive: /dev/${drive}"
+            echo "Unable to purge partitions on drive: /dev/${drive}"
         fi
     done
 }
