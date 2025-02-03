@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
         backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
@@ -63,7 +63,7 @@ use crate::{
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
+            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
         },
     },
@@ -2303,7 +2303,7 @@ impl Governance {
                         // neuron is public, and the caller requested that
                         // public neurons be included (in full_neurons).
                         || (include_public_neurons_in_full_neurons
-                            && neuron.visibility() == Some(Visibility::Public)
+                            && neuron.visibility() == Visibility::Public
                         );
                 if let_caller_read_full_neuron {
                     full_neurons.push(neuron.clone().into_api(now, self.voting_power_economics()));
@@ -2332,7 +2332,7 @@ impl Governance {
                 self.neuron_store
                     .with_neuron(&neuron_id, |n| KnownNeuron {
                         id: Some(n.id()),
-                        known_neuron_data: n.known_neuron_data.clone(),
+                        known_neuron_data: n.known_neuron_data().cloned(),
                     })
                     .map_err(|e| {
                         println!(
@@ -6259,7 +6259,7 @@ impl Governance {
                 "No neuron ID specified in the request to register a known neuron.",
             )
         })?;
-        let known_neuron_data = known_neuron.known_neuron_data.as_ref().ok_or_else(|| {
+        let known_neuron_data = known_neuron.known_neuron_data.ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 "No known neuron data specified in the register neuron request.",
@@ -6300,10 +6300,7 @@ impl Governance {
         }
 
         self.with_neuron_mut(&neuron_id, |neuron| {
-            neuron
-                .known_neuron_data
-                .replace(known_neuron_data.clone())
-                .map(|old_known_neuron_data| old_known_neuron_data.name)
+            neuron.set_known_neuron_data(known_neuron_data)
         })?;
 
         Ok(())

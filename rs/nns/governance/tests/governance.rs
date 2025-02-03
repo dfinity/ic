@@ -10316,18 +10316,22 @@ fn test_neuron_set_visibility() {
 
     // Step 3.2: Inspect neurons themselves (in particular, their visibility).
 
-    let assert_neuron_visibility =
-        |neuron_id: NeuronId, expected_visibility: Option<Visibility>| {
-            let neuron = governance
-                .with_neuron(&neuron_id, |neuron| neuron.clone())
-                .unwrap();
+    let assert_neuron_visibility = |neuron_id: NeuronId, expected_visibility: Visibility| {
+        let neuron = governance
+            .with_neuron(&neuron_id, |neuron| neuron.clone())
+            .unwrap();
 
-            assert_eq!(neuron.visibility(), expected_visibility, "{:#?}", neuron,);
-        };
+        assert_eq!(
+            neuron.visibility() as i32,
+            expected_visibility as i32,
+            "{:#?}",
+            neuron,
+        );
+    };
 
-    assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
+    assert_neuron_visibility(typical_neuron.id.unwrap(), Visibility::Public);
 
-    assert_neuron_visibility(known_neuron.id.unwrap(), Some(Visibility::Public));
+    assert_neuron_visibility(known_neuron.id.unwrap(), Visibility::Public);
 }
 
 #[test]
@@ -11867,10 +11871,7 @@ async fn test_known_neurons() {
         .flat_map(|neuron_id| {
             gov.neuron_store
                 .with_neuron(&neuron_id, |neuron| {
-                    neuron
-                        .known_neuron_data
-                        .as_ref()
-                        .map(|data| data.name.clone())
+                    neuron.known_neuron_data().map(|data| data.name.clone())
                 })
                 .unwrap()
         })

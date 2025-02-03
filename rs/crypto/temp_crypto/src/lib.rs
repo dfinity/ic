@@ -47,7 +47,7 @@ pub mod internal {
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
         ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-        ThresholdSigner,
+        ThresholdSigner, VetKdProtocol,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
@@ -86,6 +86,10 @@ pub mod internal {
     };
     use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
     use ic_types::crypto::threshold_sig::IcRootOfTrust;
+    use ic_types::crypto::vetkd::{
+        VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+        VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    };
     use ic_types::crypto::{
         BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
         CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
@@ -733,6 +737,47 @@ pub mod internal {
                 inputs,
                 signature,
             )
+        }
+    }
+
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> VetKdProtocol
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn create_encrypted_key_share(
+            &self,
+            args: VetKdArgs,
+        ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+            VetKdProtocol::create_encrypted_key_share(&self.crypto_component, args)
+        }
+
+        fn verify_encrypted_key_share(
+            &self,
+            signer: NodeId,
+            key_share: &VetKdEncryptedKeyShare,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyShareVerificationError> {
+            VetKdProtocol::verify_encrypted_key_share(
+                &self.crypto_component,
+                signer,
+                key_share,
+                args,
+            )
+        }
+
+        fn combine_encrypted_key_shares(
+            &self,
+            shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+            args: &VetKdArgs,
+        ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+            VetKdProtocol::combine_encrypted_key_shares(&self.crypto_component, shares, args)
+        }
+
+        fn verify_encrypted_key(
+            &self,
+            key: &VetKdEncryptedKey,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyVerificationError> {
+            VetKdProtocol::verify_encrypted_key(&self.crypto_component, key, args)
         }
     }
 
