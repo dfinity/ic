@@ -2,7 +2,7 @@
 //! The types in this module are used to serialize and deserialize data
 //! from and to JSON, and are used by both crates.
 
-use crate::UserError;
+use crate::RejectResponse;
 use candid::Principal;
 use hex;
 use reqwest::Response;
@@ -129,12 +129,6 @@ pub struct RawIngressStatusArgs {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawSubmitIngressResult {
-    Ok(RawMessageId),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -151,21 +145,30 @@ pub struct RawCanisterCall {
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawCanisterResult {
-    Ok(RawWasmResult),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawWasmResult {
-    /// Raw response, returned in a "happy" case
-    Reply(
+    Ok(
         #[serde(deserialize_with = "base64::deserialize")]
         #[serde(serialize_with = "base64::serialize")]
         Vec<u8>,
     ),
-    /// Returned with an error message when the canister decides to reject the
-    /// message
-    Reject(String),
+    Err(RejectResponse),
+}
+
+impl From<Result<Vec<u8>, RejectResponse>> for RawCanisterResult {
+    fn from(result: Result<Vec<u8>, RejectResponse>) -> Self {
+        match result {
+            Ok(data) => RawCanisterResult::Ok(data),
+            Err(reject_response) => RawCanisterResult::Err(reject_response),
+        }
+    }
+}
+
+impl From<RawCanisterResult> for Result<Vec<u8>, RejectResponse> {
+    fn from(result: RawCanisterResult) -> Self {
+        match result {
+            RawCanisterResult::Ok(data) => Ok(data),
+            RawCanisterResult::Err(reject_response) => Err(reject_response),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -351,6 +354,23 @@ impl From<Principal> for RawNodeId {
             node_id: principal.as_slice().to_vec(),
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
+pub struct TickConfigs {
+    pub blockmakers: Option<BlockmakerConfigs>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BlockmakerConfigs {
+    pub blockmakers_per_subnet: Vec<RawSubnetBlockmaker>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RawSubnetBlockmaker {
+    pub subnet: RawSubnetId,
+    pub blockmaker: RawNodeId,
+    pub failed_blockmakers: Vec<RawNodeId>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]

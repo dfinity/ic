@@ -181,7 +181,9 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
             id: item.id,
             name: item.name,
             description: item.description,
-            function_type: item.function_type.map(|x| x.into()),
+            function_type: item
+                .function_type
+                .map(|x: pb::nervous_system_function::FunctionType| x.into()),
         }
     }
 }
@@ -291,9 +293,33 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb_api::ChunkedCanisterWasm::from),
         }
     }
 }
+
+impl From<pb_api::ChunkedCanisterWasm> for pb::ChunkedCanisterWasm {
+    fn from(item: pb_api::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
+impl From<pb::ChunkedCanisterWasm> for pb_api::ChunkedCanisterWasm {
+    fn from(item: pb::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
 impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCanister {
     fn from(item: pb_api::UpgradeSnsControlledCanister) -> Self {
         Self {
@@ -301,6 +327,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb::ChunkedCanisterWasm::from),
         }
     }
 }
@@ -1096,6 +1125,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1123,6 +1153,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -3195,6 +3226,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3205,6 +3237,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }

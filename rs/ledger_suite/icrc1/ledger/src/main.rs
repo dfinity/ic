@@ -1,8 +1,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::candid_method;
 use candid::types::number::Nat;
+use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
@@ -21,7 +21,7 @@ use ic_icrc1_ledger::{
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction_no_trimming, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -670,7 +670,7 @@ fn execute_transfer_not_async(
             )
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
     })
 }
@@ -810,15 +810,13 @@ fn get_data_certificate() -> DataCertificate {
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
     panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
-            owner: ic_cdk::api::caller(),
+            owner: caller,
             subaccount: arg.from_subaccount,
         };
         if from_account.owner == arg.spender.owner {
@@ -869,7 +867,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             memo: arg.memo,
         };
 
-        let (block_idx, _) = apply_transaction_no_trimming(ledger, tx, now, expected_fee_tokens)
+        let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match err.try_into() {
@@ -880,6 +878,14 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             })?;
         Ok(block_idx)
     })?;
+
+    Ok(block_idx)
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.

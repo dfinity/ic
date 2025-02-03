@@ -11,7 +11,7 @@ set -ue
 ##
 
 printf "%-12s := %s\n" \
-    "REPEAT" "${REPEAT:=9}" >&2
+    "REPEAT" "${REPEAT:=3}" >&2
 
 RUN_BENCHMARK="${0%/*}/run-benchmark.sh"
 [ -x "${RUN_BENCHMARK}" ] || (echo "Error accessing script: ${RUN_BENCHMARK}" >&2 && exit 1)
@@ -39,7 +39,14 @@ run() {
     # Summarize results if the benchmark was executed or if it's the final iteration.
     if [ "${counter}" -lt "${i}" -o "${i}" = "${REPEAT}" ]; then
         echo "==> Summarizing ${name} results:" >&2
+        set +e
         NAME="${name}" MIN_FILE="${min_file}" "${SUMMARIZE_RESULTS}"
+        local ret="${?}"
+        set -e
+        # Stop repeating the benchmark if there are no changes.
+        if [ "${ret}" -eq 0 ]; then
+            echo "${REPEAT}" >"${counter_file}"
+        fi
     fi
 }
 

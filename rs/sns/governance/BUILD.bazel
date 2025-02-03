@@ -62,6 +62,7 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:strum",
 ]
 
@@ -176,6 +177,15 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)
+
+rust_test(
+    name = "governance_test--test-feature",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

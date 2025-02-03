@@ -1,39 +1,57 @@
 #![allow(clippy::test_attr_in_doctest)]
-//! # PocketIC: A Canister Testing Platform
-//!
-//! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
-//!
-//! It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
-//!
-//! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
-//!
-//! ```rust
-//! use candid::{Principal, encode_one};
-//! use pocket_ic::{WasmResult, PocketIc};
-//!
-//!  #[test]
-//!  fn test_counter_canister() {
-//!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal and add cycles.
-//!     let canister_id = pic.create_canister();
-//!     pic.add_cycles(canister_id, 2_000_000_000_000);
-//!  
-//!     let wasm_bytes = todo!();
-//!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
-//!     // 'inc' is a counter canister method.
-//!     call_counter_canister(&pic, canister_id, "inc");
-//!     // Check if it had the desired effect.
-//!     let reply = call_counter_canister(&pic, canister_id, "read");
-//!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
-//!  }
-//!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
-//!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
-//!         .expect("Failed to call counter canister")
-//! }
-//! ```
-//! For more information, see the [README](https://crates.io/crates/pocket-ic).
-//!
+/// # PocketIC: A Canister Testing Platform
+///
+/// PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
+///
+/// It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+///
+/// With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
+///
+/// ```rust
+/// use candid::{Principal, encode_one};
+/// use pocket_ic::PocketIc;
+///
+/// // 2T cycles
+/// const INIT_CYCLES: u128 = 2_000_000_000_000;
+///
+/// // Create a counter canister and charge it with 2T cycles.
+/// fn deploy_counter_canister(pic: &PocketIc) -> Principal {
+///     let canister_id = pic.create_canister();
+///     pic.add_cycles(canister_id, INIT_CYCLES);
+///     let counter_wasm = todo!();
+///     pic.install_canister(canister_id, counter_wasm, vec![], None);
+///     canister_id
+/// }
+///
+/// // Call a method on the counter canister as the anonymous principal.
+/// fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+///     pic.update_call(
+///         canister_id,
+///         Principal::anonymous(),
+///         method,
+///         encode_one(()).unwrap(),
+///     )
+///     .expect("Failed to call counter canister")
+/// }
+///
+/// #[test]
+/// fn test_counter_canister() {
+///     let pic = PocketIc::new();
+///     let canister_id = deploy_counter_canister(&pic);
+///
+///     // Make some calls to the counter canister.
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![0, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![1, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+/// }
+/// ```
+/// For more information, see the [README](https://crates.io/crates/pocket-ic).
+///
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
@@ -504,6 +522,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.tick().await })
     }
 
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn tick_with_configs(&self, configs: crate::common::rest::TickConfigs) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
+    }
+
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
@@ -601,6 +627,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
+    }
+
     /// Advance the time on the IC on all subnets by some nanoseconds.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
@@ -637,7 +670,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -654,7 +687,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -670,27 +703,39 @@ impl PocketIc {
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    pub fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
-        caller: Option<Principal>,
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub fn ingress_status_as(
+        &self,
+        message_id: RawMessageId,
+        caller: Principal,
     ) -> IngressStatusResult {
         let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.ingress_status(message_id, caller).await })
+        runtime.block_on(async { self.pocket_ic.ingress_status_as(message_id, caller).await })
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
-    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
     }
@@ -703,7 +748,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -720,7 +765,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -734,7 +779,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Principal,
-    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+    ) -> Result<Vec<CanisterLogRecord>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -749,7 +794,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResult, CallError> {
+    ) -> Result<CanisterStatusResult, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }
@@ -822,7 +867,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         chunk: Vec<u8>,
-    ) -> Result<Vec<u8>, CallError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -837,7 +882,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Vec<u8>>, CallError> {
+    ) -> Result<Vec<Vec<u8>>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stored_chunks(canister_id, sender).await })
     }
@@ -848,7 +893,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.clear_chunk_store(canister_id, sender).await })
     }
@@ -864,7 +909,7 @@ impl PocketIc {
         chunk_hashes_list: Vec<Vec<u8>>,
         wasm_module_hash: Vec<u8>,
         arg: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -906,7 +951,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -923,7 +968,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -938,7 +983,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
     }
@@ -950,7 +995,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         replace_snapshot: Option<Vec<u8>>,
-    ) -> Result<Snapshot, CallError> {
+    ) -> Result<Snapshot, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -966,7 +1011,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -981,7 +1026,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Snapshot>, CallError> {
+    ) -> Result<Vec<Snapshot>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -997,7 +1042,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1013,7 +1058,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         settings: CanisterSettings,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1029,7 +1074,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         new_controllers: Vec<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1044,7 +1089,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.start_canister(canister_id, sender).await })
     }
@@ -1055,7 +1100,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_canister(canister_id, sender).await })
     }
@@ -1066,7 +1111,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.delete_canister(canister_id, sender).await })
     }
@@ -1092,14 +1137,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    fn update_call_with_effective_principal(
+    pub fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1125,7 +1170,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1199,7 +1244,7 @@ pub fn call_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1223,7 +1268,7 @@ pub fn call_candid<Input, Output>(
     effective_principal: RawEffectivePrincipal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1244,7 +1289,7 @@ pub fn query_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1260,7 +1305,7 @@ pub fn query_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1276,7 +1321,7 @@ pub fn update_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1292,7 +1337,7 @@ pub fn update_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1306,15 +1351,15 @@ where
 /// [`query_candid`].
 pub fn with_candid<Input, Output>(
     input: Input,
-    f: impl FnOnce(Vec<u8>) -> Result<WasmResult, UserError>,
-) -> Result<Output, CallError>
+    f: impl FnOnce(Vec<u8>) -> Result<Vec<u8>, RejectResponse>,
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
 {
     let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes) {
-        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+    f(in_bytes).map(|out_bytes| {
+        decode_args(&out_bytes).unwrap_or_else(|e| {
             panic!(
                 "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
                 std::any::type_name::<Output>(),
@@ -1322,10 +1367,8 @@ where
                 out_bytes,
                 String::from_utf8_lossy(&out_bytes),
             )
-        })),
-        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
-        Err(user_error) => Err(CallError::UserError(user_error)),
-    }
+        })
+    })
 }
 
 /// Error type for [`TryFrom<u64>`].
@@ -1499,31 +1542,62 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-/// The error that is sent back to users from the IC if something goes
-/// wrong. It's designed to be copyable and serializable so that we
-/// can persist it in the ingress history.
+/// User-facing reject codes.
+///
+/// They can be derived from the most significant digit of the
+/// corresponding error code.
 #[derive(
-    PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
-pub struct UserError {
-    /// The error code.
-    pub code: ErrorCode,
-    /// A human-readable description of the error.
-    pub description: String,
+pub enum RejectCode {
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+    SysUnknown = 6,
 }
 
-impl std::fmt::Display for UserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // E.g. "IC0301: Canister 42 not found"
-        write!(f, "{}: {}", self.code, self.description)
+impl TryFrom<u64> for RejectCode {
+    type Error = TryFromError;
+    fn try_from(err: u64) -> Result<RejectCode, Self::Error> {
+        match err {
+            1 => Ok(RejectCode::SysFatal),
+            2 => Ok(RejectCode::SysTransient),
+            3 => Ok(RejectCode::DestinationInvalid),
+            4 => Ok(RejectCode::CanisterReject),
+            5 => Ok(RejectCode::CanisterError),
+            6 => Ok(RejectCode::SysUnknown),
+            _ => Err(TryFromError::ValueOutOfRange(err)),
+        }
     }
 }
 
-/// This enum describes the different error types when invoking a canister.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CallError {
-    Reject(String),
-    UserError(UserError),
+/// User-facing type describing an unsuccessful (also called reject) call response.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct RejectResponse {
+    pub reject_code: RejectCode,
+    pub reject_message: String,
+    pub error_code: ErrorCode,
+    pub certified: bool,
+}
+
+impl std::fmt::Display for RejectResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Follows [agent-rs](https://github.com/dfinity/agent-rs/blob/a651dbbe69e61d4e8508c144cd60cfa3118eeb3a/ic-agent/src/agent/agent_error.rs#L54)
+        write!(f, "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}", self.reject_code, self.reject_message, self.error_code)
+    }
 }
 
 /// This enum describes the result of retrieving ingress status.
@@ -1535,18 +1609,7 @@ pub enum CallError {
 pub enum IngressStatusResult {
     NotAvailable,
     Forbidden(String),
-    Success(Result<WasmResult, UserError>),
-}
-
-/// This struct describes the different types that executing a WASM function in
-/// a canister can produce.
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum WasmResult {
-    /// Raw response, returned in a successful case.
-    Reply(#[serde(with = "serde_bytes")] Vec<u8>),
-    /// Returned with an error message when the canister decides to reject the
-    /// message.
-    Reject(String),
+    Success(Result<Vec<u8>, RejectResponse>),
 }
 
 #[cfg(windows)]
@@ -1637,6 +1700,9 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 
@@ -1691,8 +1757,17 @@ pub fn get_default_effective_canister_id(
 
 #[cfg(test)]
 mod test {
-    use crate::ErrorCode;
+    use crate::{ErrorCode, RejectCode};
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn reject_code_round_trip() {
+        for initial in RejectCode::iter() {
+            let round_trip = RejectCode::try_from(initial as u64).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
 
     #[test]
     fn error_code_round_trip() {
@@ -1700,6 +1775,21 @@ mod test {
             let round_trip = ErrorCode::try_from(initial as u64).unwrap();
 
             assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn reject_code_matches_ic_error_code() {
+        assert_eq!(
+            RejectCode::iter().len(),
+            ic_error_types::RejectCode::iter().len()
+        );
+        for ic_reject_code in ic_error_types::RejectCode::iter() {
+            let reject_code: RejectCode = (ic_reject_code as u64).try_into().unwrap();
+            assert_eq!(
+                format!("{:?}", reject_code),
+                format!("{:?}", ic_reject_code)
+            );
         }
     }
 

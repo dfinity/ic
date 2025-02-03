@@ -93,7 +93,7 @@ impl<'de, T> Deserialize<'de> for HashOf<T> {
             phantom: PhantomData<T>,
         }
 
-        impl<'de, T> Visitor<'de> for HashOfVisitor<T> {
+        impl<T> Visitor<'_> for HashOfVisitor<T> {
             type Value = HashOf<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -31,9 +31,7 @@ fn should_generate_committee_signing_key_pair_and_store_keys() {
         .expect("Failure generating key pair with pop");
 
     assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
-    assert!(csp_vault
-        .sks_contains(KeyId::try_from(&pk).unwrap())
-        .is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&pk)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

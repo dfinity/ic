@@ -38,9 +38,7 @@ fn should_generate_node_signing_key_pair_and_store_keys() {
         .expect("failed creating key pair");
 
     assert_matches!(gen_key_result, CspPublicKey::Ed25519(_));
-    assert!(csp_vault
-        .sks_contains(KeyId::try_from(&gen_key_result).unwrap())
-        .is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&gen_key_result)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

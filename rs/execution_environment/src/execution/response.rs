@@ -37,6 +37,7 @@ use crate::execution_environment::{
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -101,7 +102,6 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 ///   ▼
 /// [end]
 ///```
-
 /// Contains fields of `ResponseHelper` that are necessary for resuming the
 /// response execution.
 #[derive(Debug)]
@@ -353,7 +353,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
@@ -374,35 +374,35 @@ impl ResponseHelper {
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // Note that we ignore the freezing threshold as required by the spec.
-            if old_balance < requested {
-                let reveal_top_up = self
-                    .canister
-                    .controllers()
-                    .contains(&original.call_origin.get_principal());
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                    reveal_top_up,
-                };
-                info!(
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        // Note that we ignore the freezing threshold as required by the spec.
+        if old_balance < requested {
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            info!(
                     round.log,
                     "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
                     self.canister.canister_id(),
                     err,
                 );
-                // Return total instructions: wasm executor leftovers + cleanup reservation.
-                return Err((
-                    self,
-                    HypervisorError::InsufficientCyclesBalance(err),
-                    output.num_instructions_left + reserved_cleanup_instructions,
-                ));
-            }
+            // Return total instructions: wasm executor leftovers + cleanup reservation.
+            return Err((
+                self,
+                HypervisorError::InsufficientCyclesBalance(err),
+                output.num_instructions_left + reserved_cleanup_instructions,
+            ));
         }
 
         apply_canister_state_changes(
@@ -441,7 +441,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
@@ -463,19 +463,17 @@ impl ResponseHelper {
         // messages being inducted for free in this edge case. This is acceptable because the cleanup
         // callback is expected to always run and allow the canister to perform important cleanup tasks,
         // like releasing locks or undoing other state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let ingress_induction_cycles_debit =
-                self.canister.system_state.ingress_induction_cycles_debit();
-            let removed_cycles = state_changes.system_state_changes.removed_cycles();
-            if self.canister.system_state.balance()
-                < ingress_induction_cycles_debit + removed_cycles
-            {
-                self.canister
-                    .system_state
-                    .remove_charge_from_ingress_induction_cycles_debit(
-                        ingress_induction_cycles_debit - removed_cycles,
-                    );
-            }
+        let ingress_induction_cycles_debit =
+            self.canister.system_state.ingress_induction_cycles_debit();
+        let removed_cycles = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
+            self.canister
+                .system_state
+                .remove_charge_from_ingress_induction_cycles_debit(
+                    ingress_induction_cycles_debit - removed_cycles,
+                );
         }
         self.canister
             .system_state
@@ -571,11 +569,11 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -584,7 +582,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 
