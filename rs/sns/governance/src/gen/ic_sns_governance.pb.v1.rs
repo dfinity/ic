@@ -1473,6 +1473,10 @@ pub struct NervousSystemParameters {
     /// (enabled) agree.
     #[prost(bool, optional, tag = "22")]
     pub maturity_modulation_disabled: ::core::option::Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    #[prost(bool, optional, tag = "23")]
+    pub automatically_advance_target_version: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -3547,6 +3551,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(bool, optional, tag = "3")]
+        pub is_advanced_automatically: ::core::option::Option<bool>,
     }
     #[derive(
         candid::CandidType,

@@ -140,7 +140,10 @@ def test_scan_job_failed_event(selected_job_type):
     assert "some error reason" in api.messages[0]
     assert selected_job_type.name in api.messages[0]
     assert "http://ci.job/123" in api.messages[0]
-    assert APP_OWNERS in api.messages[0]
+    if selected_job_type == ScannerJobType.MERGE_SCAN:
+        assert APP_OWNERS not in api.messages[0]
+    else:
+        assert APP_OWNERS in api.messages[0]
 
 
 def test_finding_needs_risk_assessment_event():
