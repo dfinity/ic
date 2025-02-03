@@ -86,6 +86,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc = { path = "../gtc" }
 ic-nns-handler-root = { path = "../handlers/root/impl" }
+ic-nns-init = { path = "../init" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 ic-protobuf = { path = "../../protobuf" }

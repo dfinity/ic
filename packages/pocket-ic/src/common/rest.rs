@@ -20,23 +20,6 @@ pub struct AutoProgressConfig {
     pub artificial_delay_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
-pub struct TickConfigs {
-    pub blockmakers_configs: Option<BlockMakerConfigs>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockMakerConfigs {
-    pub subnets_blockmakers: Vec<RawSubnetBlockmakerMetrics>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RawSubnetBlockmakerMetrics {
-    pub subnet: RawSubnetId,
-    pub blockmaker: RawNodeId,
-    pub failed_blockmakers: Vec<RawNodeId>,
-}
-
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum HttpGatewayBackend {
     Replica(String),

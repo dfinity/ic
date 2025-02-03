@@ -1,42 +1,35 @@
 use candid::{Decode, Encode, Principal};
 use ic_cdk::api::management_canister::main::CanisterId;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_nns_canisters, load_registry_mutations,
-};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_nns_canisters;
+use ic_nns_init::read_initial_registry_mutations;
 use ic_nns_test_utils::common::build_mainnet_metrics_collector_wasm;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::common::rest::{BlockMakerConfigs, RawSubnetBlockmakerMetrics, TickConfigs};
+use itertools::Itertools;
+use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
+use std::collections::BTreeMap;
+use std::time::{Duration, UNIX_EPOCH};
 use tempfile::TempDir;
+
 const DAY_HOURS: u64 = 24;
+const SEVEN_DAYS: u64 = 7;
 
-/// Advances the PocketIC state by a given number of days, producing one block per hour.
-async fn advance_pocket_ic_time(
-    pocket_ic: &PocketIc,
-    hrs: u64,
-    subnets_blockmakers: Vec<RawSubnetBlockmakerMetrics>,
-) {
-    let tick_configs = TickConfigs {
-        blockmakers_configs: Some(BlockMakerConfigs {
-            subnets_blockmakers,
-        }),
-    };
-
-    for _ in 0..hrs {
-        pocket_ic
-            .advance_time(std::time::Duration::from_secs(60 * 60))
-            .await;
-
+/// Advances PocketIC time by the given number of hours, simulating one block per hour.
+async fn advance_pocket_ic_time(pocket_ic: &PocketIc, hours: u64, tick_configs: &TickConfigs) {
+    for _ in 0..hours {
+        pocket_ic.advance_time(Duration::from_secs(3600)).await;
         pocket_ic.tick_with_configs(tick_configs.clone()).await;
     }
 }
 
+/// Queries node metrics from the specified canister.
 async fn query_node_metrics(
     pocket_ic: &PocketIc,
     canister_id: CanisterId,
     subnet_id: Principal,
+    start_at_timestamp_nanos: u64,
 ) -> Vec<NodeMetricsHistoryResponse> {
     let response = pocket_ic
         .query_call(
@@ -45,41 +38,40 @@ async fn query_node_metrics(
             "node_metrics_history",
             Encode!(&NodeMetricsHistoryArgs {
                 subnet_id: subnet_id.into(),
-                start_at_timestamp_nanos: 0,
+                start_at_timestamp_nanos,
             })
             .unwrap(),
         )
         .await
-        .unwrap();
+        .expect("Failed to query node metrics");
 
-    Decode!(&response, Vec<NodeMetricsHistoryResponse>).unwrap()
+    Decode!(&response, Vec<NodeMetricsHistoryResponse>)
+        .expect("Failed to decode node metrics response")
 }
 
 #[tokio::test]
 async fn test_node_metrics_collector() {
-    let state_dir = TempDir::new().unwrap();
-    let state_dir_path_buf = state_dir.path().to_path_buf();
-
-    // Setup PocketIC with initial subnets and records
+    let state_dir = TempDir::new().expect("Failed to create temp directory");
+    let state_dir_path = state_dir.path().to_path_buf();
     let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(state_dir_path.clone())
         .with_nns_subnet()
         .with_sns_subnet()
         .with_application_subnet()
         .build_async()
         .await;
 
-    let registry_proto_path = state_dir_path_buf.join("registry.proto");
-    let initial_mutations = load_registry_mutations(registry_proto_path);
+    // Initialize PocketIC with subnets and registry records
+    let registry_proto_path = state_dir_path.join("registry.proto");
+    let initial_mutations = read_initial_registry_mutations(registry_proto_path);
     let mutate_request = RegistryAtomicMutateRequest {
         mutations: initial_mutations,
         ..Default::default()
     };
-    let with_mainnet_nns_canisters = false;
     install_nns_canisters(
         &pocket_ic,
         vec![],
-        with_mainnet_nns_canisters,
+        false,
         Some(vec![mutate_request]),
         vec![],
     )
@@ -87,28 +79,38 @@ async fn test_node_metrics_collector() {
 
     let topology = pocket_ic.topology().await;
     let application_subnet = topology.get_app_subnets()[0];
-    let blockmaker_node = topology
-        .subnet_configs
-        .get(&application_subnet)
-        .unwrap()
-        .node_ids[0]
-        .clone();
+    let nns_subnet = topology.get_nns().unwrap();
+    let sns_subnet = topology.get_sns().unwrap();
 
-    let subnets_blockmakers = vec![RawSubnetBlockmakerMetrics {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_node,
-        failed_blockmakers: vec![],
-    }];
+    // Assign blockmakers per subnet
+    let mut blockmakers_per_subnet = BTreeMap::new();
+    for subnet in [nns_subnet, sns_subnet, application_subnet] {
+        let blockmaker_node = topology.subnet_configs.get(&subnet).unwrap().node_ids[0].clone();
+        blockmakers_per_subnet.insert(
+            subnet,
+            RawSubnetBlockmaker {
+                subnet: subnet.into(),
+                blockmaker: blockmaker_node,
+                failed_blockmakers: vec![],
+            },
+        );
+    }
 
-    // Advance time for the initial runtime period
-    advance_pocket_ic_time(&pocket_ic, DAY_HOURS * 3, subnets_blockmakers.clone()).await;
+    let tick_configs = TickConfigs {
+        blockmakers: Some(BlockmakerConfigs {
+            blockmakers_per_subnet: blockmakers_per_subnet.values().cloned().collect_vec(),
+        }),
+    };
 
-    // Install node_metrics_collector canister in the NNS subnet
-    let nns_subnet = pocket_ic.topology().await.get_nns().unwrap();
+    // Simulate block production for 70 days (Mainnet stores 60 days of metrics)
+    advance_pocket_ic_time(&pocket_ic, DAY_HOURS * 70, &tick_configs).await;
+
+    // Deploy and initialize the node_metrics_collector canister on the NNS subnet
     let canister_id = pocket_ic
         .create_canister_on_subnet(None, None, nns_subnet)
         .await;
     let metrics_collector_wasm = build_mainnet_metrics_collector_wasm();
+
     pocket_ic
         .install_canister(
             canister_id,
@@ -118,28 +120,57 @@ async fn test_node_metrics_collector() {
         )
         .await;
 
-    // Give some ticks for the node metrics collector to backfill past metrics
-    pocket_ic.tick().await;
-    pocket_ic.tick().await;
-    pocket_ic.tick().await;
+    // Trigger metric backfilling by calling tick multiple times
+    for _ in 0..3 {
+        pocket_ic.tick().await;
+    }
 
-    // Validate metrics backfilled for the past RUNTIME_DAYS days
+    // Query and validate node metrics
+    for subnet in [nns_subnet, sns_subnet, application_subnet] {
+        let from_system_time =
+            pocket_ic.get_time().await - Duration::from_secs(60 * 60 * 24 * SEVEN_DAYS);
+        let node_metrics = query_node_metrics(
+            &pocket_ic,
+            canister_id,
+            subnet,
+            from_system_time
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )
+        .await;
 
-    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
+        assert_eq!(
+            node_metrics.len(),
+            SEVEN_DAYS as usize,
+            "Unexpected number of metric entries"
+        );
 
-    println!("{:?}", node_metrics);
-    assert!(false);
-    assert_eq!(node_metrics.len(), 3);
+        let expected_blockmaker = Principal::from(
+            blockmakers_per_subnet
+                .get(&subnet)
+                .unwrap()
+                .blockmaker
+                .clone(),
+        );
 
-    // Advance time for another RUNTIME_DAYS and validate again
-    advance_pocket_ic_time(&pocket_ic, DAY_HOURS * 3, subnets_blockmakers).await;
-    let node_metrics = query_node_metrics(&pocket_ic, canister_id, application_subnet).await;
+        for daily_metrics in node_metrics {
+            let mut previous_num_blocks = daily_metrics.node_metrics[0].num_blocks_proposed_total;
 
-    assert_eq!(node_metrics.len(), 3);
+            for metrics in &daily_metrics.node_metrics[1..] {
+                assert_eq!(
+                    metrics.num_blocks_proposed_total,
+                    previous_num_blocks + 24,
+                    "num_blocks_proposed_total does not increase by 24 as expected"
+                );
+                previous_num_blocks = metrics.num_blocks_proposed_total;
+            }
 
-    // Validate all blocks are recorded
-    let blocks_proposed_day_0 = node_metrics[0].node_metrics[0].num_blocks_proposed_total;
-    let blocks_proposed_day_1 = node_metrics[1].node_metrics[0].num_blocks_proposed_total;
-
-    assert_eq!(blocks_proposed_day_1 - blocks_proposed_day_0, DAY_HOURS);
+            assert_eq!(daily_metrics.node_metrics.len(), 1);
+            assert_eq!(
+                Principal::from(daily_metrics.node_metrics[0].node_id),
+                expected_blockmaker
+            );
+        }
+    }
 }

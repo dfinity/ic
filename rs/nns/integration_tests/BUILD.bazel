@@ -48,6 +48,7 @@ BASE_DEPENDENCIES = [
         "//rs/crypto/sha2",
         "//rs/nervous_system/root",
         "//rs/nns/constants",
+        "//rs/nns/init",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
