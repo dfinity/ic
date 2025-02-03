@@ -711,10 +711,12 @@ async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronRespo
 #[cfg(feature = "test")]
 #[update]
 /// Internal method for calling update_neuron.
+///
+/// *_voting_power fields are ignored, because the value in those fields is derived.
 fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
     debug_log("update_neuron");
     governance_mut()
-        .update_neuron(gov_pb::Neuron::from(neuron))
+        .update_neuron(neuron)
         .err()
         .map(GovernanceError::from)
 }
@@ -735,7 +737,6 @@ fn get_full_neuron_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             &caller(),
         )
-        .map(Neuron::from)
         .map_err(GovernanceError::from)
 }
 

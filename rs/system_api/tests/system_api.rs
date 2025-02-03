@@ -1164,7 +1164,7 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
@@ -1337,7 +1337,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             res
         ),
     }
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
@@ -1481,7 +1481,7 @@ fn helper_test_on_low_wasm_memory(
             .unwrap();
     }
 
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
@@ -1750,7 +1750,7 @@ fn push_output_request_respects_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
@@ -1866,7 +1866,7 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
@@ -1902,7 +1902,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
 
     // Propagate system state changes
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
-    let system_state_modifications = api.into_system_state_modifications();
+    let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,

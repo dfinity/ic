@@ -344,6 +344,11 @@ pub fn build_cmc_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("cycles-minting-canister", &features)
 }
+/// Build mainnet Wasm for NNS CMC
+pub fn build_mainnet_cmc_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-cycles-minting-canister", &features)
+}
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {
     Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
