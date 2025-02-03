@@ -1445,7 +1445,7 @@ fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
 }
 
 #[test]
-fn on_low_wasm_memory_hook_is_run_after_memory_surprise_limit() {
+fn on_low_wasm_memory_hook_is_run_after_memory_surpass_limit() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
 
     let update_grow_mem_size = 10;
