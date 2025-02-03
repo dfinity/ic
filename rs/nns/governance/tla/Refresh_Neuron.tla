@@ -42,7 +42,6 @@ variables
 
 macro refresh_neuron_reset_local_vars() {
     neuron_id := 0;
-    account := DUMMY_ACCOUNT;
 }
 
 
@@ -58,8 +57,6 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
         \* The neuron_id is an argument; we let it be chosen non-deteministically
         neuron_id = 0;
-        \* The account is determined by neuron_id.
-        account = DUMMY_ACCOUNT;
     {
     RefreshNeuron1:
         either {
@@ -69,9 +66,8 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
         } or {
         with(nid \in DOMAIN(neuron) \ locks) {
             neuron_id := nid;
-            account := neuron[nid].account;
             locks := locks \union {neuron_id};
-            governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(account)));
+            governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(neuron[nid].account)));
         };
         };
     WaitForBalanceQuery:
@@ -92,12 +88,12 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "29371649" /\ chksum(tla) = "eb3a6fcf")
+\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "3003d9f1")
 VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, pc, neuron_id, account
+          ledger_to_governance, spawning_neurons, pc, neuron_id
 
 vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, pc, neuron_id, account >>
+           ledger_to_governance, spawning_neurons, pc, neuron_id >>
 
 ProcSet == (Refresh_Neuron_Process_Ids)
 
@@ -110,17 +106,15 @@ Init == (* Global variables *)
         /\ spawning_neurons = FALSE
         (* Process Refresh_Neuron *)
         /\ neuron_id = [self \in Refresh_Neuron_Process_Ids |-> 0]
-        /\ account = [self \in Refresh_Neuron_Process_Ids |-> DUMMY_ACCOUNT]
         /\ pc = [self \in ProcSet |-> "RefreshNeuron1"]
 
 RefreshNeuron1(self) == /\ pc[self] = "RefreshNeuron1"
                         /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
-                              /\ UNCHANGED <<locks, governance_to_ledger, neuron_id, account>>
+                              /\ UNCHANGED <<locks, governance_to_ledger, neuron_id>>
                            \/ /\ \E nid \in DOMAIN(neuron) \ locks:
                                    /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
-                                   /\ account' = [account EXCEPT ![self] = neuron[nid].account]
                                    /\ locks' = (locks \union {neuron_id'[self]})
-                                   /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(account'[self])))
+                                   /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(neuron[nid].account)))
                               /\ pc' = [pc EXCEPT ![self] = "WaitForBalanceQuery"]
                         /\ UNCHANGED << neuron, neuron_id_by_account, 
                                         ledger_to_governance, spawning_neurons >>
@@ -138,7 +132,6 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                              /\ UNCHANGED neuron
                                   /\ locks' = locks \ {neuron_id[self]}
                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
-                             /\ account' = [account EXCEPT ![self] = DUMMY_ACCOUNT]
                              /\ pc' = [pc EXCEPT ![self] = "Done"]
                              /\ UNCHANGED << neuron_id_by_account, 
                                              governance_to_ledger, 
