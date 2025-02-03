@@ -2,6 +2,8 @@ use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
 use std::io::{self, Write};
+use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Parser)]
 struct DetermineTargets;
@@ -60,6 +62,12 @@ struct ReleaseRunscript {
     step: Option<Step>,
 }
 
+fn ic_dir() -> PathBuf {
+    let workspace_dir =
+        std::env::var("BUILD_WORKSPACE_DIRECTORY").expect("BUILD_WORKSPACE_DIRECTORY not set");
+    PathBuf::from(&workspace_dir)
+}
+
 fn main() -> Result<()> {
     let args = match ReleaseRunscript::try_parse_from(std::env::args()) {
         Ok(args) => args,
@@ -86,20 +94,39 @@ fn main() -> Result<()> {
 }
 
 fn run_pick_commit() {
-    print_step(1,
-      "Pick Release Candidate Commit",
-      "Run `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.
-If you would like to pick a different commit, follow these steps:
-2. Go to https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch%3Amaster+event%3Apush+is%3Asuccess
-3. Find a recent commit with passing CI Main in the master branch
-4. Record this commit (e.g., post to Slack)
+    // Get the ic directory.
+    let ic = ic_dir();
 
-Pre-built artifacts check:
-- Install aws tool if needed
-- List available files: 
-aws s3 ls --no-sign-request s3://dfinity-download-public/ic/${COMMIT}/canisters/
-- Note: Our tools download from the analogous https://download.dfinity.systems/... URL",
+    // Build the absolute path to the cmd.sh script.
+    let cmd_path = ic.join("testnet/tools/nns-tools/cmd.sh");
+
+    // Run the command with the required argument.
+    let output = Command::new(cmd_path)
+        .arg("latest_commit_with_prebuilt_artifacts")
+        .current_dir(&ic)
+        .output()
+        .unwrap();
+
+    let commit = if output.status.success() {
+        let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        println!("A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.");
+        input_with_default("Commit to release", &commit)
+    } else {
+        println!(
+            "Automatically determining the commit hash failed with error:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // get input from user for the commit
+        input("Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`")
+    };
+
+    print_step(
+        1,
+        "Pick Release Candidate Commit",
+        &format!("Chosen commit: {}", commit),
     );
+
+    // Continue to next step.
     run_determine_targets(DetermineTargets);
 }
 
@@ -321,4 +348,21 @@ fn print_step(number: usize, title: &str, description: &str) {
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     print!("\x1B[2J\x1B[1;1H");
+}
+
+fn input(text: &str) -> String {
+    print!("{}: ", text);
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_string()
+}
+
+fn input_with_default(text: &str, default: &str) -> String {
+    let input = input(&format!("{} ({})", text, default));
+    if input.is_empty() {
+        default.to_string()
+    } else {
+        input
+    }
 }
