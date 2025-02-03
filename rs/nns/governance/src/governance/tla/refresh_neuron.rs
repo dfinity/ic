@@ -1,15 +1,12 @@
 use lazy_static::lazy_static;
 use tla_instrumentation::{Label, TlaConstantAssignment, ToTla, Update, VarAssignment};
 
-use super::common::default_account;
 use super::{extract_common_constants, post_process_trace};
 
 lazy_static! {
     pub static ref REFRESH_NEURON_DESC: Update = {
         const PID: &str = "Refresh_Neuron";
-        let default_locals = VarAssignment::new()
-            .add("neuron_id", 0_u64.to_tla_value())
-            .add("account", default_account());
+        let default_locals = VarAssignment::new().add("neuron_id", 0_u64.to_tla_value());
 
         Update {
             default_start_locals: default_locals.clone(),
