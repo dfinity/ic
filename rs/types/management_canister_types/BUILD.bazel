@@ -36,7 +36,6 @@ temporary_whitelist = [
     "//rs/nns/sns-wasm:__subpackages__",
     "//rs/nns/test_utils:__subpackages__",
     "//rs/orchestrator:__subpackages__",
-    "//packages/pocket-ic/test_canister:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/prep:__subpackages__",
     "//rs/recovery:__subpackages__",
