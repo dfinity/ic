@@ -79,6 +79,8 @@ impl VetKdPayloadBuilderImpl {
         }
     }
 
+    /// Return the chain key config if there is at least one enabled VetKD key
+    /// at the registry version corresponding to the given block height.
     fn get_chain_key_config_if_enabled(
         &self,
         height: Height,
@@ -152,27 +154,28 @@ impl VetKdPayloadBuilderImpl {
                 continue;
             }
 
-            let candidate =
-                if let Some(reject) = maybe_reject(&valid_keys, context, request_expiry_time) {
-                    reject
-                } else {
-                    let Some(_shares) = grouped_shares.get(callback_id) else {
-                        continue;
-                    };
-                    let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-                        continue;
-                    };
-                    let _args = VetKdArgs {
-                        derivation_path: ExtendedDerivationPath {
-                            caller: context.request.sender.into(),
-                            derivation_path: context.derivation_path.clone(),
-                        },
-                        ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                        derivation_id: ctxt_args.derivation_id.clone(),
-                        encryption_public_key: ctxt_args.encryption_public_key.clone(),
-                    };
-                    todo!("Call crypto endpoint to combine shares");
+            let candidate = if let Some(reject) =
+                reject_if_invalid(&valid_keys, context, request_expiry_time)
+            {
+                reject
+            } else {
+                let Some(_shares) = grouped_shares.get(callback_id) else {
+                    continue;
                 };
+                let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
+                    continue;
+                };
+                let _args = VetKdArgs {
+                    derivation_path: ExtendedDerivationPath {
+                        caller: context.request.sender.into(),
+                        derivation_path: context.derivation_path.clone(),
+                    },
+                    ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+                    derivation_id: ctxt_args.derivation_id.clone(),
+                    encryption_public_key: ctxt_args.encryption_public_key.clone(),
+                };
+                todo!("Call crypto endpoint to combine shares");
+            };
 
             let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
@@ -214,7 +217,7 @@ impl VetKdPayloadBuilderImpl {
                 return invalid_artifact_err(InvalidVetKdPayloadReason::IDkgContext(id));
             }
 
-            let expected_reject = maybe_reject(&valid_keys, context, request_expiry_time);
+            let expected_reject = reject_if_invalid(&valid_keys, context, request_expiry_time);
 
             match agreement {
                 VetKdAgreement::Success(data) => {
@@ -245,6 +248,7 @@ impl VetKdPayloadBuilderImpl {
         Ok(())
     }
 
+    /// Validate the VetKD key given in `data` according to the context of its request.
     fn validate_vetkd_agreement(
         &self,
         id: CallbackId,
@@ -375,7 +379,10 @@ impl IntoMessages<Vec<ConsensusResponse>> for VetKdPayloadBuilderImpl {
     }
 }
 
-fn maybe_reject(
+/// Reject the given context if
+/// 1. it requests a key ID that isn't part of `valid_keys`, or
+/// 2. the request is expired according to the given `request_expiry_time`
+fn reject_if_invalid(
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     context: &SignWithThresholdContext,
     request_expiry_time: Option<Time>,
