@@ -8,7 +8,11 @@ Open local NNS dapp instance: http://qoctq-giaaa-aaaaa-aaaea-cai.localhost:8080/
 You should be able to see executed proposals to add SNS WASM to SNS-W canisters (since currently used NNS dapp is slightly outdated, make sure to clear topic filters).
 
 The scenario installs [test canister](./canister/canister.rs) and creates new SNS with it.
-You should be able to see in NNS dapp web UI that the proposal to create a new SNS was adopted.
+Once the proposal is adopted, the scenario initiates the SNS swap and closes it by providing sufficient amount of ICP.
+Once swap is completed, the test canister is upgraded via SNS voting.
+
+NNS dapp should show the NNS proposal to create the new SNS as well as proposal in the newly created SNS to upgrade
+the controlled canister.
 
 To interact with the network created by `sns-testing` CLI, you should add the following network config to
 `~/.config/dfx/networks.json`:
