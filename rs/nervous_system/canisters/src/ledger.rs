@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use candid::Nat;
-use dfn_core::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nervous_system_common::{
     ledger::{ICRC1Ledger, IcpLedger},
