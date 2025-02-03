@@ -4,7 +4,7 @@ use ic_cdk::api::time;
 
 pub mod metrics;
 pub mod node_operator_sync;
-pub mod update_nns_status_proposal;
+pub mod recovery_proposal;
 
 pub fn now_nanoseconds() -> u64 {
     if cfg!(target_arch = "wasm32") {

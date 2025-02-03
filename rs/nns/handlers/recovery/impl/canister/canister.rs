@@ -10,6 +10,7 @@ use ic_cdk::{post_upgrade, query, update};
 use ic_nns_handler_recovery::{
     metrics::encode_metrics,
     node_operator_sync::{get_node_operators_in_nns, sync_node_operators, SimpleNodeRecord},
+    recovery_proposal::{get_recovery_proposals, RecoveryProposal},
 };
 
 fn caller() -> PrincipalId {
@@ -53,9 +54,8 @@ async fn vote_on_root_proposal_to_change_subnet_halt_status(
 }
 
 #[update(hidden = true)]
-fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<u8> {
-    // ic_nns_handler_root::backup_root_proposals::get_pending_root_proposals_to_change_subnet_halt_status()
-    vec![]
+fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<RecoveryProposal> {
+    get_recovery_proposals()
 }
 
 #[query]
