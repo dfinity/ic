@@ -216,34 +216,6 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
-impl upgrade_journal_entry::Event {
-    /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
-    /// overly fragile.
-    pub fn redact_human_readable(self) -> Self {
-        match self {
-            Self::UpgradeOutcome(upgrade_outcome) => {
-                Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
-                    ..upgrade_outcome
-                })
-            }
-            Self::UpgradeStepsReset(upgrade_steps_reset) => {
-                Self::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
-                    human_readable: None,
-                    ..upgrade_steps_reset
-                })
-            }
-            Self::TargetVersionReset(target_version_reset) => {
-                Self::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
-                    human_readable: None,
-                    ..target_version_reset
-                })
-            }
-            event => event,
-        }
-    }
-}
-
 pub fn serve_journal(journal: &UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
     use ic_canisters_http_types::HttpResponseBuilder;
     let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal.clone());

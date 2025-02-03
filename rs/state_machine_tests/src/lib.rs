@@ -834,7 +834,6 @@ pub struct StateMachine {
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
-    blockmaker_metrics: RwLock<Option<BlockmakerMetrics>>,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
@@ -1332,11 +1331,19 @@ impl StateMachine {
         StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
+    pub fn execute_round(&self) {
+        self.do_execute_round(None);
+    }
+
+    pub fn execute_round_with_blockmaker_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
+        self.do_execute_round(Some(blockmaker_metrics));
+    }
+
     /// Assemble a payload for a new round using `PayloadBuilderImpl`
     /// and execute a round with this payload.
     /// Note that only ingress messages submitted via `Self::submit_ingress`
     /// will be considered during payload building.
-    pub fn execute_round(&self) {
+    pub fn do_execute_round(&self, blockmaker_metrics: Option<BlockmakerMetrics>) {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
@@ -1418,8 +1425,10 @@ impl StateMachine {
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats)
-            .with_self_validating(self_validating)
-            .with_blockmaker_metrics(self.blockmaker_metrics.read().unwrap().clone());
+            .with_self_validating(self_validating);
+        if let Some(blockmaker_metrics) = blockmaker_metrics {
+            payload = payload.with_blockmaker_metrics(blockmaker_metrics);
+        }
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1810,7 +1819,6 @@ impl StateMachine {
             certified_height_tx,
             runtime,
             state_dir,
-            blockmaker_metrics: None.into(),
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
             checkpoint_interval_length: checkpoint_interval_length.into(),
@@ -2389,7 +2397,9 @@ impl StateMachine {
             current_time
         };
 
-        let blockmaker_metrics = payload.blockmaker_metrics.clone().unwrap_or(BlockmakerMetrics::new_for_test());
+        let blockmaker_metrics = payload
+            .blockmaker_metrics
+            .unwrap_or(BlockmakerMetrics::new_for_test());
 
         let batch = Batch {
             batch_number,
@@ -2555,11 +2565,6 @@ impl StateMachine {
                 .unwrap()
                 .as_nanos() as u64,
         )
-    }
-
-    /// Advances the state machine time by the given amount.
-    pub fn set_blockmakers_metrics(&self, blockmaker_metrics: BlockmakerMetrics) {
-        *self.blockmaker_metrics.write().unwrap() = Some(blockmaker_metrics);
     }
 
     /// Advances the state machine time by the given amount.
@@ -3848,9 +3853,9 @@ impl PayloadBuilder {
         Self::default()
     }
 
-    pub fn with_blockmaker_metrics(self, blockmaker_metrics: Option<BlockmakerMetrics>) -> Self {
+    pub fn with_blockmaker_metrics(self, blockmaker_metrics: BlockmakerMetrics) -> Self {
         Self {
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             ..self
         }
     }

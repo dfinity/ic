@@ -219,7 +219,6 @@ fn start_server_initialization(
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);
-        // TODO: NNS1-2024
         info!(log, "Ready for interaction.");
     });
 }

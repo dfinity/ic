@@ -299,7 +299,9 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
-        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::SubnetSelfSize => vec!["*"],
+        SystemApiCallId::SubnetSelfCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -779,6 +781,26 @@ fn api_availability_test(
         SystemApiCallId::CyclesBurn128 => {
             assert_api_availability(
                 |mut api| api.ic0_cycles_burn128(Cycles::zero(), 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::SubnetSelfSize => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::SubnetSelfCopy => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
