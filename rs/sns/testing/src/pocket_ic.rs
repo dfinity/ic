@@ -14,9 +14,8 @@ use ic_nervous_system_integration_tests::{
         swap::{await_swap_lifecycle, smoke_test_participate_and_finalize},
     },
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, await_with_timeout,
-        install_canister_on_subnet, install_canister_with_controllers,
-        NnsInstaller,
+        add_wasms_to_sns_wasm, await_with_timeout, install_canister_on_subnet,
+        install_canister_with_controllers, NnsInstaller,
     },
 };
 use ic_nns_common::pb::v1::ProposalId;
@@ -35,6 +34,7 @@ pub async fn bootstrap_nns(pocket_ic: &PocketIc) {
     // tokens and neuron hotkeys for user-provided indentities.
     let mut nns_installer = NnsInstaller::default();
     nns_installer.with_current_nns_canister_versions();
+    nns_installer.with_test_governance_canister();
     nns_installer.with_cycles_minting_canister();
     nns_installer.with_index_canister();
     nns_installer.install(pocket_ic).await;
@@ -188,6 +188,10 @@ pub async fn create_sns(
         .swap_parameters
         .clone()
         .unwrap();
+    assert_eq!(
+        swap_parameters.start_time, None,
+        "Expecting the swap start time to be None to start the swap immediately"
+    );
     let (sns, proposal_id) =
         propose_to_deploy_sns_and_wait(pocket_ic, create_service_nervous_system, sns_proposal_id)
             .await;
