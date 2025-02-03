@@ -1,4 +1,4 @@
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::init;
 use ic_nervous_system_common::serve_metrics;
@@ -41,7 +41,7 @@ async fn vote_on_proposal(vote: VoteOnRecoveryProposal) -> Result<(), String> {
 }
 
 #[update(hidden = true)]
-fn get_pending_root_proposals_to_change_subnet_halt_status() -> Vec<RecoveryProposal> {
+fn get_pending_recovery_proposals() -> Vec<RecoveryProposal> {
     get_recovery_proposals()
 }
 

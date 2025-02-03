@@ -3,7 +3,10 @@ use std::{collections::BTreeMap, path::PathBuf};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_handler_recovery::node_operator_sync::SimpleNodeRecord;
+use ic_nns_handler_recovery::{
+    node_operator_sync::SimpleNodeRecord,
+    recovery_proposal::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+};
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
@@ -27,7 +30,10 @@ use test_helpers::{
     prepare_registry_with_nodes_and_node_operator_id,
 };
 
+mod node_providers_sync_tests;
+mod proposal_logic_tests;
 mod test_helpers;
+mod voting_tests;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     let path: PathBuf = std::env::var(env)
@@ -235,7 +241,13 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
     // 1 - fetch nns
     // 1 - fetch membership
     // 40 - fetch node operators for nodes
-    for _ in 0..42 {
+    let ticks = arguments
+        .subnet_node_operators
+        .iter()
+        .filter(|subnet| subnet.subnet_type.eq(&SubnetType::System))
+        .map(|subnet_arg| subnet_arg.node_operators.values().sum::<u8>())
+        .sum::<u8>();
+    for _ in 0..(ticks + 2) {
         pic.tick();
     }
 
@@ -246,32 +258,30 @@ fn submit_proposal(
     pic: &PocketIc,
     canister: Principal,
     sender: Principal,
-    subnet_id: Principal,
-    to_halt: bool,
+    arg: NewRecoveryProposal,
 ) -> Result<(), String> {
     let response = pic.update_call(
         canister.into(),
         sender,
-        "submit_root_proposal_to_change_subnet_halt_status",
-        candid::encode_args((subnet_id, to_halt)).unwrap(),
+        "submit_new_recovery_proposal",
+        candid::encode_one(arg).unwrap(),
     );
     let response: Result<(), String> = candid::decode_one(response.unwrap().as_slice()).unwrap();
     println!("{:?}", response);
     response
 }
 
-fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<u8> {
+fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<RecoveryProposal> {
     let response = pic
         .update_call(
             canister.into(),
             Principal::anonymous(),
-            "get_pending_root_proposals_to_change_subnet_halt_status",
+            "get_pending_recovery_proposals",
             candid::encode_one(()).unwrap(),
         )
         .expect("Should be able to fetch remaining proposals");
 
-    let response: Vec<u8> =
-        candid::decode_one(&response).expect("Should be able to decode response");
+    let response = candid::decode_one(&response).expect("Should be able to decode response");
     println!("{:?}", response);
 
     response
@@ -281,15 +291,14 @@ fn vote(
     pic: &PocketIc,
     canister: Principal,
     sender: Principal,
-    proposer: PrincipalId,
-    ballot: u8,
+    arg: VoteOnRecoveryProposal,
 ) -> Result<(), String> {
     let response = pic
         .update_call(
             canister.into(),
             sender,
-            "vote_on_root_proposal_to_change_subnet_halt_status",
-            candid::encode_args((proposer, ballot)).unwrap(),
+            "vote_on_proposal",
+            candid::encode_one(arg).unwrap(),
         )
         .expect("Should be able to call vote function");
 
@@ -314,93 +323,15 @@ fn get_current_node_operators(pic: &PocketIc, canister: Principal) -> Vec<Simple
     response
 }
 
-#[test]
-fn node_providers_are_synced_from_registry() {
-    let mut args = RegistryPreparationArguments::default();
-    let (pic, canister) = init_pocket_ic(&mut args);
-
-    let current_node_operators = get_current_node_operators(&pic, canister);
-    assert!(!current_node_operators.is_empty())
+fn extract_node_operators_from_init_data(
+    arguments: &RegistryPreparationArguments,
+) -> BTreeMap<PrincipalId, u8> {
+    arguments
+        .subnet_node_operators
+        .iter()
+        .find_map(|subnet| match subnet.subnet_type.eq(&SubnetType::System) {
+            false => None,
+            true => Some(subnet.node_operators.clone()),
+        })
+        .unwrap()
 }
-
-// #[test]
-// fn fetch_pending_proposals_submited_one() {
-//     let mut args = RegistryPreparationArguments::default();
-//     let (pic, canister) = init_pocket_ic(&mut args);
-
-//     let nns = pic.topology().get_nns().unwrap();
-//     let no_in_subnet = args
-//         .subnet_node_operators
-//         .iter()
-//         .find_map(|arg| match arg.subnet_id.0 == nns {
-//             true => {
-//                 let operator_principals = arg
-//                     .node_operators
-//                     .iter()
-//                     .map(|(principal, _)| principal)
-//                     .collect::<Vec<_>>();
-
-//                 operator_principals.first().cloned()
-//             }
-//             false => None,
-//         })
-//         .expect("Should be able to find subnet and a node operator with nodes in it");
-
-//     let response = submit_proposal(&pic, canister, no_in_subnet.0.clone(), nns, true);
-//     assert!(response.is_ok());
-
-//     let response = get_pending(&pic, canister);
-
-//     assert!(response.len() == 1);
-//     let proposal = response.first().unwrap();
-
-//     let node_operators_in_subnet = args
-//         .subnet_node_operators
-//         .iter()
-//         .find_map(|arg| {
-//             if arg.subnet_id.0 == nns {
-//                 Some(arg.node_operators.clone())
-//             } else {
-//                 None
-//             }
-//         })
-//         .expect("Should find the corresponding number of node operators");
-
-//     let expected_ballots: u8 = node_operators_in_subnet.values().sum();
-//     assert_eq!(
-//         proposal.node_operator_ballots.len(),
-//         expected_ballots as usize,
-//         "Received:\n{:?}\nExpected (key * value):\n{:?}",
-//         proposal.node_operator_ballots,
-//         node_operators_in_subnet
-//     );
-//     assert!(proposal.proposer.eq(no_in_subnet));
-
-//     let voted_yes: Vec<_> = proposal
-//         .node_operator_ballots
-//         .iter()
-//         .filter(|(_, ballot)| {
-//             ballot.eq(&ic_nns_handler_root::root_proposals::RootProposalBallot::Yes)
-//         })
-//         .collect();
-
-//     let (no_principal, _) = voted_yes.first().unwrap();
-//     assert_eq!(no_principal, no_in_subnet);
-//     assert_eq!(
-//         voted_yes.len(),
-//         *node_operators_in_subnet.get(no_in_subnet).unwrap() as usize
-//     );
-
-//     let voted_undecided: Vec<_> = proposal
-//         .node_operator_ballots
-//         .iter()
-//         .filter(|(_, ballot)| {
-//             ballot.eq(&ic_nns_handler_root::root_proposals::RootProposalBallot::Undecided)
-//         })
-//         .collect();
-//     // All others still didn't vote since its just been proposed
-//     assert_eq!(
-//         voted_undecided.len() as u8,
-//         expected_ballots - voted_yes.len() as u8
-//     );
-// }
