@@ -306,8 +306,8 @@ impl NnsCanisters<'_> {
         assert_eq!(
             wait_for_final_state(&self.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
     }
 }

@@ -34,7 +34,7 @@ use std::sync::Arc;
 mod common;
 use common::*;
 
-use ic_cycles_account_manager::WasmExecutionMode;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
@@ -253,7 +253,7 @@ fn correct_charging_source_canister_for_a_request() {
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -443,8 +443,8 @@ fn call_increases_cycles_consumed_metric() {
     api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
     api.ic0_call_perform().unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -526,7 +526,7 @@ fn test_inter_canister_call(
         .unwrap();
 
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,

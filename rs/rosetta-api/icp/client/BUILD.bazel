@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/ed25519",
     "//rs/crypto/secp256k1",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nns/governance/api",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp:ic-rosetta-api",
     "//rs/rosetta-api/icp:rosetta-api",

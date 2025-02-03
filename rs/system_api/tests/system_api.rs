@@ -171,7 +171,12 @@ fn update_api() -> ApiType {
 }
 
 fn replicated_query_api() -> ApiType {
-    ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get())
+    ApiType::replicated_query(
+        UNIX_EPOCH,
+        vec![],
+        user_test_id(1).get(),
+        call_context_test_id(1),
+    )
 }
 
 fn non_replicated_query_api() -> ApiType {
@@ -251,13 +256,13 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgReply => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgReject => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgDeadline => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
-        SystemApiCallId::MsgCyclesAvailable => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "RQ",  "Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded => vec!["Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded128 => vec!["Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::MsgCyclesAccept => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CanisterSelfSize => vec!["*"],
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
@@ -294,7 +299,9 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
-        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::SubnetSelfSize => vec!["*"],
+        SystemApiCallId::SubnetSelfCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -781,6 +788,26 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::SubnetSelfSize => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::SubnetSelfCopy => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         // stable API is tested separately
         SystemApiCallId::StableGrow
         | SystemApiCallId::StableRead
@@ -1137,8 +1164,8 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1310,8 +1337,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             res
         ),
     }
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1454,8 +1481,8 @@ fn helper_test_on_low_wasm_memory(
             .unwrap();
     }
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1723,8 +1750,8 @@ fn push_output_request_respects_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1839,8 +1866,8 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1875,8 +1902,8 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
 
     // Propagate system state changes
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,

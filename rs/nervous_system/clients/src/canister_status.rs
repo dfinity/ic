@@ -47,9 +47,11 @@ impl std::fmt::Display for CanisterStatusType {
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
-    Controllers = 1,
+    Controllers,
     #[serde(rename = "public")]
-    Public = 2,
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<PrincipalId>),
 }
 
 /// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
@@ -86,7 +88,7 @@ pub struct CanisterStatusResult {
     pub reserved_cycles: Option<candid::Nat>,
 }
 
-/// Copy-paste of ic-types::ic_00::CanisterStatusResult.
+/// Copy-paste of `ic_management_canister_types::CanisterStatusResultV2`.
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
@@ -98,7 +100,7 @@ pub struct CanisterStatusResultFromManagementCanister {
     pub reserved_cycles: candid::Nat,
 }
 
-/// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
+/// Partial copy-paste of `ic_management_canister_types::DefiniteCanisterSettingsArgs`.
 ///
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown

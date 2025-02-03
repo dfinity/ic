@@ -11,7 +11,16 @@ pub struct NeuronPermission {
 /// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
 /// (the account that holds the neuron's staked tokens).
 #[derive(
-    Default, candid::CandidType, candid::Deserialize, Debug, Eq, std::hash::Hash, Clone, PartialEq,
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
 )]
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
@@ -587,6 +596,7 @@ pub mod governance_error {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ErrorType {
@@ -1076,6 +1086,9 @@ pub struct NervousSystemParameters {
     /// that the PB default (bool fields are false) and our application default
     /// (enabled) agree.
     pub maturity_modulation_disabled: Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    pub automatically_advance_target_version: Option<bool>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {
@@ -2236,6 +2249,7 @@ pub mod upgrade_journal_entry {
     pub struct TargetVersionSet {
         pub old_target_version: Option<super::governance::Version>,
         pub new_target_version: Option<super::governance::Version>,
+        pub is_advanced_automatically: Option<bool>,
     }
     #[derive(
         candid::CandidType, candid::Deserialize, Debug, serde::Serialize, Clone, PartialEq,
@@ -2376,6 +2390,7 @@ pub struct Account {
     Hash,
     PartialOrd,
     Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum NeuronPermissionType {

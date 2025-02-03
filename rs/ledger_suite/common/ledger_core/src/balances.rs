@@ -19,13 +19,6 @@ pub trait BalancesStore {
         F: FnMut(Option<&Self::Tokens>) -> Result<Self::Tokens, E>;
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait InspectableBalancesStore: BalancesStore {
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Self::Tokens)> + '_>;
-
-    fn len(&self) -> usize;
-}
-
 impl<AccountId, Tokens> BalancesStore for BTreeMap<AccountId, Tokens>
 where
     AccountId: Eq + Clone + std::cmp::Ord,
@@ -60,20 +53,6 @@ where
                 Ok(new_v)
             }
         }
-    }
-}
-
-impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
-where
-    AccountId: Eq + Clone + std::cmp::Ord,
-    Tokens: TokensType,
-{
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Self::Tokens)> + '_> {
-        Box::new(self.iter())
     }
 }
 
