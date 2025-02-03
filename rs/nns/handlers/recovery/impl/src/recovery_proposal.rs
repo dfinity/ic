@@ -121,27 +121,28 @@ pub fn submit_recovery_proposal(
 
     PROPOSALS.with_borrow_mut(|proposals| {
         match proposals.len() {
-            // There is no proposals currently and the only possible proposal to be placed is
-            // HALT NNS Subnet
-            0 => match &new_proposal.payload {
-                RecoveryPayload::Halt => {
-                    proposals.push(RecoveryProposal {
-                        proposer: caller,
-                        submission_timestamp_seconds: now_seconds(),
-                        node_operator_ballots: initialize_ballots_from_node_operators(
-                            &nodes_in_nns,
-                        ),
-                        payload: RecoveryPayload::Halt,
-                    });
+            0 => {
+                // There is no proposals currently and the only possible proposal to be placed is
+                // HALT NNS Subnet
+                match &new_proposal.payload {
+                    RecoveryPayload::Halt => {
+                        proposals.push(RecoveryProposal {
+                            proposer: caller,
+                            submission_timestamp_seconds: now_seconds(),
+                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
+                            payload: RecoveryPayload::Halt,
+                        });
+                    }
+                    _ => {
+                        let message = format!(
+                            "Caller {} tried to place proposal {:?} which is currently not allowed",
+                            caller, new_proposal
+                        );
+                        ic_cdk::println!("{}", message);
+                        return Err(message);
+                    }
                 }
-                _ => {
-                    let message = format!(
-                        "Caller {} tried to place proposal {:?} which is currently not allowed", caller, new_proposal
-                    );
-                    ic_cdk::println!("{}", message);
-                    return Err(message);
-                }
-            },
+            }
             1 => {
                 // The only possible previous proposal is a proposal to HALT NNS subnet
                 // Ensure that previous proposal is voted in
@@ -149,9 +150,7 @@ pub fn submit_recovery_proposal(
 
                 // No need to check if it is a majority no because it will be removed if it is
                 if !first.is_byzantine_majority_yes() {
-                    let message = format!(
-                        "Caller {} tried to place proposal {:?} which and the previous proposal wasn't executed", caller, new_proposal
-                    );
+                    let message = format!("Can't submit a proposal until the previous is decided");
                     ic_cdk::println!("{}", message);
                     return Err(message);
                 }
@@ -159,54 +158,73 @@ pub fn submit_recovery_proposal(
                 // Its possible to either request recovery or unhalt the nns subnet if the issues
                 // self corrected
                 match &new_proposal.payload {
-                    RecoveryPayload::DoRecovery { height: _, state_hash: _ } | RecoveryPayload::Unhalt => {
+                    RecoveryPayload::DoRecovery {
+                        height: _,
+                        state_hash: _,
+                    }
+                    | RecoveryPayload::Unhalt => {
                         proposals.push(RecoveryProposal {
                             proposer: caller,
                             submission_timestamp_seconds: now_seconds(),
-                            node_operator_ballots: initialize_ballots_from_node_operators(&nodes_in_nns),
+                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
                             payload: new_proposal.payload.clone(),
                         });
-                    },
+                    }
                     _ => {
                         let message = format!(
-                            "Caller {} tried to place proposal {:?} which is currently not allowed", caller, new_proposal
+                            "Caller {} tried to place proposal {:?} which is currently not allowed",
+                            caller, new_proposal
                         );
                         ic_cdk::println!("{}", message);
                         return Err(message);
                     }
                 }
-            },
+            }
             2 => {
                 // There are two previous options:
                 //     1. Recovery - if this is previous proposal allow placing of the next only if it is voted in
                 //     2. Unhalt - if this is previous proposal don't allow placing new proposal
                 let second_proposal = proposals.get(1).expect("Must have at least two proposals");
                 match (&second_proposal.payload, &new_proposal.payload) {
-                    (RecoveryPayload::DoRecovery { height: _, state_hash: _ }, RecoveryPayload::Unhalt) => {
+                    (
+                        RecoveryPayload::DoRecovery {
+                            height: _,
+                            state_hash: _,
+                        },
+                        RecoveryPayload::Unhalt,
+                    ) => {
                         if !second_proposal.is_byzantine_majority_yes() {
-                            let message = format!("Caller {} tried to place proposal {:?} before the outcome of proposal {:?} is decided", caller, new_proposal, second_proposal);
+                            let message =
+                                format!("Can't submit a proposal until the previous is decided");
                             ic_cdk::println!("{}", message);
                             return Err(message);
                         }
-                        proposals.push(RecoveryProposal { proposer: caller, submission_timestamp_seconds: now_seconds(), node_operator_ballots: initialize_ballots_from_node_operators(&nodes_in_nns), payload: RecoveryPayload::Unhalt });            
-                    },
+                        proposals.push(RecoveryProposal {
+                            proposer: caller,
+                            submission_timestamp_seconds: now_seconds(),
+                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
+                            payload: RecoveryPayload::Unhalt,
+                        });
+                    }
                     (_, _) => {
                         let message = format!(
-                            "Caller {} tried to place proposal {:?} which is currently not allowed", caller, new_proposal
+                            "Caller {} tried to place proposal {:?} which is currently not allowed",
+                            caller, new_proposal
                         );
                         ic_cdk::println!("{}", message);
                         return Err(message);
                     }
                 }
-            },
+            }
             3 => {
                 // Already submited all three proposals.
                 let message = format!(
-                    "Caller {} tried to place proposal {:?} which is currently not allowed", caller, new_proposal
+                    "Caller {} tried to place proposal {:?} which is currently not allowed",
+                    caller, new_proposal
                 );
                 ic_cdk::println!("{}", message);
                 return Err(message);
-            },
+            }
             _ => unreachable!(
                 "There is an error in the logic since its not possible to have 3 proposals"
             ),
@@ -215,9 +233,7 @@ pub fn submit_recovery_proposal(
     })
 }
 
-fn initialize_ballots_from_node_operators(
-    simple_node_records: &Vec<SimpleNodeRecord>,
-) -> Vec<NodeOperatorBallot> {
+fn initialize_ballots(simple_node_records: &Vec<SimpleNodeRecord>) -> Vec<NodeOperatorBallot> {
     simple_node_records
         .iter()
         .fold(Vec::new(), |mut acc, next| {
