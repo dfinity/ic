@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
 ic-nervous-system-common = { path = "../../common" }

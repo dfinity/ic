@@ -2,7 +2,7 @@
 pub use crate::prometheus::{get_counter, get_gauge, get_samples};
 
 use async_trait::async_trait;
-use dfn_core::CanisterId;
+use ic_base_types::CanisterId;
 use futures::{
     channel::{
         mpsc::{UnboundedReceiver, UnboundedSender},

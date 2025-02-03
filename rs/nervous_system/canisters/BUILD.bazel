@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
-    "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
 ]
