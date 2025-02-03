@@ -353,7 +353,7 @@ impl From<RequestOrResponse> for CanisterInput {
 ///    whose responses have been shed.
 ///
 /// Implements the `MessageStore` trait for both inbound messages
-/// (`T = CanisterInput` items that are eiter pooled messages or compact
+/// (`T = CanisterInput` items that are either pooled messages or compact
 /// responses) and outbound messages (pooled `RequestOrResponse items`).
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct MessageStoreImpl {
@@ -1724,8 +1724,8 @@ fn generate_timeout_response(request: &Request) -> Response {
     }
 }
 
-/// Returns a function that determines the input queue type (local or remote) of
-/// a given sender, based on a the set of all local canisters, plus
+/// Returns a function that determines the input queue type (local or remote)
+/// of a given sender, based on the set of all local canisters, plus
 /// `own_canister_id` (since Rust's ownership rules would prevent us from
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(

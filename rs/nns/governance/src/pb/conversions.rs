@@ -80,41 +80,6 @@ impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
     }
 }
 
-impl From<pb::Neuron> for pb_api::Neuron {
-    fn from(item: pb::Neuron) -> Self {
-        Self {
-            id: item.id,
-            account: item.account,
-            controller: item.controller,
-            hot_keys: item.hot_keys,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            followees: item
-                .followees
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            kyc_verified: item.kyc_verified,
-            transfer: item.transfer.map(|x| x.into()),
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-            deciding_voting_power: item.deciding_voting_power,
-            potential_voting_power: item.potential_voting_power,
-        }
-    }
-}
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
         Self {
@@ -147,8 +112,6 @@ impl From<pb_api::Neuron> for pb::Neuron {
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
             // This field is internal only and should not be read from API types.
             recent_ballots_next_entry_index: None,
-            deciding_voting_power: item.deciding_voting_power,
-            potential_voting_power: item.potential_voting_power,
         }
     }
 }
