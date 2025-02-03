@@ -564,3 +564,64 @@ fn place_proposal_and_vote_yes_with_one_node_operator() {
     total_nodes_in_subnet_from_no_voters.dedup();
     assert_eq!(voted_no, total_nodes_in_subnet_from_no_voters);
 }
+
+#[test]
+fn test_byzantine_majority() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let nns = pic.topology().get_nns().unwrap();
+    let mut node_operators = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|arg| match arg.subnet_id.0 == nns {
+            true => {
+                let operator_principals = arg
+                    .node_operators
+                    .iter()
+                    .map(|(principal, _)| principal)
+                    .collect::<Vec<_>>();
+
+                Some(operator_principals)
+            }
+            false => None,
+        })
+        .expect("Should be able to find subnet and a node operators with nodes in it");
+
+    let proposer = node_operators.pop().unwrap();
+    let response = submit_proposal(&pic, canister, proposer.0.clone(), nns, true);
+    assert!(response.is_ok());
+
+    // For this test we have 40 nodes spread across 10 node operators.
+    // max faults = (40 - 1) / 3 = 13
+    // needed yes => 40 - 13 = 27
+    // Each operator has 4 nodes which means that we need 7 node operators
+    // to vote yes to adopt the proposal.
+
+    // Since one is the proposer it means we require 6 more
+
+    // First 5 should be able to vote and still fetch the proposal. After the 6th
+    // votes the proposal will be removed meaning it should no longer be fetchable
+
+    for voter in 0..5 {
+        let voter = node_operators
+            .get(voter)
+            .expect("Should exist for this example");
+
+        let response = vote(&pic, canister, voter.0, *proposer, RootProposalBallot::Yes);
+        assert!(response.is_ok());
+
+        let pending_proposals = get_pending(&pic, canister);
+        assert!(pending_proposals.len().eq(&1));
+    }
+
+    // After the 6th one goes in it should no longer be fetchable
+    let voter = node_operators
+        .get(5)
+        .expect("Should exist for this example");
+    let response = vote(&pic, canister, voter.0, *proposer, RootProposalBallot::Yes);
+    assert!(response.is_ok());
+
+    let pending_proposals = get_pending(&pic, canister);
+    assert!(pending_proposals.is_empty());
+}
