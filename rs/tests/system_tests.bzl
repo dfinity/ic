@@ -241,7 +241,7 @@ def system_test(
     # Environment variable names to targets (targets are resolved)
     _env_deps = {}
 
-    _guestos = "//ic-os/guestos/envs/dev:"
+    _guestos = "//ic-os/guestos/envs/local-base-dev:"
     _hostos = "//ic-os/hostos/envs/dev:"
     _setupos = "//ic-os/setupos/envs/dev:"
 
