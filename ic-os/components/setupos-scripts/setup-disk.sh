@@ -11,7 +11,7 @@ source /opt/ic/bin/functions.sh
 function purge_partitions() {
     echo "* Purging partitions..."
 
-    # Destroy guest partitions
+    # Destroy guest partitions (for redeployments)
     vgscan --mknodes
     loop_device=$(losetup -P -f /dev/mapper/hostlvm-guestos --show)
     if [ "${loop_device}" != "" ]; then
@@ -21,12 +21,14 @@ function purge_partitions() {
             echo "WARNING: Unable to purge GuestOS partitions on ${loop_device}"
         fi
         losetup -d "${loop_device}"
+    else
+        echo "Unable to detect GuestOS loop device (may not exist)"
     fi
 
-    # Destroy host partitions
+    # Destroy host partitions (for redeployments)
     wipefs --all --force "/dev/mapper/hostlvm"*
     if [ "${?}" -ne 0 ]; then
-        echo "WARNING: Unable to purge HostOS partitions"
+        echo "Unable to purge HostOS partitions (may not exist)"
     fi
     vgremove --force hostlvm
 
