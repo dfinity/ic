@@ -5,7 +5,6 @@ use ic_nns_handler_root::{
     backup_root_proposals::ChangeSubnetHaltStatus, encode_metrics,
     root_proposals::RootProposalBallot,
 };
-use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
@@ -14,12 +13,6 @@ use ic_cdk::{post_upgrade, query, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
-}
-
-thread_local! {
-    // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
-    // a reasonable balance.
-    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = const { RefCell::new(167) };
 }
 
 // canister_init and canister_post_upgrade are needed here
@@ -42,6 +35,8 @@ async fn submit_root_proposal_to_change_subnet_halt_status(
     subnet_id: SubnetId,
     halt: bool,
 ) -> Result<(), String> {
+    //TODO: Create a separate thing that polls nns for node operators and store them in memory
+    // If nns is down we won't be able to call registry canister
     ic_nns_handler_root::backup_root_proposals::submit_root_proposal_to_change_subnet_halt_status(
         caller(),
         subnet_id,
@@ -52,10 +47,14 @@ async fn submit_root_proposal_to_change_subnet_halt_status(
 
 #[update(hidden = true)]
 async fn vote_on_root_proposal_to_change_subnet_halt_status(
-    _proposer: PrincipalId,
-    _ballot: RootProposalBallot,
+    proposer: PrincipalId,
+    ballot: RootProposalBallot,
 ) -> Result<(), String> {
-    Ok(())
+    ic_nns_handler_root::backup_root_proposals::vote_on_root_proposal_to_change_subnet_halt_status(
+        caller(),
+        proposer,
+        ballot,
+    )
 }
 
 #[update(hidden = true)]

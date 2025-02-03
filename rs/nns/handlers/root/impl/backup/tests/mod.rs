@@ -3,7 +3,9 @@ use std::{collections::BTreeMap, path::PathBuf};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_handler_root::backup_root_proposals::ChangeSubnetHaltStatus;
+use ic_nns_handler_root::{
+    backup_root_proposals::ChangeSubnetHaltStatus, root_proposals::RootProposalBallot,
+};
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
@@ -263,7 +265,30 @@ fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<ChangeSubnetHaltStatu
 
     let response: Vec<ChangeSubnetHaltStatus> =
         candid::decode_one(&response).expect("Should be able to decode response");
+    println!("{:?}", response);
 
+    response
+}
+
+fn vote(
+    pic: &PocketIc,
+    canister: Principal,
+    sender: Principal,
+    proposer: PrincipalId,
+    ballot: RootProposalBallot,
+) -> Result<(), String> {
+    let response = pic
+        .update_call(
+            canister.into(),
+            sender,
+            "vote_on_root_proposal_to_change_subnet_halt_status",
+            candid::encode_args((proposer, ballot)).unwrap(),
+        )
+        .expect("Should be able to call vote function");
+
+    let response: Result<(), String> =
+        candid::decode_one(&response).expect("Should be able to decode response");
+    println!("{:?}", response);
     response
 }
 
@@ -382,4 +407,160 @@ fn disallow_proposals_from_node_operators_not_in_subnet() {
 
     let response = get_pending(&pic, canister);
     assert!(response.len() == 0)
+}
+
+#[test]
+fn place_proposal_and_vote_yes_with_one_node_operator() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let nns = pic.topology().get_nns().unwrap();
+    let mut node_operators = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|arg| match arg.subnet_id.0 == nns {
+            true => {
+                let operator_principals = arg
+                    .node_operators
+                    .iter()
+                    .map(|(principal, _)| principal)
+                    .collect::<Vec<_>>();
+
+                Some(operator_principals)
+            }
+            false => None,
+        })
+        .expect("Should be able to find subnet and a node operators with nodes in it");
+
+    let proposer = node_operators.pop().unwrap();
+    let response = submit_proposal(&pic, canister, proposer.0.clone(), nns, true);
+    assert!(response.is_ok());
+
+    let first_voter = node_operators.pop().unwrap();
+    let response = vote(
+        &pic,
+        canister,
+        first_voter.0.clone(),
+        proposer.clone(),
+        RootProposalBallot::Yes,
+    );
+    assert!(response.is_ok());
+
+    let second_voter = node_operators.pop().unwrap();
+    let response = vote(
+        &pic,
+        canister,
+        second_voter.0.clone(),
+        proposer.clone(),
+        RootProposalBallot::No,
+    );
+    assert!(response.is_ok());
+
+    let non_existant_voter = Principal::anonymous();
+    let response = vote(
+        &pic,
+        canister,
+        non_existant_voter,
+        proposer.clone(),
+        RootProposalBallot::Yes,
+    );
+    assert!(response.is_err());
+
+    let try_vote_second_again = vote(
+        &pic,
+        canister,
+        second_voter.0.clone(),
+        proposer.clone(),
+        RootProposalBallot::Yes,
+    );
+    assert!(try_vote_second_again.is_err());
+
+    let proposals = get_pending(&pic, canister);
+    let proposal = proposals.first().unwrap();
+
+    let voted_yes: Vec<(PrincipalId, RootProposalBallot)> = proposal
+        .node_operator_ballots
+        .iter()
+        .filter(|(_, ballot)| ballot == &RootProposalBallot::Yes)
+        .cloned()
+        .collect();
+
+    let total_nodes_in_subnet_from_yes_voters: Vec<(PrincipalId, u8)> = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|subnet_arg| match subnet_arg.subnet_id.0.eq(&nns) {
+            false => None,
+            true => Some(
+                subnet_arg
+                    .node_operators
+                    .clone()
+                    .into_iter()
+                    .filter(|(principal, _)| principal.eq(proposer) || principal.eq(first_voter))
+                    .collect(),
+            ),
+        })
+        .unwrap();
+
+    assert_eq!(
+        voted_yes.len(),
+        total_nodes_in_subnet_from_yes_voters
+            .iter()
+            .map(|(_, nodes)| nodes)
+            .sum::<u8>() as usize
+    );
+
+    let mut voted_yes = voted_yes.iter().map(|(p, _)| p).collect::<Vec<_>>();
+    voted_yes.sort();
+    voted_yes.dedup();
+
+    let mut total_nodes_in_subnet_from_yes_voters = total_nodes_in_subnet_from_yes_voters
+        .iter()
+        .map(|(p, _)| p)
+        .collect::<Vec<_>>();
+    total_nodes_in_subnet_from_yes_voters.sort();
+    total_nodes_in_subnet_from_yes_voters.dedup();
+    assert_eq!(voted_yes, total_nodes_in_subnet_from_yes_voters);
+
+    let voted_no: Vec<(PrincipalId, RootProposalBallot)> = proposal
+        .node_operator_ballots
+        .iter()
+        .filter(|(_, ballot)| ballot == &RootProposalBallot::No)
+        .cloned()
+        .collect();
+
+    let total_nodes_in_subnet_from_no_voters: Vec<(PrincipalId, u8)> = args
+        .subnet_node_operators
+        .iter()
+        .find_map(|subnet_arg| match subnet_arg.subnet_id.0.eq(&nns) {
+            false => None,
+            true => Some(
+                subnet_arg
+                    .node_operators
+                    .clone()
+                    .into_iter()
+                    .filter(|(principal, _)| principal.eq(second_voter))
+                    .collect(),
+            ),
+        })
+        .unwrap();
+
+    assert_eq!(
+        voted_no.len(),
+        total_nodes_in_subnet_from_no_voters
+            .iter()
+            .map(|(_, nodes)| nodes)
+            .sum::<u8>() as usize
+    );
+
+    let mut voted_no = voted_no.iter().map(|(p, _)| p).collect::<Vec<_>>();
+    voted_no.sort();
+    voted_no.dedup();
+
+    let mut total_nodes_in_subnet_from_no_voters = total_nodes_in_subnet_from_no_voters
+        .iter()
+        .map(|(p, _)| p)
+        .collect::<Vec<_>>();
+    total_nodes_in_subnet_from_no_voters.sort();
+    total_nodes_in_subnet_from_no_voters.dedup();
+    assert_eq!(voted_no, total_nodes_in_subnet_from_no_voters);
 }

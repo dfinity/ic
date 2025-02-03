@@ -137,7 +137,7 @@ pub async fn submit_root_proposal_to_change_subnet_halt_status(
     PROPOSALS.with(|proposals| {
         if let Some(proposal) = proposals.borrow().get(&caller) {
             println!(
-                "Current root proposal {:?} from {} is going to be overwritten.",
+                "Current proposal {:?} from {} is going to be overwritten.",
                 proposal, caller,
             );
         }
@@ -155,4 +155,82 @@ pub async fn submit_root_proposal_to_change_subnet_halt_status(
     });
 
     Ok(())
+}
+
+pub fn vote_on_root_proposal_to_change_subnet_halt_status(
+    caller: PrincipalId,
+    proposer: PrincipalId,
+    ballot: RootProposalBallot,
+) -> Result<(), String> {
+    if ballot.eq(&RootProposalBallot::Undecided) {
+        return Err("Cannot register an undecided vote".to_string());
+    }
+
+    PROPOSALS.with(|proposals| {
+        let mut proposals = proposals.borrow_mut();
+        let proposal = proposals.get_mut(&proposer).ok_or({
+            let message = format!("No change subnet halt status from {} is pending", proposer);
+            println!("{}", message);
+            message
+        })?;
+
+        // Check if the proposal timed out?
+
+        let mut voted_on: i32 = 0;
+        for (_, node_operator_ballot) in &mut proposal
+            .node_operator_ballots
+            .iter_mut()
+            .filter(|(node_operator, _)| node_operator == &caller)
+        {
+            // Already voted
+            if !node_operator_ballot.eq(&&RootProposalBallot::Undecided) {
+                let message = format!("Caller: {} has already voted on this proposal", caller);
+                println!("{}", message);
+                return Err(message);
+            }
+
+            // Register a vote
+            *node_operator_ballot = ballot.clone();
+            voted_on += 1;
+        }
+
+        if voted_on == 0 {
+            let message = format!(
+                "Caller: {} is not eligible to vote on root change status proposal",
+                caller
+            );
+            println!("{}", message);
+            return Err(message);
+        }
+
+        let mut votes_yes: u32 = 0;
+        let mut votes_no: u32 = 0;
+        let mut votes_undecided: u32 = 0;
+
+        for (_, ballot) in &proposal.node_operator_ballots {
+            match ballot {
+                RootProposalBallot::Yes => votes_yes += 1,
+                RootProposalBallot::No => votes_no += 1,
+                RootProposalBallot::Undecided => votes_undecided += 1,
+            }
+        }
+
+        println!("Vote(s) on root proposal to change subnet status from proposer {}: Current tally: {} Yes, {} No, {} Undecided", proposer, votes_yes, votes_no, votes_undecided);
+        if proposal.is_byzantine_majority_yes() {
+            println!(
+                "Proposal from proposer {} has received majority yes",
+                proposer
+            );
+            // Update the status somewhere from where the orchestrator is polling
+            proposals.remove(&proposer);
+        } else if proposal.is_byzantine_majority_no() {
+            println!(
+                "Proposal from proposer {} has received majority no",
+                proposer
+            );
+            proposals.remove(&proposer);
+        }
+
+        Ok(())
+    })
 }
