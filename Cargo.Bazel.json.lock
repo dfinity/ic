@@ -1,5 +1,5 @@
 {
-  "checksum": "1c198a1e523171945768f2579f76f306cd68c8c7ddd074aaa8f5dc8eb8a28426",
+  "checksum": "fdf963ba3ffb1ad926d2a7c4089133ae5e18acd1dbc5632a38f8e81ae58c04aa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -91510,11 +91510,5 @@
     "zstd 0.13.2"
   ],
   "direct_dev_deps": [],
-  "unused_patches": [
-    {
-      "name": "jsonrpc",
-      "version": "0.12.1",
-      "source": "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"
-    }
-  ]
+  "unused_patches": []
 }
