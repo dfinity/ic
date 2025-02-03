@@ -371,7 +371,7 @@ impl CallOrTaskHelper {
         validate_message(&canister, &original.method)?;
 
         match original.call_or_task {
-            CanisterCallOrTask::Update(_) | CanisterCallOrTask(_) => {
+            CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
                 let wasm_memory_usage = canister
                     .execution_state
                     .as_ref()
