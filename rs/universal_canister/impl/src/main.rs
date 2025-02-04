@@ -441,6 +441,40 @@ fn eval(ops_bytes: OpsBytes) {
                 }
                 std::hint::black_box(a);
             }
+            Ops::ReplicationFactor => {
+                let size = stack.pop_int();
+                let src = stack.pop_int();
+                stack.push_int(api::replication_factor(src, size))
+            }
+            Ops::CostCall => {
+                let payload_size = stack.pop_int64();
+                let method_name_size = stack.pop_int64();
+                stack.push_blob(api::cost_call(method_name_size, payload_size));
+            }
+            Ops::CostCreateCanister => stack.push_blob(api::cost_create_canister()),
+            Ops::CostHttpRequest => {
+                let max_res_bytes = stack.pop_int64();
+                let request_size = stack.pop_int64();
+                stack.push_blob(api::cost_http_request(request_size, max_res_bytes));
+            }
+            Ops::CostSignWithEcdsa => {
+                let ecdsa_curve = stack.pop_int();
+                let size = stack.pop_int();
+                let src = stack.pop_int();
+                stack.push_blob(api::cost_sign_with_ecdsa(src, size, ecdsa_curve));
+            }
+            Ops::CostSignWithSchnorr => {
+                let algorithm = stack.pop_int();
+                let size = stack.pop_int();
+                let src = stack.pop_int();
+                stack.push_blob(api::cost_sign_with_schnorr(src, size, algorithm));
+            }
+            Ops::CostVetkdDeriveEncryptedKey => {
+                let vetkd_curve = stack.pop_int();
+                let size = stack.pop_int();
+                let src = stack.pop_int();
+                stack.push_blob(api::cost_vetkd_derive_encrypted_key(src, size, vetkd_curve));
+            }
         }
     }
 }
