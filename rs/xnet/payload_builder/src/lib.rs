@@ -539,7 +539,7 @@ impl XNetPayloadBuilderImpl {
             // messages have been GC-ed). Meaning we can never have signals going back
             // farther than the maximum number of messages in a stream.
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES as u64 {
+            if signals_end.get() - signals_begin.index.get() > 2 * MAX_STREAM_MESSAGES as u64 {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
