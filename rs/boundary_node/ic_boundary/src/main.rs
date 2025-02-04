@@ -4,6 +4,7 @@ use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
+mod attestation;
 mod bouncer;
 mod cache;
 mod check;

@@ -12,7 +12,7 @@ impl CertifiedState {
     pub fn insert_attestation_token(
         &self,
         attestation_token_payload: &AttestationTokenPayload,
-    ) -> Result<(), serde_cbor::Error> {
+    ) -> anyhow::Result<()> {
         self.state.borrow_mut().insert(
             &[
                 attestation_token::ATTESTATION_TOKENS_LABEL.to_vec(),
@@ -20,6 +20,7 @@ impl CertifiedState {
             ],
             serde_cbor::to_vec(attestation_token_payload)?,
         );
+        Ok(())
     }
 
     pub fn attestation_token_witness(&self, node_id: &Principal) -> Option<HashTree> {

@@ -1,55 +1,40 @@
 use crate::attestation::SevAttestationReport;
-use candid::Deserialize;
-use std::error::Error;
+use candid::CandidType;
+use std::fmt::{Debug, Display};
 
-#[non_exhaustive]
-#[derive(candid::CandidType, candid::Deserialize)]
+pub use crate::error::{VerificationError, VerificationErrorDetail};
+
+#[derive(CandidType, candid::Deserialize)]
 pub struct GenerateAttestationTokenChallenge {
     pub nonce: Vec<u8>,
 }
 
-#[derive(candid::CandidType)]
+#[derive(CandidType, candid::Deserialize)]
 pub struct InitiateGenerateAttestationTokenRequest {
-    pub chip_id: Vec<u8>,
+    pub tls_public_key: Vec<u8>,
 }
 
-#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(CandidType, candid::Deserialize)]
 pub struct InitiateGenerateAttestationTokenResponse {
     pub challenge: GenerateAttestationTokenChallenge,
 }
 
-#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(CandidType, candid::Deserialize)]
 pub struct GenerateAttestationTokenRequest {
     pub tls_public_key: Vec<u8>,
     pub nonce: Vec<u8>,
     pub sev_attestation_report: SevAttestationReport,
 }
 
-#[derive(candid::CandidType, candid::Deserialize)]
-#[non_exhaustive]
-pub enum GenerateAttestationTokenError {
-    InvalidNonce,
-    InvalidAttestationReport(String),
-    Internal(String),
-}
-
-impl<E: Error> From<E> for GenerateAttestationTokenError {
-    fn from(error: E) -> Self {
-        GenerateAttestationTokenError::Internal(error.to_string())
-    }
-}
-
-#[derive(candid::CandidType)]
+#[derive(CandidType, candid::Deserialize)]
 pub struct GenerateAttestationTokenResponse {}
 
-trait Attestor {
-    fn initiate_generate_attestation_token(
-        &self,
-        request: InitiateGenerateAttestationTokenRequest,
-    ) -> InitiateGenerateAttestationTokenResponse;
+#[derive(CandidType, candid::Deserialize)]
+pub struct FetchAttestationTokenRequest {
+    pub tls_public_key: Vec<u8>,
+}
 
-    fn generate_attestation_token(
-        &self,
-        request: GenerateAttestationTokenRequest,
-    ) -> GenerateAttestationTokenResponse;
+#[derive(CandidType, candid::Deserialize)]
+pub struct FetchAttestationTokenResponse {
+    pub attestation_token: Vec<u8>,
 }

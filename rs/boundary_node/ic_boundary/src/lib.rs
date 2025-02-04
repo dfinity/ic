@@ -1,3 +1,4 @@
+mod attestation;
 mod bouncer;
 mod cache;
 mod check;

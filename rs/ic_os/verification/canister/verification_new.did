@@ -1,65 +1,45 @@
 type CertTableEntry = record { cert_type : opt CertType; data : blob };
-
 type CertType = variant { ARK; ASK; CRL; VCEK; VLEK; OTHER : record {} };
-
 type FetchAttestationTokenRequest = record { tls_public_key : blob };
-
 type FetchAttestationTokenResponse = record { attestation_token : blob };
-
 type GenerateAttestationTokenChallenge = record { nonce : blob };
-
 type GenerateAttestationTokenRequest = record {
   tls_public_key : blob;
   sev_attestation_report : SevAttestationReport;
   nonce : blob;
 };
-
-type InitiateGenerateAttestationTokenRequest = record {
-  tls_public_key : blob
-};
-
 type InitiateGenerateAttestationTokenResponse = record {
   challenge : GenerateAttestationTokenChallenge;
 };
-
-type FetchAttestationTokenResult = variant {
+type Result = variant {
   Ok : FetchAttestationTokenResponse;
   Err : VerificationError;
 };
-
-type GenerateAttestationTokenResponse = record {};
-
-type GenerateAttestationTokenResult = variant {
-  Ok : GenerateAttestationTokenResponse;
-  Err : VerificationError
-};
-
-type InitiateGenerateAttestationTokenResult = variant {
+type Result_1 = variant { Ok : record {}; Err : VerificationError };
+type Result_2 = variant {
   Ok : InitiateGenerateAttestationTokenResponse;
   Err : VerificationError;
 };
-
 type SevAttestationReport = record {
   attestation_report : blob;
   certificates : vec CertTableEntry;
 };
-
 type VerificationError = record {
   detail : opt VerificationErrorDetail;
   message : text;
 };
-
 type VerificationErrorDetail = variant {
-  Internal : record { message: text };
-  InvalidNonce : reserved;
-  AttestationTokenNotFound : reserved;
-  NonceNotFound : reserved;
-  InvalidAttestationReport : record { message: text };
-  NonceTooOld : reserved;
+  Internal : record { message : text };
+  InvalidNonce;
+  AttestationTokenNotFound;
+  NonceNotFound;
+  InvalidAttestationReport : record { message : text };
+  NonceTooOld;
 };
-
 service : {
-  fetch_attestation_token : (FetchAttestationTokenRequest) -> (FetchAttestationTokenResult) query;
-  generate_attestation_token : (GenerateAttestationTokenRequest) -> (GenerateAttestationTokenResult);
-  initiate_generate_attestation_token : (InitiateGenerateAttestationTokenRequest) -> (InitiateGenerateAttestationTokenResult);
+  fetch_attestation_token : (FetchAttestationTokenRequest) -> (Result) query;
+  generate_attestation_token : (GenerateAttestationTokenRequest) -> (Result_1);
+  initiate_generate_attestation_token : (FetchAttestationTokenRequest) -> (
+      Result_2,
+    );
 }

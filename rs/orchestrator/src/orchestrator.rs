@@ -18,6 +18,7 @@ use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
@@ -185,6 +186,8 @@ impl Orchestrator {
         })
         .await
         .unwrap();
+
+        crypto.server_config();
 
         let slog_logger = logger.inner_logger.root.clone();
         let (metrics, _metrics_runtime) =

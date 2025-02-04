@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package proto;
+
+message NonceInfo {
+  bytes nonce = 1;
+  google.protobuf.Timestamp generated_at = 2;
+}

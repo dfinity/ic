@@ -1,11 +1,7 @@
-use der::asn1::{OctetString, OctetStringRef};
+use der::asn1::OctetStringRef;
 use der::Encode;
-use sev::firmware::guest::AttestationReport;
-use sev::firmware::host::CertTableEntry as SevCertTableEntry;
-use sev::firmware::host::CertType as SevCertType;
 use sha2::Digest;
-use std::collections::HashMap;
-use std::error::Error;
+use thiserror::Error;
 
 #[derive(der::Sequence)]
 pub struct GenerateAttestationTokenCustomData<'a> {
@@ -13,10 +9,15 @@ pub struct GenerateAttestationTokenCustomData<'a> {
     pub tls_public_key: OctetStringRef<'a>,
 }
 
+#[derive(Debug, Error)]
+#[error("EncodingError")]
+pub struct EncodingError;
+
 impl GenerateAttestationTokenCustomData<'_> {
-    pub fn to_bytes(&self) -> Result<[u8; 64], Box<dyn Error>> {
+    pub fn to_bytes(&self) -> Result<[u8; 64], EncodingError> {
         let mut encoded = vec![];
-        self.encode_to_vec(&mut encoded)?;
+        self.encode_to_vec(&mut encoded)
+            .map_err(|_| EncodingError)?;
         Ok(sha2::Sha512::digest(encoded).into())
     }
 }
@@ -32,16 +33,16 @@ pub struct SevAttestationReport {
 }
 
 #[derive(candid::CandidType, candid::Deserialize)]
-struct CertTableEntry {
+pub struct CertTableEntry {
     /// A specific certificate type.
-    pub cert_type: CertType,
+    pub cert_type: Option<CertType>,
 
     /// The raw data of the certificate.
     pub data: Vec<u8>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize)]
-enum CertType {
+pub enum CertType {
     ARK,
 
     /// AMD SEV Signing Key (ASK) certificate

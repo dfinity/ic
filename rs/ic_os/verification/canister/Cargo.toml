@@ -24,3 +24,9 @@ ic-cdk = "0.17"
 ic-cbor = "3.0"
 serde = { version = "1.0.215", features = ["derive"] }
 attestation = { path = "../attestation" }
+ic-stable-structures = "0.6"
+prost = "0.13"
+prost-types = "0.13"
+
+[build-dependencies]
+prost-build = "0.13"

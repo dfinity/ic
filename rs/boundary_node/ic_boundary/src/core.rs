@@ -63,6 +63,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
+use rustls::server::ResolvesServerCertUsingSni;
 use sec1::pkcs8::spki::AlgorithmIdentifier;
 use sec1::pkcs8::PrivateKeyInfo;
 use tokio::sync::RwLock;
@@ -72,6 +73,7 @@ use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, Ser
 use tracing::{debug, error, warn};
 use x509_parser::pem;
 
+use crate::attestation::ResolverWithAttestation;
 use ic_crypto_test_utils_tls::x509_certificates::{
     AttestationTokenExtension, CertWithPrivateKey, KeyPair,
 };
@@ -267,6 +269,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 &metrics_registry,
                 http_metrics.clone(),
             )
+            .await
             .context("unable to setup HTTPS")?,
         )
     } else {
@@ -538,44 +541,17 @@ fn setup_registry(
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
 
-    // let cert = cli
-    //     .tls_cert_path
-    //     .clone()
-    //     .ok_or(anyhow!("TLS cert not specified"))?;
-    // let key = cli
-    //     .tls_pkey_path
-    //     .clone()
-    //     .ok_or(anyhow!("TLS key not specified"))?;
+    let cert = cli
+        .tls_cert_path
+        .clone()
+        .ok_or(anyhow!("TLS cert not specified"))?;
+    let key = cli
+        .tls_pkey_path
+        .clone()
+        .ok_or(anyhow!("TLS key not specified"))?;
 
-    let mut builder = CertWithPrivateKey::builder();
-    builder.add_attestation_token_extension(AttestationTokenExtension());
-
-    let cert_with_private_key = builder.build_ed25519(&mut rand::thread_rng());
-
-    let cert = cert_with_private_key.cert_pem();
-    let KeyPair::Ed25519 { secret_key, .. } = cert_with_private_key.key_pair() else {
-        bail!("Unexpected key");
-    };
-
-    let mut ccc = vec![];
-    OctetStringRef::new(secret_key.0.expose_secret())
-        .unwrap()
-        .encode(&mut ccc)
-        .unwrap();
-    let key = PrivateKeyInfo {
-        private_key: &ccc[..],
-        public_key: None,
-        algorithm: AlgorithmIdentifier {
-            oid: ObjectIdentifier::new_unwrap("1.3.101.112"),
-            parameters: None,
-        },
-    }
-    .to_pem(base64ct::LineEnding::default())
-    .expect("unable to PEM encode cert")
-    .into_bytes();
-
-    // let cert = std::fs::read(cert).context("unable to read TLS cert")?;
-    // let key = std::fs::read(key).context("unable to read TLS key")?;
+    let cert = std::fs::read(cert).context("unable to read TLS cert")?;
+    let key = std::fs::read(key).context("unable to read TLS key")?;
 
     let resolver = tls::StubResolver::new(&cert, &key)?;
     Ok(Arc::new(resolver))
@@ -614,34 +590,33 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
 #[cfg(feature = "tls")]
 fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
-    setup_tls_resolver_stub(cli)
-    // match setup_tls_resolver_stub(cli) {
-    //     Ok(v) => {
-    //         warn!("TLS: static resolver loaded");
-    //         return Ok(v);
-    //     }
-    //
-    //     Err(e) => warn!("TLS: unable to load static resolver: {e}"),
-    // }
-    //
-    // warn!(
-    //     "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
-    //     cli.tls_acme_staging
-    // );
-    // match setup_tls_resolver_acme(cli) {
-    //     Ok(v) => {
-    //         warn!("TLS: ACME resolver loaded");
-    //         return Ok(v);
-    //     }
-    //
-    //     Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
-    // }
-    //
-    // Err(anyhow!("TLS: no resolvers were able to load"))
+    match setup_tls_resolver_stub(cli) {
+        Ok(v) => {
+            warn!("TLS: static resolver loaded");
+            return Ok(v);
+        }
+
+        Err(e) => warn!("TLS: unable to load static resolver: {e}"),
+    }
+
+    warn!(
+        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
+        cli.tls_acme_staging
+    );
+    match setup_tls_resolver_acme(cli) {
+        Ok(v) => {
+            warn!("TLS: ACME resolver loaded");
+            return Ok(v);
+        }
+
+        Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
+    }
+
+    Err(anyhow!("TLS: no resolvers were able to load"))
 }
 
 #[cfg(feature = "tls")]
-fn setup_https(
+async fn setup_https(
     router: Router,
     opts: http::server::Options,
     cli: &Cli,
@@ -650,7 +625,15 @@ fn setup_https(
 ) -> Result<http::Server, Error> {
     use ic_bn_lib::tls;
 
-    let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+    // let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+    // warn!("Creating resolver");
+    let resolver = ResolvesServerCertUsingSni::new();
+    let resolver = Arc::new(
+        ResolverWithAttestation::new(Arc::new(resolver))
+            .await
+            .context("Cannot set up ResolverWithAttestation")?,
+    );
+    warn!("Resolver created");
 
     let tls_opts = tls::Options {
         additional_alpn: vec![http::ALPN_ACME.to_vec()],

@@ -1,35 +1,69 @@
 use anyhow::{Context, Result};
-use attestation::attestation::{GenerateAttestationTokenCustomData, SevAttestationReport};
+use attestation::attestation::SevAttestationReport;
 use der::Encode;
-use sev::firmware::guest::Firmware;
-use sha2::{Digest, Sha512};
+use sev::firmware::guest::{AttestationReport, Firmware};
+use sev::firmware::host::CertTableEntry;
+use sha2::Digest;
 
-pub(crate) trait SevFirmware {
-    fn get_report(&mut self, custom_data: [u8; 64]) -> Result<SevAttestationReport>;
+pub trait SevFirmware: Send + Sync {
+    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport>;
 }
 
-struct RealSevFirmware(Firmware);
+pub struct RealSevFirmware(pub Firmware);
 
 impl SevFirmware for RealSevFirmware {
-    fn get_report(&mut self, custom_data: [u8; 64]) -> Result<SevAttestationReport> {
+    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport> {
         let (attestation_report, certificates) =
-            self.0.get_ext_report(None, Some(custom_data), None)?;
+            self.0.get_ext_report(None, Some(*custom_data), None)?;
         Ok(SevAttestationReport {
-            attestation_report,
-            certificates: certificates.context("Missing certificates")?,
+            attestation_report: attestation_report_to_byte_vec(&attestation_report),
+            certificates: convert_cert_table_entries(
+                &certificates.context("Missing certificates")?,
+            ),
         })
     }
 }
 
-#[cfg(test)]
-mod mock {
+fn attestation_report_to_byte_vec(attestation_report: &AttestationReport) -> Vec<u8> {
+    let attestation_report_len = std::mem::size_of::<AttestationReport>();
+    let mut vec = Vec::with_capacity(attestation_report_len);
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            attestation_report as *const _ as *const u8,
+            vec.as_mut_ptr(),
+            attestation_report_len,
+        );
+        vec.set_len(attestation_report_len);
+    }
+    vec
+}
+
+fn convert_cert_table_entries(
+    cert_table_entries: &[CertTableEntry],
+) -> Vec<attestation::attestation::CertTableEntry> {
+    vec![]
+}
+
+// #[cfg(test)]
+pub mod mock {
     use super::*;
 
     pub struct MockSevFirmware {}
 
+    impl MockSevFirmware {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+
     impl SevFirmware for MockSevFirmware {
-        fn get_report(&mut self, custom_data: [u8; 64]) -> Result<SevAttestationReport> {
-            todo!()
+        fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport> {
+            let mut report = AttestationReport::default();
+            report.report_data.copy_from_slice(custom_data);
+            Ok(SevAttestationReport {
+                attestation_report: attestation_report_to_byte_vec(&report),
+                certificates: vec![],
+            })
         }
     }
 }

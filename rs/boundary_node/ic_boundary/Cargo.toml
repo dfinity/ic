@@ -15,6 +15,8 @@ bench = []
 tls = []
 
 [dependencies]
+attestee = { path = "../../ic_os/verification/attestee"}
+attestation-token = { path = "../../ic_os/verification/attestation_token"}
 anyhow = { workspace = true }
 arc-swap = "1.7.1"
 async-scoped = { version = "0.9", features = ["use-tokio"] }

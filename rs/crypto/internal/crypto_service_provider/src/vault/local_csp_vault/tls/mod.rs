@@ -26,6 +26,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
     TlsHandshakeCspVault for LocalCspVault<R, S, C, P>
 {
     fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        // TODO: add attestation token
         let start_time = self.metrics.now();
         let result = self.gen_tls_key_pair_internal(node);
         self.metrics.observe_duration_seconds(

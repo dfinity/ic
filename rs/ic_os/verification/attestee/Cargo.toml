@@ -17,9 +17,11 @@ ic-certified-map = "0.4"
 serde_cbor = "0.11"
 attestation = {path = "../attestation"}
 attestation-token = {path = "../attestation_token"}
+thiserror = "1.0.68"
+async-trait = "0.1.83"
 
 [[bin]]
 name = "renew_attestation_token"
 
 [lib]
-name = "verification"
+name = "attestee"

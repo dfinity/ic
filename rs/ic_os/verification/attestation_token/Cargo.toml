@@ -20,3 +20,4 @@ ic-cbor = "3.0"
 ic-certification = "3.0"
 ic-certificate-verification = "3.0"
 serde = { version = "1.0.215", features = ["derive"] }
+der = { version = "0.8.0-rc.1", features = ["alloc"] }
