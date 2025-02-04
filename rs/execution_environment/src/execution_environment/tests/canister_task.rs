@@ -1472,9 +1472,6 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
 #[test]
 fn upgrade_changes_hook_status_to_ready() {
     let wat = r#"(module
-            (func (export "canister_global_timer")
-                (drop (memory.grow (i32.const 10)))
-            )
             (memory 1 20)
         )"#;
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
@@ -1509,9 +1506,6 @@ fn upgrade_changes_hook_status_to_ready() {
     );
 
     let wat2 = r#"(module
-        (func (export "canister_global_timer")
-            (drop (memory.grow (i32.const 10)))
-        )
         (memory 2 2)
     )"#;
 
