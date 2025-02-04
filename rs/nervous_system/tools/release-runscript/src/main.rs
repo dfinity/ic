@@ -389,13 +389,13 @@ fn run_submit_proposals(cmd: SubmitProposals) {
         sns_proposal_text_paths,
     } = cmd;
 
-    // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
-    if input_yes_or_no("Do you want to submit upgrade proposals?", false) {
+    if !input_yes_or_no("Do you want to submit upgrade proposals?", false) {
         println!("Skipping upgrade proposal submission and all following steps.");
         return;
     }
     println!();
 
+    // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
     println!("We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>.");
     let neuron_id = input("Enter your neuron ID (e.g. 51)");
 
