@@ -240,7 +240,9 @@ impl Scalar {
     /// targeting the scalar group.
     pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
         let mut s = [ic_bls12_381::Scalar::zero()];
-        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(input, domain_sep, &mut s);
+        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+            input, domain_sep, &mut s,
+        );
         Self::new(s[0])
     }
 
