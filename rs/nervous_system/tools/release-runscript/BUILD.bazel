@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
+    "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:colored",
     "@crate_index//:futures",
