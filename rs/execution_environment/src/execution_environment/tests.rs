@@ -173,7 +173,12 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
         .encode(),
         Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
             derivation_id: vec![],
-            encryption_public_key: vec![],
+            // G1Affine::generator().to_compressed() is a valid public key
+            encryption_public_key: [
+                151, 241, 211, 167, 49, 151, 215, 148, 38, 149, 99, 140, 79, 169, 172, 15, 195,
+                104, 140, 79, 151, 116, 185, 5, 161, 78, 58, 63, 23, 27, 172, 88, 108, 85, 232, 63,
+                249, 122, 26, 239, 251, 58, 240, 10, 219, 34, 198, 187,
+            ],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_vetkd(key_id),
         }

@@ -5,6 +5,12 @@ use rand::{Rng, SeedableRng};
 mod test_utils;
 
 #[test]
+fn g1_ser() {
+    let g1 = G1Affine::generator().to_compressed();
+    println!("xxxx: {g1:?}",);
+}
+
+#[test]
 fn protocol_flow_with_emulated_server_side() {
     use test_utils::*;
 
