@@ -51,8 +51,9 @@ impl Registry {
     }
 
     // Prepare mutations for removing or replacing a node in the registry.
-    // If new_node_id is Some, the old node is in-place replaced with the new node, even if the old node is in active use (i.e., assigned to a subnet or acts as an API boundary node).
-    // If new_node_id is None, the old node is only removed from the registry and is not allowed to be in active use.
+    // * If new_node_id is Some, the old node is in-place replaced with the new node, even if the old node is
+    //   in active use (i.e., assigned to a subnet or acts as an API boundary node).
+    // * If new_node_id is None, the old node is only removed from the registry and is not allowed to be in active use.
     pub fn make_remove_or_replace_node_mutations(
         &mut self,
         payload: RemoveNodeDirectlyPayload,
@@ -123,23 +124,25 @@ impl Registry {
 
         let mut mutations = vec![];
 
-        // 3. Check if the node is an API Boundary Node. If there is a replacement node, remove the existing node and try to assign the new one to act as API boundary node. This will only .
+        // 3. Check if the node is an API Boundary Node. If there is a replacement node, remove the existing node
+        //    and try to assign the new one to act as API boundary node. This will only work if the new node meets all
+        //    the requirements of an API boundary node (e.g., it is configured with a domain name).
         if let Some(api_bn_record) = self.get_api_boundary_node_record(payload.node_id) {
-            if let Some(node_id) = new_node_id {
-                // remove the existing API boundary node record
-                let old_key = make_api_boundary_node_record_key(payload.node_id);
-                mutations.push(delete(old_key));
-
-                // create the new API boundary node record by just cloning the old one and inserting it with the new key
-                let new_key = make_api_boundary_node_record_key(node_id);
-                mutations.push(insert(new_key, api_bn_record.clone().encode_to_vec()));
-            } else {
+            let Some(replacement_node_id) = new_node_id else {
                 panic!(
                     "{}do_remove_node_directly: Cannot remove this node, as it is an active API boundary node: {}",
                     LOG_PREFIX,
                     make_api_boundary_node_record_key(payload.node_id)
                 );
-            }
+            };
+
+            // remove the existing API boundary node record
+            let old_key = make_api_boundary_node_record_key(payload.node_id);
+            mutations.push(delete(old_key));
+
+            // create the new API boundary node record by just cloning the old one and inserting it with the new key
+            let new_key = make_api_boundary_node_record_key(replacement_node_id);
+            mutations.push(insert(new_key, api_bn_record.clone().encode_to_vec()));
         }
 
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.
