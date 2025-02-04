@@ -49,6 +49,14 @@ async fn query_node_metrics(
         .expect("Failed to decode node metrics response")
 }
 
+fn test_canister_wasm() -> Vec<u8> {
+    let wasm_path =
+        std::env::var_os("POCKET_IC_TEST_WASM").expect("Missing test canister wasm file");
+    std::fs::read(wasm_path).unwrap()
+}
+
+const INIT_CYCLES: u128 = 2_000_000_000_000;
+
 #[tokio::test]
 async fn test_node_metrics_collector() {
     let state_dir = TempDir::new().expect("Failed to create temp directory");
@@ -102,8 +110,15 @@ async fn test_node_metrics_collector() {
         }),
     };
 
-    // Simulate block production for 70 days (Mainnet stores 60 days of metrics)
-    advance_pocket_ic_time(&pocket_ic, DAY_HOURS * 70, &tick_configs).await;
+    let canister = pocket_ic
+        .create_canister_on_subnet(None, None, application_subnet)
+        .await;
+    pocket_ic.add_cycles(canister, INIT_CYCLES).await;
+    pocket_ic
+        .install_canister(canister, test_canister_wasm(), vec![], None)
+        .await;
+
+    advance_pocket_ic_time(&pocket_ic, DAY_HOURS * 10, &tick_configs).await;
 
     // Deploy and initialize the node_metrics_collector canister on the NNS subnet
     let canister_id = pocket_ic
@@ -114,7 +129,7 @@ async fn test_node_metrics_collector() {
     pocket_ic
         .install_canister(
             canister_id,
-            metrics_collector_wasm.bytes().to_vec(),
+            metrics_collector_wasm.clone().bytes().to_vec(),
             vec![],
             None,
         )
@@ -125,20 +140,51 @@ async fn test_node_metrics_collector() {
         pocket_ic.tick().await;
     }
 
+    // Upgrade the metrics collector canister to same wasm
+    pocket_ic
+        .upgrade_canister(
+            canister_id,
+            metrics_collector_wasm.bytes().to_vec(),
+            vec![],
+            None,
+        )
+        .await
+        .unwrap();
+
     // Query and validate node metrics
     for subnet in [nns_subnet, sns_subnet, application_subnet] {
-        let from_system_time =
-            pocket_ic.get_time().await - Duration::from_secs(60 * 60 * 24 * SEVEN_DAYS);
-        let node_metrics = query_node_metrics(
-            &pocket_ic,
-            canister_id,
-            subnet,
-            from_system_time
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64,
-        )
-        .await;
+        let from_nanos = (pocket_ic.get_time().await
+            - Duration::from_secs(60 * 60 * 24 * SEVEN_DAYS))
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+        let node_metrics = query_node_metrics(&pocket_ic, canister_id, subnet, from_nanos).await;
+
+        let node_metrics_management = pocket_ic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                // Calls the node_metrics_history method on the management canister
+                "node_metrics_history_proxy",
+                Encode!(&NodeMetricsHistoryArgs {
+                    subnet_id: subnet.into(),
+                    start_at_timestamp_nanos: from_nanos,
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let node_metrics_management =
+            Decode!(&node_metrics_management, Vec<NodeMetricsHistoryResponse>).unwrap();
+
+        assert!(
+            node_metrics_management
+                .iter()
+                .zip(&node_metrics)
+                .all(|(a, b)| a == b),
+            "Node metrics management and node metrics do not match"
+        );
 
         assert_eq!(
             node_metrics.len(),
