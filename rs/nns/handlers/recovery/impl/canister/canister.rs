@@ -9,11 +9,12 @@ use ic_cdk::println;
 use ic_cdk::{post_upgrade, query, update};
 use ic_nns_handler_recovery::{
     metrics::encode_metrics,
-    node_operator_sync::{get_node_operators_in_nns, sync_node_operators, SimpleNodeRecord},
+    node_operator_sync::{get_node_operators_in_nns, sync_node_operators},
     recovery_proposal::{get_recovery_proposals, submit_recovery_proposal, vote_on_proposal_inner},
 };
-use ic_nns_handler_recovery_interface::recovery::{
-    NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal,
+use ic_nns_handler_recovery_interface::{
+    recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    simple_node_record::SimpleNodeRecord,
 };
 
 fn caller() -> PrincipalId {

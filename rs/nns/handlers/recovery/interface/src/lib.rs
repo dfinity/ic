@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 pub mod recovery;
 pub mod security_metadata;
+pub mod simple_node_record;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub enum Ballot {

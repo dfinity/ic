@@ -1,17 +1,9 @@
 use std::cell::RefCell;
 
-use candid::CandidType;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_nns_handler_recovery_interface::simple_node_record::SimpleNodeRecord;
 use ic_nns_handler_root::root_proposals::{
     get_nns_membership, get_nns_subnet_id, get_node_operator_pid_of_node,
 };
-use serde::Deserialize;
-
-#[derive(Debug, Clone, CandidType, Deserialize)]
-pub struct SimpleNodeRecord {
-    pub node_principal: NodeId,
-    pub operator_principal: PrincipalId,
-}
 
 thread_local! {
   static NODE_OPERATORS_IN_NNS: RefCell<Vec<SimpleNodeRecord>> = const { RefCell::new(Vec::new()) };
@@ -29,8 +21,8 @@ pub async fn sync_node_operators() -> Result<(), String> {
             get_node_operator_pid_of_node(&node, subnet_membership_registry_version).await?;
 
         new_simple_records.push(SimpleNodeRecord {
-            node_principal: node,
-            operator_principal: node_operator_id,
+            node_principal: node.get().0,
+            operator_principal: node_operator_id.0,
         });
     }
 

@@ -7,11 +7,12 @@ use ic_nns_handler_recovery_interface::{
         VoteOnRecoveryProposal,
     },
     security_metadata::SecurityMetadata,
+    simple_node_record::SimpleNodeRecord,
     Ballot,
 };
 use ic_nns_handler_root::now_seconds;
 
-use crate::node_operator_sync::{get_node_operators_in_nns, SimpleNodeRecord};
+use crate::node_operator_sync::get_node_operators_in_nns;
 
 thread_local! {
   static PROPOSALS: RefCell<Vec<RecoveryProposal>> = const { RefCell::new(Vec::new()) };
@@ -30,7 +31,7 @@ pub fn submit_recovery_proposal(
     // Check if the caller has nodes in nns
     if !nodes_in_nns
         .iter()
-        .any(|node| node.operator_principal == caller)
+        .any(|node| node.operator_principal == caller.0)
     {
         let message = format!(
             "Caller: {} is not eligible to submit proposals to this canister",
@@ -169,16 +170,16 @@ fn initialize_ballots(simple_node_records: &Vec<SimpleNodeRecord>) -> Vec<NodeOp
         .fold(Vec::new(), |mut acc, next| {
             match acc
                 .iter_mut()
-                .find(|operator_ballot| operator_ballot.principal == next.operator_principal.0)
+                .find(|operator_ballot| operator_ballot.principal == next.operator_principal)
             {
                 Some(existing_ballot) => {
                     existing_ballot
                         .nodes_tied_to_ballot
-                        .push(next.node_principal.get().0.clone());
+                        .push(next.node_principal);
                 }
                 None => acc.push(NodeOperatorBallot {
-                    principal: next.operator_principal.0.clone(),
-                    nodes_tied_to_ballot: vec![next.node_principal.get().0.clone()],
+                    principal: next.operator_principal,
+                    nodes_tied_to_ballot: vec![next.node_principal],
                     ballot: Ballot::Undecided,
                     security_metadata: SecurityMetadata::empty(),
                 }),
