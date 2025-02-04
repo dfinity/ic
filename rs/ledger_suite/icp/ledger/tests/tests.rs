@@ -1268,19 +1268,9 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
 
 fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
     let p1 = PrincipalId::new_user_test_id(1);
-    let blocks_res = query_blocks(&state_machine, p1.0, ledger_id, 0, u32::MAX.into());
+    let blocks_res = query_encoded_blocks(state_machine, p1.0, ledger_id, 0, u32::MAX.into());
     let mut result = vec![];
-    println!(
-        "chain length: {}, local length: {}, num_archives: {}",
-        blocks_res.chain_length,
-        blocks_res.blocks.len(),
-        blocks_res.archived_blocks.len(),
-    );
     for archived in blocks_res.archived_blocks {
-        println!(
-            "get blocks from archive, start: {}, length: {}",
-            archived.start, archived.length
-        );
         let get_blocks_args = Encode!(&GetBlocksArgs {
             start: archived.start,
             length: archived.length,
@@ -1290,42 +1280,29 @@ fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<En
             &state_machine
                 .query(
                     CanisterId::unchecked_from_principal(archived.callback.canister_id.into()),
-                    "get_blocks",
+                    "get_encoded_blocks",
                     get_blocks_args.clone()
                 )
                 .unwrap()
                 .bytes(),
-            GetBlocksResult
+            GetEncodedBlocksResult
         )
         .unwrap()
         .unwrap();
-        result.extend(archived_blocks.blocks);
+        result.extend(archived_blocks);
     }
 
     result.extend(blocks_res.blocks);
     assert_eq!(result.len(), blocks_res.chain_length as usize);
-    let mut prev_hash = None;
-    let mut i = 0;
 
-    for block in &result {
-        println!("for loop iter {i}");
-        i += 1;
-        let block: Block = block.clone().try_into().unwrap();
-        println!("{:?}", block.parent_hash);
-        println!("{:?}", prev_hash);
-        println!("");
+    let mut prev_hash = None;
+    for encoded_block in &result {
+        let block = Block::decode(encoded_block.clone()).expect("failed to decode block");
         assert_eq!(block.parent_hash, prev_hash);
-        let encoded_block = block.encode();
-        prev_hash = Some(icp_ledger::Block::block_hash(&encoded_block));
+        prev_hash = Some(Block::block_hash(encoded_block));
     }
 
     result
-        .into_iter()
-        .map(|b| {
-            let block: Block = b.try_into().unwrap();
-            block.encode()
-        })
-        .collect()
 }
 
 #[test]
