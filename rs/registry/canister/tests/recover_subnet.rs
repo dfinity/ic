@@ -27,7 +27,7 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, EcdsaConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -49,7 +49,7 @@ use rand::{CryptoRng, Rng, RngCore};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
-        do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+        do_create_subnet::CreateSubnetPayload,
         do_recover_subnet::{
             InitialChainKeyConfig, KeyConfig, KeyConfigRequest, RecoverSubnetPayload,
         },
@@ -64,9 +64,9 @@ use std::{
 mod common;
 use crate::common::test_helpers::prepare_registry_with_nodes_and_valid_pks;
 use common::test_helpers::{
-    get_cup_contents, get_subnet_holding_chain_keys, get_subnet_holding_ecdsa_keys,
-    get_subnet_record, set_up_universal_canister_as_governance,
-    setup_registry_synced_with_fake_client, wait_for_chain_key_setup, wait_for_ecdsa_setup,
+    get_cup_contents, get_subnet_holding_chain_keys, get_subnet_record,
+    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
+    wait_for_chain_key_setup,
 };
 use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
 

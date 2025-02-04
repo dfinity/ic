@@ -528,7 +528,7 @@ mod tests {
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
-        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, KeyConfig as KeyConfigPb,
+        ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
@@ -611,15 +611,15 @@ mod tests {
             curve: EcdsaCurve::Secp256k1,
             name: "key_id".to_string(),
         };
-        let chain_key_config = Some(ChainKeyConfig {
+        let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: Some(MasterPublicKeyId::from(&key_id)),
+                key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
                 pre_signatures_to_create_in_advance: Some(111),
                 max_queue_size: Some(222),
             }],
             signature_request_timeout_ns: Some(333),
             idkg_key_rotation_period_ms: Some(444),
-        });
+        };
 
         let payload = UpdateSubnetPayload {
             subnet_id: SubnetId::from(
@@ -653,7 +653,7 @@ mod tests {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
-            chain_key_config: chain_key_config.clone().map(ChainKeyConfigPb::from),
+            chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
             // Deprecated/unused values follow
@@ -692,7 +692,9 @@ mod tests {
                     }
                     .into()
                 ),
-                chain_key_config: chain_key_config.map(ChainKeyConfigPb::from),
+                chain_key_config: Some(ChainKeyConfigPb::from(
+                    ChainKeyConfigInternal::try_from(chain_key_config).unwrap()
+                )),
                 ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
@@ -1223,12 +1225,6 @@ mod tests {
         registry.do_update_subnet(payload);
     }
 
-    #[test]
-    #[should_panic(
-        expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
-        {Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id_2\" })} for subnet: \
-        'ge6io-epiam-aaaaa-aaaap-yai'"
-    )]
     #[test]
     #[should_panic(
         expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
