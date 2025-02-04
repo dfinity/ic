@@ -40,9 +40,21 @@ EOF
 
 # Color helpers
 tp() { tput -T xterm "$@"; }
-echo_red() { tp setaf 1; echo "$1"; tp sgr0; }
-echo_green() { tp setaf 2; echo "$1"; tp sgr0; }
-echo_blue() { tp setaf 4; echo "$1"; tp sgr0; }
+echo_red() {
+    tp setaf 1
+    echo "$1"
+    tp sgr0
+}
+echo_green() {
+    tp setaf 2
+    echo "$1"
+    tp sgr0
+}
+echo_blue() {
+    tp setaf 4
+    echo "$1"
+    tp sgr0
+}
 
 export BUILD_BIN=false
 export BUILD_CAN=false
@@ -102,14 +114,13 @@ export BINARIES_DIR_FULL="$ROOT_DIR/$BINARIES_DIR"
 export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
-
 # Join a bash array with a string
 # https://stackoverflow.com/a/17841619
 function join_by {
-  local d=${1-} f=${2-}
-  if shift 2; then
-    printf %s "$f" "${@/#/$d}"
-  fi
+    local d=${1-} f=${2-}
+    if shift 2; then
+        printf %s "$f" "${@/#/$d}"
+    fi
 }
 
 echo_blue "Purging artifact directories"
@@ -117,25 +128,24 @@ rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
-BAZEL_TARGETS=(  )
+BAZEL_TARGETS=()
 
 BAZEL_COMMON_ARGS=(
     --config=local # TODO: explain all args
     --ic_version="$VERSION"
     --ic_version_rc_only="$IC_VERSION_RC_ONLY"
     --release_build="$RELEASE"
-    )
+)
 
 echo_green "Building selected IC artifacts: ${BAZEL_TARGETS[*]}"
 
-if "$BUILD_BIN"; then BAZEL_TARGETS+=( "//publish/binaries:compute_checksums" ); fi
-if "$BUILD_CAN"; then BAZEL_TARGETS+=( "//publish/canisters:compute_checksums" ); fi
+if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
+if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
     "//ic-os/guestos/envs/prod:compute_checksums"
     "//ic-os/hostos/envs/prod:compute_checksums"
     "//ic-os/setupos/envs/prod:compute_checksums"
 ); fi
-
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
