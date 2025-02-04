@@ -500,7 +500,7 @@ mod test {
     use ic_base_types::SubnetId;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};
     use ic_test_utilities_types::ids::subnet_test_id;
 
@@ -529,14 +529,17 @@ mod test {
 
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key_id.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfigInternal {
+                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
-        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
         subnet_record.chain_key_config = Some(chain_key_config_pb);
 
