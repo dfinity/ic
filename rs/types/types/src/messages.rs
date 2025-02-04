@@ -517,7 +517,8 @@ impl Display for CanisterMessageOrTask {
     }
 }
 
-/// A wrapper around canister messages and tasks.
+/// A wrapper around canister calls and tasks that are executed in
+/// replicated mode.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterCallOrTask {
     Update(CanisterCall),
