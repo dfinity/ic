@@ -4,6 +4,7 @@ use colored::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use url::Url;
 
 #[derive(Debug, Parser)]
 struct DetermineTargets {
@@ -40,8 +41,16 @@ struct SubmitProposals {
 }
 
 #[derive(Debug, Parser)]
-struct CreateForumPost;
-
+struct CreateForumPost {
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_text_paths: Vec<PathBuf>,
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_ids: Vec<String>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_text_paths: Vec<PathBuf>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_ids: Vec<String>,
+}
 #[derive(Debug, Parser)]
 struct ScheduleVote;
 
@@ -479,56 +488,129 @@ fn run_submit_proposals(cmd: SubmitProposals) {
         ),
     );
 
-    run_create_forum_post(CreateForumPost);
+    run_create_forum_post(CreateForumPost {
+        nns_proposal_text_paths,
+        nns_proposal_ids,
+        sns_proposal_text_paths,
+        sns_proposal_ids,
+    });
 }
 
-fn run_create_forum_post(_: CreateForumPost) {
-    print_step(6,
-        "Create Forum Post",
-        "Create a forum post with the following specifications:
+fn run_create_forum_post(cmd: CreateForumPost) {
+    let CreateForumPost {
+        nns_proposal_text_paths,
+        nns_proposal_ids,
+        sns_proposal_text_paths,
+        sns_proposal_ids,
+    } = cmd;
 
-1. Title Format: 
-   'NNS Updates <ISO 8601 DATE>(: <Anything interesting to announce>)'
+    let ic = ic_dir();
 
-2. Category: 
-   Governance > NNS proposal discussion
-   Reference: https://forum.dfinity.org/t/nns-proposal-discussions/34492
+    // --- Generate NNS forum post ---
+    {
+        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let output = Command::new(script)
+            .arg("generate_forum_post_nns_upgrades")
+            .args(nns_proposal_text_paths)
+            .output()
+            .expect("Failed to run generate_forum_post_nns_upgrades");
 
-3. Tags:
-   - Protocol-canister-management / Service-nervous-system-management
-   - nns / sns
+        if !output.status.success() {
+            panic!(
+                "Failed to generate NNS forum post: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
 
-4. Content:
-   - Link to proposals in IC Dashboard
-   - Include all proposal texts
-   - Use six consecutive backticks (```````) to wrap proposal text
-   - Call out any 'interesting' changes, breaking changes, or required actions
+        copy(&output.stdout).unwrap();
 
-5. Generate Forum Content:
-   If your proposals are in a dedicated directory:
+        let title = format!("NNS Updates {}", chrono::Local::now().format("%Y-%m-%d"));
+        let body =
+            "Please paste the post in here! It should already be copied into your clipboard.";
+        let mut url = Url::parse("https://forum.dfinity.org/new-topic").unwrap();
+        url.query_pairs_mut()
+            .append_pair("title", &title)
+            .append_pair("body", body)
+            .append_pair("category", "Governance/NNS proposal discussions")
+            .append_pair("tags", "nns");
 
-   For NNS upgrades:
-   ```bash
-   ./testnet/tools/nns-tools/cmd.sh \\
-       generate_forum_post_nns_upgrades \\
-       $PROPOSALS_DIR/nns-*.md \\
-       | pbcopy
-   ```
+        open_webpage(&url).unwrap();
 
-   For SNS WASM publishing:
-   ```bash
-   ./testnet/tools/nns-tools/cmd.sh \\
-       generate_forum_post_sns_wasm_publish \\
-       $PROPOSALS_DIR/sns-*.md \\
-       | pbcopy
-   ```
+        use std::fmt::Write;
+        println!(
+            "NNS forum post copied to clipboard. Please paste in the following proposal texts as well: {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
+                    id
+                );
+                acc
+            })
+        );
 
-6. Required Follow-ups:
-   - Reply to NNS Updates Aggregation Thread (https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551)
-   - If SNS canister WASMs were published, update SNS Upgrades Aggregation Thread
-     (https://forum.dfinity.org/t/sns-upgrade-aggregation-thread/24259/2)",
+        print!("Press Enter to continue...");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+    }
+
+    // --- Generate SNS forum post ---
+    {
+        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let output = Command::new(script)
+            .arg("generate_forum_post_sns_wasm_publish")
+            .args(sns_proposal_text_paths)
+            .output()
+            .expect("Failed to run generate_forum_post_sns_wasm_publish");
+
+        if !output.status.success() {
+            panic!(
+                "Failed to generate SNS forum post: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        copy(&output.stdout).unwrap();
+
+        let title = format!("SNS Updates {}", chrono::Local::now().format("%Y-%m-%d"));
+        let body =
+            "Please paste the post in here! It should already be copied into your clipboard.";
+        let mut url = Url::parse("https://forum.dfinity.org/new-topic").unwrap();
+        url.query_pairs_mut()
+            .append_pair("title", &title)
+            .append_pair("body", body)
+            .append_pair("category", "Governance/NNS proposal discussions")
+            .append_pair("tags", "SNS");
+
+        open_webpage(&url).unwrap();
+
+        use std::fmt::Write;
+        println!(
+            "SNS forum post copied to clipboard. Please paste in the following proposal texts as well: {}",
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
+                    id
+                );
+                acc
+            })
+        );
+
+        print!("Press Enter to continue...");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+    }
+
+    print_step(
+        6,
+        "Post to the DFINITY forum",
+        "Make sure to add the proposal IDs to the forum post!",
     );
 
+    // Continue to the next automated step.
     run_schedule_vote(ScheduleVote);
 }
 
@@ -645,6 +727,24 @@ fn input_with_default(text: &str, default: &str) -> String {
     } else {
         input
     }
+}
+
+fn open_webpage(url: &Url) -> Result<()> {
+    let command = "open";
+    Command::new(command).arg(url.to_string()).spawn()?.wait()?;
+
+    Ok(())
+}
+
+fn copy(text: &[u8]) -> Result<()> {
+    let mut copy = Command::new("pbcopy").stdin(Stdio::piped()).spawn()?;
+    copy.stdin
+        .take()
+        .ok_or(anyhow::anyhow!("Failed to take stdin"))?
+        .write_all(text)?;
+    copy.wait()?;
+
+    Ok(())
 }
 
 fn input_yes_or_no(text: &str, default: bool) -> bool {
