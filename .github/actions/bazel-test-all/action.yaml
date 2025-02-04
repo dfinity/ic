@@ -18,7 +18,9 @@ inputs:
     default: '--output_base=/var/tmp/bazel-output/'
   BUILDEVENT_APIKEY:
     required: false
-  SSH_PRIVATE_KEY:
+  SSH_PRIVATE_KEY_BACKUP_POD:
+    required: false
+  GPG_PASSPHRASE:
     required: false
 
 runs:
@@ -30,9 +32,9 @@ runs:
         run: |
           set +e # manual error handling to ensure we can run some post-build commands
 
-          if [ -n "$SSH_PRIVATE_KEY" ]; then
+          if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
+            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
             rm -rf ~/.ssh
             mkdir -p ~/.ssh
             chmod 0700 ~/.ssh
@@ -60,6 +62,11 @@ runs:
               rm "$exportout"
               echo "BEP events exported to honeycomb!"
           fi
+          if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
+              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
+                  --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
+          fi
+          rm -f bazel-bep.pb
 
           # output node name to gihub step summary
           [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
@@ -77,4 +84,5 @@ runs:
           CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
+          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}

@@ -19,6 +19,7 @@ base64 = { workspace = true }
 candid = { workspace = true }
 candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
+dfx-core = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -49,6 +50,7 @@ serde_yaml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }

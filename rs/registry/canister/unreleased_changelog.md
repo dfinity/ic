@@ -11,6 +11,11 @@ on the process that this file is part of, see
 
 ## Changed
 
+### Migrate Registry to use ic_stable_structures' MemoryManager
+
+This update migrates registry from using dfn_core to using virtual memory regions provided by ic_stable_structures
+MemoryManager.  This allows in the future to migrate the Registry records into stable memory.
+
 ## Deprecated
 
 ## Removed

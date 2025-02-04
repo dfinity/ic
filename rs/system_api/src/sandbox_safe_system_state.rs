@@ -1350,6 +1350,10 @@ impl SandboxSafeSystemState {
             false
         }
     }
+
+    pub fn get_subnet_id(&self) -> SubnetId {
+        self.cycles_account_manager.get_subnet_id()
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same

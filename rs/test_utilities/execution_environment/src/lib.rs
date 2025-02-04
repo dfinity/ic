@@ -1712,6 +1712,10 @@ impl ExecutionTest {
     pub fn query_stats_set_epoch_for_testing(&mut self, epoch: QueryStatsEpoch) {
         self.query_handler.query_stats_set_epoch_for_testing(epoch);
     }
+
+    pub fn get_own_subnet_id(&self) -> SubnetId {
+        self.cycles_account_manager.get_subnet_id()
+    }
 }
 
 /// A builder for `ExecutionTest`.

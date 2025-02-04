@@ -9,7 +9,7 @@ use crate::{
         install_code::CanisterInstallMode, neuron::Followees, proposal::Action, Ballot, BallotInfo,
         CreateServiceNervousSystem, ExecuteNnsFunction, Governance as GovernanceProto, InstallCode,
         KnownNeuron, ListProposalInfo, NetworkEconomics, Neuron as NeuronProto, NnsFunction,
-        Proposal, ProposalData, Topic, Vote, VotingPowerEconomics,
+        Proposal, ProposalData, Topic, Vote,
     },
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
@@ -494,13 +494,12 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
         .map(|id| {
             (
                 id,
-                make_neuron(
+                NeuronProto::from(make_neuron(
                     id,
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
-                )
-                .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                )),
             )
         })
         .collect::<BTreeMap<u64, NeuronProto>>();
@@ -535,13 +534,12 @@ fn list_neurons_benchmark() -> BenchResult {
     let neurons = (0..100)
         .map(|id| {
             (id, {
-                let mut neuron: NeuronProto = make_neuron(
+                let mut neuron = NeuronProto::from(make_neuron(
                     id,
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
-                )
-                .into_proto(&VotingPowerEconomics::DEFAULT, 123_456_789);
+                ));
                 neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
                 neuron
             })
@@ -606,15 +604,15 @@ fn create_service_nervous_system_action_with_large_payload() -> CreateServiceNer
 fn list_proposals_benchmark() -> BenchResult {
     let neurons = (1..=100)
         .map(|id| {
-            (id, {
-                make_neuron(
+            (
+                id,
+                NeuronProto::from(make_neuron(
                     id,
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
-                )
-                .into_proto(&VotingPowerEconomics::DEFAULT, 123_456_789)
-            })
+                )),
+            )
         })
         .collect::<BTreeMap<u64, NeuronProto>>();
 
