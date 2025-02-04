@@ -32,7 +32,7 @@ use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::Client;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
@@ -256,6 +256,8 @@ pub enum PocketIcError {
     InvalidRejectCode(u64),
     SettingTimeIntoPast((u64, u64)),
     Forbidden(String),
+    BlockmakerNotFound(NodeId),
+    BlockmakerContainedInFailed(NodeId),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -284,6 +286,12 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
                 write!(f, "SubnetNotFound({})", sid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
+                write!(f, "BlockmakerNotFound({})", nid)
+            }
+            OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
+                write!(f, "BlockmakerContainedInFailed({})", nid)
             }
             OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
                 write!(f, "RequestRoutingError({:?})", msg)

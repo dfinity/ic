@@ -253,7 +253,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
 
             // check that EKS serialization round trips:
             let eks_bytes = eks.serialize();
-            let eks2 = EncryptedKeyShare::deserialize(eks_bytes).unwrap();
+            let eks2 = EncryptedKeyShare::deserialize(&eks_bytes).unwrap();
             assert_eq!(eks, eks2);
 
             node_info.push((node_idx as u32, node_pk.clone(), eks.clone()));

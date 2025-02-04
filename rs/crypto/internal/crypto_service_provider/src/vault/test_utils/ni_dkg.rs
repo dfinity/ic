@@ -1,14 +1,14 @@
 pub mod fixtures;
 
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
+use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::{
     random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
     StateWithTranscript, StateWithVerifiedDealings,
 };
-use crate::vault::{test_utils, KeyIdInstantiationError};
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
