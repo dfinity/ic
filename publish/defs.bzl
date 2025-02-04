@@ -153,7 +153,8 @@ def _checksum_rule_impl(ctx):
         for input in "$@"; do
             {sha256} "$input" "$output"
             cat "$output" >> "$out_checksums"
-            echo " $(basename $input)" >> "$out_checksums"
+            # '*' added for compatibility with determinism tests
+            echo " *$(basename $input)" >> "$out_checksums"
         done
 
         cat "$out_checksums"
