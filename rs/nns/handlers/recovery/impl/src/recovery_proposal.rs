@@ -1,30 +1,20 @@
 use std::cell::RefCell;
 
-use candid::CandidType;
 use ic_base_types::PrincipalId;
 use ic_nns_handler_recovery_interface::{
-    recovery::{NodeOperatorBallot, RecoveryPayload, RecoveryProposal},
+    recovery::{
+        NewRecoveryProposal, NodeOperatorBallot, RecoveryPayload, RecoveryProposal,
+        VoteOnRecoveryProposal,
+    },
     security_metadata::SecurityMetadata,
     Ballot,
 };
 use ic_nns_handler_root::now_seconds;
-use serde::Deserialize;
 
 use crate::node_operator_sync::{get_node_operators_in_nns, SimpleNodeRecord};
 
 thread_local! {
   static PROPOSALS: RefCell<Vec<RecoveryProposal>> = const { RefCell::new(Vec::new()) };
-}
-
-#[derive(Debug, CandidType, Deserialize, Clone)]
-pub struct NewRecoveryProposal {
-    pub payload: RecoveryPayload,
-}
-
-#[derive(Debug, CandidType, Deserialize, Clone)]
-pub struct VoteOnRecoveryProposal {
-    pub security_metadata: SecurityMetadata,
-    pub ballot: Ballot,
 }
 
 pub fn get_recovery_proposals() -> Vec<RecoveryProposal> {

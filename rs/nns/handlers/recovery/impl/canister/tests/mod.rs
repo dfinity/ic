@@ -4,12 +4,11 @@ use candid::Principal;
 use ed25519_dalek::SigningKey;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_handler_recovery::{
-    node_operator_sync::SimpleNodeRecord,
-    recovery_proposal::{NewRecoveryProposal, VoteOnRecoveryProposal},
-};
+use ic_nns_handler_recovery::node_operator_sync::SimpleNodeRecord;
 use ic_nns_handler_recovery_interface::{
-    recovery::RecoveryProposal, security_metadata::SecurityMetadata, Ballot,
+    recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    security_metadata::SecurityMetadata,
+    Ballot,
 };
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},

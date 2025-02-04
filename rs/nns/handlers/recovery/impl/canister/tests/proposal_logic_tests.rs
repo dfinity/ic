@@ -1,6 +1,8 @@
 use candid::Principal;
-use ic_nns_handler_recovery::recovery_proposal::NewRecoveryProposal;
-use ic_nns_handler_recovery_interface::{recovery::RecoveryPayload, Ballot};
+use ic_nns_handler_recovery_interface::{
+    recovery::{NewRecoveryProposal, RecoveryPayload},
+    Ballot,
+};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::PocketIc;
 
@@ -12,7 +14,6 @@ use super::{
 };
 
 // First proposal tests
-// TODO: Allow to place multiple recover subnets proposals
 #[test]
 fn place_first_proposal() {
     let mut args = RegistryPreparationArguments::default();

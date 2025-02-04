@@ -34,6 +34,17 @@ pub struct RecoveryProposal {
     pub payload: RecoveryPayload,
 }
 
+#[derive(Debug, CandidType, Deserialize, Clone)]
+pub struct NewRecoveryProposal {
+    pub payload: RecoveryPayload,
+}
+
+#[derive(Debug, CandidType, Deserialize, Clone)]
+pub struct VoteOnRecoveryProposal {
+    pub security_metadata: SecurityMetadata,
+    pub ballot: Ballot,
+}
+
 impl RecoveryProposal {
     pub fn sign(&self, signing_key: &mut SigningKey) -> Result<[u8; 64]> {
         let signature = signing_key.sign(&self.signature_payload()?);

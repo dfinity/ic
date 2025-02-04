@@ -1,8 +1,9 @@
 use candid::Principal;
 use ed25519_dalek::SigningKey;
-use ic_nns_handler_recovery::recovery_proposal::{NewRecoveryProposal, VoteOnRecoveryProposal};
 use ic_nns_handler_recovery_interface::{
-    recovery::RecoveryPayload, security_metadata::SecurityMetadata, Ballot,
+    recovery::{NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal},
+    security_metadata::SecurityMetadata,
+    Ballot,
 };
 
 use crate::tests::{
