@@ -1141,19 +1141,20 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     );
     assert_eq!(result, Ok(()));
 
+    // Upgrade is executed, and the wasm_memory size is unchanged.
+    // Hook condition is satisfied.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(8)
+    );
+
+    // Status of the hook is still Ready.
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
             .task_queue
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
-    );
-
-    // Upgrade is executed, and the wasm_memory size is unchanged.
-    // Hook condition is satisfied.
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(8)
     );
 
     // Though we have the second ingress message awaiting to be processed,
