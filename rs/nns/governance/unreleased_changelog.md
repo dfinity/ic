@@ -78,6 +78,8 @@ No neurons are actually migrated yet.
   was default to true before, and now it's default to true. More details can be found at:
   https://forum.dfinity.org/t/listneurons-api-change-empty-neurons/40311
 
+* The limit of the number of neurons is increased from 380K to 400K.
+
 ## Deprecated
 
 ## Removed
