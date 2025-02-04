@@ -143,14 +143,23 @@ def _checksum_rule_impl(ctx):
         inputs = input_files,
         arguments = [file.path for file in input_files],
         outputs = [out_checksums],
+        tools = [ctx.executable._sha256],
         command = """
         set -euo pipefail
 
-        out_checksums="{}"
+        out_checksums="{out}"
+        output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
 
-        sha256sum "$@" | sed -r 's|^([[:alnum:]]+)\\s+([[:alnum:]_-]+/)+|\\1 |' | tee "$out_checksums"
+        for input in "$@"; do
+            {sha256} "$input" "$output"
+            cat "$output" >> "$out_checksums"
+            echo " $(basename $input)" >> "$out_checksums"
+        done
+
+        cat "$out_checksums"
+
         sort -o "$out_checksums" -k 2 "$out_checksums"
-        """.format(out_checksums.path),
+        """.format(out = out_checksums.path, sha256 = ctx.executable._sha256.path),
     )
 
     # Return the output file
@@ -164,6 +173,12 @@ checksum_rule = rule(
         "inputs": attr.label_list(
             allow_files = True,
             mandatory = True,
+        ),
+        # The bazel-provided sha256 tool to avoid relying on tools from the container/env
+        "_sha256": attr.label(
+            default = "@bazel_tools//tools/build_defs/hash:sha256",
+            executable = True,
+            cfg = "exec",
         ),
     },
 )
