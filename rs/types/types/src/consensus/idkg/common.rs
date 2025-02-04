@@ -19,7 +19,6 @@ use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -1176,16 +1175,6 @@ impl Display for SignatureScheme {
             SignatureScheme::Ecdsa => write!(f, "ECDSA"),
             SignatureScheme::Schnorr => write!(f, "Schnorr"),
             SignatureScheme::VetKd => write!(f, "VetKd"),
-        }
-    }
-}
-
-impl From<&MasterPublicKeyId> for SignatureScheme {
-    fn from(value: &MasterPublicKeyId) -> Self {
-        match value {
-            MasterPublicKeyId::Ecdsa(_) => SignatureScheme::Ecdsa,
-            MasterPublicKeyId::Schnorr(_) => SignatureScheme::Schnorr,
-            MasterPublicKeyId::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 }
