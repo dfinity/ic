@@ -1490,7 +1490,7 @@ fn upgrade_changes_hook_status_to_ready() {
     // wasm_memory_threshold = 9 Wasm Pages
 
     // Initially wasm_memory.size = 1
-    // wasm_memory_limit - used_wasm_memory = wasm_memory_threshold
+    // wasm_capacity - used_wasm_memory = wasm_memory_threshold
     // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
