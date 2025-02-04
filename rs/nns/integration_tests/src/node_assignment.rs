@@ -92,8 +92,8 @@ fn test_add_and_remove_nodes_from_registry() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let proposal_payload = AddNodeOperatorPayload {
@@ -167,8 +167,8 @@ fn test_add_and_remove_nodes_from_registry() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, prop_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let node_record = get_value::<NodeRecord>(

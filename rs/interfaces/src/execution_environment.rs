@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -231,6 +231,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.replication_factor()`
     ReplicationFactor,
     /// Tracker for `ic0.stable64_grow()`
@@ -1237,49 +1241,65 @@ pub trait SystemApi {
 
     /// This system call indicates the cycle cost of signing with ecdsa,
     /// i.e., the management canister's `sign_with_ecdsa`, for the key
-    /// with name given by `src` + `size`.
+    /// with name given by `src` + `size` and the provided curve.
     ///
     /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
-    fn ic0_cost_ecdsa(
+    fn ic0_cost_sign_with_ecdsa(
         &self,
         src: usize,
         size: usize,
+        curve: EcdsaCurve,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with schnorr,
     /// i.e., the management canister's `sign_with_schnorr` for the key
-    /// with name given by `src` + `size`.
+    /// with name given by `src` + `size` and the provided algorithm.
     ///
     /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
-    fn ic0_cost_schnorr(
+    fn ic0_cost_sign_with_schnorr(
         &self,
         src: usize,
         size: usize,
+        algorithm: SchnorrAlgorithm,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// This system call indicates the cycle cost of signing with ecdsa,
-    /// i.e., the management canister's `vetkd_encrypted_key` for the key
-    /// with name given by `src` + `size`.
+    /// This system call indicates the cycle cost of threshold key derivation,
+    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
+    /// with name given by `src` + `size` and the provided curve.
     ///
     /// Traps if `src`/`size` cannot be decoded to a valid key name.
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
-    fn ic0_cost_vetkey(
+    fn ic0_cost_vetkd_derive_encrypted_key(
         &self,
         src: usize,
         size: usize,
+        curve: VetKdCurve,
         dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }

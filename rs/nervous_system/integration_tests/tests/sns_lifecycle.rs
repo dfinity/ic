@@ -13,7 +13,7 @@ use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
         add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
-        sns::{self, swap::SwapFinalizationStatus},
+        sns::{self, governance::dissolve_delay_seconds, swap::SwapFinalizationStatus},
     },
 };
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
@@ -24,10 +24,8 @@ use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
     CreateServiceNervousSystem, Neuron,
 };
-use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{self as sns_pb, NeuronPermissionType},
-};
+use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
+use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
@@ -1510,7 +1508,7 @@ async fn test_sns_lifecycle(
                         .as_secs();
                     let longest_dissolve_delay_sns_neuron = swap_neuron_basket
                         .iter()
-                        .max_by_key(|neuron| neuron.dissolve_delay_seconds(now_seconds))
+                        .max_by_key(|neuron| dissolve_delay_seconds(neuron, now_seconds))
                         .expect(
                             "Expected to have at least one swap SNS neuron for each participant.",
                         );
@@ -1639,7 +1637,8 @@ async fn test_sns_lifecycle(
 
                     // Finally, check that the SNS Ledger balances add up.
                     {
-                        let subaccount = sns_neuron.id.as_ref().unwrap().subaccount().unwrap();
+                        let subaccount = sns_neuron.id.unwrap().id.try_into().unwrap();
+
                         let observed_balance_e8s = sns::ledger::icrc1_balance_of(
                             &pocket_ic,
                             sns.ledger.canister_id,

@@ -24,6 +24,7 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod list_neurons;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
@@ -1516,25 +1517,25 @@ fn topic_min_max_test() {
 #[cfg(feature = "test")]
 #[test]
 fn test_update_neuron_errors_out_expectedly() {
-    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
-        NeuronProto {
+    fn new_neuron(account: Vec<u8>) -> api::Neuron {
+        api::Neuron {
             account,
             id: Some(NeuronId { id: 1 }),
             controller: Some(PrincipalId::new_user_test_id(1)),
             followees: hashmap! {
-                2 => Followees {
+                2 => api::neuron::Followees {
                     followees: vec![NeuronId { id : 3}]
                 }
             },
             aging_since_timestamp_seconds: 1,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(42)),
             ..Default::default()
         }
     }
 
     let neuron1_subaccount_blob = vec![1; 32];
     let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
-    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neuron1 = NeuronProto::from(new_neuron(neuron1_subaccount_blob.clone()));
     let neurons = btreemap! { 1 => neuron1 };
     let governance_proto = GovernanceProto {
         neurons,
@@ -1548,7 +1549,7 @@ fn test_update_neuron_errors_out_expectedly() {
     );
 
     assert_eq!(
-        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        governance.update_neuron(new_neuron(vec![0; 32])),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!(
@@ -1568,7 +1569,7 @@ fn test_compute_ballots_for_new_proposal() {
         let controller = PrincipalId::new_user_test_id(i);
         let d = i / 10_u64.pow(i.ilog10());
 
-        NeuronBuilder::new(
+        let neuron = NeuronBuilder::new(
             NeuronId { id: i },
             Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
             controller,
@@ -1579,11 +1580,9 @@ fn test_compute_ballots_for_new_proposal() {
             CREATED_TIMESTAMP_SECONDS,
         )
         .with_cached_neuron_stake_e8s(i * E8)
-        .build()
-        .into_proto(
-            &VotingPowerEconomics::DEFAULT,
-            CREATED_TIMESTAMP_SECONDS + 999,
-        )
+        .build();
+
+        NeuronProto::from(neuron)
     }
 
     let mut neuron_10 = new_neuron(10);

@@ -1,10 +1,8 @@
 use self::api::CspVault;
 use self::local_csp_vault::ProdLocalCspVault;
 use self::remote_csp_vault::RemoteCspVault;
-use crate::key_id::KeyIdInstantiationError;
 use crate::vault::api::{
-    CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
+    CspBasicSignatureError, CspMultiSignatureError, CspSecretKeyStoreContainsError,
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
@@ -166,22 +164,6 @@ impl From<CspSecretKeyStoreContainsError> for CryptoError {
             CspSecretKeyStoreContainsError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
-        }
-    }
-}
-
-impl From<KeyIdInstantiationError> for CspBasicSignatureKeygenError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        CspBasicSignatureKeygenError::InternalError {
-            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
-        }
-    }
-}
-
-impl From<KeyIdInstantiationError> for CspMultiSignatureKeygenError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        CspMultiSignatureKeygenError::InternalError {
-            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
         }
     }
 }

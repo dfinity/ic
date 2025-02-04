@@ -8,8 +8,10 @@ use ic_nns_test_utils::{
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::{
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_node_operators() {
@@ -22,9 +24,7 @@ fn test_the_anonymous_user_cannot_remove_node_operators() {
         )
         .await;
 
-        let payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![],
-        };
+        let payload = RemoveNodeOperatorsPayload::new(vec![]);
 
         // The anonymous end-user tries to remove node operators, bypassing
         // the Governance canister. This should be rejected.
@@ -72,9 +72,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_node_operato
         )
         .await;
 
-        let payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![],
-        };
+        let payload = RemoveNodeOperatorsPayload::new(vec![]);
 
         // The attacker canister tries to remove node operators, pretending
         // to be the Governance canister. This should have no effect.

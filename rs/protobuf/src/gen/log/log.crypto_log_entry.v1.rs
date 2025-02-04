@@ -85,4 +85,12 @@ pub struct CryptoLogEntry {
     #[prost(message, optional, tag = "28")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_id: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "29")]
+    pub vetkd_args: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "30")]
+    pub vetkd_key_share: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "31")]
+    pub vetkd_key_shares: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "32")]
+    pub vetkd_key: ::core::option::Option<::prost::alloc::string::String>,
 }
