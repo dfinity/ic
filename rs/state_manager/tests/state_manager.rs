@@ -7141,7 +7141,7 @@ fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_caniste
         .execute_ingress(canister_id, "grow_page", vec![])
         .unwrap();
 
-    // Execute all operations against both state machines, except never enable LSTM on `base_env`.
+    // Execute all operations the state machine.
     for op in ops {
         env = execute_op(env, canister_id, op.clone());
     }

@@ -395,11 +395,8 @@ impl TipHandler {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
             } else if path == cp.unverified_checkpoint_marker() {
-                // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
+                // The unverified checkpoint marker should already be removed at this point.
                 debug_assert!(false);
-                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
-                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
-                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
                 CopyInstruction::Skip
             } else {
                 // Everything else should be readonly.

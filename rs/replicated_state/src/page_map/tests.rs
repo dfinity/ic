@@ -428,7 +428,6 @@ fn calc_dirty_pages_matches_actual_change() {
         .unwrap()
 }
 
-// TODO fix the test
 #[test]
 fn get_memory_instructions_returns_deltas() {
     let mut page_map = PageMap::new_for_testing();

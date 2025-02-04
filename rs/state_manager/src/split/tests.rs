@@ -82,7 +82,6 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Full list of files expected to be listed in the manifest of subnet A.
 /// Note that any queue files are missing as they would be empty.
 fn subnet_a_files() -> &'static [&'static str] {
-    // With lsmt enabled, we do do not write empty files for the wasm chunk store.
     &[
         "canister_states/00000000000000010101/canister.pbuf",
         "canister_states/00000000000000010101/software.wasm",

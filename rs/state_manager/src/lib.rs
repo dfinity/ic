@@ -2662,8 +2662,6 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
             let tip_requests = vec![TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
                 pagemaptypes: PageMapType::list_all_including_snapshots(&state),
