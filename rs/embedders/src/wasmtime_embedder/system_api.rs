@@ -1307,46 +1307,50 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "cost_ecdsa", {
-            move |mut caller: Caller<'_, StoreData>, src: I, size: I, dst: I| {
+        .func_wrap("ic0", "cost_sign_with_ecdsa", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
-                    s.ic0_cost_ecdsa(src, size, dst, memory)
+                    s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_ecdsa failed: {}", e)))
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {}", e)))
             }
         })
         .unwrap();
 
     linker
-        .func_wrap("ic0", "cost_schnorr", {
-            move |mut caller: Caller<'_, StoreData>, src: I, size: I, dst: I| {
+        .func_wrap("ic0", "cost_sign_with_schnorr", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, algorithm: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
-                    s.ic0_cost_schnorr(src, size, dst, memory)
+                    s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_schnorr failed: {}", e)))
+                .map_err(|e| {
+                    anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {}", e))
+                })
             }
         })
         .unwrap();
 
     linker
-        .func_wrap("ic0", "cost_vetkey", {
-            move |mut caller: Caller<'_, StoreData>, src: I, size: I, dst: I| {
+        .func_wrap("ic0", "cost_vetkd_derive_encrypted_key", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKEY, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
-                    s.ic0_cost_vetkey(src, size, dst, memory)
+                    s.ic0_cost_vetkd_derive_encrypted_key(src, size, curve, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkey failed: {}", e)))
+                .map_err(|e| {
+                    anyhow::Error::msg(format!("ic0_cost_vetkd_derive_encrypted_key failed: {}", e))
+                })
             }
         })
         .unwrap();

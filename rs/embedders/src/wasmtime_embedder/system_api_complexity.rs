@@ -40,7 +40,7 @@ pub mod overhead {
     pub const COST_HTTP_REQUEST: NumInstructions = NumInstructions::new(100);
     pub const COST_ECDSA: NumInstructions = NumInstructions::new(100);
     pub const COST_SCHNORR: NumInstructions = NumInstructions::new(100);
-    pub const COST_VETKEY: NumInstructions = NumInstructions::new(100);
+    pub const COST_VETKD: NumInstructions = NumInstructions::new(100);
     pub const DATA_CERTIFICATE_COPY: NumInstructions = NumInstructions::new(500);
     pub const DATA_CERTIFICATE_PRESENT: NumInstructions = NumInstructions::new(500);
     pub const DATA_CERTIFICATE_SIZE: NumInstructions = NumInstructions::new(500);
