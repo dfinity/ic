@@ -36,7 +36,7 @@ impl DerivationPath {
         }
 
         let dst = b"ic-crypto-vetkd-bls12-381-g2-derivation-path";
-        let delta = Scalar::hash(dst, &self.inputs);
+        let delta = Scalar::hash(dst, &combined_inputs);
 
         Self { delta }
     }
