@@ -238,7 +238,7 @@ impl Registry {
             }
         });
 
-        let Some(initial_chain_key_config) = payload.chain_key_config else {
+        let Some(initial_chain_key_config) = &payload.chain_key_config else {
             return; // Nothing to do.
         };
 

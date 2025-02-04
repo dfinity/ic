@@ -28,7 +28,7 @@ impl Registry {
         assert_eq!(
             payload.ecdsa_key_signing_enable,
             None,
-            "Fields ecdsa_key_signing_{en,dis}able are deprecated. Please use chain_key_signing_{en,dis}able instead.",
+            "Fields ecdsa_key_signing_{{en,dis}}able are deprecated. Please use chain_key_signing_{{en,dis}}able instead.",
         );
 
         self.validate_update_payload_chain_key_config(&payload);
@@ -76,7 +76,7 @@ impl Registry {
         assert_eq!(
             payload.ecdsa_key_signing_enable,
             None,
-            "Fields ecdsa_key_signing_{en,dis}able are deprecated. Please use chain_key_signing_{en,dis}able instead.",
+            "Fields ecdsa_key_signing_{{en,dis}}able are deprecated. Please use chain_key_signing_{{en,dis}}able instead.",
         );
 
         assert_eq!(
@@ -603,11 +603,23 @@ mod tests {
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
+            ecdsa_config: None,
         };
 
-        let chain_key_config_pb = ecdsa_config_pb.clone().map(ChainKeyConfigPb::from);
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "key_id".to_string(),
+        };
+        let chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(MasterPublicKeyId::from(&key_id)),
+                pre_signatures_to_create_in_advance: Some(111),
+                max_queue_size: Some(222),
+            }],
+            signature_request_timeout_ns: Some(333),
+            idkg_key_rotation_period_ms: Some(444),
+        });
 
         let payload = UpdateSubnetPayload {
             subnet_id: SubnetId::from(
@@ -641,7 +653,7 @@ mod tests {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
-            chain_key_config: None,
+            chain_key_config: chain_key_config.clone().map(ChainKeyConfigPb::from),
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
             // Deprecated/unused values follow
@@ -680,7 +692,7 @@ mod tests {
                     }
                     .into()
                 ),
-                chain_key_config: chain_key_config_pb,
+                chain_key_config: chain_key_config.map(ChainKeyConfigPb::from),
                 ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
@@ -1325,7 +1337,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Fields ecdsa_key_signing_{en,dis}able are deprecated.")]
+    #[should_panic(expected = "Fields ecdsa_key_signing_{{en,dis}}able are deprecated.")]
     fn test_disallow_legacy_ecdsa_key_signing_enable_specification_together() {
         let key_id = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
