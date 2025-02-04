@@ -954,7 +954,6 @@ fn list_neurons_pb() {
     ic_cdk::setup();
     let request =
         ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
-    // New fields are not supported in list_neurons_pb and it is deprecated anyway.
     let candid_request = ListNeurons::from(request);
     let res: ListNeuronsResponse = list_neurons(candid_request);
     let mut buf = Vec::with_capacity(res.encoded_len());

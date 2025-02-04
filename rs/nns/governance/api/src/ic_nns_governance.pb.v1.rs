@@ -3463,25 +3463,13 @@ pub struct ListProposalInfo {
 pub struct ListProposalInfoResponse {
     pub proposal_info: Vec<ProposalInfo>,
 }
-/// A request to list neurons. The "requested list", i.e., the list of
-/// neuron IDs to retrieve information about, is the union of the list
-/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-/// the list of neuron IDs of neurons for which the caller is the
-/// controller or one of the hot keys.
+
+/// The same as ListNeurons, but only used in list_neurons_pb, which is deprecated.
+/// This is temporarily split out so that the API changes to list_neurons do not have to
+/// follow both candid and protobuf standards for changes, which simplifies the API design
+/// considerably.
 ///
-/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
-/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
-/// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
-/// When paging through results, it is good to keep in mind that newly inserted neurons
-/// could be missed if they are inserted between calls to pages, and this could result in missing
-/// a neuron in the combined responses.
-///
-/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
-/// each page will contain the exactly the page size, even if it is not the final request.  This is
-/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
-/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
-/// will be returned in the current page.
+/// This type should be removed when list_neurons_pb is finally deprecated.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3520,7 +3508,25 @@ pub struct ListNeuronsProto {
     #[prost(uint64, optional, tag = "6")]
     pub page_size: Option<u64>,
 }
-
+/// A request to list neurons. The "requested list", i.e., the list of
+/// neuron IDs to retrieve information about, is the union of the list
+/// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
+/// the list of neuron IDs of neurons for which the caller is the
+/// controller or one of the hot keys.
+///
+/// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
+/// which is currently 500 neurons.  If you are unsure of the number of results in a set,
+/// you can use the `total_pages_available` field in the response to determine how many
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// When paging through results, it is good to keep in mind that newly inserted neurons
+/// could be missed if they are inserted between calls to pages, and this could result in missing
+/// a neuron in the combined responses.
+///
+/// If a user provides neuron_ids that do not exist in the request, there is no guarantee that
+/// each page will contain the exactly the page size, even if it is not the final request.  This is
+/// because neurons are retrieved by their neuron_id, and no additional checks are made on the
+/// validity of the neuron_ids provided by the user before deciding which sets of neuron_ids
+/// will be returned in the current page.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Debug, Default, PartialEq)]
