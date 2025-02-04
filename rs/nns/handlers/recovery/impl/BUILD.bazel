@@ -40,6 +40,9 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:rand",
+    "@crate_index//:itertools",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

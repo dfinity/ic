@@ -44,6 +44,9 @@ on_wire = { path = "../../../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+ed25519-dalek.workspace = true
+rand.workspace = true
+itertools.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }

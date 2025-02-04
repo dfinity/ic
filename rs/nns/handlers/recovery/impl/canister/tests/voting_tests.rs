@@ -1,11 +1,8 @@
-use candid::Principal;
-use ic_nns_handler_recovery::recovery_proposal::{
-    Ballot, NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal,
-};
+use ic_nns_handler_recovery::recovery_proposal::{Ballot, NewRecoveryProposal, RecoveryPayload};
 
 use crate::tests::{
-    extract_node_operators_from_init_data, init_pocket_ic, submit_proposal, vote,
-    RegistryPreparationArguments,
+    extract_node_operators_from_init_data, init_pocket_ic, submit_proposal, vote_with_only_ballot,
+    NodeOperatorArg, RegistryPreparationArguments,
 };
 
 #[test]
@@ -13,14 +10,14 @@ fn disallow_double_vote() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.keys();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
     let response = submit_proposal(
         &pic,
         canister,
-        first.0.clone(),
+        first.principal.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
         },
@@ -29,28 +26,10 @@ fn disallow_double_vote() {
     assert!(response.is_ok());
 
     let second = node_operators_iterator.next().unwrap();
-    let response = vote(
-        &pic,
-        canister,
-        second.0.clone(),
-        VoteOnRecoveryProposal {
-            signature: "Not important yet".as_bytes().to_vec(),
-            payload: "Not important yet".as_bytes().to_vec(),
-            ballot: Ballot::Yes,
-        },
-    );
+    let response = vote_with_only_ballot(&pic, canister, second, Ballot::Yes);
     assert!(response.is_ok());
 
-    let response = vote(
-        &pic,
-        canister,
-        second.0.clone(),
-        VoteOnRecoveryProposal {
-            signature: "Not important yet".as_bytes().to_vec(),
-            payload: "Not important yet".as_bytes().to_vec(),
-            ballot: Ballot::Yes,
-        },
-    );
+    let response = vote_with_only_ballot(&pic, canister, second, Ballot::Yes);
     assert!(response.is_err());
 }
 
@@ -60,13 +39,13 @@ fn disallow_vote_anonymous() {
     let (pic, canister) = init_pocket_ic(&mut args);
 
     let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.keys();
+    let mut node_operators_iterator = node_operators.iter();
     let first = node_operators_iterator.next().unwrap();
 
     let response = submit_proposal(
         &pic,
         canister,
-        first.0.clone(),
+        first.principal.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
         },
@@ -74,16 +53,8 @@ fn disallow_vote_anonymous() {
 
     assert!(response.is_ok());
 
-    let response = vote(
-        &pic,
-        canister,
-        Principal::anonymous(),
-        VoteOnRecoveryProposal {
-            signature: "Not important yet".as_bytes().to_vec(),
-            payload: "Not important yet".as_bytes().to_vec(),
-            ballot: Ballot::Yes,
-        },
-    );
+    let response =
+        vote_with_only_ballot(&pic, canister, &mut NodeOperatorArg::new(10), Ballot::Yes);
     assert!(response.is_err());
 }
 
@@ -92,14 +63,14 @@ fn allow_votes_even_if_executed() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.keys();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
     let response = submit_proposal(
         &pic,
         canister,
-        first.0.clone(),
+        first.principal.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
         },
@@ -108,16 +79,10 @@ fn allow_votes_even_if_executed() {
     assert!(response.is_ok());
 
     for no in node_operators_iterator {
-        let response = vote(
-            &pic,
-            canister,
-            no.0.clone(),
-            VoteOnRecoveryProposal {
-                signature: "Not important yet".as_bytes().to_vec(),
-                payload: "Not important yet".as_bytes().to_vec(),
-                ballot: Ballot::Yes,
-            },
-        );
+        let response = vote_with_only_ballot(&pic, canister, no, Ballot::Yes);
         assert!(response.is_ok());
     }
 }
+
+#[test]
+fn disallow_votes_bad_signature() {}

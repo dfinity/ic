@@ -37,7 +37,7 @@ async fn submit_new_recovery_proposal(
 
 #[update(hidden = true)]
 async fn vote_on_proposal(vote: VoteOnRecoveryProposal) -> Result<(), String> {
-    vote_on_proposal_inner(caller(), vote.ballot, vote.signature)
+    vote_on_proposal_inner(caller(), vote)
 }
 
 #[update(hidden = true)]

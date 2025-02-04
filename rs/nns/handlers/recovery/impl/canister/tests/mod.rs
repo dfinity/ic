@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use candid::Principal;
+use ed25519_dalek::SigningKey;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery::{
     node_operator_sync::SimpleNodeRecord,
-    recovery_proposal::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_proposal::{Ballot, NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
 };
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -24,6 +25,7 @@ use ic_registry_transport::{
 use maplit::btreemap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use prost::Message;
+use rand::rngs::OsRng;
 use registry_canister::init::RegistryCanisterInitPayload;
 use test_helpers::{
     add_fake_subnet, get_invariant_compliant_subnet_record,
@@ -80,11 +82,31 @@ fn add_routing_table_record(total_mutations: &mut Vec<RegistryMutation>, nns_id:
     ));
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NodeOperatorArg {
+    principal: PrincipalId,
+    num_nodes: u8,
+    signing_key: SigningKey,
+}
+
+impl NodeOperatorArg {
+    fn new(num_nodes: u8) -> Self {
+        let mut csprng = OsRng;
+        let signing_key = SigningKey::generate(&mut csprng);
+
+        Self {
+            principal: PrincipalId::new_self_authenticating(signing_key.verifying_key().as_bytes()),
+            num_nodes,
+            signing_key,
+        }
+    }
+}
+
 struct SubnetNodeOperatorArg {
     subnet_id: PrincipalId,
     subnet_type: SubnetType,
     // Operator id : number of nodes in subnet
-    node_operators: BTreeMap<PrincipalId, u8>,
+    node_operators: Vec<NodeOperatorArg>,
 }
 
 struct RegistryPreparationArguments {
@@ -100,26 +122,22 @@ impl Default for RegistryPreparationArguments {
                     subnet_type: SubnetType::System,
                     node_operators: vec![
                         // Each has 4 nodes so this is 40 nodes in total
-                        (PrincipalId::new_user_test_id(0), 4),
-                        (PrincipalId::new_user_test_id(1), 4),
-                        (PrincipalId::new_user_test_id(2), 4),
-                        (PrincipalId::new_user_test_id(3), 4),
-                        (PrincipalId::new_user_test_id(4), 4),
-                        (PrincipalId::new_user_test_id(5), 4),
-                        (PrincipalId::new_user_test_id(6), 4),
-                        (PrincipalId::new_user_test_id(7), 4),
-                        (PrincipalId::new_user_test_id(8), 4),
-                        (PrincipalId::new_user_test_id(9), 4),
-                    ]
-                    .into_iter()
-                    .collect(),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                        NodeOperatorArg::new(4),
+                    ],
                 },
                 SubnetNodeOperatorArg {
                     subnet_id: PrincipalId::new_subnet_test_id(0),
                     subnet_type: SubnetType::Application,
-                    node_operators: vec![(PrincipalId::new_user_test_id(999), 4)]
-                        .into_iter()
-                        .collect(),
+                    node_operators: vec![NodeOperatorArg::new(4)],
                 },
             ],
         }
@@ -137,13 +155,13 @@ fn prepare_registry(
     let mut operator_mutation_ids: u8 = 0;
     for arg in &registry_preparation_args.subnet_node_operators {
         let mut current_subnet_nodes = BTreeMap::new();
-        for (operator, num_nodes) in &arg.node_operators {
+        for operator_arg in &arg.node_operators {
             let (mutation, nodes) = prepare_registry_with_nodes_and_node_operator_id(
                 operator_mutation_ids,
-                *num_nodes as u64,
-                operator.clone(),
+                operator_arg.num_nodes as u64,
+                operator_arg.principal.clone(),
             );
-            operator_mutation_ids += num_nodes;
+            operator_mutation_ids += operator_arg.num_nodes;
 
             total_mutations.extend(mutation.mutations);
             current_subnet_nodes.extend(nodes);
@@ -245,7 +263,13 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
         .subnet_node_operators
         .iter()
         .filter(|subnet| subnet.subnet_type.eq(&SubnetType::System))
-        .map(|subnet_arg| subnet_arg.node_operators.values().sum::<u8>())
+        .map(|subnet_arg| {
+            subnet_arg
+                .node_operators
+                .iter()
+                .map(|operator_arg| operator_arg.num_nodes)
+                .sum::<u8>()
+        })
         .sum::<u8>();
     for _ in 0..(ticks + 2) {
         pic.tick();
@@ -287,6 +311,33 @@ fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<RecoveryProposal> {
     response
 }
 
+fn vote_with_only_ballot(
+    pic: &PocketIc,
+    canister: Principal,
+    sender: &mut NodeOperatorArg,
+    ballot: Ballot,
+) -> Result<(), String> {
+    // Add logic for signing so that this is valid
+    let pending = get_pending(pic, canister);
+    let last = pending.last().unwrap();
+    let signature = last.sign(&mut sender.signing_key);
+    let mut parts = [[0; 32]; 2];
+    parts[0].copy_from_slice(&signature[..32]);
+    parts[1].copy_from_slice(&signature[32..]);
+
+    vote(
+        pic,
+        canister,
+        sender.principal.0.clone(),
+        VoteOnRecoveryProposal {
+            payload: last.payload().expect("Should be able to fetch payload"),
+            signature: parts,
+            public_key: sender.signing_key.verifying_key().to_bytes(),
+            ballot,
+        },
+    )
+}
+
 fn vote(
     pic: &PocketIc,
     canister: Principal,
@@ -325,7 +376,7 @@ fn get_current_node_operators(pic: &PocketIc, canister: Principal) -> Vec<Simple
 
 fn extract_node_operators_from_init_data(
     arguments: &RegistryPreparationArguments,
-) -> BTreeMap<PrincipalId, u8> {
+) -> Vec<NodeOperatorArg> {
     arguments
         .subnet_node_operators
         .iter()

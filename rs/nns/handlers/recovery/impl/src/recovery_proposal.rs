@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
 use candid::CandidType;
+use ed25519_dalek::{ed25519::signature::SignerMut, Signature, SigningKey};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_handler_root::now_seconds;
 use serde::Deserialize;
@@ -19,8 +20,17 @@ pub struct NodeOperatorBallot {
     pub principal: PrincipalId,
     pub nodes_tied_to_ballot: Vec<NodeId>,
     pub ballot: Ballot,
-    pub signature: Vec<u8>,
+    pub signature: [[u8; 32]; 2],
+    pub payload: Vec<u8>,
+    pub pub_key: [u8; 32],
 }
+
+// struct {
+//     pub pub_key: 32 bytes,
+//     pub proposal_type: &str,
+//     pub payload: Vec<u8>,
+//     pub signature: 64 bytes
+// }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub enum RecoveryPayload {
@@ -41,6 +51,26 @@ pub struct RecoveryProposal {
     pub node_operator_ballots: Vec<NodeOperatorBallot>,
     /// Payload for the proposal
     pub payload: RecoveryPayload,
+}
+
+impl RecoveryProposal {
+    pub fn sign(&self, signing_key: &mut SigningKey) -> [u8; 64] {
+        let signature = signing_key.sign(
+            &self
+                .payload()
+                .expect("Should be able to encode recovery proposal"),
+        );
+        signature.to_bytes()
+    }
+
+    pub fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        let self_with_empty_ballots = Self {
+            node_operator_ballots: vec![],
+            ..self.clone()
+        };
+
+        candid::encode_one(self_with_empty_ballots)
+    }
 }
 
 impl RecoveryProposal {
@@ -92,7 +122,8 @@ pub struct NewRecoveryProposal {
 #[derive(Debug, CandidType, Deserialize, Clone)]
 pub struct VoteOnRecoveryProposal {
     pub payload: Vec<u8>,
-    pub signature: Vec<u8>,
+    pub signature: [[u8; 32]; 2],
+    pub public_key: [u8; 32],
 
     pub ballot: Ballot,
 }
@@ -260,7 +291,9 @@ fn initialize_ballots(simple_node_records: &Vec<SimpleNodeRecord>) -> Vec<NodeOp
                     principal: next.operator_principal,
                     nodes_tied_to_ballot: vec![next.node_principal],
                     ballot: Ballot::Undecided,
-                    signature: vec![],
+                    signature: [[0; 32]; 2],
+                    payload: vec![],
+                    pub_key: [0; 32],
                 }),
             }
             acc
@@ -269,18 +302,15 @@ fn initialize_ballots(simple_node_records: &Vec<SimpleNodeRecord>) -> Vec<NodeOp
 
 pub fn vote_on_proposal_inner(
     caller: PrincipalId,
-    ballot: Ballot,
-    signature: Vec<u8>,
+    vote: VoteOnRecoveryProposal,
 ) -> Result<(), String> {
-    PROPOSALS
-        .with_borrow_mut(|proposals| vote_on_last_proposal(caller, proposals, ballot, signature))
+    PROPOSALS.with_borrow_mut(|proposals| vote_on_last_proposal(caller, proposals, vote))
 }
 
 fn vote_on_last_proposal(
     caller: PrincipalId,
     proposals: &mut Vec<RecoveryProposal>,
-    ballot: Ballot,
-    signature: Vec<u8>,
+    vote: VoteOnRecoveryProposal,
 ) -> Result<(), String> {
     let last_proposal = proposals
         .last_mut()
@@ -299,8 +329,16 @@ fn vote_on_last_proposal(
         return Err("Vote already submitted".to_string());
     }
 
-    correlated_ballot.ballot = ballot;
-    correlated_ballot.signature = signature;
+    // Ensure that the payload can be deserialized in last proposal
+    // This ensures that the versions match
+
+    // Ensure that the signature is valid
+    is_valid_signature(&caller, &vote.public_key, &vote.signature, &vote.payload)?;
+
+    correlated_ballot.ballot = vote.ballot;
+    correlated_ballot.signature = vote.signature;
+    correlated_ballot.payload = vote.payload;
+    correlated_ballot.pub_key = vote.public_key;
 
     // If the outcome is no, remove this proposal
     if last_proposal.is_byzantine_majority_no() {
@@ -312,4 +350,25 @@ fn vote_on_last_proposal(
     }
 
     Ok(())
+}
+
+fn is_valid_signature(
+    caller: &PrincipalId,
+    pub_key: &[u8; 32],
+    submitted_signature: &[[u8; 32]; 2],
+    raw_payload: &Vec<u8>,
+) -> Result<(), String> {
+    let principal_from_pub_key = PrincipalId::new_self_authenticating(pub_key.as_slice());
+    if !principal_from_pub_key.eq(caller) {
+        return Err("Caller and public key sent differ!".to_string());
+    }
+
+    let loaded_public_key = ed25519_dalek::VerifyingKey::from_bytes(pub_key)
+        .map_err(|e| format!("Invalid public key: {:?}", e))?;
+    let signature = ed25519_dalek::Signature::from_slice(submitted_signature.as_flattened())
+        .map_err(|e| format!("Invalid signature: {:?}", e))?;
+
+    loaded_public_key
+        .verify_strict(&raw_payload, &signature)
+        .map_err(|e| format!("Signature not doesn't match: {:?}", e))
 }
