@@ -474,7 +474,7 @@ fn write_overlay(
         delta,
         &storage_layout,
         height,
-        &LsmtConfig {
+        &lsmt_config_unsharded(),
             shard_num_pages: u64::MAX,
         },
         metrics,
