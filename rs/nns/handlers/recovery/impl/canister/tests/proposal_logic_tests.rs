@@ -609,3 +609,41 @@ fn vote_in_last_proposal() {
 }
 
 // Nth proposal tests
+#[test]
+fn place_any_proposal_after_there_are_three() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_second_proposal(&mut args);
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    // Place the third
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::Unhalt,
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    let payloads = vec![
+        RecoveryPayload::Halt,
+        RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
+        },
+        RecoveryPayload::Unhalt,
+    ];
+    for payload in payloads {
+        let response = submit_proposal(
+            &pic,
+            canister,
+            first.0.clone(),
+            NewRecoveryProposal {
+                payload,
+                signature: "Not important yet".as_bytes().to_vec(),
+            },
+        );
+
+        assert!(response.is_err())
+    }
+}
