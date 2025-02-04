@@ -8,15 +8,15 @@ use ic_icrc1_ledger::{
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
-    TOKEN_SYMBOL,
+    get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -555,12 +555,18 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
     );
 }
 
+fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(state_machine, ledger_id, None, None);
+    blocks.into_iter().map(|b| b.encode()).collect()
+}
+
 #[test]
 fn icrc1_test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args_with_large_archive_trigger_threshold,
+        get_all_blocks,
     );
 }
 
@@ -570,6 +576,7 @@ fn icrc1_test_multi_step_migration_from_v3() {
         ledger_mainnet_v3_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -579,6 +586,7 @@ fn icrc1_test_multi_step_migration_from_v2() {
         ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -588,6 +596,7 @@ fn icrc1_test_multi_step_migration_from_v2_noledgerversion() {
         ledger_mainnet_v2_noledgerversion_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 

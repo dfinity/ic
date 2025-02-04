@@ -12,7 +12,7 @@ use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transact
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
@@ -2504,6 +2504,7 @@ pub fn icrc1_test_multi_step_migration<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
+    get_all_blocks: fn(&StateMachine, CanisterId) -> Vec<EncodedBlock>,
 ) where
     T: CandidType,
 {
@@ -2580,6 +2581,8 @@ pub fn icrc1_test_multi_step_migration<T>(
     let test_upgrade = |ledger_wasm: Vec<u8>,
                         balances: BTreeMap<&Account, Nat>,
                         min_migration_steps: u64| {
+        let blocks_before = get_all_blocks(&env, canister_id);
+
         env.upgrade_canister(
             canister_id,
             ledger_wasm,
@@ -2588,6 +2591,8 @@ pub fn icrc1_test_multi_step_migration<T>(
         .unwrap();
 
         wait_ledger_ready(&env, canister_id, 20);
+
+        assert_eq!(blocks_before, get_all_blocks(&env, canister_id));
 
         let stable_upgrade_migration_steps =
             parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");

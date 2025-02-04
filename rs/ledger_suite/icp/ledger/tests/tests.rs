@@ -5,7 +5,7 @@ use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::block::{BlockIndex, EncodedBlock};
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
@@ -1266,12 +1266,75 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
     );
 }
 
+fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let blocks_res = query_blocks(&state_machine, p1.0, ledger_id, 0, u32::MAX.into());
+    let mut result = vec![];
+    println!(
+        "chain length: {}, local length: {}, num_archives: {}",
+        blocks_res.chain_length,
+        blocks_res.blocks.len(),
+        blocks_res.archived_blocks.len(),
+    );
+    for archived in blocks_res.archived_blocks {
+        println!(
+            "get blocks from archive, start: {}, length: {}",
+            archived.start, archived.length
+        );
+        let get_blocks_args = Encode!(&GetBlocksArgs {
+            start: archived.start,
+            length: archived.length,
+        })
+        .unwrap();
+        let archived_blocks = Decode!(
+            &state_machine
+                .query(
+                    CanisterId::unchecked_from_principal(archived.callback.canister_id.into()),
+                    "get_blocks",
+                    get_blocks_args.clone()
+                )
+                .unwrap()
+                .bytes(),
+            GetBlocksResult
+        )
+        .unwrap()
+        .unwrap();
+        result.extend(archived_blocks.blocks);
+    }
+
+    result.extend(blocks_res.blocks);
+    assert_eq!(result.len(), blocks_res.chain_length as usize);
+    let mut prev_hash = None;
+    let mut i = 0;
+
+    for block in &result {
+        println!("for loop iter {i}");
+        i += 1;
+        let block: Block = block.clone().try_into().unwrap();
+        println!("{:?}", block.parent_hash);
+        println!("{:?}", prev_hash);
+        println!("");
+        assert_eq!(block.parent_hash, prev_hash);
+        let encoded_block = block.encode();
+        prev_hash = Some(icp_ledger::Block::block_hash(&encoded_block));
+    }
+
+    result
+        .into_iter()
+        .map(|b| {
+            let block: Block = b.try_into().unwrap();
+            block.encode()
+        })
+        .collect()
+}
+
 #[test]
 fn test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
@@ -1281,6 +1344,7 @@ fn test_multi_step_migration_from_v2() {
         ledger_wasm_mainnet_v2(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
+        get_all_blocks,
     );
 }
 
