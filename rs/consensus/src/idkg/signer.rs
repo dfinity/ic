@@ -1227,11 +1227,7 @@ mod tests {
                 let state = fake_state_with_signature_requests(
                     height,
                     (0..3).map(|i| {
-                        fake_signature_request_context_from_id(
-                            key_id.clone().into(),
-                            pids[i],
-                            ids[i],
-                        )
+                        fake_signature_request_context_from_id(key_id.clone(), pids[i], ids[i])
                     }),
                 );
 

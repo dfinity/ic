@@ -164,7 +164,7 @@ pub fn fake_signature_request_context_from_id(
     let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id.into(), height),
+        args: fake_signature_request_args(key_id, height),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -1145,10 +1145,9 @@ pub(crate) fn create_sig_inputs_with_height(
     height: Height,
     key_id: MasterPublicKeyId,
 ) -> TestSigInputs {
-    match &key_id {
-        MasterPublicKeyId::VetKd(key_id) => return create_vetkd_inputs_with_args(caller, key_id),
-        _ => (),
-    };
+    if let MasterPublicKeyId::VetKd(key_id) = &key_id {
+        return create_vetkd_inputs_with_args(caller, key_id);
+    }
     let transcript_id = |offset| {
         let val = caller as u64;
         create_transcript_id(val * 214365 + offset)
