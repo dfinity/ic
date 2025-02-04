@@ -721,6 +721,8 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
                         |share| Ok(CombinedSignature::Schnorr(share)),
                     )
             }
+            // We don't expect to combine VetKd shares here
+            // (this is done by the vetKD payload builder instead).
             ThresholdSigInputs::VetKd(_) => Err(CombineSigSharesError::VetKdUnexpected),
         };
         stats.record_sig_share_aggregation(request_id, start.elapsed());
