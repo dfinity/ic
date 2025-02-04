@@ -612,22 +612,36 @@ fn icrc1_test_downgrade_from_incompatible_version() {
 }
 
 #[test]
+fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
+    test_stable_migration_endpoints_disabled(ledger_mainnet_wasm());
+}
+
+#[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_v3() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_mainnet_v3_wasm(),
-        ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args,
-        vec![],
-    );
+    test_stable_migration_endpoints_disabled(ledger_mainnet_v3_wasm());
 }
 
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled_from_v2() {
+    test_stable_migration_endpoints_disabled(ledger_mainnet_v2_wasm());
+}
+
+fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
+    let get_blocks_arg = Encode!(&GetBlocksRequest {
+        start: Nat::from(0u64),
+        length: Nat::from(1u64),
+    })
+    .unwrap();
+    let args: Vec<GetBlocksRequest> = vec![];
+    let icrc3_get_blocks_arg = Encode!(&args).unwrap();
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_mainnet_v2_wasm(),
+        ledger_wasm_mainnet,
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args,
-        vec![],
+        encode_init_args_with_large_archive_trigger_threshold,
+        vec![
+            ("get_blocks", get_blocks_arg),
+            ("icrc3_get_blocks", icrc3_get_blocks_arg),
+        ],
     );
 }
 

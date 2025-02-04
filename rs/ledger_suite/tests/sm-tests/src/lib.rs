@@ -2825,7 +2825,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         test_endpoint(endpoint_name, args, true);
     }
 
-    wait_ledger_ready(&env, canister_id, 20);
+    wait_ledger_ready(&env, canister_id, 50);
 
     test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), false);
     test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), false);

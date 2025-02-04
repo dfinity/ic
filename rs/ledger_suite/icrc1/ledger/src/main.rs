@@ -803,6 +803,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 #[query]
 #[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
+    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -972,6 +973,7 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 #[query]
 #[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
