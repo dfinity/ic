@@ -131,7 +131,7 @@ rm -rf "$DISK_DIR_FULL"
 BAZEL_TARGETS=()
 
 BAZEL_COMMON_ARGS=(
-    --config=local # TODO: explain all args
+    --config=local
     --ic_version="$VERSION"
     --ic_version_rc_only="$IC_VERSION_RC_ONLY"
     --release_build="$RELEASE"
