@@ -13,7 +13,9 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
+prometheus = {workspace = true }
 salt-api = { path = "./api" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
