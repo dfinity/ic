@@ -698,31 +698,31 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
-            "cost_ecdsa",
+            "cost_sign_with_ecdsa",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![I, I, I],
+                    param_types: vec![I, I, ValType::I32, I],
                     return_type: vec![],
                 },
             )],
         ),
         (
-            "cost_schnorr",
+            "cost_sign_with_schnorr",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![I, I, I],
+                    param_types: vec![I, I, ValType::I32, I],
                     return_type: vec![],
                 },
             )],
         ),
         (
-            "cost_vetkey",
+            "cost_vetkd_derive_encrypted_key",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![I, I, I],
+                    param_types: vec![I, I, ValType::I32, I],
                     return_type: vec![],
                 },
             )],
