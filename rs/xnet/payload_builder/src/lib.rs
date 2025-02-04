@@ -533,6 +533,8 @@ impl XNetPayloadBuilderImpl {
             // A stream can never have more than `MAX_STREAM_MESSAGES` signals by design,
             // since we stop pulling messages after reaching this limit. Any subnet with
             // more than this number of signals can therefore be classified as dishonest.
+            // The factor of 2 allows for wiggle room in increasing this constant without
+            // touching this, but is still good enough as a guard against dishonest subnets.
 
             // An honest subnet will only produce signals for the messages in the incoming
             // stream (i.e. no signals for future messages; and all signals for past
