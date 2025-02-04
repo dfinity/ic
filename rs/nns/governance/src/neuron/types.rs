@@ -318,7 +318,9 @@ impl Neuron {
         // Main calculation.
         let result = adjustment_factor * Decimal::from(potential_voting_power);
 
-        // Convert (back) to u64.
+        // Convert (back) to u64. Currently, Decimal uses "banker's rounding".
+        // However, the particular type of rounding used does not matter to us
+        // very much, because we are not apportioning, nor anything like that.
         let result = result.round();
         u64::try_from(result).unwrap_or_else(|err| {
             // Log and fall back to potential voting power. Assuming
