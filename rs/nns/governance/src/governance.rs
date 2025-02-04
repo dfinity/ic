@@ -372,6 +372,17 @@ impl VotingPowerEconomics {
         Self::DEFAULT
     }
 
+    /// Returns 1 if a neuron has refreshed (its voting power/following)
+    /// recently.
+    ///
+    /// Otherwise, if a neuron has not refreshed for >
+    /// start_reducing_voting_power_after_seconds, returns < 1 (but >= 0).
+    ///
+    /// Once a neuron has not refresehd for
+    /// start_reducing_voting_power_after_seconds +
+    /// clear_following_after_seconds, this returns 0.
+    ///
+    /// Between these two points, the decrease is linear.
     pub fn deciding_voting_power_adjustment_factor(
         &self,
         time_since_last_voting_power_refreshed: Duration,
