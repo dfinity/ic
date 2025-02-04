@@ -294,7 +294,7 @@ impl Neuron {
             > 0
     }
 
-    /// How much swap this neuron has when it casts its vote on proposals.
+    /// How much sway this neuron has when it casts its vote on proposals.
     pub fn deciding_voting_power(
         &self,
         voting_power_economics: &VotingPowerEconomics,
