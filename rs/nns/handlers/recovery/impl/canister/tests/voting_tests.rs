@@ -1,7 +1,7 @@
 use candid::Principal;
 use ed25519_dalek::SigningKey;
 use ic_nns_handler_recovery::recovery_proposal::{
-    Ballot, NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal,
+    Ballot, NewRecoveryProposal, RecoveryPayload, SecurityMetadata, VoteOnRecoveryProposal,
 };
 
 use crate::tests::{
@@ -115,10 +115,12 @@ fn disallow_votes_bad_signature() {
         canister,
         first.principal.0.clone(),
         VoteOnRecoveryProposal {
-            payload: vec![],
-            signature: [[0; 32]; 2],
-            public_key: first.signing_key.verifying_key().to_bytes(),
             ballot: Ballot::Yes,
+            security_metadata: SecurityMetadata {
+                payload: vec![],
+                signature: [[0; 32]; 2],
+                pub_key: first.signing_key.verifying_key().to_bytes(),
+            },
         },
     );
     assert!(response.is_err());
@@ -160,11 +162,13 @@ fn disallow_votes_wrong_public_key() {
         canister,
         first.principal.0.clone(),
         VoteOnRecoveryProposal {
-            payload: last_proposal
-                .signature_payload()
-                .expect("Should be able to serialize payload"),
-            signature: parts,
-            public_key: new_key_pair.verifying_key().to_bytes(),
+            security_metadata: SecurityMetadata {
+                payload: last_proposal
+                    .signature_payload()
+                    .expect("Should be able to serialize payload"),
+                signature: parts,
+                pub_key: new_key_pair.verifying_key().to_bytes(),
+            },
             ballot: Ballot::Yes,
         },
     );
@@ -196,9 +200,11 @@ fn disallow_votes_anonymous() {
         canister,
         Principal::anonymous(),
         VoteOnRecoveryProposal {
-            payload: vec![],
-            signature: [[0; 32]; 2],
-            public_key: [0; 32],
+            security_metadata: SecurityMetadata {
+                payload: vec![],
+                signature: [[0; 32]; 2],
+                pub_key: [0; 32],
+            },
             ballot: Ballot::Yes,
         },
     );

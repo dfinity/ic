@@ -6,7 +6,9 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery::{
     node_operator_sync::SimpleNodeRecord,
-    recovery_proposal::{Ballot, NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_proposal::{
+        Ballot, NewRecoveryProposal, RecoveryProposal, SecurityMetadata, VoteOnRecoveryProposal,
+    },
 };
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -330,11 +332,13 @@ fn vote_with_only_ballot(
         canister,
         sender.principal.0.clone(),
         VoteOnRecoveryProposal {
-            payload: last
-                .signature_payload()
-                .expect("Should be able to fetch payload"),
-            signature: parts,
-            public_key: sender.signing_key.verifying_key().to_bytes(),
+            security_metadata: SecurityMetadata {
+                payload: last
+                    .signature_payload()
+                    .expect("Should be able to fetch payload"),
+                signature: parts,
+                pub_key: sender.signing_key.verifying_key().to_bytes(),
+            },
             ballot,
         },
     )
