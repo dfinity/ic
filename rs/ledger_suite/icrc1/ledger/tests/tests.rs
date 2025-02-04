@@ -219,16 +219,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
             MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
             MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: Some(0),
-            max_transactions_per_response: None,
-        },
+        archive_options: args.archive_options,
         max_memo_length: None,
         feature_flags: args.feature_flags,
     })
@@ -693,6 +684,23 @@ fn icrc1_test_metrics_while_migrating_from_v2() {
 fn icrc1_test_upgrade_from_v1_not_possible() {
     ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
         ledger_mainnet_v1_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade(
+        ledger_mainnet_v2_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_cycles_for_archive_creation_default_spawns_archive() {
+    ic_ledger_suite_state_machine_tests::test_cycles_for_archive_creation_default_spawns_archive(
         ledger_wasm(),
         encode_init_args,
     );
