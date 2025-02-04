@@ -67,6 +67,10 @@ fn ledger_wasm_mainnet_v2() -> Vec<u8> {
     std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V2_WASM_PATH").unwrap()).unwrap()
 }
 
+fn ledger_wasm_mainnet_v3() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V3_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -1232,7 +1236,7 @@ fn test_block_transformation() {
 
 #[test]
 fn test_upgrade_serialization_from_mainnet() {
-    test_upgrade_serialization(ledger_wasm_mainnet());
+    test_upgrade_serialization(ledger_wasm_mainnet_v3());
 }
 
 #[test]
@@ -1269,7 +1273,7 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
 #[test]
 fn test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
@@ -1287,7 +1291,7 @@ fn test_multi_step_migration_from_v2() {
 #[test]
 fn test_downgrade_from_incompatible_version() {
     ic_ledger_suite_state_machine_tests::test_downgrade_from_incompatible_version(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet_v3(),
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
@@ -1297,7 +1301,7 @@ fn test_downgrade_from_incompatible_version() {
 
 #[test]
 fn test_stable_migration_endpoints_disabled_from_mainnet() {
-    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet());
+    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet_v3());
 }
 
 #[test]
@@ -1344,7 +1348,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
 #[test]
 fn test_incomplete_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
@@ -1362,7 +1366,7 @@ fn test_incomplete_migration_from_v2() {
 #[test]
 fn test_incomplete_migration_to_current_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
@@ -1380,7 +1384,7 @@ fn test_incomplete_migration_to_current_from_v2() {
 #[test]
 fn test_metrics_while_migrating_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
-        ledger_wasm_mainnet(),
+        ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
