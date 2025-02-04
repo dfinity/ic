@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -1251,7 +1251,7 @@ pub trait SystemApi {
         &self,
         src: usize,
         size: usize,
-        curve: EcdsaCurve,
+        curve: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
@@ -1268,7 +1268,7 @@ pub trait SystemApi {
         &self,
         src: usize,
         size: usize,
-        algorithm: SchnorrAlgorithm,
+        algorithm: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
@@ -1285,7 +1285,7 @@ pub trait SystemApi {
         &self,
         src: usize,
         size: usize,
-        curve: VetKdCurve,
+        curve: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
