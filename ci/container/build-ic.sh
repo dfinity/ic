@@ -137,8 +137,6 @@ BAZEL_COMMON_ARGS=(
     --release_build="$RELEASE"
 )
 
-echo_green "Building selected IC artifacts: ${BAZEL_TARGETS[*]}"
-
 if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
 if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
 if "$BUILD_IMG"; then BAZEL_TARGETS+=(
