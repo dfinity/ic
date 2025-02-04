@@ -50,15 +50,10 @@ type InitArgs = record {
     // If true salt is regenerated immediately and subsequently based on the chosen strategy
     regenerate_now: bool;
     // Strategy defining salt generation
-    // If specified: newly provided strategy is used
-    // If not specified: previous strategy is used 
-    salt_generation_strategy: opt SaltGenerationStrategy;
+    salt_generation_strategy: SaltGenerationStrategy;
     // Interval (in seconds) for polling API boundary node IDs from the registry
     // The first polling operation occurs immediately
     registry_polling_interval_secs: nat64;
-    // Interval (in seconds) for periodic regeneration of the random seed
-    // If not specified, random seed is generated once and not regenerated afterwards
-    seeding_interval_secs: opt nat64
 };
 
 service : (InitArgs) -> {

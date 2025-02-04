@@ -10,9 +10,8 @@ pub enum SaltGenerationStrategy {
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct InitArg {
     pub regenerate_now: bool,
-    pub salt_generation_strategy: Option<SaltGenerationStrategy>,
+    pub salt_generation_strategy: SaltGenerationStrategy,
     pub registry_polling_interval_secs: u64,
-    pub seeding_interval_secs: Option<u64>,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]

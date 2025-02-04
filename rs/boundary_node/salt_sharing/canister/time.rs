@@ -79,5 +79,15 @@ mod tests {
             delay,
             Duration::from_secs(4 * day_sec + 12 * hour_sec + 25 * minute_sec)
         );
+        // Verify that the date after delay is exactly the start of next month
+        let time_after_delay_ns = time + delay.as_nanos() as u64;
+        let dt_after_delay =
+            OffsetDateTime::from_unix_timestamp_nanos(time_after_delay_ns as i128).unwrap();
+        let expected_dt = OffsetDateTime::new_in_offset(
+            Date::from_calendar_date(2025, Month::January, 1).unwrap(),
+            Time::from_hms_nano(0, 0, 0, 0).unwrap(),
+            UtcOffset::from_hms(0, 0, 0).unwrap(),
+        );
+        assert_eq!(dt_after_delay, expected_dt);
     }
 }

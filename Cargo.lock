@@ -19352,13 +19352,16 @@ name = "salt"
 version = "0.9.0"
 dependencies = [
  "candid",
- "candid_parser",
+ "ic-canister-log 0.2.0",
+ "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-stable-structures",
- "rand_chacha 0.3.1",
  "salt-api",
+ "serde",
+ "serde_cbor",
+ "serde_json",
  "time",
 ]
 
