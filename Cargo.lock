@@ -10829,6 +10829,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-handler-recovery-interface",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
  "ic-protobuf",
@@ -10854,6 +10855,15 @@ dependencies = [
  "serde_bytes",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "ic-nns-handler-recovery-interface"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ed25519-dalek",
+ "serde",
 ]
 
 [[package]]

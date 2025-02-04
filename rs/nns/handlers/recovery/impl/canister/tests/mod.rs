@@ -6,10 +6,9 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery::{
     node_operator_sync::SimpleNodeRecord,
-    recovery_proposal::{
-        Ballot, NewRecoveryProposal, RecoveryProposal, SecurityMetadata, VoteOnRecoveryProposal,
-    },
+    recovery_proposal::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
 };
+use ic_nns_handler_recovery_interface::{security_metadata::SecurityMetadata, Ballot};
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,

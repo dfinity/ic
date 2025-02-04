@@ -47,6 +47,7 @@ serde_bytes = { workspace = true }
 ed25519-dalek.workspace = true
 rand.workspace = true
 itertools.workspace = true
+ic-nns-handler-recovery-interface = { path = "../interface" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }

@@ -1,5 +1,6 @@
 use candid::Principal;
-use ic_nns_handler_recovery::recovery_proposal::{Ballot, NewRecoveryProposal, RecoveryPayload};
+use ic_nns_handler_recovery::recovery_proposal::{NewRecoveryProposal, RecoveryPayload};
+use ic_nns_handler_recovery_interface::Ballot;
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::PocketIc;
 

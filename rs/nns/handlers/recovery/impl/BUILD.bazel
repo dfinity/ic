@@ -30,6 +30,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/nns/handlers/root/impl:root",
+    "//rs/nns/handlers/recovery/interface",
     "@crate_index//:build-info",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:candid",

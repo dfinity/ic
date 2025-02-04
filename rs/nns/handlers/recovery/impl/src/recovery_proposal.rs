@@ -3,34 +3,11 @@ use std::cell::RefCell;
 use candid::CandidType;
 use ed25519_dalek::{ed25519::signature::SignerMut, SigningKey};
 use ic_base_types::{NodeId, PrincipalId};
+use ic_nns_handler_recovery_interface::{security_metadata::SecurityMetadata, Ballot};
 use ic_nns_handler_root::now_seconds;
 use serde::Deserialize;
 
 use crate::node_operator_sync::{get_node_operators_in_nns, SimpleNodeRecord};
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
-pub enum Ballot {
-    Yes,
-    No,
-    Undecided,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct SecurityMetadata {
-    pub signature: [[u8; 32]; 2],
-    pub payload: Vec<u8>,
-    pub pub_key: [u8; 32],
-}
-
-impl SecurityMetadata {
-    pub fn empty() -> Self {
-        Self {
-            signature: [[0; 32]; 2],
-            payload: vec![],
-            pub_key: [0; 32],
-        }
-    }
-}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct NodeOperatorBallot {
@@ -335,7 +312,9 @@ fn vote_on_last_proposal(
     // This ensures that the versions match
 
     // Ensure that the signature is valid
-    is_valid_signature(&caller, &vote.security_metadata)?;
+    vote.security_metadata
+        .validate_metadata(&caller.0)
+        .map_err(|e| e.to_string())?;
 
     correlated_ballot.ballot = vote.ballot;
     correlated_ballot.security_metadata = vote.security_metadata.clone();
@@ -350,25 +329,4 @@ fn vote_on_last_proposal(
     }
 
     Ok(())
-}
-
-fn is_valid_signature(
-    caller: &PrincipalId,
-    security_metadata: &SecurityMetadata,
-) -> Result<(), String> {
-    let principal_from_pub_key =
-        PrincipalId::new_self_authenticating(security_metadata.pub_key.as_slice());
-    if !principal_from_pub_key.eq(caller) {
-        return Err("Caller and public key sent differ!".to_string());
-    }
-
-    let loaded_public_key = ed25519_dalek::VerifyingKey::from_bytes(&security_metadata.pub_key)
-        .map_err(|e| format!("Invalid public key: {:?}", e))?;
-    let signature =
-        ed25519_dalek::Signature::from_slice(security_metadata.signature.as_flattened())
-            .map_err(|e| format!("Invalid signature: {:?}", e))?;
-
-    loaded_public_key
-        .verify_strict(&security_metadata.payload, &signature)
-        .map_err(|e| format!("Signature not doesn't match: {:?}", e))
 }

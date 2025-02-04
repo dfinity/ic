@@ -437,6 +437,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/nns/handlers/recovery/interface",
 ]
 
 resolver = "2"
