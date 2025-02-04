@@ -330,7 +330,9 @@ fn vote_with_only_ballot(
         canister,
         sender.principal.0.clone(),
         VoteOnRecoveryProposal {
-            payload: last.payload().expect("Should be able to fetch payload"),
+            payload: last
+                .signature_payload()
+                .expect("Should be able to fetch payload"),
             signature: parts,
             public_key: sender.signing_key.verifying_key().to_bytes(),
             ballot,

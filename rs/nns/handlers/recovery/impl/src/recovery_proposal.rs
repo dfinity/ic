@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use candid::CandidType;
-use ed25519_dalek::{ed25519::signature::SignerMut, Signature, SigningKey};
+use ed25519_dalek::{ed25519::signature::SignerMut, SigningKey};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_handler_root::now_seconds;
 use serde::Deserialize;
@@ -57,19 +57,18 @@ impl RecoveryProposal {
     pub fn sign(&self, signing_key: &mut SigningKey) -> [u8; 64] {
         let signature = signing_key.sign(
             &self
-                .payload()
+                .signature_payload()
                 .expect("Should be able to encode recovery proposal"),
         );
         signature.to_bytes()
     }
 
-    pub fn payload(&self) -> Result<Vec<u8>, candid::Error> {
-        let self_with_empty_ballots = Self {
+    pub fn signature_payload(&self) -> Result<Vec<u8>, candid::Error> {
+        let self_without_ballots = Self {
             node_operator_ballots: vec![],
             ..self.clone()
         };
-
-        candid::encode_one(self_with_empty_ballots)
+        candid::encode_one(self_without_ballots)
     }
 }
 
