@@ -186,6 +186,12 @@ pub fn submit_recovery_proposal(
                 //     1. Recovery - if this is previous proposal allow placing of the next only if it is voted in
                 //     2. Unhalt - if this is previous proposal don't allow placing new proposal
                 let second_proposal = proposals.get(1).expect("Must have at least two proposals");
+                if !second_proposal.is_byzantine_majority_yes() {
+                    let message =
+                        format!("Can't submit a proposal until the previous is decided");
+                    ic_cdk::println!("{}", message);
+                    return Err(message);
+                }
                 match (&second_proposal.payload, &new_proposal.payload) {
                     (
                         RecoveryPayload::DoRecovery {
@@ -194,19 +200,22 @@ pub fn submit_recovery_proposal(
                         },
                         RecoveryPayload::Unhalt,
                     ) => {
-                        if !second_proposal.is_byzantine_majority_yes() {
-                            let message =
-                                format!("Can't submit a proposal until the previous is decided");
-                            ic_cdk::println!("{}", message);
-                            return Err(message);
-                        }
                         proposals.push(RecoveryProposal {
                             proposer: caller,
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&nodes_in_nns),
                             payload: RecoveryPayload::Unhalt,
                         });
-                    }
+                    },
+                    // Allow submitting a new recovery proposal only if the current one
+                    // is voted in. This could happen if the recovery from this proposal
+                    // failed and we need to submit a new one with different args.
+                    (RecoveryPayload::DoRecovery { height: _, state_hash: _ }, RecoveryPayload::DoRecovery { height: _, state_hash: _ }) => {
+                        // Remove the second_one
+                        proposals.pop();
+
+                        proposals.push(RecoveryProposal { proposer: caller, submission_timestamp_seconds: now_seconds(), node_operator_ballots: initialize_ballots(&nodes_in_nns), payload: new_proposal.payload.clone() });
+                    },
                     (_, _) => {
                         let message = format!(
                             "Caller {} tried to place proposal {:?} which is currently not allowed",

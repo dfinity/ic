@@ -399,6 +399,64 @@ fn second_proposal_recovery_vote_in() {
 }
 
 #[test]
+fn second_proposal_recovery_vote_in_and_resubmit() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    // Place the second
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
+        },
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    // We need 7 to vote in
+    for _ in 0..7 {
+        let next = node_operators_iterator.next().unwrap();
+
+        let response = vote(
+            &pic,
+            canister,
+            next.0.clone(),
+            VoteOnRecoveryProposal {
+                signature: "Not important yet".as_bytes().to_vec(),
+                ballot: Ballot::Yes,
+                payload: "Not important yet".as_bytes().to_vec(),
+            },
+        );
+        assert!(response.is_ok())
+    }
+
+    let resubmitted_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::DoRecovery {
+            height: 456,
+            state_hash: "456".to_string(),
+        },
+    };
+    let response = submit_proposal(
+        &pic,
+        canister,
+        first.0.clone(),
+        resubmitted_proposal.clone(),
+    );
+    assert!(response.is_ok());
+
+    let pending = get_pending(&pic, canister);
+    assert!(pending.len().eq(&2));
+
+    let last = pending.last().unwrap();
+    assert!(!last.is_byzantine_majority_no() && !last.is_byzantine_majority_yes());
+    assert_eq!(last.payload, resubmitted_proposal.payload)
+}
+
+#[test]
 fn second_proposal_unhalt_vote_in() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_first_proposal(&mut args);
