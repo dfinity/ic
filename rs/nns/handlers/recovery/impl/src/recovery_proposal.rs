@@ -22,7 +22,7 @@ pub struct NodeOperatorBallot {
     pub signature: Vec<u8>,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub enum RecoveryPayload {
     Halt,
     DoRecovery { height: u64, state_hash: String },
@@ -68,14 +68,14 @@ impl RecoveryProposal {
     /// For a root proposal to have a byzantine majority of no, it
     /// needs to collect f + 1 "no" votes, where N s the total number
     /// of nodes (same as the number of ballots) and f = (N - 1) / 3.
-    fn is_byzantine_majority_no(&self) -> bool {
+    pub fn is_byzantine_majority_no(&self) -> bool {
         self.is_byzantine_majority(Ballot::No)
     }
 
     /// For a root proposal to have a byzantine majority of no, it
     /// needs to collect f + 1 "no" votes, where N s the total number
     /// of nodes (same as the number of ballots) and f = (N - 1) / 3.
-    fn is_byzantine_majority_yes(&self) -> bool {
+    pub fn is_byzantine_majority_yes(&self) -> bool {
         self.is_byzantine_majority(Ballot::Yes)
     }
 }
@@ -295,6 +295,10 @@ fn vote_on_last_proposal(
     // If the outcome is no, remove this proposal
     if last_proposal.is_byzantine_majority_no() {
         proposals.pop();
+    } else if last_proposal.is_byzantine_majority_yes() {
+        if let RecoveryPayload::Unhalt = last_proposal.payload {
+            proposals.clear();
+        }
     }
 
     Ok(())

@@ -3,6 +3,7 @@ use ic_nns_handler_recovery::recovery_proposal::{
     Ballot, NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal,
 };
 use ic_registry_subnet_type::SubnetType;
+use pocket_ic::PocketIc;
 
 use crate::tests::{get_pending, vote};
 
@@ -195,7 +196,244 @@ fn disallow_node_operators_from_different_subnets_from_placing_proposals() {
     );
     assert!(response.is_err());
 }
+
 // Second proposal tests
+fn place_and_execute_first_proposal(
+    args: &mut RegistryPreparationArguments,
+) -> (PocketIc, Principal) {
+    let (pic, canister) = init_pocket_ic(args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    let response = submit_proposal(
+        &pic,
+        canister,
+        first.0.clone(),
+        NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+            signature: "Not important yet".as_bytes().to_vec(),
+        },
+    );
+    assert!(response.is_ok());
+
+    // To achieve byzantine majority in default setup 7
+    // node operators should vote "Yes"
+    // The first one voted "Yes" when submitting the proposal
+    // which leaves room for 6 more
+    for _ in 0..6 {
+        let next = node_operators_iterator.next().unwrap();
+
+        let response = vote(
+            &pic,
+            canister,
+            next.0.clone(),
+            VoteOnRecoveryProposal {
+                signature: "Not important yet".as_bytes().to_vec(),
+                ballot: Ballot::Yes,
+            },
+        );
+
+        assert!(response.is_ok());
+    }
+
+    let pending_proposals = get_pending(&pic, canister);
+    let first_proposal = pending_proposals.first().unwrap();
+    assert!(first_proposal.is_byzantine_majority_yes());
+    (pic, canister)
+}
+
+#[test]
+fn place_second_proposal_recovery() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
+        },
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    let pending_proposals = get_pending(&pic, canister);
+    let latest_proposal = pending_proposals.last().unwrap();
+    assert!(latest_proposal.payload.eq(&new_proposal.payload));
+    assert!(
+        !latest_proposal.is_byzantine_majority_no() && !latest_proposal.is_byzantine_majority_yes()
+    )
+}
+
+#[test]
+fn place_second_proposal_unhalt() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::Unhalt,
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    let pending_proposals = get_pending(&pic, canister);
+    let latest_proposal = pending_proposals.last().unwrap();
+    assert!(latest_proposal.payload.eq(&new_proposal.payload));
+    assert!(
+        !latest_proposal.is_byzantine_majority_no() && !latest_proposal.is_byzantine_majority_yes()
+    )
+}
+
+#[test]
+fn place_second_proposal_halt() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    let response = submit_proposal(
+        &pic,
+        canister,
+        first.0.clone(),
+        NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+            signature: "Not important yet".as_bytes().to_vec(),
+        },
+    );
+    assert!(response.is_err());
+}
+
+#[test]
+fn second_proposal_vote_against() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    // Place the second
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
+        },
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    // We need 7 votes to vote against this
+    for _ in 0..7 {
+        let next = node_operators_iterator.next().unwrap();
+
+        let response = vote(
+            &pic,
+            canister,
+            next.0.clone(),
+            VoteOnRecoveryProposal {
+                signature: "Not important yet".as_bytes().to_vec(),
+                ballot: Ballot::No,
+            },
+        );
+        assert!(response.is_ok())
+    }
+
+    let pending = get_pending(&pic, canister);
+    assert!(pending.len().eq(&1))
+}
+
+#[test]
+fn second_proposal_recovery_vote_in() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    // Place the second
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
+        },
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    // We need 6 more to vote in
+    for _ in 0..6 {
+        let next = node_operators_iterator.next().unwrap();
+
+        let response = vote(
+            &pic,
+            canister,
+            next.0.clone(),
+            VoteOnRecoveryProposal {
+                signature: "Not important yet".as_bytes().to_vec(),
+                ballot: Ballot::Yes,
+            },
+        );
+        assert!(response.is_ok())
+    }
+
+    let pending = get_pending(&pic, canister);
+    assert!(pending.len().eq(&2));
+    let latest_proposal = pending.last().unwrap();
+    assert!(latest_proposal.is_byzantine_majority_yes())
+}
+
+#[test]
+fn second_proposal_unhalt_vote_in() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = place_and_execute_first_proposal(&mut args);
+
+    let node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.keys();
+    let first = node_operators_iterator.next().unwrap();
+
+    // Place the second
+    let new_proposal = NewRecoveryProposal {
+        payload: RecoveryPayload::Unhalt,
+        signature: "Not important yet".as_bytes().to_vec(),
+    };
+    let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
+    assert!(response.is_ok());
+
+    // We need 6 more to vote in
+    for _ in 0..6 {
+        let next = node_operators_iterator.next().unwrap();
+
+        let response = vote(
+            &pic,
+            canister,
+            next.0.clone(),
+            VoteOnRecoveryProposal {
+                signature: "Not important yet".as_bytes().to_vec(),
+                ballot: Ballot::Yes,
+            },
+        );
+        assert!(response.is_ok())
+    }
+
+    let pending = get_pending(&pic, canister);
+    assert!(pending.is_empty());
+}
 
 // Third proposal tests
 
