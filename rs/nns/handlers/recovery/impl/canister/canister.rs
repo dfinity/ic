@@ -40,7 +40,7 @@ async fn vote_on_proposal(vote: VoteOnRecoveryProposal) -> Result<(), String> {
     vote_on_proposal_inner(caller(), vote)
 }
 
-#[update(hidden = true)]
+#[query(hidden = true)]
 fn get_pending_recovery_proposals() -> Vec<RecoveryProposal> {
     get_recovery_proposals()
 }

@@ -297,7 +297,7 @@ fn submit_proposal(
 
 fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<RecoveryProposal> {
     let response = pic
-        .update_call(
+        .query_call(
             canister.into(),
             Principal::anonymous(),
             "get_pending_recovery_proposals",
