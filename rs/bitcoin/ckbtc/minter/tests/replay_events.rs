@@ -1,3 +1,10 @@
+//! To refresh the stored events on disk, call the tests as follows
+//! ```
+//! bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_replay_events_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet" --test_timeout 900
+//! ```
+//! The parameter `spawn_strategy=standalone` is needed, because the events will be fetched from the running canister and the default sandbox doesn't allow it.
+//! The parameter `test_env=RETRIEVE_MINTER_EVENTS=true` is needed to enable the fetching of the events.
+
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
@@ -162,15 +169,15 @@ struct Mainnet;
 struct Testnet;
 
 trait GetEventsFile {
+    // TODO (XC-261):
+    // These associated types are meant to deal with the the type difference in existing
+    // event logs between mainnet (with timestamps) and testnet (without timestamps)
+    // when we deserialize them for processing. This difference will go away once
+    // we re-deploy the testnet canister. These types (and the GetEventsFile trait)
+    // should be consolidated by then.
     type EventType: CandidType + for<'a> Deserialize<'a> + Into<Event>;
-    type GetEventsResultType: CandidType + for<'a> Deserialize<'a> + Into<GetEventsResult>;
+    type ResultType: CandidType + for<'a> Deserialize<'a> + Into<GetEventsResult>;
 
-    /// To refresh the stored events on disk, call the tests as follows
-    /// ```
-    /// bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_replay_events_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet" --test_timeout 900
-    /// ```
-    /// The parameter `spawn_strategy=standalone` is needed, because the events will be fetched from the running canister and the default sandbox doesn't allow it.
-    /// The parameter `test_env=RETRIEVE_MINTER_EVENTS=true` is needed to enable the fetching of the events.
     async fn retrieve_and_store_events_if_env(&self) {
         if std::env::var("RETRIEVE_MINTER_EVENTS").map(|s| s.parse().ok().unwrap_or_default())
             == Ok(true)
@@ -275,7 +282,7 @@ trait GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, Self::GetEventsResultType)
+        Decode!(&decompressed_buffer, Self::ResultType)
             .expect("Failed to decode events")
             .into()
     }
@@ -283,7 +290,7 @@ trait GetEventsFile {
 
 impl GetEventsFile for Mainnet {
     type EventType = Event;
-    type GetEventsResultType = GetEventsResult;
+    type ResultType = GetEventsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap()
     }
@@ -294,7 +301,7 @@ impl GetEventsFile for Mainnet {
 
 impl GetEventsFile for Testnet {
     type EventType = EventType;
-    type GetEventsResultType = GetEventTypesResult;
+    type ResultType = GetEventsWithoutTimestampsResult;
     fn minter_canister_id(&self) -> Principal {
         Principal::from_text("ml52i-qqaaa-aaaar-qaaba-cai").unwrap()
     }
@@ -305,7 +312,7 @@ impl GetEventsFile for Testnet {
 
 // TODO XC-261: Remove
 #[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct GetEventTypesResult {
+pub struct GetEventsWithoutTimestampsResult {
     pub events: Vec<EventType>,
     pub total_event_count: u64,
 }
@@ -317,8 +324,8 @@ pub struct GetEventsResult {
 }
 
 // TODO XC-261: Remove
-impl From<GetEventTypesResult> for GetEventsResult {
-    fn from(value: GetEventTypesResult) -> Self {
+impl From<GetEventsWithoutTimestampsResult> for GetEventsResult {
+    fn from(value: GetEventsWithoutTimestampsResult) -> Self {
         Self {
             events: value.events.into_iter().map(Event::from).collect(),
             total_event_count: value.total_event_count,
