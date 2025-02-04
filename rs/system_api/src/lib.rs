@@ -11,6 +11,10 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory,
@@ -18,7 +22,6 @@ use ic_replicated_state::{
 };
 use ic_sys::PageBytes;
 use ic_types::{
-    consensus::idkg::common::SignatureScheme,
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
@@ -3553,11 +3556,14 @@ impl SystemApi for SystemApiImpl {
         let msg_bytes = valid_subslice("ic0_replication_factor", src, size, heap)?;
         let subnet_id = PrincipalId::try_from(msg_bytes)
             .map_err(|e| HypervisorError::InvalidPrincipalId(PrincipalIdBlobParseError(e.0)))?;
-        self.sandbox_safe_system_state
+        let result = self
+            .sandbox_safe_system_state
             .network_topology
             .get_subnet_size(&subnet_id.into())
             .map(|x| x as u32)
-            .ok_or(HypervisorError::SubnetNotFound)
+            .ok_or(HypervisorError::SubnetNotFound);
+        trace_syscall!(self, ReplicationFactor, result);
+        result
     }
 
     fn ic0_cost_call(
@@ -3580,6 +3586,7 @@ impl SystemApi for SystemApiImpl {
                     subnet_size,
                 );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
+        trace_syscall!(self, CostCall, cost);
         Ok(())
     }
 
@@ -3590,6 +3597,7 @@ impl SystemApi for SystemApiImpl {
             .cycles_account_manager
             .canister_creation_fee(subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
     }
 
@@ -3606,115 +3614,115 @@ impl SystemApi for SystemApiImpl {
             .cycles_account_manager
             .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
     }
 
-    fn ic0_cost_ecdsa(
+    fn ic0_cost_sign_with_ecdsa(
         &self,
         src: usize,
         size: usize,
+        curve: EcdsaCurve,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let key_bytes = valid_subslice("ic0.cost_sign_with_ecdsa heap", src, size, heap)?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_signing_key_replication_factor(
-            SignatureScheme::Ecdsa,
-            "ecdsa",
-            topology,
-            src,
-            size,
-            heap,
-        )?;
+        let subnet_size = get_key_replication_factor(topology, key)?;
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .ecdsa_signature_fee(subnet_size);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_ecdsa")?;
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(())
     }
 
-    fn ic0_cost_schnorr(
+    fn ic0_cost_sign_with_schnorr(
         &self,
         src: usize,
         size: usize,
+        algorithm: SchnorrAlgorithm,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let key_bytes = valid_subslice("ic0.cost_sign_with_schnorr heap", src, size, heap)?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_signing_key_replication_factor(
-            SignatureScheme::Schnorr,
-            "schnorr",
-            topology,
-            src,
-            size,
-            heap,
-        )?;
+        let subnet_size = get_key_replication_factor(topology, key)?;
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .schnorr_signature_fee(subnet_size);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_schnorr")?;
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(())
     }
 
-    fn ic0_cost_vetkey(
+    fn ic0_cost_vetkd_derive_encrypted_key(
         &self,
         src: usize,
         size: usize,
+        curve: VetKdCurve,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let key_bytes =
+            valid_subslice("ic0.cost_vetkd_derive_encrypted_key heap", src, size, heap)?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
-        let subnet_size = get_signing_key_replication_factor(
-            SignatureScheme::VetKd,
-            "vetkey",
-            topology,
-            src,
-            size,
-            heap,
-        )?;
+        let subnet_size = get_key_replication_factor(topology, key)?;
         let cost = self
             .sandbox_safe_system_state
             .cycles_account_manager
             .vetkd_fee(subnet_size);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkey")?;
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_encrypted_key")?;
+        trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(())
     }
 }
 
-/// Common steps for the syscalls `ic0_cost_ecdsa`, `ic0_cost_schnorr` and `ic0_cost_vetkey`.
-/// Extract the key name, look it up in `chain_key_enabled_subnets`, then extract all subnets
+/// Look up key in `chain_key_enabled_subnets`, then extract all subnets
 /// for that key and return the replication factor of the biggest one.
-fn get_signing_key_replication_factor(
-    scheme: SignatureScheme,
-    scheme_str: &str,
+fn get_key_replication_factor(
     topology: &NetworkTopology,
-    src: usize,
-    size: usize,
-    heap: &mut [u8],
+    key: MasterPublicKeyId,
 ) -> HypervisorResult<usize> {
-    let key_bytes = valid_subslice(&format!("ic0.cost_{} heap", scheme_str), src, size, heap)?;
-    let key_name =
-        str::from_utf8(key_bytes).map_err(|_| HypervisorError::ToolchainContractViolation {
-            error: format!(
-                "Failed to decode key name {}",
-                String::from_utf8_lossy(key_bytes)
-            ),
-        })?;
-    let key_id = topology.get_key_by_name(scheme, key_name).ok_or(
-        HypervisorError::ToolchainContractViolation {
-            error: format!("{} signing key {} not known.", scheme, key_name),
-        },
-    )?;
-    let max_subnet_size = topology
-        .chain_key_enabled_subnets(key_id)
-        .iter() // this is non-empty, otherwise key_id would have errored
+    let subnets_with_key = topology.chain_key_enabled_subnets(&key);
+    subnets_with_key
+        .iter()
         .map(|subnet_id| {
-            topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the collection
+            topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
         })
         .max()
-        .unwrap(); // the maximum of a non-empty sequence of usize exists
-    Ok(max_subnet_size)
+        .ok_or(HypervisorError::ToolchainContractViolation {
+            error: format!("Public key {:?} not known.", key),
+        })
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

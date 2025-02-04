@@ -29,7 +29,6 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::consensus::idkg::common::SignatureScheme;
 use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
@@ -244,16 +243,6 @@ impl NetworkTopology {
         self.subnets
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
-    }
-
-    pub fn get_key_by_name(
-        &self,
-        signature_scheme: SignatureScheme,
-        key_name: &str,
-    ) -> Option<&MasterPublicKeyId> {
-        self.chain_key_enabled_subnets
-            .keys()
-            .find(|&entry| signature_scheme == entry.into() && key_name == entry.get_key_name())
     }
 }
 
