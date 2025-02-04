@@ -19844,6 +19844,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea1a2d0a644769cc99faa24c3ad26b379b786fe7c36fd3c546254801650e6dd"
 
 [[package]]
+name = "salt"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-canister-log 0.2.0",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "ic-stable-structures",
+ "salt-api",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "time",
+]
+
+[[package]]
+name = "salt-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "serde",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
