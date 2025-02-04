@@ -87,12 +87,13 @@ thread_local! {
 #[derive(Debug, CandidType, Deserialize, Clone)]
 pub struct NewRecoveryProposal {
     pub payload: RecoveryPayload,
-    pub signature: Vec<u8>,
 }
 
 #[derive(Debug, CandidType, Deserialize, Clone)]
 pub struct VoteOnRecoveryProposal {
+    pub payload: Vec<u8>,
     pub signature: Vec<u8>,
+
     pub ballot: Ballot,
 }
 
@@ -229,7 +230,7 @@ pub fn submit_recovery_proposal(
                 "There is an error in the logic since its not possible to have more than 3 proposals"
             ),
         }
-        vote_on_last_proposal(caller, proposals, Ballot::Yes, new_proposal.signature)
+        Ok(())
     })
 }
 

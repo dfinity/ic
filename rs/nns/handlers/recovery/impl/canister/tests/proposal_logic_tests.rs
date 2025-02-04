@@ -28,10 +28,21 @@ fn place_first_proposal() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
 
+    assert!(response.is_ok());
+
+    let response = vote(
+        &pic,
+        canister,
+        first.0.clone(),
+        VoteOnRecoveryProposal {
+            payload: "Not important yet".as_bytes().to_vec(),
+            signature: "Not important yet".as_bytes().to_vec(),
+            ballot: Ballot::Yes,
+        },
+    );
     assert!(response.is_ok());
 
     let pending_proposals = get_pending(&pic, canister);
@@ -72,11 +83,9 @@ fn place_non_halt_first_proposal() {
                 height: 123,
                 state_hash: "123".to_string(),
             },
-            signature: "Not important yet".as_bytes().to_vec(),
         },
         NewRecoveryProposal {
             payload: RecoveryPayload::Unhalt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     ];
 
@@ -104,7 +113,6 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_ok());
@@ -116,7 +124,6 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_err());
@@ -133,6 +140,7 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
             next.0.clone(),
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
+                payload: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::No,
             },
         );
@@ -147,7 +155,6 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_ok());
@@ -164,7 +171,6 @@ fn disallow_unknown_node_operators_from_placing_proposals() {
         Principal::anonymous(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_err());
@@ -191,7 +197,6 @@ fn disallow_node_operators_from_different_subnets_from_placing_proposals() {
         first_node_operator.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_err());
@@ -213,16 +218,13 @@ fn place_and_execute_first_proposal(
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_ok());
 
     // To achieve byzantine majority in default setup 7
     // node operators should vote "Yes"
-    // The first one voted "Yes" when submitting the proposal
-    // which leaves room for 6 more
-    for _ in 0..6 {
+    for _ in 0..7 {
         let next = node_operators_iterator.next().unwrap();
 
         let response = vote(
@@ -232,6 +234,7 @@ fn place_and_execute_first_proposal(
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
+                payload: "Not important yet".as_bytes().to_vec(),
             },
         );
 
@@ -258,7 +261,6 @@ fn place_second_proposal_recovery() {
             height: 123,
             state_hash: "123".to_string(),
         },
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -282,7 +284,6 @@ fn place_second_proposal_unhalt() {
 
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -310,7 +311,6 @@ fn place_second_proposal_halt() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
     assert!(response.is_err());
@@ -331,7 +331,6 @@ fn second_proposal_vote_against() {
             height: 123,
             state_hash: "123".to_string(),
         },
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -347,6 +346,7 @@ fn second_proposal_vote_against() {
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::No,
+                payload: "Not important yet".as_bytes().to_vec(),
             },
         );
         assert!(response.is_ok())
@@ -371,13 +371,12 @@ fn second_proposal_recovery_vote_in() {
             height: 123,
             state_hash: "123".to_string(),
         },
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
 
-    // We need 6 more to vote in
-    for _ in 0..6 {
+    // We need 7 to vote in
+    for _ in 0..7 {
         let next = node_operators_iterator.next().unwrap();
 
         let response = vote(
@@ -387,6 +386,7 @@ fn second_proposal_recovery_vote_in() {
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
+                payload: "Not important yet".as_bytes().to_vec(),
             },
         );
         assert!(response.is_ok())
@@ -410,13 +410,12 @@ fn second_proposal_unhalt_vote_in() {
     // Place the second
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
 
-    // We need 6 more to vote in
-    for _ in 0..6 {
+    // We need 7 to vote it in
+    for _ in 0..7 {
         let next = node_operators_iterator.next().unwrap();
 
         let response = vote(
@@ -426,6 +425,7 @@ fn second_proposal_unhalt_vote_in() {
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
+                payload: "Not important yet".as_bytes().to_vec(),
             },
         );
         assert!(response.is_ok())
@@ -451,7 +451,6 @@ fn submit_first_two_second_not_voted_in_place_third() {
             height: 123,
             state_hash: "123".to_string(),
         },
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -459,7 +458,6 @@ fn submit_first_two_second_not_voted_in_place_third() {
     // Place the third
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_err());
@@ -480,13 +478,12 @@ fn place_and_execute_second_proposal(
             height: 123,
             state_hash: "123".to_string(),
         },
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
 
-    // We need 6 more to vote in
-    for _ in 0..6 {
+    // We need 7 to vote it in
+    for _ in 0..7 {
         let next = node_operators_iterator.next().unwrap();
 
         let response = vote(
@@ -495,6 +492,7 @@ fn place_and_execute_second_proposal(
             next.0.clone(),
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
+                payload: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
             },
         );
@@ -519,7 +517,6 @@ fn submit_first_two_second_voted_in_place_third() {
     // Place the third
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -541,7 +538,6 @@ fn vote_against_last_proposal() {
     // Place the third
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -556,6 +552,7 @@ fn vote_against_last_proposal() {
             next.0.clone(),
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
+                payload: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::No,
             },
         );
@@ -581,13 +578,12 @@ fn vote_in_last_proposal() {
     // Place the third
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
 
-    // We need 6 votes to vote for this proposal
-    for _ in 0..6 {
+    // We need 7 votes to vote for this proposal
+    for _ in 0..7 {
         let next = node_operators_iterator.next().unwrap();
 
         let response = vote(
@@ -596,6 +592,7 @@ fn vote_in_last_proposal() {
             next.0.clone(),
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
+                payload: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
             },
         );
@@ -620,7 +617,6 @@ fn place_any_proposal_after_there_are_three() {
     // Place the third
     let new_proposal = NewRecoveryProposal {
         payload: RecoveryPayload::Unhalt,
-        signature: "Not important yet".as_bytes().to_vec(),
     };
     let response = submit_proposal(&pic, canister, first.0.clone(), new_proposal.clone());
     assert!(response.is_ok());
@@ -638,10 +634,7 @@ fn place_any_proposal_after_there_are_three() {
             &pic,
             canister,
             first.0.clone(),
-            NewRecoveryProposal {
-                payload,
-                signature: "Not important yet".as_bytes().to_vec(),
-            },
+            NewRecoveryProposal { payload },
         );
 
         assert!(response.is_err())

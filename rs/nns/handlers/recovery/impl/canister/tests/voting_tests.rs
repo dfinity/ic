@@ -23,7 +23,6 @@ fn disallow_double_vote() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
 
@@ -36,6 +35,7 @@ fn disallow_double_vote() {
         second.0.clone(),
         VoteOnRecoveryProposal {
             signature: "Not important yet".as_bytes().to_vec(),
+            payload: "Not important yet".as_bytes().to_vec(),
             ballot: Ballot::Yes,
         },
     );
@@ -47,6 +47,7 @@ fn disallow_double_vote() {
         second.0.clone(),
         VoteOnRecoveryProposal {
             signature: "Not important yet".as_bytes().to_vec(),
+            payload: "Not important yet".as_bytes().to_vec(),
             ballot: Ballot::Yes,
         },
     );
@@ -68,7 +69,6 @@ fn disallow_vote_anonymous() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
 
@@ -80,6 +80,7 @@ fn disallow_vote_anonymous() {
         Principal::anonymous(),
         VoteOnRecoveryProposal {
             signature: "Not important yet".as_bytes().to_vec(),
+            payload: "Not important yet".as_bytes().to_vec(),
             ballot: Ballot::Yes,
         },
     );
@@ -101,7 +102,6 @@ fn allow_votes_even_if_executed() {
         first.0.clone(),
         NewRecoveryProposal {
             payload: RecoveryPayload::Halt,
-            signature: "Not important yet".as_bytes().to_vec(),
         },
     );
 
@@ -114,6 +114,7 @@ fn allow_votes_even_if_executed() {
             no.0.clone(),
             VoteOnRecoveryProposal {
                 signature: "Not important yet".as_bytes().to_vec(),
+                payload: "Not important yet".as_bytes().to_vec(),
                 ballot: Ballot::Yes,
             },
         );
