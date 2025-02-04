@@ -754,7 +754,6 @@ fn get_neuron_info(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     debug_log("get_neuron_info");
     governance()
         .get_neuron_info(&NeuronIdProto::from(neuron_id), caller())
-        .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
 }
 
@@ -768,7 +767,6 @@ fn get_neuron_info_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
             caller(),
         )
-        .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
 }
 
