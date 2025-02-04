@@ -410,7 +410,7 @@ fn test_voting_can_span_multiple_rounds() {
 
     // No recent ballots, bc ran out of instructions, should wait til next round.
     for neuron in listed_neurons.full_neurons {
-        assert_eq!(neuron.recent_ballots, Some(vec![]), "Neuron: {:?}", neuron);
+        assert_eq!(neuron.recent_ballots, vec![], "Neuron: {:?}", neuron);
     }
 
     // The timer should run, which should record all the ballots.
