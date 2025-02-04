@@ -2010,6 +2010,19 @@ pub enum EcdsaCurve {
     Secp256k1,
 }
 
+impl TryFrom<u32> for EcdsaCurve {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(EcdsaCurve::Secp256k1),
+            _ => Err(format!(
+                "{value} is not a recognized EcdsaCurve variant identifier."
+            )),
+        }
+    }
+}
+
 impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
@@ -2129,6 +2142,20 @@ pub enum SchnorrAlgorithm {
     Bip340Secp256k1,
     #[serde(rename = "ed25519")]
     Ed25519,
+}
+
+impl TryFrom<u32> for SchnorrAlgorithm {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SchnorrAlgorithm::Bip340Secp256k1),
+            1 => Ok(SchnorrAlgorithm::Ed25519),
+            _ => Err(format!(
+                "{value} is not a recognized SchnorrAlgorithm variant identifier."
+            )),
+        }
+    }
 }
 
 impl From<&SchnorrAlgorithm> for pb_types::SchnorrAlgorithm {
@@ -2252,6 +2279,19 @@ pub enum VetKdCurve {
     #[serde(rename = "bls12_381_g2")]
     #[allow(non_camel_case_types)]
     Bls12_381_G2,
+}
+
+impl TryFrom<u32> for VetKdCurve {
+    type Error = String;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(VetKdCurve::Bls12_381_G2),
+            _ => Err(format!(
+                "{value} is not a recognized VetKdCurve variant identifier."
+            )),
+        }
+    }
 }
 
 impl From<&VetKdCurve> for pb_types::VetKdCurve {
