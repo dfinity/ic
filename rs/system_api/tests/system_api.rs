@@ -298,10 +298,10 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
         SystemApiCallId::CostCall => vec!["*", "s"],
         SystemApiCallId::CostCreateCanister => vec!["*", "s"],
-        SystemApiCallId::CostEcdsa=> vec!["*", "s"],
+        SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
         SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
-        SystemApiCallId::CostSchnorr=> vec!["*", "s"],
-        SystemApiCallId::CostVetkey => vec!["*", "s"],
+        SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
+        SystemApiCallId::CostVetkdDeriveEncryptedKey => vec!["*", "s"],
         SystemApiCallId::ReplicationFactor => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
@@ -835,9 +835,9 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::CostEcdsa => {
+        SystemApiCallId::CostSignWithEcdsa => {
             assert_api_availability(
-                |api| api.ic0_cost_ecdsa(0, 0, 0, &mut [42; 128]),
+                |api| api.ic0_cost_sign_with_ecdsa(0, 0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -855,9 +855,9 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::CostSchnorr => {
+        SystemApiCallId::CostSignWithSchnorr => {
             assert_api_availability(
-                |api| api.ic0_cost_schnorr(0, 0, 0, &mut [42; 128]),
+                |api| api.ic0_cost_sign_with_schnorr(0, 0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -865,9 +865,9 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::CostVetkey => {
+        SystemApiCallId::CostVetkdDeriveEncryptedKey => {
             assert_api_availability(
-                |api| api.ic0_cost_vetkey(0, 0, 0, &mut [42; 128]),
+                |api| api.ic0_cost_vetkd_derive_encrypted_key(0, 0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
