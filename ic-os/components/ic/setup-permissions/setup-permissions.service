@@ -22,6 +22,3 @@ ExecStart=/opt/ic/bin/setup-permissions.sh
 # to happen partially in parallel with some services
 # running already. This is very tricky to synchronize, though.
 TimeoutStartSec=1800
-Restart=on-failure
-RestartSec=10
-

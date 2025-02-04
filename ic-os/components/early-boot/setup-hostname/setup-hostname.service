@@ -11,5 +11,3 @@ WantedBy=multi-user.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-hostname.sh
-Restart=on-failure
-RestartSec=10
