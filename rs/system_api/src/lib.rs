@@ -3592,7 +3592,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         src: usize,
         size: usize,
-        curve: EcdsaCurve,
+        curve: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
@@ -3605,6 +3605,8 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
+        let curve = EcdsaCurve::try_from(curve)
+            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let subnet_size = get_key_replication_factor(topology, key)?;
@@ -3621,7 +3623,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         src: usize,
         size: usize,
-        algorithm: SchnorrAlgorithm,
+        algorithm: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
@@ -3634,6 +3636,8 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
+        let algorithm = SchnorrAlgorithm::try_from(algorithm)
+            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let subnet_size = get_key_replication_factor(topology, key)?;
@@ -3650,7 +3654,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         src: usize,
         size: usize,
-        curve: VetKdCurve,
+        curve: u32,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
@@ -3664,6 +3668,8 @@ impl SystemApi for SystemApiImpl {
                 ),
             })?
             .to_string();
+        let curve = VetKdCurve::try_from(curve)
+            .map_err(|e| HypervisorError::ToolchainContractViolation { error: e })?;
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
         let topology = &self.sandbox_safe_system_state.network_topology;
         let subnet_size = get_key_replication_factor(topology, key)?;
