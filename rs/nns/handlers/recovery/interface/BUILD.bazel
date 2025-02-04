@@ -4,19 +4,12 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/nervous_system/clients",
-    "//rs/nns/constants",
-    "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
     "@crate_index//:ed25519-dalek",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = []
 

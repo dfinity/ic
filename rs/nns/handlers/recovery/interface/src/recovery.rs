@@ -6,17 +6,42 @@ use serde::Deserialize;
 use crate::{security_metadata::SecurityMetadata, Ballot};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+/// Types of acceptable payloads by the recovery canister proposals.
 pub enum RecoveryPayload {
+    /// Halt NNS.
+    ///
+    /// If adopted, the orchestrator's watching the recovery canister
+    /// should deem NNS as halted. This proposal maps to a proposal
+    /// similar to [134605](https://dashboard.internetcomputer.org/proposal/134605).
     Halt,
+    /// Do the recovery.
+    ///
+    /// If adopted, the orchestrator's watching recovery canister
+    /// should perform a recovery based on the provided information.
+    /// This proposal maps to a proposal similar to [134629](https://dashboard.internetcomputer.org/proposal/134629).
     DoRecovery { height: u64, state_hash: String },
+    /// Unhalt NNS.
+    ///
+    /// If adopted, the orchestrator's watching the recovery canister
+    /// should deem NNS as unhalted and working normally. This proposal
+    /// maps to a proposal similar to [134632](https://dashboard.internetcomputer.org/proposal/134632).
     Unhalt,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+/// Represents a vote from one node operator
 pub struct NodeOperatorBallot {
+    /// The principal id of the node operator (must be one of the node
+    /// operators of the NNS subnet according to the registry at
+    /// time of submission).
     pub principal: Principal,
+    /// List of nodes that the node operator controls on the NNS.
+    /// Each node counts as 1 vote.
     pub nodes_tied_to_ballot: Vec<Principal>,
+    /// The node provider's decision on the observed proposal.
     pub ballot: Ballot,
+    /// Metadata used for verifying the user's identity, and integrity of the
+    /// vote itself.
     pub security_metadata: SecurityMetadata,
 }
 
@@ -30,16 +55,18 @@ pub struct RecoveryProposal {
     pub submission_timestamp_seconds: u64,
     /// The ballots cast by node operators.
     pub node_operator_ballots: Vec<NodeOperatorBallot>,
-    /// Payload for the proposal
+    /// Payload for the proposal.
     pub payload: RecoveryPayload,
 }
 
 #[derive(Debug, CandidType, Deserialize, Clone)]
+/// Conveniece struct used for submitting a new proposal
 pub struct NewRecoveryProposal {
     pub payload: RecoveryPayload,
 }
 
 #[derive(Debug, CandidType, Deserialize, Clone)]
+/// Convenience struct used for casting a vote on a proposal
 pub struct VoteOnRecoveryProposal {
     pub security_metadata: SecurityMetadata,
     pub ballot: Ballot,
