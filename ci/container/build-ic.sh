@@ -79,6 +79,12 @@ if ! "$BUILD_BIN" && ! "$BUILD_CAN" && ! "$BUILD_IMG"; then
     usage && exit 1
 fi
 
+# Ensure working dir is clean
+if [ -n "$(git status --porcelain)" ]; then
+    echo_red "Git working directory is not clean! Clean it and retry."
+    exit 1
+fi
+
 export VERSION="$(git rev-parse HEAD)"
 
 if "$RELEASE"; then
