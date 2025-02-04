@@ -201,8 +201,6 @@ impl ThresholdSignerImpl {
             })
             .collect::<BTreeMap<_, _>>();
 
-        println!("{sig_inputs_map:?}");
-
         // Collection of validated shares
         let mut validated_sig_shares = BTreeSet::new();
 
@@ -822,7 +820,6 @@ impl<'a> Action<'a> {
                     // A signature for the received ID was requested and the context was completed.
                     // However, the received share claims a pre-signature was matched at a different
                     // height, therefore drop the message.
-                    println!("AAAAAAAAA");
                     Action::Drop
                 }
             }
@@ -831,7 +828,6 @@ impl<'a> Action<'a> {
             Some(None) => Action::Defer,
             None => {
                 // Its for a signature that has not been requested, drop it
-                println!("BBBBBBBBBBB");
                 Action::Drop
             }
         }
@@ -1774,7 +1770,6 @@ mod tests {
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
                 assert_eq!(change_set.len(), 1);
-                println!("{change_set:?}");
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
             })
         })
@@ -1842,7 +1837,6 @@ mod tests {
 
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                println!("{change_set:?}");
                 assert_eq!(change_set.len(), 3);
                 let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
                     && is_handle_invalid(&change_set, &msg_id_2);
