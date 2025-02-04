@@ -13,7 +13,7 @@ use super::{
 };
 
 // First proposal tests
-
+// TODO: Allow to place multiple recover subnets proposals
 #[test]
 fn place_first_proposal() {
     let mut args = RegistryPreparationArguments::default();
