@@ -226,7 +226,7 @@ pub fn submit_recovery_proposal(
                 return Err(message);
             }
             _ => unreachable!(
-                "There is an error in the logic since its not possible to have 3 proposals"
+                "There is an error in the logic since its not possible to have more than 3 proposals"
             ),
         }
         vote_on_last_proposal(caller, proposals, Ballot::Yes, new_proposal.signature)
