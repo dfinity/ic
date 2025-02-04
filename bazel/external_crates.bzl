@@ -380,7 +380,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "cloudflare": crate.spec(
                 git = "https://github.com/dfinity/cloudflare-rs.git",
-                rev = "eb0e93c469304ae42eda135cbf73c3115c66b485",
+                rev = "0b1805bf11ed526445712559e6f18d3b8e024b06",
                 default_features = False,
                 features = [
                     "rustls-tls",
