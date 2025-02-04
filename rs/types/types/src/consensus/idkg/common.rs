@@ -1179,13 +1179,3 @@ impl Display for SignatureScheme {
         }
     }
 }
-
-impl From<&MasterPublicKeyId> for SignatureScheme {
-    fn from(value: &MasterPublicKeyId) -> Self {
-        match value {
-            MasterPublicKeyId::Ecdsa(_) => SignatureScheme::Ecdsa,
-            MasterPublicKeyId::Schnorr(_) => SignatureScheme::Schnorr,
-            MasterPublicKeyId::VetKd(_) => SignatureScheme::VetKd,
-        }
-    }
-}
