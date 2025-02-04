@@ -1,9 +1,9 @@
 use candid::Principal;
 use ed25519_dalek::SigningKey;
-use ic_nns_handler_recovery::recovery_proposal::{
-    NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal,
+use ic_nns_handler_recovery::recovery_proposal::{NewRecoveryProposal, VoteOnRecoveryProposal};
+use ic_nns_handler_recovery_interface::{
+    recovery::RecoveryPayload, security_metadata::SecurityMetadata, Ballot,
 };
-use ic_nns_handler_recovery_interface::{security_metadata::SecurityMetadata, Ballot};
 
 use crate::tests::{
     extract_node_operators_from_init_data, init_pocket_ic, submit_proposal, vote,
@@ -153,7 +153,7 @@ fn disallow_votes_wrong_public_key() {
     let last_proposal = pending.last().unwrap();
 
     let mut new_key_pair = SigningKey::generate(&mut rand::rngs::OsRng);
-    let signature = last_proposal.sign(&mut new_key_pair);
+    let signature = last_proposal.sign(&mut new_key_pair).unwrap();
     let mut parts = [[0; 32]; 2];
     parts[0].copy_from_slice(&signature[..32]);
     parts[1].copy_from_slice(&signature[32..]);

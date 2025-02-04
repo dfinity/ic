@@ -6,9 +6,11 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery::{
     node_operator_sync::SimpleNodeRecord,
-    recovery_proposal::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_proposal::{NewRecoveryProposal, VoteOnRecoveryProposal},
 };
-use ic_nns_handler_recovery_interface::{security_metadata::SecurityMetadata, Ballot};
+use ic_nns_handler_recovery_interface::{
+    recovery::RecoveryProposal, security_metadata::SecurityMetadata, Ballot,
+};
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
@@ -321,7 +323,7 @@ fn vote_with_only_ballot(
     // Add logic for signing so that this is valid
     let pending = get_pending(pic, canister);
     let last = pending.last().unwrap();
-    let signature = last.sign(&mut sender.signing_key);
+    let signature = last.sign(&mut sender.signing_key).unwrap();
     let mut parts = [[0; 32]; 2];
     parts[0].copy_from_slice(&signature[..32]);
     parts[1].copy_from_slice(&signature[32..]);

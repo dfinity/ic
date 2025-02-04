@@ -1,6 +1,6 @@
 use candid::Principal;
-use ic_nns_handler_recovery::recovery_proposal::{NewRecoveryProposal, RecoveryPayload};
-use ic_nns_handler_recovery_interface::Ballot;
+use ic_nns_handler_recovery::recovery_proposal::NewRecoveryProposal;
+use ic_nns_handler_recovery_interface::{recovery::RecoveryPayload, Ballot};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::PocketIc;
 
@@ -55,7 +55,7 @@ fn place_first_proposal() {
         .nodes_tied_to_ballot
         .len()
         .eq(&(first.num_nodes as usize)));
-    assert_eq!(only_vote.principal, first.principal)
+    assert_eq!(only_vote.principal, first.principal.0)
 }
 
 #[test]

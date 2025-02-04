@@ -12,9 +12,10 @@ use ic_nns_handler_recovery::{
     node_operator_sync::{get_node_operators_in_nns, sync_node_operators, SimpleNodeRecord},
     recovery_proposal::{
         get_recovery_proposals, submit_recovery_proposal, vote_on_proposal_inner,
-        NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal,
+        NewRecoveryProposal, VoteOnRecoveryProposal,
     },
 };
+use ic_nns_handler_recovery_interface::recovery::RecoveryProposal;
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
