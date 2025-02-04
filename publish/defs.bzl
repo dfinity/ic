@@ -120,3 +120,50 @@ malicious_binary = rule(
         "binary": attr.label(mandatory = True, cfg = malicious_code_enabled_transition, allow_single_file = True),
     },
 )
+
+def _checksum_rule_impl(ctx):
+    # List of input files
+    input_files = ctx.files.inputs
+
+    # Declare output files (NOTE: not windows friendly)
+    out_checksums = ctx.actions.declare_file("_checksums/SHA256SUMS")
+
+    def make_symlink(target):
+        symlink = ctx.actions.declare_file("_checksums/" + target.basename)
+        ctx.actions.symlink(output = symlink, target_file = target)
+        return symlink
+
+    symlinks = [make_symlink(file) for file in input_files]
+
+    # Compute checksums and print it to stdout & out file.
+    # The filenames are stripped from anything but the basename.
+    # NOTE: This might produce confusing output if `input_files` contain
+    # files with identical names in different directories.
+    ctx.actions.run_shell(
+        inputs = input_files,
+        arguments = [file.path for file in input_files],
+        outputs = [out_checksums],
+        command = """
+        set -euo pipefail
+
+        out_checksums="{}"
+
+        sha256sum "$@" | sed -r 's|^([[:alnum:]]+)\\s+([[:alnum:]_-]+/)+|\\1 |' | tee "$out_checksums"
+        sort -o "$out_checksums" -k 2 "$out_checksums"
+        """.format(out_checksums.path),
+    )
+
+    # Return the output file
+    return [DefaultInfo(files = depset([out_checksums] + symlinks))]
+
+# A rule that re-exports symlinks to all the inputs as well
+# as an extra file 'SHA256SUMS' containing the checksums of inputs.
+checksum_rule = rule(
+    implementation = _checksum_rule_impl,
+    attrs = {
+        "inputs": attr.label_list(
+            allow_files = True,
+            mandatory = True,
+        ),
+    },
+)
