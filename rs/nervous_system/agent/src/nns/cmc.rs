@@ -3,6 +3,8 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::CanisterId;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 
+pub mod requests;
+
 pub async fn create_canister<C: CallCanisters>(
     agent: &C,
     subnet_selection: Option<SubnetSelection>,

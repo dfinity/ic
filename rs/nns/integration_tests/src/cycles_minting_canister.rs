@@ -99,8 +99,8 @@ async fn set_icp_xdr_conversion_rate(
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 
     let response: IcpXdrConversionRateCertifiedResponse = nns
@@ -1205,8 +1205,8 @@ async fn update_subnet_type(nns: &NnsCanisters<'_>, payload: UpdateSubnetTypeArg
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 }
 
@@ -1258,8 +1258,8 @@ async fn change_subnet_type_assignment(
     assert_eq!(
         wait_for_final_state(&nns.governance, proposal_id)
             .await
-            .status(),
-        ProposalStatus::Executed
+            .status,
+        ProposalStatus::Executed as i32
     );
 }
 

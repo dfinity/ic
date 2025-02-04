@@ -293,6 +293,40 @@ async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
         .0
 }
 
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetrics {
+    pub node_id: Principal,
+    pub num_blocks_proposed_total: u64,
+    pub num_block_failures_total: u64,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetricsHistoryResponse {
+    pub timestamp_nanos: u64,
+    pub node_metrics: Vec<NodeMetrics>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetricsHistoryArgs {
+    pub start_at_timestamp_nanos: u64,
+    pub subnet_id: Principal,
+}
+
+#[update]
+async fn node_metrics_history_proxy(
+    args: NodeMetricsHistoryArgs,
+) -> Vec<NodeMetricsHistoryResponse> {
+    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+        candid::Principal::management_canister(),
+        "node_metrics_history",
+        (args,),
+        0_u128,
+    )
+    .await
+    .unwrap()
+    .0
+}
+
 // executing many instructions
 
 #[update]

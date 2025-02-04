@@ -62,6 +62,8 @@ pub mod overhead {
     pub const MSG_REPLY_DATA_APPEND: NumInstructions = NumInstructions::new(500);
     pub const MSG_REPLY: NumInstructions = NumInstructions::new(500);
     pub const PERFORMANCE_COUNTER: NumInstructions = NumInstructions::new(200);
+    pub const SUBNET_SELF_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const SUBNET_SELF_COPY: NumInstructions = NumInstructions::new(500);
     pub const STABLE_GROW: NumInstructions = NumInstructions::new(500);
     pub const STABLE_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE_SIZE: NumInstructions = NumInstructions::new(20);

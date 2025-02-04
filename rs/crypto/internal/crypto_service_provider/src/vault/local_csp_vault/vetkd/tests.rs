@@ -63,8 +63,8 @@ fn should_fail_to_create_key_share_with_invalid_master_public_key() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid master public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey)
     );
 }
 
@@ -79,8 +79,8 @@ fn should_fail_to_create_key_share_with_invalid_encryption_public_key() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid encryption public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentEncryptionPublicKey)
     );
 }
 
@@ -94,7 +94,7 @@ fn should_fail_to_create_key_share_if_key_is_missing_in_secret_key_store() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("missing key with ID")
     );
 }
@@ -111,7 +111,7 @@ fn should_fail_to_create_key_share_if_key_in_secret_key_store_has_wrong_type() {
     let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("wrong secret key type")
     );
 }

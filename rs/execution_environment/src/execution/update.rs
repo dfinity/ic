@@ -18,7 +18,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallOrigin,
+    CanisterState,
+};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -48,7 +51,7 @@ pub fn execute_update(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
+    let (mut clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
             None => {
@@ -60,10 +63,10 @@ pub fn execute_update(
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
 
-                let is_wasm64_execution = canister
+                let wasm_execution_mode = canister
                     .execution_state
                     .as_ref()
-                    .is_some_and(|es| es.is_wasm64);
+                    .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
                 let prepaid_execution_cycles = match round
                     .cycles_account_manager
@@ -75,7 +78,7 @@ pub fn execute_update(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
-                        is_wasm64_execution.into(),
+                        wasm_execution_mode,
                     ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -144,13 +147,31 @@ pub fn execute_update(
     let helper = match UpdateHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
+            if err.code() == ErrorCode::CanisterWasmMemoryLimitExceeded
+                && original.call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory)
+            {
+                //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
+                // but its was not executed due to error `WasmMemoryLimitExceeded`. To ensure that the hook is executed
+                // when the error is resolved we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
+                // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
+                // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
+                // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                clean_canister
+                    .system_state
+                    .task_queue
+                    .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                clean_canister
+                    .system_state
+                    .task_queue
+                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+            }
             return finish_err(
                 clean_canister,
                 original.execution_parameters.instruction_limits.message(),
                 err,
                 original,
                 round,
-            )
+            );
         }
     };
 
@@ -265,10 +286,10 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
-    let is_wasm64_execution = canister
+    let wasm_execution_mode = canister
         .execution_state
         .as_ref()
-        .is_some_and(|es| es.is_wasm64);
+        .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -278,7 +299,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution.into(),
+        wasm_execution_mode,
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -338,26 +359,22 @@ impl UpdateHelper {
 
         validate_message(&canister, &original.method)?;
 
-        if let CanisterCallOrTask::Call(_) = original.call_or_task {
-            // TODO(RUN-957): Enforce the limit in heartbeat and timer after
-            // canister logging ships by removing the `if` above.
+        let wasm_memory_usage = canister
+            .execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| {
+                num_bytes_try_from(es.wasm_memory.size).unwrap()
+            });
 
-            let wasm_memory_usage = canister
-                .execution_state
-                .as_ref()
-                .map_or(NumBytes::new(0), |es| {
-                    num_bytes_try_from(es.wasm_memory.size).unwrap()
-                });
+        if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+            // A Wasm memory limit of 0 means unlimited.
+            if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                let err = HypervisorError::WasmMemoryLimitExceeded {
+                    bytes: wasm_memory_usage,
+                    limit: wasm_memory_limit,
+                };
 
-            if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
-                // A Wasm memory limit of 0 means unlimited.
-                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
-                    let err = HypervisorError::WasmMemoryLimitExceeded {
-                        bytes: wasm_memory_usage,
-                        limit: wasm_memory_limit,
-                    };
-                    return Err(err.into_user_error(&canister.canister_id()));
-                }
+                return Err(err.into_user_error(&canister.canister_id()));
             }
         }
 
@@ -533,11 +550,11 @@ impl UpdateHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let is_wasm64_execution = self
+        let wasm_execution_mode = self
             .canister
             .execution_state
             .as_ref()
-            .is_some_and(|es| es.is_wasm64);
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
@@ -546,7 +563,7 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
+            wasm_execution_mode,
             round.log,
         );
 

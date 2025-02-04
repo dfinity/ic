@@ -22,7 +22,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="frontend",
                 path="nns-dapp/frontend",
-                owner=Team.GIX_TEAM,
+                owner=Team.NNS_TEAM,
             )
         ],
         "18.17.1",
