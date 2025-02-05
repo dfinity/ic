@@ -282,18 +282,18 @@ impl BlockchainState {
         let height = self.header_cache.get(&block_hash).unwrap().height;
 
         let block_height = self.header_cache.get(&block_hash).unwrap().height;
-        let mut duration = 0;
+        let mut serializing_duration = 0;
         let mut cloning_duration = 0;
         let total_size = block.total_size();
 
-        let times = 100.min(2_000_000 / total_size);
+        let times = 100.min(1_000_000 / total_size);
 
         let mut buf_size = 0;
         let experiments = 1;
         let value = std::sync::Arc::new(block);
 
         if true || block_height == 1098 {
-            let mut total_duration = 0;
+            let mut total_serializing_duration = 0;
             let mut total_cloning_duration = 0;
             for i in 0..experiments {
                 let start = Instant::now();
@@ -321,6 +321,10 @@ impl BlockchainState {
                     next    
                 };
 
+                total_cloning_duration += start.elapsed().as_millis();
+
+                let start = Instant::now();
+
                 //write!(self.block_file, "after response: {},", start.elapsed().as_millis()).unwrap();
         
                 let response = BtcServiceGetSuccessorsResponse::try_from(mock_response).unwrap();
@@ -328,20 +332,18 @@ impl BlockchainState {
                 //write!(self.block_file, "after try_from: {},", start.elapsed().as_millis()).unwrap();
         
                 let mut buf = Vec::new();
-
-                total_cloning_duration += start.elapsed().as_millis();
         
                 response.encode(&mut buf).unwrap();
 
                 buf_size = buf.len();
         
-                total_duration += start.elapsed().as_millis();
+                total_serializing_duration += start.elapsed().as_millis();
             }
-            duration = total_duration / experiments;
+            serializing_duration = total_serializing_duration / experiments;
             cloning_duration = total_cloning_duration / experiments;
         }
 
-        writeln!(self.block_file, "[{}, {}, {}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, value.header.difficulty_float(), value.total_size(), duration, cloning_duration, times, buf_size).unwrap();
+        writeln!(self.block_file, "[{}, {}, {}, {}, {}, {}, {}],", self.header_cache.get(&block_hash).unwrap().height, value.header.difficulty_float(), value.total_size(), serializing_duration, cloning_duration, times, buf_size).unwrap();
 
         self.block_cache.insert(block_hash, value.clone());
         self.prune_blocks_below_height(height);

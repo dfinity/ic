@@ -1,15 +1,8 @@
 {
-  "network": "bitcoin",
+  "network": "testnet4",
   "dns_seeds": [
-      "seed.bitcoin.sipa.be",
-                "dnsseed.bluematt.me",
-                "dnsseed.bitcoin.dashjr.org",
-                "seed.bitcoinstats.com",
-                "seed.bitcoin.jonasschnelli.ch",
-                "seed.btc.petertodd.org",
-                "seed.bitcoin.sprovoost.nl",
-                "dnsseed.emzy.de",
-                "seed.bitcoin.wiz.biz"
+      "seed.testnet4.bitcoin.sprovoost.nl",
+            "seed.testnet4.wiz.biz"
   ],
   "nodes": [],
   "socks_proxy": null,
