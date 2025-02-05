@@ -143,7 +143,7 @@ impl GetSuccessorsHandler {
             // We can safely remove everything that is in the cache then, as those blocks are no longer needed.
             // There is a chance that these blocks are above the anchor height (but they were forked below it),
             // meaning that the regular "pruning anything below anchor" will not affect them.
-            // There is also a chance that they are reachable from the anchor, just not through the cache. 
+            // There is also a chance that they are reachable from the anchor, just not through the cache.
             // Meanining that we still need to download some other blocks first. (hence we need to free the cache).
             let mut obsolete_blocks = request.processed_block_hashes;
             if blocks.is_empty() {
