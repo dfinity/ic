@@ -1,11 +1,13 @@
+use crate::nns::governance::requests::{GetNetworkEconomicsParameters, GetProposalInfo};
 use crate::CallCanisters;
 use ic_base_types::CanisterId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
+    GetNeuronsFundAuditInfoResponse, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
+    ProposalActionRequest, ProposalInfo,
 };
 use ic_sns_governance_api::format_full_hash;
 use ic_sns_wasm::pb::v1::{
@@ -144,4 +146,28 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
     };
 
     make_proposal(agent, neuron_id, proposal).await
+}
+
+pub async fn list_neurons<C: CallCanisters>(
+    agent: &C,
+    list_neurons: ListNeurons,
+) -> Result<ListNeuronsResponse, C::Error> {
+    agent.call(GOVERNANCE_CANISTER_ID, list_neurons).await
+}
+
+pub async fn get_proposal_info<C: CallCanisters>(
+    agent: &C,
+    proposal_id: ProposalId,
+) -> Result<Option<ProposalInfo>, C::Error> {
+    agent
+        .call(GOVERNANCE_CANISTER_ID, GetProposalInfo(proposal_id))
+        .await
+}
+
+pub async fn get_network_economics_parameters<C: CallCanisters>(
+    agent: &C,
+) -> Result<ic_nns_governance_api::pb::v1::NetworkEconomics, C::Error> {
+    agent
+        .call(GOVERNANCE_CANISTER_ID, GetNetworkEconomicsParameters())
+        .await
 }
