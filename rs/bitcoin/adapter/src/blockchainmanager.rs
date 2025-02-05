@@ -1195,7 +1195,7 @@ pub mod test {
 
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // The request is considered retried if its timeout is less than the the timeout seconds.
-        let request: &GetDataRequestInfo = blockchain_manager
+        let request = blockchain_manager
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
