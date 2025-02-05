@@ -137,7 +137,6 @@ impl BlockchainState {
         self.header_cache.get(hash)
     }
 
-    /// Returns the hashes of all cached blocks.
     pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
         self.block_cache.keys().cloned().collect()
     }
