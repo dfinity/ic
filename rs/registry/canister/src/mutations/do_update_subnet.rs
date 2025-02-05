@@ -46,9 +46,7 @@ impl Registry {
 
         let mut mutations = vec![subnet_record_mutation];
 
-        let chain_key_signing_enable = { payload.chain_key_signing_enable };
-
-        if let Some(chain_key_signing_enable) = chain_key_signing_enable {
+        if let Some(chain_key_signing_enable) = payload.chain_key_signing_enable {
             mutations.append(
                 &mut self.mutations_to_enable_subnet_signing(subnet_id, &chain_key_signing_enable),
             );
