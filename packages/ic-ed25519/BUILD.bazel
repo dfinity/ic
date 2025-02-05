@@ -28,7 +28,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "ic-ed25519",
+    name = "ed25519",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_ed25519",
