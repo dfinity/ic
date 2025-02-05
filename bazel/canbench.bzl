@@ -17,6 +17,8 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         add_test: If True add an additional :${name}_test rule that fails if canbench benchmark fails.
         opt: The optimization level to use for the rust_binary compilation.
         **kwargs: Additional arguments to pass to rust_binary.
+        noise_threshold: The noise threshold to use for the benchmark. If None, the default value from
+            canbench is used.
     """
 
     rust_binary(

@@ -43,12 +43,7 @@ elif [ "$1" = "--update" ]; then
         cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 else
-    if [[ -z "${NOISE_THRESHOLD}" ]]; then
-        NOISE_THRESHOLD_ARG=""
-    else
-        NOISE_THRESHOLD_ARG="--noise-threshold ${NOISE_THRESHOLD}"
-    fi
-
+    NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
     ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
