@@ -8,7 +8,7 @@ use ic_cdk::{api::time, spawn};
 use ic_cdk::{caller, trap};
 use ic_cdk_macros::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
-use salt_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};
+use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};
 use std::time::Duration;
 
 const REPLICATED_QUERY_METHOD: &str = "get_salt";

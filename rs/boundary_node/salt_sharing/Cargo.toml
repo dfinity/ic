@@ -1,5 +1,5 @@
 [package]
-name = "salt"
+name = "salt_sharing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -16,7 +16,7 @@ ic-cdk-timers = { workspace = true }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 prometheus = {workspace = true }
-salt-api = { path = "./api" }
+salt-sharing-api = { path = "./api" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }

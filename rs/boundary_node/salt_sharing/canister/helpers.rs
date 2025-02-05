@@ -11,7 +11,7 @@ use ic_canister_log::log;
 use ic_cdk::{api::time, call, spawn};
 use ic_cdk_timers::{set_timer, set_timer_interval};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use salt_api::{
+use salt_sharing_api::{
     ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, InitArg, SaltGenerationStrategy,
 };
 
