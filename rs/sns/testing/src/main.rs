@@ -1,7 +1,7 @@
 use clap::Parser;
-use ic_sns_testing::pocket_ic::{
-    bootstrap_nns, create_sns, install_test_canister, upgrade_sns_controlled_test_canister,
-    TestCanisterInitArgs,
+use ic_sns_testing::nns_dapp::bootstrap_nns;
+use ic_sns_testing::sns::{
+    create_sns, install_test_canister, upgrade_sns_controlled_test_canister, TestCanisterInitArgs,
 };
 use pocket_ic::PocketIcBuilder;
 use reqwest::Url;

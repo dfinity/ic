@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:clap",
+    "@crate_index//:futures",
     "@crate_index//:reqwest",
     "@crate_index//:tokio",
 ]
