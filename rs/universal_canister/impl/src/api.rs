@@ -442,8 +442,8 @@ pub fn cycles_burn128(amount_high: u64, amount_low: u64) -> Vec<u8> {
     bytes
 }
 
-pub fn replication_factor(src: u32, size: u32) -> u32 {
-    unsafe { ic0::replication_factor(src, size) }
+pub fn replication_factor(data: &[u8]) -> u32 {
+    unsafe { ic0::replication_factor(data.as_ptr() as u32, data.len() as u32) }
 }
 
 pub fn cost_call(method_name_size: u64, payload_size: u64) -> Vec<u8> {
@@ -467,24 +467,39 @@ pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
     }
     bytes
 }
-pub fn cost_sign_with_ecdsa(src: u32, size: u32, ecdsa_curve: u32) -> Vec<u8> {
+pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     unsafe {
-        ic0::cost_sign_with_ecdsa(src, size, ecdsa_curve, bytes.as_mut_ptr() as u32);
+        ic0::cost_sign_with_ecdsa(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            ecdsa_curve,
+            bytes.as_mut_ptr() as u32,
+        );
     }
     bytes
 }
-pub fn cost_sign_with_schnorr(src: u32, size: u32, algorithm: u32) -> Vec<u8> {
+pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     unsafe {
-        ic0::cost_sign_with_schnorr(src, size, algorithm, bytes.as_mut_ptr() as u32);
+        ic0::cost_sign_with_schnorr(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            algorithm,
+            bytes.as_mut_ptr() as u32,
+        );
     }
     bytes
 }
-pub fn cost_vetkd_derive_encrypted_key(src: u32, size: u32, vetkd_curve: u32) -> Vec<u8> {
+pub fn cost_vetkd_derive_encrypted_key(data: &[u8], vetkd_curve: u32) -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     unsafe {
-        ic0::cost_vetkd_derive_encrypted_key(src, size, vetkd_curve, bytes.as_mut_ptr() as u32);
+        ic0::cost_vetkd_derive_encrypted_key(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            vetkd_curve,
+            bytes.as_mut_ptr() as u32,
+        );
     }
     bytes
 }

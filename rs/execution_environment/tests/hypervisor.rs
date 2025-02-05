@@ -8129,3 +8129,20 @@ fn wasm64_correct_execution_state() {
 fn wasm32_correct_execution_state() {
     check_correct_execution_state(false);
 }
+
+#[test]
+fn replication_factor() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let own_subnet_id = test.get_own_subnet_id();
+    let own_subnet_size = test.subnet_size() as u32;
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .replication_factor(own_subnet_id.get().as_slice())
+        .reply_int()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    assert_eq!(bytes, own_subnet_size.to_le_bytes());
+}
