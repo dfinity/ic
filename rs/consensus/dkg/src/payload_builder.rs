@@ -1550,7 +1550,7 @@ mod tests {
             assert_eq!(dkg_summary.configs.len(), 2);
             assert_eq!(dkg_summary.current_transcripts().len(), 2);
 
-            // Since it is the genesis summary, it also has no current transcripts
+            // Since it is the genesis summary, it also has no next transcripts
             assert_eq!(dkg_summary.next_transcripts().len(), 0);
             for tag in tags_iter(&vet_key_ids) {
                 // Check that every tag has a config in the summary
