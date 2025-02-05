@@ -1,7 +1,7 @@
 [package]
 name = "ic-secp256k1"
 version = "0.1.0"
-description = "A package created for the Internet Computer Protocol for the handling of ECDSA keys over the secp256k1 curve."
+description = "A package created for the Internet Computer Protocol for the handling of ECDSA and Schnorr keys over the secp256k1 curve."
 license = "Apache-2.0"
 readme = "README.md"
 include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
