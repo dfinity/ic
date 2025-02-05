@@ -11,22 +11,23 @@ pub struct CertifiedState {
 impl CertifiedState {
     pub fn insert_attestation_token(
         &self,
+        tls_public_key: Vec<u8>,
         attestation_token_payload: &AttestationTokenPayload,
     ) -> anyhow::Result<()> {
         self.state.borrow_mut().insert(
             &[
                 attestation_token::ATTESTATION_TOKENS_LABEL.to_vec(),
-                attestation_token_payload.node_id.as_slice().to_vec(),
+                tls_public_key,
             ],
             serde_cbor::to_vec(attestation_token_payload)?,
         );
         Ok(())
     }
 
-    pub fn attestation_token_witness(&self, node_id: &Principal) -> Option<HashTree> {
+    pub fn attestation_token_witness(&self, public_tls_key: &[u8]) -> Option<HashTree> {
         let path = &[
             attestation_token::ATTESTATION_TOKENS_LABEL.to_vec(),
-            node_id.as_slice().to_vec(),
+            public_tls_key.to_vec(),
         ];
         self.state
             .borrow()

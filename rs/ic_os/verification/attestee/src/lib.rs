@@ -18,6 +18,9 @@ use std::io::Read;
 pub mod sev_firmware;
 pub mod verification_agent;
 
+#[derive(Debug, Clone)]
+pub struct SerializedAttestationToken(pub Vec<u8>);
+
 pub async fn fetch_attestation_token(
     tls_public_key: &[u8],
     identity_pem: impl Read,

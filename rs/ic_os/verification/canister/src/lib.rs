@@ -85,18 +85,18 @@ fn generate_attestation_token(
         verify_generate_attestation_token_request(&request, &nonce_info.nonce)
     })?;
 
-    let node_id = ic_cdk::caller();
     let now_epoch = Duration::from_nanos(ic_cdk::api::time());
     CERTIFIED_STATE.with(|state| {
         state
-            .insert_attestation_token(&AttestationTokenPayload {
-                tls_public_key: request.tls_public_key,
-                issued_epoch_sec: now_epoch.as_secs(),
-                expires_epoch_sec: now_epoch
-                    .add(ATTESTATION_TOKEN_DEFAULT_EXPIRATION)
-                    .as_secs(),
-                node_id,
-            })
+            .insert_attestation_token(
+                request.tls_public_key,
+                &AttestationTokenPayload {
+                    issued_epoch_sec: now_epoch.as_secs(),
+                    expires_epoch_sec: now_epoch
+                        .add(ATTESTATION_TOKEN_DEFAULT_EXPIRATION)
+                        .as_secs(),
+                },
+            )
             .map_err_to_internal_with_context(
                 "Could not add attestation token to certified state",
             )?;
@@ -110,17 +110,17 @@ fn generate_attestation_token(
 
 #[query]
 fn fetch_attestation_token(
-    _request: FetchAttestationTokenRequest,
+    request: FetchAttestationTokenRequest,
 ) -> Result<FetchAttestationTokenResponse, VerificationError> {
-    let node_id = ic_cdk::caller();
-
     CERTIFIED_STATE.with(|state| {
-        let Some(attestation_token_witness) = state.attestation_token_witness(&node_id) else {
+        let Some(attestation_token_witness) =
+            state.attestation_token_witness(&request.tls_public_key)
+        else {
             return Err(VerificationErrorDetail::AttestationTokenNotFound.into());
         };
 
         let attestation_token = AttestationToken {
-            node_id,
+            tls_public_key: request.tls_public_key,
             hash_tree: attestation_token_witness,
             certificate: Certificate::from_cbor(
                 &ic_cdk::api::data_certificate()
@@ -129,6 +129,7 @@ fn fetch_attestation_token(
             .map_err_to_internal_with_context("Could not decode data certificate")?,
         };
 
+        attestation_token.to_der();
         Ok(FetchAttestationTokenResponse {
             attestation_token: serde_cbor::to_vec(&attestation_token).map_err_to_internal()?,
         })
@@ -153,14 +154,5 @@ impl<T, E: Display> ToVerificationError<T> for std::result::Result<T, E> {
         context: &str,
     ) -> std::result::Result<T, VerificationError> {
         self.map_err(|err| VerificationError::internal(format!("{context}\n\nCaused by:\n{err}")))
-    }
-}
-
-pub mod export {
-    use super::*;
-    #[test]
-    fn test_export() {
-        candid::export_service!();
-        println!("{}", __export_service());
     }
 }

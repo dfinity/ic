@@ -98,16 +98,17 @@ impl AttestationTokenRefresher {
         let attestation_token_der =
             attestee::fetch_attestation_token(key_pair.public_key_raw(), &mut vec![].as_slice())
                 .await
-                .context("Could not fetch attestation token")?
-                .to_der()?;
+                .context("Could not fetch attestation token")?;
+                // .to_der()?;
         println!("Fetches attestation token: {:x?}", attestation_token_der);
         let mut params = CertificateParams::new(vec![])?;
         params
             .custom_extensions
             .push(CustomExtension::from_oid_content(
                 &[1, 3, 6, 1, 4, 1, 56387, 42, 1],
-                attestation_token_der,
+                attestation_token_der.0,
             ));
+        params.signed_by()
         let cert = params.self_signed(&key_pair)?;
 
         Ok(rcgen::CertifiedKey { cert, key_pair })
