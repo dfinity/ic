@@ -223,6 +223,7 @@ rust_canbench(
     # We would like to figure out why and fix it, but for now, we are reducing the optimization
     # level so that tests against the optimization level can be added.
     opt = "s",
+    noise_threshold = 5.0,
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

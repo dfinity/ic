@@ -9,6 +9,8 @@
 #     - updated if --update is specified.
 #     - used for comparison if it's not empty.
 # - WASM_PATH: Path to the wasm file to be benchmarked.
+# - NOISE_THRESHOLD: The noise threshold in percentage. If the difference between the current
+#     benchmark and the results file is above this threshold, the benchmark test will fail.
 
 set -eEuo pipefail
 
@@ -28,8 +30,6 @@ if [ -s "${REPO_RESULTS_PATH}" ]; then
     echo "  ${REPO_RESULTS_PATH}" >>${CANBENCH_YML}
 fi
 
-echo ${RUNFILES}
-
 if [ $# -eq 0 ]; then
     # Runs the benchmark without updating the results file.
     ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN}
@@ -43,8 +43,14 @@ elif [ "$1" = "--update" ]; then
         cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 else
+    if [[ -z "${NOISE_THRESHOLD}" ]]; then
+        NOISE_THRESHOLD_ARG=""
+    else
+        NOISE_THRESHOLD_ARG="--noise-threshold ${NOISE_THRESHOLD}"
+    fi
+
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
-    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} >$CANBENCH_OUTPUT
+    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} ${NOISE_THRESHOLD_ARG} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
         cat "$CANBENCH_OUTPUT"
         echo "**\`$REPO_RESULTS_PATH\` is not up to date ❌**
