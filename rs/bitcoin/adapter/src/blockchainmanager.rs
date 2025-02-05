@@ -1274,10 +1274,8 @@ pub mod test {
         );
     }
 
-    /// This function tests to ensure that the BlockchainManager retries `getdata` requests
-    /// that have failed when calling `sync_blocks` with a full block cache.
     #[test]
-    fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
+    fn test_ensure_getdata_requests_are_not_retried_with_a_full_cache() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1330,29 +1328,14 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
-        );
-        let getdata_command = channel
-            .pop_back()
-            .expect("there should `getdata` request in the channel");
-        assert!(matches!(
-            getdata_command.message,
-            NetworkMessage::GetData(_)
-        ));
-        let hashes_sent = match getdata_command.message {
-            NetworkMessage::GetData(inv) => inv,
-            _ => vec![],
-        };
-        assert_eq!(hashes_sent.len(), 1);
-        assert!(
-            matches!(hashes_sent.first(), Some(Inventory::Block(hash)) if *hash == block_1_hash)
-        );
+        // The request should not have been retried as the block cache is full.
+        assert!(request.sent_at.is_none());
+        while let Some(command) = channel.pop_front() {
+            assert!(
+                !matches!(command.message, NetworkMessage::GetData(_)),
+                "Found a `GetData` command, but none was expected."
+            );
+        }
     }
 
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
@@ -1602,7 +1585,7 @@ pub mod test {
 
     /// Test to check that the retry queue is always used to retrieve the next block hash.
     #[test]
-    fn test_get_next_block_hash_to_sync_always_retrieves_from_the_retry_queue() {
+    fn test_get_next_block_hash_to_sync_retrieves_from_sync_queue_first_only_if_cahce_not_full() {
         let genesis_block = genesis_block(Network::Regtest);
         let headers = generate_headers(
             genesis_block.block_hash(),
@@ -1610,9 +1593,11 @@ pub mod test {
             3,
             &[],
         );
-        let mut retry_queue: LinkedHashSet<BlockHash> =
+        // Sync queue starts with 2 times
+        let mut sync_queue: LinkedHashSet<BlockHash> =
             headers.iter().map(|h| h.block_hash()).take(2).collect();
-        let mut sync_queue: LinkedHashSet<BlockHash> = headers
+        // Retry queue starts with 1 item.
+        let mut retry_queue: LinkedHashSet<BlockHash> = headers
             .iter()
             .map(|h| h.block_hash())
             .skip(2)
@@ -1620,24 +1605,26 @@ pub mod test {
             .collect();
 
         // Try with `is_cache_full` set to false.
-        let first_hash = retry_queue
+        let first_hash = sync_queue
             .front()
             .copied()
-            .expect("Retry queue should have 2 items.");
+            .expect("Sync queue queue should have 2 items.");
         let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        // The result is part of sync queue, and now sync queue only has one item
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(retry_queue.len(), 1);
         assert_eq!(sync_queue.len(), 1);
 
-        // Try with `is_cache_full` set to true.
-        let first_hash = retry_queue
+        // Try with `is_cache_full` set to true. None of the queues should call getdata.
+        let _first_hash = sync_queue
             .front()
             .copied()
-            .expect("Retry queue should have 1 item.");
+            .expect("Sync queue should have 1 item.");
         let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
+        // The queues have not changed, the result should be None.
+        assert!(matches!(result, None));
+        assert_eq!(retry_queue.len(), 1);
         assert_eq!(sync_queue.len(), 1);
-        assert_eq!(retry_queue.len(), 0);
     }
 
     /// Tests if the cache is full and the retry queue is empty, then no blocks are returned.
