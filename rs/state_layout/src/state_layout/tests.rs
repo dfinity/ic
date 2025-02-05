@@ -279,7 +279,7 @@ fn test_removal_when_last_dropped() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
         let scratchpad_dir = tmpdir("scratchpad");
         let cp1 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("1"),
                     Height::new(1),
@@ -289,7 +289,7 @@ fn test_removal_when_last_dropped() {
             )
             .unwrap();
         let cp2 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("2"),
                     Height::new(2),
@@ -300,7 +300,7 @@ fn test_removal_when_last_dropped() {
             .unwrap();
         // Add one checkpoint so that we never remove the last one and crash
         let _cp3 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("3"),
                     Height::new(3),
@@ -341,7 +341,7 @@ fn test_last_removal_panics_in_debug() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
         let scratchpad_dir = tmpdir("scratchpad");
         let cp1 = state_layout
-            .scratchpad_to_checkpoint(
+            .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("1"),
                     Height::new(1),
@@ -350,6 +350,7 @@ fn test_last_removal_panics_in_debug() {
                 Height::new(1),
             )
             .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         std::mem::drop(cp1);
     });
@@ -372,7 +373,7 @@ fn test_can_remove_unverified_marker_file_twice() {
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");
         // Create at least a file in the scratchpad layout. Otherwise, empty folders can be overridden without errors
-        // and calling "scratchpad_to_checkpoint" twice will not fail as expected.
+        // and calling "promote_scratchpad_to_unverified_checkpoint" twice will not fail as expected.
         File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
 
         let tip_path = state_layout.tip_path();
@@ -387,7 +388,7 @@ fn test_can_remove_unverified_marker_file_twice() {
         tip.create_unverified_checkpoint_marker().unwrap();
 
         let checkpoint = state_layout
-            .scratchpad_to_checkpoint(scratchpad_layout, height)
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
             .unwrap();
         checkpoint
             .finalize_and_remove_unverified_marker(None)
@@ -395,7 +396,8 @@ fn test_can_remove_unverified_marker_file_twice() {
 
         // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
         // However, it can still access the checkpoint and try to remove the marker file again from its side.
-        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height);
+        let checkpoint_result =
+            state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height);
         assert!(checkpoint_result.is_err());
 
         let res = state_layout

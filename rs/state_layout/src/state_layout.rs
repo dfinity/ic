@@ -639,11 +639,26 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint<T>(
+    /// Creates an unverified marker in the scratchpad and promotes it to a checkpoint.
+    ///
+    /// This function maintains the integrity of the checkpointing process by ensuring that
+    /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
+    pub fn promote_scratchpad_to_unverified_checkpoint<T>(
+        &self,
+        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        scratchpad_layout.create_unverified_checkpoint_marker()?;
+        self.scratchpad_to_checkpoint(scratchpad_layout, height)
+    }
+
+    fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
+        debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();

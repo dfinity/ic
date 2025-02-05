@@ -189,15 +189,8 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
-                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
-                                        sender
-                                            .send(Err(err))
-                                            .expect("Failed to return TipToCheckpoint error");
-                                        continue;
-                                    }
-
-                                    let cp_or_err =
-                                        state_layout.scratchpad_to_checkpoint(tip, height);
+                                    let cp_or_err = state_layout
+                                        .promote_scratchpad_to_unverified_checkpoint(tip, height);
                                     match cp_or_err {
                                         Err(err) => {
                                             sender
@@ -1277,9 +1270,8 @@ mod test {
             let tip = tip_handler.tip(height).unwrap();
 
             // Create a marker in the tip and promote it to a checkpoint.
-            tip.create_unverified_checkpoint_marker().unwrap();
             let checkpoint_layout = state_layout
-                .scratchpad_to_checkpoint(tip, height, None)
+                .promote_scratchpad_to_unverified_checkpoint(tip, height)
                 .unwrap();
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
