@@ -1,22 +1,43 @@
+use crate::helpers::{init_async, is_api_boundary_node_principal};
+use crate::logs::export_logs_as_http_response;
+use crate::metrics::{export_metrics_as_http_response, METRICS};
+use crate::storage::SALT;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::api::call::{accept_message, method_name};
+use ic_cdk::{api::time, spawn};
+use ic_cdk::{caller, trap};
+use ic_cdk_macros::{init, inspect_message, post_upgrade, query};
+use ic_cdk_timers::set_timer;
+use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};
 use std::time::Duration;
 
-use crate::logs::{self, Log, LogEntry, Priority, P0};
-use crate::storage::{StorableSalt, SALT, SALT_SIZE};
-use crate::time::delay_till_next_month;
-use candid::Principal;
-use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{api::time, spawn};
-use ic_cdk_macros::{init, post_upgrade, query};
-use ic_cdk_timers::set_timer;
-use salt_api::{GetSaltError, GetSaltResponse, InitArg, SaltGenerationStrategy, SaltResponse};
-use std::str::FromStr;
+const REPLICATED_QUERY_METHOD: &str = "get_salt";
+
+// Inspect the ingress messages in the pre-consensus phase and reject early, if the conditions are not met
+#[inspect_message]
+fn inspect_message() {
+    let caller_id = caller();
+    let called_method = method_name();
+
+    if called_method == REPLICATED_QUERY_METHOD && is_api_boundary_node_principal(&caller_id) {
+        accept_message();
+    } else {
+        trap("message_inspection_failed: method call is prohibited in the current context");
+    }
+}
 
 // Runs when canister is first installed
 #[init]
 fn init(init_arg: InitArg) {
     set_timer(Duration::ZERO, || {
         spawn(async { init_async(init_arg).await });
+    });
+    // Update metric.
+    let current_time = time() as i64;
+    METRICS.with(|cell| {
+        cell.borrow_mut()
+            .last_canister_change_time
+            .set(current_time);
     });
 }
 
@@ -29,135 +50,83 @@ fn post_upgrade(init_arg: InitArg) {
 
 #[query]
 fn get_salt() -> GetSaltResponse {
-    get_salt_response()
+    let caller_id = caller();
+    if is_api_boundary_node_principal(&caller_id) {
+        let stored_salt = SALT
+            .with(|cell| cell.borrow().get(&()))
+            .ok_or(GetSaltError::SaltNotInitialized)?;
+
+        return Ok(SaltResponse {
+            salt: stored_salt.salt,
+            salt_id: stored_salt.salt_id,
+        });
+    }
+    Err(GetSaltError::Unauthorized)
 }
 
 #[query(decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/logs" => {
-            use serde_json;
-
-            let max_skip_timestamp = match request.raw_query_param("time") {
-                Some(arg) => match u64::from_str(arg) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        return HttpResponseBuilder::bad_request()
-                            .with_body_and_content_length("failed to parse the 'time' parameter")
-                            .build()
-                    }
-                },
-                None => 0,
-            };
-
-            let mut entries: Log = Default::default();
-
-            for entry in export_logs(&logs::P0) {
-                entries.entries.push(LogEntry {
-                    timestamp: entry.timestamp,
-                    counter: entry.counter,
-                    priority: Priority::P0,
-                    file: entry.file.to_string(),
-                    line: entry.line,
-                    message: entry.message,
-                });
-            }
-
-            for entry in export_logs(&logs::P1) {
-                entries.entries.push(LogEntry {
-                    timestamp: entry.timestamp,
-                    counter: entry.counter,
-                    priority: Priority::P1,
-                    file: entry.file.to_string(),
-                    line: entry.line,
-                    message: entry.message,
-                });
-            }
-
-            entries
-                .entries
-                .retain(|entry| entry.timestamp >= max_skip_timestamp);
-
-            HttpResponseBuilder::ok()
-                .header("Content-Type", "application/json; charset=utf-8")
-                .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
-                .build()
-        }
+        "/metrics" => export_metrics_as_http_response(),
+        "/logs" => export_logs_as_http_response(request),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
 
-async fn init_async(init_arg: InitArg) {
-    if !is_salt_init() || init_arg.regenerate_now {
-        if let Err(err) = try_regenerate_salt().await {
-            log!(P0, "[init_regenerate_salt_failed]: {err}");
-        }
-    }
-    // Start salt generation schedule based on the argument.
-    match init_arg.salt_generation_strategy {
-        SaltGenerationStrategy::StartOfMonth => schedule_monthly_salt_generation(),
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-// Sets an execution timer (delayed future task) and returns immediately.
-fn schedule_monthly_salt_generation() {
-    let delay = delay_till_next_month(time());
-    set_timer(delay, || {
-        spawn(async {
-            if let Err(err) = try_regenerate_salt().await {
-                log!(P0, "[scheduled_regenerate_salt_failed]: {err}");
+    #[test]
+    fn check_candid_interface_compatibility() {
+        use candid_parser::utils::{service_equal, CandidSource};
+
+        fn source_to_str(source: &CandidSource) -> String {
+            match source {
+                CandidSource::File(f) => {
+                    std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
+                }
+                CandidSource::Text(t) => t.to_string(),
             }
-            // Function is called recursively to schedule next execution
-            schedule_monthly_salt_generation();
-        });
-    });
-}
+        }
 
-fn is_salt_init() -> bool {
-    SALT.with(|cell| cell.borrow().get(&())).is_some()
-}
+        fn check_service_equal(
+            new_name: &str,
+            new: CandidSource,
+            old_name: &str,
+            old: CandidSource,
+        ) {
+            let new_str = source_to_str(&new);
+            let old_str = source_to_str(&old);
+            match service_equal(new, old) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!(
+                        "{} is not compatible with {}!\n\n\
+                {}:\n\
+                {}\n\n\
+                {}:\n\
+                {}\n",
+                        new_name, old_name, new_name, new_str, old_name, old_str
+                    );
+                    panic!("{:?}", e);
+                }
+            }
+        }
 
-fn get_salt_response() -> Result<SaltResponse, GetSaltError> {
-    let stored_salt = SALT
-        .with(|cell| cell.borrow().get(&()))
-        .ok_or(GetSaltError::SaltNotInitialized)?;
+        candid::export_service!();
 
-    Ok(SaltResponse {
-        salt: stored_salt.salt,
-        salt_id: stored_salt.salt_id,
-    })
-}
+        let new_interface = __export_service();
 
-// Regenerate salt and store it in the stable memory
-// Can only fail, if the calls to management canister fail.
-async fn try_regenerate_salt() -> Result<(), String> {
-    // Closure for getting random bytes from the IC.
-    let rnd_call = |attempt: u32| async move {
-        ic_cdk::call(Principal::management_canister(), "raw_rand", ())
-            .await
-            .map_err(|err| {
-                format!(
-                    "Call {attempt} to raw_rand failed: code={:?}, err={}",
-                    err.0, err.1
-                )
-            })
-    };
+        // check the public interface against the actual one
+        let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("canister/salt_sharing_canister.did");
 
-    let (rnd_bytes_1,): ([u8; 32],) = rnd_call(1).await?;
-    let (rnd_bytes_2,): ([u8; 32],) = rnd_call(2).await?;
-
-    // Concatenate arrays to form an array of 64 random bytes.
-    let mut salt = [rnd_bytes_1, rnd_bytes_2].concat();
-    salt.truncate(SALT_SIZE);
-
-    let stored_salt = StorableSalt {
-        salt,
-        salt_id: time(),
-    };
-
-    SALT.with(|cell| {
-        cell.borrow_mut().insert((), stored_salt);
-    });
-
-    Ok(())
+        check_service_equal(
+            "actual rate-limit candid interface",
+            candid_parser::utils::CandidSource::Text(&new_interface),
+            "declared candid interface in interface.did file",
+            candid_parser::utils::CandidSource::File(old_interface.as_path()),
+        );
+    }
 }

@@ -14,8 +14,7 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
-        prune_some_following, NeuronMetrics, NeuronStore,
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -373,6 +372,17 @@ impl VotingPowerEconomics {
         Self::DEFAULT
     }
 
+    /// Returns 1 if a neuron has refreshed (its voting power/following)
+    /// recently.
+    ///
+    /// Otherwise, if a neuron has not refreshed for >
+    /// start_reducing_voting_power_after_seconds, returns < 1 (but >= 0).
+    ///
+    /// Once a neuron has not refresehd for
+    /// start_reducing_voting_power_after_seconds +
+    /// clear_following_after_seconds, this returns 0.
+    ///
+    /// Between these two points, the decrease is linear.
     pub fn deciding_voting_power_adjustment_factor(
         &self,
         time_since_last_voting_power_refreshed: Duration,
@@ -5980,14 +5990,6 @@ impl Governance {
             begin,
             carry_on,
         )
-    }
-
-    pub fn backfill_some_voting_power_refreshed_timestamps(
-        &mut self,
-        begin: std::ops::Bound<NeuronId>,
-        carry_on: impl FnMut() -> bool,
-    ) -> std::ops::Bound<NeuronId> {
-        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
     }
 
     pub fn backfill_install_code_hashes(&mut self) {
