@@ -14,7 +14,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly, RwPolicy,
+    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
     SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;

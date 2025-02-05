@@ -777,7 +777,6 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        thread_pool: &mut scoped_threadpool::Pool,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -1330,7 +1329,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            &mut self.thread_pool.lock().unwrap(),
                         );
 
                         self.state_sync.deliver_state_sync(
@@ -1507,7 +1505,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        &mut self.thread_pool.lock().unwrap(),
                     );
 
                     self.state_sync.deliver_state_sync(

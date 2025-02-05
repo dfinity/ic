@@ -11,7 +11,7 @@ use crate::{
 
 use ic_base_types::CanisterId;
 use ic_config::state_manager::Config;
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
     difference, CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError,
