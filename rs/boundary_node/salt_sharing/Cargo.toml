@@ -23,6 +23,7 @@ serde_json = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 
 [lib]
 crate-type = ["cdylib"]
