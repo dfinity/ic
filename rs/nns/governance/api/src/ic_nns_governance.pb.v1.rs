@@ -3496,10 +3496,9 @@ pub struct ListNeurons {
     pub include_neurons_readable_by_caller: bool,
     /// Whether to also include empty neurons readable by the caller. This field only has an effect
     /// when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-    /// this field. Since the previous behavior was to always include empty neurons readable by caller,
-    /// if this field is not provided, it defaults to true, in order to maintain backwards
-    /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+    /// `neuron_ids` field, then the neuron will be included in the response regardless of the value
+    /// of this field. The default value is false (i.e. `None` is treated as `Some(false)`). Here,
+    /// being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: Option<bool>,
     /// If this is set to true, and a neuron in the "requested list" has its
