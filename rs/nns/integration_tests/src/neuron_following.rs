@@ -1,15 +1,14 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     neuron::{DissolveState, Followees},
-    Neuron, Tally, Topic, Visibility, Vote,
+    Neuron, Tally, Topic, Vote,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
