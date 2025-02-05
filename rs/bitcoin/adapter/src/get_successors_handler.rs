@@ -221,6 +221,9 @@ fn get_successor_blocks(
                 } else {
                     break;
                 }
+            } else {
+                // Cache miss. discard this subtree from the BFS tree.
+                continue;
             }
         }
 
