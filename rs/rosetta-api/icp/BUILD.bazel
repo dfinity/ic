@@ -66,9 +66,9 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//packages/ic-ed25519",
     "//packages/pocket-ic",
     "//rs/ledger_suite/icp/test_utils",
     "//rs/ledger_suite/icrc1",
