@@ -639,7 +639,8 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args_with_large_archive_trigger_threshold,
         vec![
-            ("get_blocks", get_blocks_arg),
+            ("get_blocks", get_blocks_arg.clone()),
+            ("get_transactions", get_blocks_arg),
             ("icrc3_get_blocks", icrc3_get_blocks_arg),
         ],
     );

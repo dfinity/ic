@@ -793,6 +793,7 @@ fn supported_standards() -> Vec<StandardRecord> {
 #[query]
 #[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
+    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
