@@ -12,7 +12,7 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
-    common::{build_test_governance_wasm, NnsInitPayloadsBuilder},
+    common::{build_governance_wasm, NnsInitPayloadsBuilder},
     neuron_helpers::{
         get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
         submit_proposal, TestNeuronOwner,
@@ -484,10 +484,7 @@ async fn test_prune_some_following() {
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
         governance_proto.encode_to_vec(),
-        // TODO(NNS1-3446): Once following pruning is released, replace with
-        // vanilla build_governance_wasm(). For now, the feature is only enabled
-        // when built with feature = "test".
-        build_test_governance_wasm(),
+        build_governance_wasm(),
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;
