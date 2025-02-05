@@ -83,14 +83,14 @@ fn assert_api_not_supported<T>(res: HypervisorResult<T>) {
 }
 
 fn assert_api_availability<T, F>(
-    f: F,
+    mut f: F,
     api_type: ApiType,
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
     api_type_enum: SystemApiCallId,
     context: &str,
 ) where
-    F: Fn(SystemApiImpl) -> HypervisorResult<T>,
+    F: FnMut(SystemApiImpl) -> HypervisorResult<T>,
 {
     #[allow(unused_mut)]
     let mut api = get_system_api(api_type, system_state, cycles_account_manager);
@@ -815,76 +815,6 @@ fn api_availability_test(
                 context,
             );
         }
-        SystemApiCallId::CostCall => {
-            assert_api_availability(
-                |api| api.ic0_cost_call(0, 0, 0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::CostCreateCanister => {
-            assert_api_availability(
-                |api| api.ic0_cost_create_canister(0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::CostSignWithEcdsa => {
-            assert_api_availability(
-                |api| api.ic0_cost_sign_with_ecdsa(0, 0, 0, 0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::CostHttpRequest => {
-            assert_api_availability(
-                |api| api.ic0_cost_http_request(0, 0, 0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::CostSignWithSchnorr => {
-            assert_api_availability(
-                |api| api.ic0_cost_sign_with_schnorr(0, 0, 0, 0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::CostVetkdDeriveEncryptedKey => {
-            assert_api_availability(
-                |api| api.ic0_cost_vetkd_derive_encrypted_key(0, 0, 0, 0, &mut [42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
-        SystemApiCallId::ReplicationFactor => {
-            assert_api_availability(
-                |api| api.ic0_replication_factor(0, 0, &[42; 128]),
-                api_type,
-                &system_state,
-                cycles_account_manager,
-                api_type_enum,
-                context,
-            );
-        }
         // stable API is tested separately
         SystemApiCallId::StableGrow
         | SystemApiCallId::StableRead
@@ -897,6 +827,14 @@ fn api_availability_test(
         // OutOfInstructions and TryGrowWasmMemory are private
         SystemApiCallId::OutOfInstructions => {}
         SystemApiCallId::TryGrowWasmMemory => {}
+        // These are available in all contexts
+        SystemApiCallId::CostCall => {}
+        SystemApiCallId::CostCreateCanister => {}
+        SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostSignWithEcdsa => {}
+        SystemApiCallId::CostSignWithSchnorr => {}
+        SystemApiCallId::CostVetkdDeriveEncryptedKey => {}
+        SystemApiCallId::ReplicationFactor => {}
     }
 }
 
