@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),
