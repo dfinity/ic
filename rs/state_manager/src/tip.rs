@@ -1,5 +1,5 @@
 use crate::{
-    checkpoint::validate_checkpoint_and_remove_unverified_marker,
+    checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -472,14 +472,16 @@ pub(crate) fn spawn_tip_thread(
                                 }
                             }
                             let _timer = request_timer(&metrics, "validate_replicated_state");
-                            if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
-                                &checkpoint_layout,
-                                Some(reference_state.deref()),
-                                own_subnet_type,
-                                Arc::clone(&fd_factory),
-                                &metrics.checkpoint_metrics,
-                                Some(&mut thread_pool),
-                            ) {
+                            if let Err(err) =
+                                validate_and_finalize_checkpoint_and_remove_unverified_marker(
+                                    &checkpoint_layout,
+                                    Some(reference_state.deref()),
+                                    own_subnet_type,
+                                    Arc::clone(&fd_factory),
+                                    &metrics.checkpoint_metrics,
+                                    Some(&mut thread_pool),
+                                )
+                            {
                                 fatal!(
                                     &log,
                                     "Checkpoint validation for {} has failed: {:#}",

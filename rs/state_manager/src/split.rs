@@ -2,7 +2,7 @@
 use crate::{
     checkpoint::{
         load_checkpoint, make_unvalidated_checkpoint,
-        validate_checkpoint_and_remove_unverified_marker,
+        validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
     flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
@@ -224,11 +224,7 @@ fn write_checkpoint(
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
 
-    state_layout
-        .mark_files_readonly_and_sync(&log, cp_layout.raw_path(), Some(thread_pool))
-        .map_err(|e| format!("Failed to mark checkpoint readonly and sync: {}", e))?;
-
-    validate_checkpoint_and_remove_unverified_marker(
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
         None,
         SubnetType::Application,

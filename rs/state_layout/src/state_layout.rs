@@ -1609,7 +1609,7 @@ impl CheckpointLayout<ReadOnly> {
     /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
     /// However, the removal of the unverified checkpoint marker is allowed as
     /// the marker is not part the checkpoint conceptually.
-    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+    fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
             return Ok(());
@@ -1632,6 +1632,14 @@ impl CheckpointLayout<ReadOnly> {
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    pub fn finalize_and_remove_unverified_marker(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        self.mark_files_readonly_and_sync(thread_pool)?;
+        self.remove_unverified_checkpoint_marker()
     }
 }
 
