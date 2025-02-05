@@ -1,9 +1,9 @@
 {
     "version": 1,
     "canisters": {
-      "salt": {
+      "salt_sharing": {
         "type": "rust",
-        "package": "salt",
+        "package": "salt_sharing",
         "candid": "canister/salt_sharing_canister.did",
         "gzip": true
       }
