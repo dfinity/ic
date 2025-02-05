@@ -1,7 +1,7 @@
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::error;
+use ic_logger::{error, fatal};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
@@ -171,6 +171,7 @@ pub fn load_checkpoint_and_validate_parallel(
         Arc::clone(&fd_factory),
     )?;
 
+    checkpoint_layout.mark_files_readonly_and_sync(Some(&mut thread_pool))?;
     validate_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,

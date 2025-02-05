@@ -859,23 +859,6 @@ impl IncompleteState {
             }
             Err(err) => fatal!(log, "Unexpected layout error: {}", err),
         }
-
-        // Draft notes:
-        // Functions are spread across make_checkpoint and deliver_state_sync.
-        // Since make_checkpoint does not return anything. Maybe it can be merged into deliver_state_sync.
-        // Then deliver_state_sync, we can all the steps one by one in a single place to avoid overlooking any step.
-        if let Err(err) = state_layout.mark_files_readonly_and_sync(
-            &log,
-            scratchpad_layout.raw_path(),
-            Some(thread_pool),
-        ) {
-            fatal!(
-                &log,
-                "Failed to mark checkpoint {} readonly and sync: {:#}",
-                scratchpad_layout.raw_path().display(),
-                err
-            )
-        }
     }
 
     /// Preallocates the files listed in the manifest and copies the chunks

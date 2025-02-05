@@ -2573,7 +2573,8 @@ impl StateManagerImpl {
                 self.lsmt_status,
             )
         };
-        let _checkpoint_layout_for_async_writing = self.state_layout.checkpoint_in_async_writing(height);
+        let _checkpoint_layout_for_async_writing =
+            self.state_layout.checkpoint_in_async_writing(height);
         let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {

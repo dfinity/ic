@@ -545,12 +545,13 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
             let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
-            mark_files_readonly_and_sync(&self.log, &path, &self.metrics, thread_pool.as_mut())
-                .map_err(|err| LayoutError::IoError {
+            mark_files_readonly_and_sync(&path, thread_pool.as_mut()).map_err(|err| {
+                LayoutError::IoError {
                     path,
                     message: format!("Could not sync and mark readonly checkpoint {}", height),
                     io_err: err,
-                })?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -1187,27 +1188,6 @@ impl StateLayout {
         std::fs::create_dir_all(p)
     }
 
-    // Draft notes:
-    // It seems that this function can be implemented for CheckpointLayout instead of StateLayout.
-    // However, there is no simple workaround for the needed StateLayoutMetrics.
-    pub fn mark_files_readonly_and_sync(
-        &self,
-        log: &ReplicaLogger,
-        path: &Path,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
-        mark_files_readonly_and_sync(log, path, &self.metrics, thread_pool).map_err(|err| {
-            LayoutError::IoError {
-                path: self.raw_path().to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    self.height()
-                ),
-                io_err: err,
-            }
-        })
-    }
-
     /// Atomically copies a checkpoint with the specified name located at src
     /// path into the specified dst path.
     ///
@@ -1592,6 +1572,22 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Returns if the checkpoint is marked as unverified or not.
     pub fn is_checkpoint_verified(&self) -> bool {
         !self.unverified_checkpoint_marker().exists()
+    }
+
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        mark_files_readonly_and_sync(self.raw_path(), thread_pool).map_err(|err| {
+            LayoutError::IoError {
+                path: self.raw_path().to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        })
     }
 }
 
@@ -2771,9 +2767,7 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
 fn mark_files_readonly_and_sync(
-    #[allow(unused)] log: &ReplicaLogger,
     path: &Path,
-    #[allow(unused)] metrics: &StateLayoutMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
     let paths = dir_list_recursive(path)?;
@@ -2795,11 +2789,6 @@ fn mark_files_readonly_and_sync(
                 return Err(std::io::Error::last_os_error());
             }
         }
-        let elapsed = start.elapsed();
-        metrics
-            .state_layout_syncfs_duration
-            .observe(elapsed.as_secs_f64());
-        info!(log, "syncfs took {:?}", elapsed);
     }
     Ok(())
 }

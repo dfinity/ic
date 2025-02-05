@@ -456,11 +456,9 @@ pub(crate) fn spawn_tip_thread(
 
                         TipRequest::MarkCheckpointReadOnlyAndSync { checkpoint_layout } => {
                             let _timer = request_timer(&metrics, "mark_files_readonly_and_sync");
-                            if let Err(err) = state_layout.mark_files_readonly_and_sync(
-                                &log,
-                                checkpoint_layout.raw_path(),
-                                Some(&mut thread_pool),
-                            ) {
+                            if let Err(err) = checkpoint_layout
+                                .mark_files_readonly_and_sync(Some(&mut thread_pool))
+                            {
                                 fatal!(
                                     &log,
                                     "Failed to mark checkpoint {} readonly and sync: {:#}",
