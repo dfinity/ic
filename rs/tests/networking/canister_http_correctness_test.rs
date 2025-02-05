@@ -533,7 +533,7 @@ pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
         &handlers.proxy_canister(),
         RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
+                url: format!("https://[{webserver_ipv6}]:20443/delay/100"),
                 headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
