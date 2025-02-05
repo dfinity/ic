@@ -1335,7 +1335,7 @@ pub mod test {
         let request = blockchain_manager
             .getdata_request_info
             .get(&block_1_hash)
-            .expect("missing request info for block hash 1");\
+            .expect("missing request info for block hash 1");
         assert!(
             request
                 .sent_at
