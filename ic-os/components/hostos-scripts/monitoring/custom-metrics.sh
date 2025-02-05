@@ -15,13 +15,13 @@ function update_microcode_metric() {
         return 1
     fi
 
-    microcode=$(tr -d '\n' < "${MICROCODE_FILE}")
+    microcode=$(tr -d '\n' <"${MICROCODE_FILE}")
     write_log "Found microcode version: ${microcode}"
     write_metric_attr "node_cpu_microcode" \
-            "{version=\"${microcode}\"}" \
-            "1" \
-            "CPU microcode version" \
-            "gauge"
+        "{version=\"${microcode}\"}" \
+        "1" \
+        "CPU microcode version" \
+        "gauge"
 }
 
 function main() {
