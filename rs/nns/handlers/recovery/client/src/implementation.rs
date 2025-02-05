@@ -79,21 +79,17 @@ impl RecoveryCanister for RecoveryCanisterImpl {
     }
 
     async fn get_pending_recovery_proposals(&self) -> Result<Vec<RecoveryProposal>> {
-        self.query("get_pending_recovery_proposals", candid::encode_one(())?)
-            .await
+        let response: Vec<RecoveryProposal> = self
+            .query("get_pending_recovery_proposals", candid::encode_one(())?)
+            .await?;
+        response.iter().verify()?;
+
+        Ok(response)
     }
 
     async fn vote_on_latest_proposal(&self, ballot: Ballot) -> Result<()> {
         self.ensure_not_anonymous()?;
-
-        let proposal_chain = self.get_pending_recovery_proposals().await?;
-        proposal_chain.iter().verify()?;
-
-        let last_proposal = proposal_chain
-            .last()
-            .ok_or(RecoveryError::NoProposalsToVoteOn(
-                "There are no proposals to be voted in.".to_string(),
-            ))?;
+        let last_proposal = self.fetch_latest_proposal().await?;
 
         let mut signing_key = self.signing_key.clone();
 

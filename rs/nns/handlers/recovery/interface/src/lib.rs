@@ -44,8 +44,8 @@ pub enum RecoveryError {
     /// Identity in use is invalid to fulfil a desired action
     InvalidIdentity(String),
 
-    /// No proposals exist on the canister which could be voted on
-    NoProposalsToVoteOn(String),
+    /// No proposals exist on the canister
+    NoProposals(String),
 
     /// Specifies that the recovery proposal payload cannot be
     /// mapped to a governance proposal. This can happen if the
@@ -74,7 +74,7 @@ impl ToString for RecoveryError {
             | Self::AgentError(s)
             | Self::CandidError(s)
             | Self::InvalidIdentity(s)
-            | Self::NoProposalsToVoteOn(s)
+            | Self::NoProposals(s)
             | Self::InvalidRecoveryProposalPayload(s) => s.to_string(),
         }
     }
