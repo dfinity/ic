@@ -5,7 +5,7 @@ use ic_agent::Agent;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
     security_metadata::SecurityMetadata,
-    simple_node_record::SimpleNodeRecord,
+    simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot, RecoveryError, Result, VerifyIntegirty,
 };
 
@@ -73,7 +73,7 @@ impl RecoveryCanisterImpl {
 
 #[async_trait]
 impl RecoveryCanister for RecoveryCanisterImpl {
-    async fn get_node_operators_in_nns(&self) -> Result<Vec<SimpleNodeRecord>> {
+    async fn get_node_operators_in_nns(&self) -> Result<Vec<SimpleNodeOperatorRecord>> {
         self.query("get_node_operators_in_nns", candid::encode_one(())?)
             .await
     }

@@ -2,8 +2,9 @@ use candid::CandidType;
 use serde::Deserialize;
 
 pub mod recovery;
+pub mod recovery_init;
 pub mod security_metadata;
-pub mod simple_node_record;
+pub mod simple_node_operator_record;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
 /// Vote types that exist

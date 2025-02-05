@@ -7,7 +7,7 @@ use ic_nns_handler_recovery_interface::{
         VoteOnRecoveryProposal,
     },
     security_metadata::SecurityMetadata,
-    simple_node_record::SimpleNodeRecord,
+    simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot,
 };
 use ic_nns_handler_root::now_seconds;
@@ -26,12 +26,12 @@ pub fn submit_recovery_proposal(
     new_proposal: NewRecoveryProposal,
     caller: PrincipalId,
 ) -> Result<(), String> {
-    let nodes_in_nns = get_node_operators_in_nns();
+    let node_operators_in_nns = get_node_operators_in_nns();
 
     // Check if the caller has nodes in nns
-    if !nodes_in_nns
+    if !node_operators_in_nns
         .iter()
-        .any(|node| node.operator_principal == caller.0)
+        .any(|node| node.principal == caller.0)
     {
         let message = format!(
             "Caller: {} is not eligible to submit proposals to this canister",
@@ -51,7 +51,7 @@ pub fn submit_recovery_proposal(
                         proposals.push(RecoveryProposal {
                             proposer: caller.0.clone(),
                             submission_timestamp_seconds: now_seconds(),
-                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
+                            node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Halt,
                         });
                     }
@@ -88,7 +88,7 @@ pub fn submit_recovery_proposal(
                         proposals.push(RecoveryProposal {
                             proposer: caller.0.clone(),
                             submission_timestamp_seconds: now_seconds(),
-                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
+                            node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: new_proposal.payload.clone(),
                         });
                     }
@@ -124,7 +124,7 @@ pub fn submit_recovery_proposal(
                         proposals.push(RecoveryProposal {
                             proposer: caller.0.clone(),
                             submission_timestamp_seconds: now_seconds(),
-                            node_operator_ballots: initialize_ballots(&nodes_in_nns),
+                            node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Unhalt,
                         });
                     },
@@ -135,7 +135,7 @@ pub fn submit_recovery_proposal(
                         // Remove the second_one
                         proposals.pop();
 
-                        proposals.push(RecoveryProposal { proposer: caller.0.clone(), submission_timestamp_seconds: now_seconds(), node_operator_ballots: initialize_ballots(&nodes_in_nns), payload: new_proposal.payload.clone() });
+                        proposals.push(RecoveryProposal { proposer: caller.0.clone(), submission_timestamp_seconds: now_seconds(), node_operator_ballots: initialize_ballots(&node_operators_in_nns), payload: new_proposal.payload.clone() });
                     },
                     (_, _) => {
                         let message = format!(
@@ -164,28 +164,18 @@ pub fn submit_recovery_proposal(
     })
 }
 
-fn initialize_ballots(simple_node_records: &Vec<SimpleNodeRecord>) -> Vec<NodeOperatorBallot> {
+fn initialize_ballots(
+    simple_node_records: &Vec<SimpleNodeOperatorRecord>,
+) -> Vec<NodeOperatorBallot> {
     simple_node_records
         .iter()
-        .fold(Vec::new(), |mut acc, next| {
-            match acc
-                .iter_mut()
-                .find(|operator_ballot| operator_ballot.principal == next.operator_principal)
-            {
-                Some(existing_ballot) => {
-                    existing_ballot
-                        .nodes_tied_to_ballot
-                        .push(next.node_principal);
-                }
-                None => acc.push(NodeOperatorBallot {
-                    principal: next.operator_principal,
-                    nodes_tied_to_ballot: vec![next.node_principal],
-                    ballot: Ballot::Undecided,
-                    security_metadata: SecurityMetadata::empty(),
-                }),
-            }
-            acc
+        .map(|operator_record| NodeOperatorBallot {
+            principal: operator_record.principal.clone(),
+            nodes_tied_to_ballot: operator_record.nodes.clone(),
+            ballot: Ballot::Undecided,
+            security_metadata: SecurityMetadata::empty(),
         })
+        .collect()
 }
 
 pub fn vote_on_proposal_inner(

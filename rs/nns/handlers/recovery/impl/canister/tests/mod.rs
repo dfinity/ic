@@ -7,7 +7,7 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
     security_metadata::SecurityMetadata,
-    simple_node_record::SimpleNodeRecord,
+    simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot,
 };
 use ic_protobuf::registry::{
@@ -362,7 +362,10 @@ fn vote(
     response
 }
 
-fn get_current_node_operators(pic: &PocketIc, canister: Principal) -> Vec<SimpleNodeRecord> {
+fn get_current_node_operators(
+    pic: &PocketIc,
+    canister: Principal,
+) -> Vec<SimpleNodeOperatorRecord> {
     let response = pic
         .query_call(
             canister.into(),

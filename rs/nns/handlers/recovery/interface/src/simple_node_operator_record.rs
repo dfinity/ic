@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[derive(Debug, Clone, CandidType, Deserialize)]
 /// Convenience structure for storing information about nodes
 /// and their operators coming from NNS on recovery canister.
-pub struct SimpleNodeRecord {
-    pub node_principal: Principal,
-    pub operator_principal: Principal,
+pub struct SimpleNodeOperatorRecord {
+    pub principal: Principal,
+    pub nodes: Vec<Principal>,
 }

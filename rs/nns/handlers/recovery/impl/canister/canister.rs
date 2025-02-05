@@ -14,7 +14,7 @@ use ic_nns_handler_recovery::{
 };
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
-    simple_node_record::SimpleNodeRecord,
+    simple_node_operator_record::SimpleNodeOperatorRecord,
 };
 
 fn caller() -> PrincipalId {
@@ -47,7 +47,7 @@ fn get_pending_recovery_proposals() -> Vec<RecoveryProposal> {
 }
 
 #[query]
-fn get_current_nns_node_operators() -> Vec<SimpleNodeRecord> {
+fn get_current_nns_node_operators() -> Vec<SimpleNodeOperatorRecord> {
     get_node_operators_in_nns()
 }
 

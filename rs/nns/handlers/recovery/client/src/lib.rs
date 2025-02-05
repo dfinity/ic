@@ -2,13 +2,17 @@ use async_trait::async_trait;
 
 use ic_nns_handler_recovery_interface::recovery::{NewRecoveryProposal, RecoveryProposal};
 use ic_nns_handler_recovery_interface::Result;
-use ic_nns_handler_recovery_interface::{simple_node_record::SimpleNodeRecord, Ballot};
+use ic_nns_handler_recovery_interface::{
+    simple_node_operator_record::SimpleNodeOperatorRecord, Ballot,
+};
 
 pub mod implementation;
+#[cfg(test)]
+mod tests;
 
 #[async_trait]
 pub trait RecoveryCanister {
-    async fn get_node_operators_in_nns(&self) -> Result<Vec<SimpleNodeRecord>>;
+    async fn get_node_operators_in_nns(&self) -> Result<Vec<SimpleNodeOperatorRecord>>;
 
     async fn get_pending_recovery_proposals(&self) -> Result<Vec<RecoveryProposal>>;
 
