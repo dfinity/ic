@@ -20,7 +20,7 @@ use crate::{
 //
 // NOTE: Should be = the `MAX_RESPONSE_SIZE` defined in `replicated_state/bitcoin.rs`
 // for pagination on the replica side to work as expected.
-const MAINNET_MAX_RESPONSE_SIZE: usize = 2_000_000;
+const MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 // Lower than mainnet's response size. The main reason is large serialization time
 // for large blocks.
@@ -41,14 +41,11 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 // The maximum number of bytes the `blocks` in a response can take.
 // NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
 // Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
-const MAINNET_MAX_BLOCKS_BYTES: usize = MAINNET_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
 const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
-const_assert_eq!(
-    MAX_NEXT_BYTES + MAINNET_MAX_BLOCKS_BYTES,
-    MAINNET_MAX_RESPONSE_SIZE
-);
+const_assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
 const_assert_eq!(
     MAX_NEXT_BYTES + TESTNET4_MAX_BLOCKS_BYTES,
     TESTNET4_MAX_RESPONSE_SIZE
@@ -181,11 +178,8 @@ fn get_successor_blocks(
         .unwrap_or_default();
 
     let max_blocks_size = match network {
-        Network::Testnet | Network::Signet | Network::Regtest | Network::Bitcoin => {
-            MAINNET_MAX_BLOCKS_BYTES
-        }
         Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
-        other => unreachable!("Unsupported network: {:?}", other),
+        _ => MAX_BLOCKS_BYTES,
     };
 
     // Compute the blocks by starting a breadth-first search.
