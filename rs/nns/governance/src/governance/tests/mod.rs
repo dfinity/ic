@@ -22,7 +22,10 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
-use std::convert::TryFrom;
+use std::{
+    convert::TryFrom,
+    time::Duration,
+};
 
 mod list_neurons;
 mod neurons_fund;
