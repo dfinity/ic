@@ -1,7 +1,7 @@
-use candid::{CandidType, Principal};
-use serde::Deserialize;
+use candid::{CandidType, Deserialize, Principal};
+use serde::Serialize;
 
-#[derive(Debug, Clone, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize, Clone)]
 /// Convenience structure for storing information about nodes
 /// and their operators coming from NNS on recovery canister.
 pub struct SimpleNodeOperatorRecord {

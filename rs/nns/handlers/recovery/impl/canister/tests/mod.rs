@@ -6,6 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_init::RecoveryInitArgs,
     security_metadata::SecurityMetadata,
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot,
@@ -90,6 +91,17 @@ struct NodeOperatorArg {
     principal: PrincipalId,
     num_nodes: u8,
     signing_key: SigningKey,
+}
+
+impl From<NodeOperatorArg> for SimpleNodeOperatorRecord {
+    fn from(value: NodeOperatorArg) -> Self {
+        Self {
+            operator_id: value.principal.0,
+            nodes: (0..value.num_nodes)
+                .map(|i| PrincipalId::new_node_test_id(i as u64).0)
+                .collect(),
+        }
+    }
 }
 
 impl NodeOperatorArg {
@@ -254,7 +266,7 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
     pic.install_canister(
         canister,
         fetch_canister_wasm("BACKUP_ROOT_WASM_PATH"),
-        candid::encode_one(()).unwrap(),
+        candid::encode_one(RecoveryInitArgs::default()).unwrap(),
         None,
     );
 

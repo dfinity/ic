@@ -93,6 +93,13 @@ impl RecoveryProposal {
             .iter()
             .map(|bal| bal.nodes_tied_to_ballot.len())
             .sum::<usize>();
+        // If all node operators in the canister
+        // were added as initial node operators
+        // they would have 0 nodes meaning that
+        // their total sum of nodes would be 0
+        if total_nodes_nodes == 0 {
+            return false;
+        }
         let max_faults = (total_nodes_nodes - 1) / 3;
         let votes_for_ballot = self
             .node_operator_ballots

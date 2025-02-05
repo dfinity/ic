@@ -1,4 +1,3 @@
-use candid::Decode;
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::init;
@@ -7,7 +6,7 @@ use ic_nervous_system_common::serve_metrics;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
 
-use ic_cdk::{api::call::arg_data_raw, post_upgrade, query, update};
+use ic_cdk::{post_upgrade, query, update};
 use ic_nns_handler_recovery::{
     metrics::encode_metrics,
     node_operator_sync::{
@@ -26,9 +25,9 @@ fn caller() -> PrincipalId {
 }
 
 #[post_upgrade]
-fn canister_post_upgrade() {
+fn canister_post_upgrade(arg: RecoveryInitArgs) {
     println!("canister_post_upgrade");
-    init();
+    init(arg);
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
@@ -85,25 +84,19 @@ fn main() {
 fn main() {}
 
 #[init]
-fn init() {
+fn init(arg: RecoveryInitArgs) {
     ic_cdk_timers::set_timer(std::time::Duration::from_secs(0), || {
-        ic_cdk::spawn(setup_node_operator_update());
+        ic_cdk::println!("Received: {:?}", arg);
+        ic_cdk::spawn(setup_node_operator_update(Some(arg)));
     });
     ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(60 * 60 * 24), || {
-        ic_cdk::spawn(setup_node_operator_update());
+        ic_cdk::spawn(setup_node_operator_update(None));
     });
 }
 
-async fn setup_node_operator_update() {
-    let data = arg_data_raw();
-    ic_cdk::println!("Received: {:?}", data);
-    match Decode!(&data, RecoveryInitArgs) {
-        Ok(args) => {
-            set_initial_node_operators(args.initial_node_operator_records);
-        }
-        Err(e) => {
-            ic_cdk::println!("Couldn't deseriliaze candid init payload. Skipping setting initial node operators. Error: {}", e.to_string())
-        }
+async fn setup_node_operator_update(args: Option<RecoveryInitArgs>) {
+    if let Some(args) = args {
+        set_initial_node_operators(args.initial_node_operator_records);
     }
 
     ic_cdk::println!("Started Sync for new node operators on NNS");
