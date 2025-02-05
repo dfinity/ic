@@ -46,6 +46,7 @@ ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+static_assertions = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]

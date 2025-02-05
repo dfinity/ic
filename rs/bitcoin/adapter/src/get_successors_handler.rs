@@ -266,6 +266,7 @@ mod test {
 
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
+    use static_assertions::const_assert_eq;
     use tokio::sync::mpsc::channel;
 
     use crate::config::test::ConfigBuilder;
@@ -799,11 +800,11 @@ mod test {
 
     #[test]
     fn response_size() {
-        assert_eq!(
+        const_assert_eq!(
             MAX_NEXT_BYTES + MAINNET_MAX_BLOCKS_BYTES,
             MAINNET_MAX_RESPONSE_SIZE
         );
-        assert_eq!(
+        const_assert_eq!(
             MAX_NEXT_BYTES + TESTNET_MAX_BLOCKS_BYTES,
             TESTNET_MAX_RESPONSE_SIZE
         );
