@@ -232,11 +232,10 @@ where
             return VecDeque::new();
         }
 
-        let blocks_to_archive: VecDeque<EncodedBlock> =
-            VecDeque::from(self.blocks.get_blocks(Range {
-                start: 0,
-                end: (num_blocks_to_archive as u64).min(num_blocks_before),
-            }));
+        let blocks_to_archive: VecDeque<EncodedBlock> = VecDeque::from(
+            self.blocks
+                .get_blocks(0..(num_blocks_to_archive as u64).min(num_blocks_before)),
+        );
 
         println!(
             "get_blocks_for_archiving(): trigger_threshold: {}, num_blocks: {}, blocks before archiving: {}, blocks to archive: {}",
