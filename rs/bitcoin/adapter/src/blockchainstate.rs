@@ -136,7 +136,7 @@ impl BlockchainState {
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
     }
-    
+
     pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
         self.block_cache.keys().cloned().collect()
     }
