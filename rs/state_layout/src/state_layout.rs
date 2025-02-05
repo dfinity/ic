@@ -213,8 +213,6 @@ pub struct CanisterSnapshotBits {
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
     state_layout_remove_checkpoint_duration: Histogram,
-    #[cfg(target_os = "linux")]
-    state_layout_syncfs_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -229,12 +227,6 @@ impl StateLayoutMetrics {
                 "state_layout_remove_checkpoint_duration",
                 "Time elapsed in removing checkpoint.",
                 decimal_buckets(-3, 1),
-            ),
-            #[cfg(target_os = "linux")]
-            state_layout_syncfs_duration: metric_registry.histogram(
-                "state_layout_syncfs_duration_seconds",
-                "Time elapsed in syncfs.",
-                decimal_buckets(-2, 2),
             ),
         }
     }
@@ -2764,7 +2756,6 @@ fn mark_files_readonly_and_sync(
     {
         let f = std::fs::File::open(path)?;
         use std::os::fd::AsRawFd;
-        let start = Instant::now();
         unsafe {
             if libc::syncfs(f.as_raw_fd()) == -1 {
                 return Err(std::io::Error::last_os_error());
