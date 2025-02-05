@@ -5,6 +5,7 @@ use std::{
 
 use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
+use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
@@ -20,6 +21,10 @@ use crate::{
 // NOTE: Should be = the `MAX_RESPONSE_SIZE` defined in `replicated_state/bitcoin.rs`
 // for pagination on the replica side to work as expected.
 const MAX_RESPONSE_SIZE: usize = 2_000_000;
+
+// Lower than mainnet's response size. The main reason is large serialization time
+// for large blocks.
+const TESTNET4_MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
@@ -37,6 +42,14 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 // NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
 // Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
 const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+const_assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
+const_assert_eq!(
+    MAX_NEXT_BYTES + TESTNET4_MAX_BLOCKS_BYTES,
+    TESTNET4_MAX_RESPONSE_SIZE
+);
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
@@ -108,6 +121,7 @@ impl GetSuccessorsHandler {
                 &request.anchor,
                 &request.processed_block_hashes,
                 allow_multiple_blocks,
+                self.network,
             );
             let next = get_next_headers(
                 &state,
@@ -151,6 +165,7 @@ fn get_successor_blocks(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
+    network: Network,
 ) -> Vec<Arc<Block>> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
@@ -162,6 +177,11 @@ fn get_successor_blocks(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
+    let max_blocks_size = match network {
+        Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
+        _ => MAX_BLOCKS_BYTES,
+    };
+
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
@@ -170,7 +190,7 @@ fn get_successor_blocks(
                 Some(block) => {
                     let block_size = block.total_size();
                     if response_block_size == 0
-                        || (response_block_size + block_size <= MAX_BLOCKS_BYTES
+                        || (response_block_size + block_size <= max_blocks_size
                             && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
@@ -779,10 +799,5 @@ mod test {
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
-    }
-
-    #[test]
-    fn response_size() {
-        assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
     }
 }
