@@ -407,8 +407,8 @@ pub fn build_mainnet_governance_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
 }
 
-/// Build Wasm for Index canister for the ICP Ledger
+/// Build mainnet Wasm for Index canister for the ICP Ledger
 pub fn build_mainnet_index_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-index-canister", &features)
+    Project::cargo_bin_maybe_from_env("mainnet-ic-icp-index-canister", &features)
 }
