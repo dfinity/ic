@@ -22,7 +22,6 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
-    is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -216,10 +215,6 @@ fn schedule_seeding(delay: Duration) {
 }
 
 fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
-    if !is_prune_following_enabled() {
-        return;
-    }
-
     ic_cdk_timers::set_timer(delay, move || {
         let carry_on =
             || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
