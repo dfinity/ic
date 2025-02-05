@@ -41,7 +41,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {}
 
 rust_library(
-    name = "ic-ed25519",
+    name = "ed25519",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ed25519",
@@ -59,7 +59,7 @@ rust_test(
     crate = ":ed25519",
     data = ["test_resources/sign.input"],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_lib/basic_sig/ic-ed25519",
+        "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
