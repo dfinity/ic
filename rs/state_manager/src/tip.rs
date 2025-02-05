@@ -27,8 +27,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, FilePermissions, PageMapLayout, ReadOnly, RwPolicy, StateLayout,
-    TipHandler, WasmFile,
+    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
@@ -471,19 +470,16 @@ fn backup<T>(
         log,
         &canister_layout.vmemory_0(),
         &snapshot_layout.vmemory_0(),
-        FilePermissions::ReadOnly,
     )?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &canister_layout.stable_memory(),
         &snapshot_layout.stable_memory(),
-        FilePermissions::ReadOnly,
     )?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &canister_layout.wasm_chunk_store(),
         &snapshot_layout.wasm_chunk_store(),
-        FilePermissions::ReadOnly,
     )?;
 
     WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
@@ -509,21 +505,18 @@ fn restore<T>(
         log,
         &snapshot_layout.vmemory_0(),
         &canister_layout.vmemory_0(),
-        FilePermissions::ReadOnly,
     )?;
     canister_layout.stable_memory().delete_files()?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &snapshot_layout.stable_memory(),
         &canister_layout.stable_memory(),
-        FilePermissions::ReadOnly,
     )?;
     canister_layout.wasm_chunk_store().delete_files()?;
     PageMapLayout::copy_or_hardlink_files(
         log,
         &snapshot_layout.wasm_chunk_store(),
         &canister_layout.wasm_chunk_store(),
-        FilePermissions::ReadOnly,
     )?;
 
     canister_layout.wasm().try_delete_file()?;
