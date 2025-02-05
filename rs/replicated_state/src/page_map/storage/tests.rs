@@ -475,8 +475,6 @@ fn write_overlay(
         &storage_layout,
         height,
         &lsmt_config_unsharded(),
-            shard_num_pages: u64::MAX,
-        },
         metrics,
     )
 }
