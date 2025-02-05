@@ -1,6 +1,5 @@
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -28,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
     CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -57,7 +56,6 @@ pub(crate) fn make_unvalidated_checkpoint(
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
@@ -93,30 +91,8 @@ pub(crate) fn make_unvalidated_checkpoint(
             })
             .unwrap();
         let (cp, has_downgrade) = recv.recv().unwrap()?;
-        // With lsmt storage, ResetTipAndMerge happens later (after manifest).
-        if lsmt_storage == FlagStatus::Disabled {
-            tip_channel
-                .send(TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: cp.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
-                    is_initializing_tip: false,
-                })
-                .unwrap();
-        }
         (cp, has_downgrade)
     };
-
-    if lsmt_storage == FlagStatus::Disabled {
-        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["wait_for_reflinking"])
-            .start_timer();
-        #[allow(clippy::disallowed_methods)]
-        let (send, recv) = unbounded();
-        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-        recv.recv().unwrap();
-    }
 
     Ok((cp, has_downgrade))
 }
