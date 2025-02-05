@@ -323,9 +323,6 @@ fn vote_with_only_ballot(
     let pending = get_pending(pic, canister);
     let last = pending.last().unwrap();
     let signature = last.sign(&mut sender.signing_key).unwrap();
-    let mut parts = [[0; 32]; 2];
-    parts[0].copy_from_slice(&signature[..32]);
-    parts[1].copy_from_slice(&signature[32..]);
 
     vote(
         pic,
@@ -336,7 +333,7 @@ fn vote_with_only_ballot(
                 payload: last
                     .signature_payload()
                     .expect("Should be able to fetch payload"),
-                signature: parts,
+                signature,
                 pub_key: sender.signing_key.verifying_key().to_bytes(),
             },
             ballot,

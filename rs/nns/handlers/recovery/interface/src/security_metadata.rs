@@ -37,11 +37,11 @@ impl SecurityMetadata {
     /// Verify the authenticity of a whole vote on a recovery canister proposal.
     pub fn validate_metadata(&self, caller: &Principal) -> Result<()> {
         self.principal_matches_public_key(caller)?;
-        self.verify()
+        self.verify_signature()
     }
 
     /// Verifies the signature authenticity of security metadata.
-    pub fn verify(&self) -> Result<()> {
+    pub fn verify_signature(&self) -> Result<()> {
         let loaded_public_key = VerifyingKey::from_bytes(&self.pub_key)
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
         let signature = Signature::from_slice(self.signature.as_flattened())

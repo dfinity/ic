@@ -33,10 +33,23 @@ pub enum RecoveryError {
 
     /// Candid error while encoding the recovery canister payload
     PayloadSerialization(String),
+
+    AgentError(String),
+    CandidError(String),
+
+    InvalidIdentity(String),
+
+    NoProposalsToVoteOn(String),
+}
+
+impl From<candid::Error> for RecoveryError {
+    fn from(value: candid::Error) -> Self {
+        Self::CandidError(value.to_string())
+    }
 }
 
 /// Convenience type to wrap all results in the library
-type Result<T> = std::result::Result<T, RecoveryError>;
+pub type Result<T> = std::result::Result<T, RecoveryError>;
 
 impl ToString for RecoveryError {
     fn to_string(&self) -> String {
@@ -45,7 +58,28 @@ impl ToString for RecoveryError {
             | Self::InvalidSignatureFormat(s)
             | Self::InvalidSignature(s)
             | Self::PrincipalPublicKeyMismatch(s)
-            | Self::PayloadSerialization(s) => s.to_string(),
+            | Self::PayloadSerialization(s)
+            | Self::AgentError(s)
+            | Self::CandidError(s)
+            | Self::InvalidIdentity(s)
+            | Self::NoProposalsToVoteOn(s) => s.to_string(),
         }
+    }
+}
+
+pub trait VerifyIntegirty {
+    fn verify(&self) -> Result<()>;
+}
+
+impl<'a, I, T> VerifyIntegirty for I
+where
+    I: Iterator<Item = &'a T> + Clone,
+    T: VerifyIntegirty + 'a,
+{
+    fn verify(&self) -> Result<()> {
+        self.clone()
+            .map(|item| item.verify())
+            .find(|res| res.is_err())
+            .unwrap_or(Ok(()))
     }
 }

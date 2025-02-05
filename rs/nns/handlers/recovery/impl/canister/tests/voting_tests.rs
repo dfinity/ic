@@ -155,9 +155,6 @@ fn disallow_votes_wrong_public_key() {
 
     let mut new_key_pair = SigningKey::generate(&mut rand::rngs::OsRng);
     let signature = last_proposal.sign(&mut new_key_pair).unwrap();
-    let mut parts = [[0; 32]; 2];
-    parts[0].copy_from_slice(&signature[..32]);
-    parts[1].copy_from_slice(&signature[32..]);
 
     let response = vote(
         &pic,
@@ -168,7 +165,7 @@ fn disallow_votes_wrong_public_key() {
                 payload: last_proposal
                     .signature_payload()
                     .expect("Should be able to serialize payload"),
-                signature: parts,
+                signature,
                 pub_key: new_key_pair.verifying_key().to_bytes(),
             },
             ballot: Ballot::Yes,

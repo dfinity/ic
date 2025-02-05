@@ -73,9 +73,9 @@ pub struct VoteOnRecoveryProposal {
 }
 
 impl RecoveryProposal {
-    pub fn sign(&self, signing_key: &mut SigningKey) -> Result<[u8; 64]> {
+    pub fn sign(&self, signing_key: &mut SigningKey) -> Result<[[u8; 32]; 2]> {
         let signature = signing_key.sign(&self.signature_payload()?);
-        Ok(signature.to_bytes())
+        Ok([*signature.r_bytes(), *signature.s_bytes()])
     }
 
     pub fn signature_payload(&self) -> Result<Vec<u8>> {
@@ -86,9 +86,7 @@ impl RecoveryProposal {
         candid::encode_one(self_without_ballots)
             .map_err(|e| RecoveryError::PayloadSerialization(e.to_string()))
     }
-}
 
-impl RecoveryProposal {
     fn is_byzantine_majority(&self, ballot: Ballot) -> bool {
         let total_nodes_nodes = self
             .node_operator_ballots
@@ -122,5 +120,17 @@ impl RecoveryProposal {
     /// of nodes (same as the number of ballots) and f = (N - 1) / 3.
     pub fn is_byzantine_majority_yes(&self) -> bool {
         self.is_byzantine_majority(Ballot::Yes)
+    }
+}
+
+impl VerifyIntegirty for NodeOperatorBallot {
+    fn verify(&self) -> Result<()> {
+        self.security_metadata.validate_metadata(&self.principal)
+    }
+}
+
+impl VerifyIntegirty for RecoveryProposal {
+    fn verify(&self) -> Result<()> {
+        self.node_operator_ballots.iter().verify()
     }
 }

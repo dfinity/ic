@@ -1,0 +1,15 @@
+[package]
+name = "ic-nns-handler-recovery-client"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+serde = { workspace = true }
+ed25519-dalek.workspace = true
+ic-agent.workspace = true
+async-trait.workspace = true
+ic-nns-handler-recovery-interface.path = "../interface"

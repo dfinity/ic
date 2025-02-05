@@ -4,12 +4,16 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nns/handlers/recovery/interface",
     "@crate_index//:candid",
     "@crate_index//:serde",
     "@crate_index//:ed25519-dalek",
+    "@crate_index//:ic-agent",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait"
+]
 
 DEV_DEPENDENCIES = []
 
@@ -18,10 +22,10 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "interface",
+    name = "client",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "ic_nns_handler_recovery_interface",
+    crate_name = "ic_nns_handler_recovery_client",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
