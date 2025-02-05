@@ -6,7 +6,6 @@ use crate::{
         manage_neuron::{SetDissolveTimestamp, StartDissolving},
         VotingPowerEconomics,
     },
-    temporarily_disable_voting_power_adjustment, temporarily_enable_voting_power_adjustment,
 };
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
@@ -616,9 +615,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 }
 
 #[test]
-fn test_adjust_voting_power_enabled() {
-    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
-
+fn test_adjust_voting_power() {
     let principal_id = PrincipalId::new_user_test_id(42);
     let created_timestamp_seconds = 1729791574;
 
@@ -707,44 +704,6 @@ fn test_adjust_voting_power_enabled() {
         assert_eq!(
             neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
             0
-        );
-    }
-}
-
-#[test]
-fn test_adjust_voting_power_disabled() {
-    let _restore_on_drop = temporarily_disable_voting_power_adjustment();
-
-    let principal_id = PrincipalId::new_user_test_id(42);
-    let created_timestamp_seconds = 1729791574;
-
-    let neuron = NeuronBuilder::new(
-        NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
-        principal_id,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
-        },
-        created_timestamp_seconds, // created
-    )
-    .with_cached_neuron_stake_e8s(100 * E8)
-    .build();
-    let original_potential_voting_power = neuron.potential_voting_power(created_timestamp_seconds);
-    assert!(original_potential_voting_power > 0);
-
-    // At all times, deciding voting power is exactly the same as potential
-    // voting power, because adjustment is disabled.
-    for months in [
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.001, 6.1, 6.25, 6.5, 6.75, 6.9, 6.999, 7.0, 7.001,
-        7.1, 7.25, 7.5, 8.0, 9.0, 10.0,
-    ] {
-        let now_seconds = created_timestamp_seconds + (months * ONE_MONTH_SECONDS as f64) as u64;
-        let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
-
-        assert_eq!(
-            neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
-            current_potential_voting_power,
         );
     }
 }
