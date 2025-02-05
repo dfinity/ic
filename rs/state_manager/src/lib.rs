@@ -2649,6 +2649,31 @@ impl StateManagerImpl {
             })
             .expect("Failed to send Validate request");
 
+        // With lsmt storage, ResetTipAndMerge happens later (after manifest).
+        // Without lsmt storage, we need to wait for reset_tip_to so that we don't reflink in parallel with other operations.
+        if self.lsmt_status == FlagStatus::Disabled {
+            self.tip_channel
+                .send(TipRequest::ResetTipAndMerge {
+                    checkpoint_layout: cp_layout.clone(),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+                    is_initializing_tip: false,
+                })
+                .unwrap();
+
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["wait_for_reflinking"])
+                .start_timer();
+            #[allow(clippy::disallowed_methods)]
+            let (send, recv) = unbounded();
+            self.tip_channel
+                .send(TipRequest::Wait { sender: send })
+                .unwrap();
+            recv.recv().unwrap();
+        }
+
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
         let manifest_delta = if is_nns || has_downgrade == HasDowngrade::Yes {
@@ -2687,7 +2712,7 @@ impl StateManagerImpl {
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
             // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_unvalidated_checkpoint.
+            // Without lsmt, the ResetTipAndMerge happens earlier in a blocking way.
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
