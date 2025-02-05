@@ -1,5 +1,5 @@
 {
-  "checksum": "6bed8641f4af14470e0877f17b229644fb9c504d547b34b773230c601c91046b",
+  "checksum": "4ae7b3c97aa8a5afd939403aaa5919e419cc497d77a0fef55b643a99ef0c998b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20146,6 +20146,10 @@
             {
               "id": "maxminddb 0.24.0",
               "target": "maxminddb"
+            },
+            {
+              "id": "memmap2 0.9.5",
+              "target": "memmap2"
             },
             {
               "id": "metrics-proxy 0.1.0",
@@ -43402,6 +43406,56 @@
         },
         "edition": "2018",
         "version": "0.5.10"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "memmap2 0.9.5": {
+      "name": "memmap2",
+      "version": "0.9.5",
+      "package_url": "https://github.com/RazrFalcon/memmap2-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/memmap2/0.9.5/download",
+          "sha256": "fd3f7eed9d3848f8b98834af67102b720745c4ec028fcd0aa0239277e7de374f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "memmap2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "memmap2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.9.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -91421,6 +91475,7 @@
     "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
+    "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",

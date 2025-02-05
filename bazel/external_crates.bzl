@@ -779,6 +779,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "macaddr": crate.spec(
                 version = "^1.0",
             ),
+            "memmap2": crate.spec(
+                version = "^0.9.5",
+            ),
             "mach2": crate.spec(
                 # Wasmtime depends on 0.4.2 but specifies 0.4.1.
                 # Enforce 0.4.2 using a dummy dependency until
