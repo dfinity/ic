@@ -152,7 +152,7 @@ fn test_install_bitcoin_mock_canister() {
     .expect("failed to decode get_mempool response");
     assert_eq!(mempool.len(), 1);
 
-    let tx = deserialize::<Transaction>(&mempool[0]).expect("failed to parse transaction");
+    let tx: Transaction = deserialize(&mempool[0]).expect("failed to parse transaction");
     assert_eq!(tx.input.len(), 1);
     assert_eq!(tx.output.len(), 2);
 

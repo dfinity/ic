@@ -19,6 +19,7 @@ use bytes::BytesMut;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
@@ -35,7 +36,7 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch, Notify},
 };
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::wrappers::ReceiverStream;
 use turmoil::Sim;
 
 pub struct CustomUdp {
@@ -381,20 +382,22 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx) =
-                    consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let AbortableBroadcastChannel {
+                    outbound_tx,
+                    inbound_rx,
+                } = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,
-                    inbound_tx,
+                    inbound_rx,
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
 
-                let (consensus_router, manager) = consensus_builder.build();
+                let consensus_router = consensus_builder.router();
                 router = Some(router.unwrap_or_default().merge(consensus_router));
 
-                Some((artifact_processor_jh, manager))
+                Some((artifact_processor_jh, consensus_builder))
             } else {
                 None
             };
@@ -440,16 +443,13 @@ pub fn waiter_fut(
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
     outbound_tx: mpsc::Sender<ArtifactTransmit<U64Artifact>>,
-    inbound_rx: mpsc::UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
+    inbound_rx: mpsc::Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> Box<dyn JoinGuard> {
     let time_source = Arc::new(SysTimeSource::new());
     let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
-    run_artifact_processor::<
-        U64Artifact,
-        UnboundedReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>,
-    >(
+    run_artifact_processor::<U64Artifact, ReceiverStream<UnvalidatedArtifactMutation<U64Artifact>>>(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),
