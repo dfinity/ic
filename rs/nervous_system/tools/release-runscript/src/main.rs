@@ -400,7 +400,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     println!("    pkcs11-tool --list-slots");
     println!("And you can practice entering your password with: ");
     println!("    pkcs11-tool --login --test");
-    input("Press Enter to continue...")?;
+    press_enter_to_continue()?;
 
     let ic = ic_dir();
 
@@ -545,10 +545,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             })
         );
 
-        print!("Press Enter to continue...");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        press_enter_to_continue()?;
     }
 
     // --- Generate SNS forum post ---
@@ -594,10 +591,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             })
         );
 
-        print!("Press Enter to continue...");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        press_enter_to_continue()?;
     }
 
     print_step(
@@ -721,10 +715,7 @@ fn print_step(number: usize, title: &str, description: &str) -> Result<()> {
     );
     println!("{}", "---".bright_blue());
     println!("{}\n", description);
-    print!("\nPress Enter to continue to next step...");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
+    press_enter_to_continue()?;
     print!("\x1B[2J\x1B[1;1H");
     Ok(())
 }
@@ -785,4 +776,9 @@ fn input_yes_or_no(text: &str, default: bool) -> Result<bool> {
             return Ok(false);
         }
     }
+}
+
+fn press_enter_to_continue() -> Result<()> {
+    input(&format!("\n{}", "Press Enter to continue...".bright_blue()))?;
+    Ok(())
 }
