@@ -1,13 +1,30 @@
-use crate::helpers::init_async;
+use crate::helpers::{init_async, is_api_boundary_node_principal};
 use crate::logs::export_logs_as_http_response;
 use crate::metrics::{export_metrics_as_http_response, METRICS};
 use crate::storage::SALT;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::api::call::{accept_message, method_name};
 use ic_cdk::{api::time, spawn};
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::{caller, trap};
+use ic_cdk_macros::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
 use salt_api::{GetSaltError, GetSaltResponse, InitArg, SaltResponse};
 use std::time::Duration;
+
+const REPLICATED_QUERY_METHOD: &str = "get_salt";
+
+// Inspect the ingress messages in the pre-consensus phase and reject early, if the conditions are not met
+#[inspect_message]
+fn inspect_message() {
+    let caller_id = caller();
+    let called_method = method_name();
+
+    if called_method == REPLICATED_QUERY_METHOD && is_api_boundary_node_principal(&caller_id) {
+        accept_message();
+    } else {
+        trap("message_inspection_failed: method call is prohibited in the current context");
+    }
+}
 
 // Runs when canister is first installed
 #[init]
@@ -33,14 +50,18 @@ fn post_upgrade(init_arg: InitArg) {
 
 #[query]
 fn get_salt() -> GetSaltResponse {
-    let stored_salt = SALT
-        .with(|cell| cell.borrow().get(&()))
-        .ok_or(GetSaltError::SaltNotInitialized)?;
+    let caller_id = caller();
+    if is_api_boundary_node_principal(&caller_id) {
+        let stored_salt = SALT
+            .with(|cell| cell.borrow().get(&()))
+            .ok_or(GetSaltError::SaltNotInitialized)?;
 
-    Ok(SaltResponse {
-        salt: stored_salt.salt,
-        salt_id: stored_salt.salt_id,
-    })
+        return Ok(SaltResponse {
+            salt: stored_salt.salt,
+            salt_id: stored_salt.salt_id,
+        });
+    }
+    Err(GetSaltError::Unauthorized)
 }
 
 #[query(decoding_quota = 10000)]

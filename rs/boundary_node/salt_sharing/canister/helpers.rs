@@ -130,3 +130,7 @@ pub async fn poll_api_boundary_nodes() {
             .inc();
     });
 }
+
+pub fn is_api_boundary_node_principal(principal: &Principal) -> bool {
+    API_BOUNDARY_NODE_PRINCIPALS.with(|cell| cell.borrow().contains(principal))
+}
