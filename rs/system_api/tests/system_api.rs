@@ -1,7 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
-use ic_config::embedders::{BestEffortResponsesFeature, FeatureFlags};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
@@ -13,10 +14,9 @@ use ic_interfaces::execution_environment::{
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{
     canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
-    CallOrigin, Memory, NetworkTopology, SystemState,
+    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -28,13 +28,13 @@ use ic_test_utilities_types::{
     ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
     messages::RequestBuilder,
 };
-use ic_types::messages::RequestOrResponse;
 use ic_types::{
-    messages::{CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
+    messages::{
+        CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    },
     methods::{Callback, WasmClosure},
-    time,
-    time::UNIX_EPOCH,
-    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    time::{self, UNIX_EPOCH},
+    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
@@ -2121,35 +2121,24 @@ fn in_replicated_execution_works_correctly() {
 }
 
 #[test]
-#[should_panic(expected = "ic0::call_with_best_effort_response is not enabled.")]
-fn ic0_call_with_best_effort_response_traps_when_disabled() {
-    let system_state = SystemStateBuilder::default().build();
-    let mut api = get_system_api_for_best_effort_response_feature_test(
-        SubnetType::Application,
-        BestEffortResponsesFeature::DisabledByTrap,
-        &system_state,
-    );
-
-    // Make a call to something that isn't `IC_00`.
-    api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
-        .unwrap();
-    api.ic0_call_with_best_effort_response(13).unwrap();
-}
-
-#[test]
 fn ic0_call_with_best_effort_response_feature_stages() {
     use BestEffortResponsesFeature::*;
 
-    for feature_stage in [
-        FallBackToGuaranteedResponse,
+    let own_subnet_id = subnet_test_id(0);
+    let other_subnet_id = subnet_test_id(1);
+    for best_effort_responses in [
+        SpecificSubnets(vec![]),
+        SpecificSubnets(vec![other_subnet_id]),
+        SpecificSubnets(vec![own_subnet_id, other_subnet_id]),
         ApplicationSubnetsOnly,
         Enabled,
     ] {
         for subnet_type in SubnetType::iter() {
             let mut system_state = SystemStateBuilder::default().build();
             let mut api = get_system_api_for_best_effort_response_feature_test(
+                own_subnet_id,
                 subnet_type,
-                feature_stage,
+                &best_effort_responses,
                 &system_state,
             );
 
@@ -2168,7 +2157,7 @@ fn ic0_call_with_best_effort_response_feature_stages() {
                     UNIX_EPOCH,
                     &mut system_state,
                     &default_network_topology(),
-                    subnet_test_id(1),
+                    own_subnet_id,
                     &no_op_logger(),
                 )
                 .unwrap();
@@ -2185,39 +2174,34 @@ fn ic0_call_with_best_effort_response_feature_stages() {
                 .next()
                 .unwrap();
 
-            match (feature_stage, subnet_type) {
-                (FallBackToGuaranteedResponse, _)
-                | (ApplicationSubnetsOnly, SubnetType::System) => {
-                    // Silently converted to a guaranteed response request.
-                    assert_eq!(req.deadline, NO_DEADLINE);
-                    assert_eq!(callback.deadline, NO_DEADLINE);
-                }
-
-                (ApplicationSubnetsOnly, _) | (Enabled, _) => {
-                    // An actual best-effort request.
-                    assert_ne!(req.deadline, NO_DEADLINE);
-                    assert_ne!(callback.deadline, NO_DEADLINE);
-                }
-
-                (DisabledByTrap, _) => unreachable!(),
+            if best_effort_responses.is_enabled_on(&own_subnet_id, subnet_type) {
+                // An actual best-effort request.
+                assert_ne!(req.deadline, NO_DEADLINE);
+                assert_ne!(callback.deadline, NO_DEADLINE);
+            } else {
+                // Silently converted to a guaranteed response request.
+                assert_eq!(req.deadline, NO_DEADLINE);
+                assert_eq!(callback.deadline, NO_DEADLINE);
             }
         }
     }
 }
 
 fn get_system_api_for_best_effort_response_feature_test(
+    subnet_id: SubnetId,
     subnet_type: SubnetType,
-    best_effort_responses: BestEffortResponsesFeature,
+    best_effort_responses: &BestEffortResponsesFeature,
     system_state: &SystemState,
 ) -> SystemApiImpl {
     const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
     let api_type = ApiTypeBuilder::build_update_api();
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_id(subnet_id)
         .with_subnet_type(subnet_type)
         .build();
     let mut execution_parameters = execution_parameters(api_type.execution_mode());
-    execution_parameters.subnet_type = cycles_account_manager.subnet_type();
+    execution_parameters.subnet_type = subnet_type;
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
@@ -2231,7 +2215,7 @@ fn get_system_api_for_best_effort_response_feature_test(
     );
     let embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
-            best_effort_responses,
+            best_effort_responses: best_effort_responses.clone(),
             ..Default::default()
         },
         ..Default::default()

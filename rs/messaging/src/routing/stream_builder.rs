@@ -413,12 +413,11 @@ impl StreamBuilderImpl {
                         //
                         // TODO(MR-649): Drop this once best-effort calls are fully deployed.
                         RequestOrResponse::Request(req)
-                            if dst_subnet_id != self.subnet_id
-                                && req.deadline != NO_DEADLINE
-                                && !should_route_best_effort_request_to(
-                                    destination_subnet_type,
-                                    self.best_effort_responses,
-                                ) =>
+                            if req.deadline != NO_DEADLINE
+                                && dst_subnet_id != self.subnet_id
+                                && !self
+                                    .best_effort_responses
+                                    .is_enabled_on(&dst_subnet_id, destination_subnet_type) =>
                         {
                             warn!(
                                 self.log,
@@ -590,20 +589,5 @@ impl StreamBuilderImpl {
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
         self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
-    }
-}
-
-/// Determines whether a best-effort request should be routed to a specific
-/// subnet type, given the rollout stage of the best-effort responses feature.
-fn should_route_best_effort_request_to(
-    subnet_type: SubnetType,
-    best_effort_responses: BestEffortResponsesFeature,
-) -> bool {
-    match (best_effort_responses, subnet_type) {
-        (BestEffortResponsesFeature::DisabledByTrap, _) => false,
-        (BestEffortResponsesFeature::FallBackToGuaranteedResponse, _) => false,
-        (BestEffortResponsesFeature::ApplicationSubnetsOnly, SubnetType::System) => false,
-        (BestEffortResponsesFeature::ApplicationSubnetsOnly, _) => true,
-        (BestEffortResponsesFeature::Enabled, _) => true,
     }
 }

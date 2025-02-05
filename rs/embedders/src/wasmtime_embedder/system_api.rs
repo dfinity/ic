@@ -356,7 +356,7 @@ pub fn syscalls<
     /// Check if debug print is enabled.
     fn debug_print_is_enabled(
         caller: &mut Caller<'_, StoreData>,
-        feature_flags: FeatureFlags,
+        feature_flags: &FeatureFlags,
     ) -> Result<bool, anyhow::Error> {
         match (
             feature_flags.rate_limiting_of_debug_prints,
@@ -612,11 +612,12 @@ pub fn syscalls<
 
     linker
         .func_wrap("ic0", "debug_print", {
+            let feature_flags = feature_flags.clone();
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
                 num_bytes += logging_charge_bytes(&mut caller, length)?;
-                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
+                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
                 }

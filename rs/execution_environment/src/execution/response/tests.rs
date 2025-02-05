@@ -1,8 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::embedders::BestEffortResponsesFeature;
-use ic_error_types::ErrorCode;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -12,14 +11,12 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, MessageId},
-    CanisterId, Cycles, Time,
+    messages::{CallbackId, MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, SubnetId, Time,
 };
-use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
-use ic_types::{ComputeAllocation, MemoryAllocation};
+use ic_types_test_utils::ids::{SUBNET_1, SUBNET_42};
 use ic_universal_canister::{call_args, wasm};
 
 #[test]
@@ -3044,10 +3041,14 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     assert!(counters[1] < counters[2]);
 }
 
-fn test_best_effort_responses_feature_flag(
+const OWN_SUBNET_ID: SubnetId = SUBNET_1;
+const OTHER_SUBNET_ID: SubnetId = SUBNET_42;
+
+fn test_call_with_best_effort_response_feature_flag_impl(
     flag: BestEffortResponsesFeature,
 ) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(OWN_SUBNET_ID)
         .with_best_effort_responses(flag)
         .build();
 
@@ -3075,33 +3076,22 @@ fn test_best_effort_responses_feature_flag(
 }
 
 #[test]
-fn test_best_effort_responses_feature_flag_not_disabled() {
+fn test_call_with_best_effort_response_feature_flag() {
     for flag in &[
-        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
         BestEffortResponsesFeature::ApplicationSubnetsOnly,
         BestEffortResponsesFeature::Enabled,
     ] {
-        match test_best_effort_responses_feature_flag(*flag) {
+        match test_call_with_best_effort_response_feature_flag_impl(flag.clone()) {
             Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
             _ => panic!("Unexpected result"),
         };
     }
 }
 
-#[test]
-fn test_best_effort_responses_feature_flag_disabled() {
-    match test_best_effort_responses_feature_flag(BestEffortResponsesFeature::DisabledByTrap) {
-        Err(e) => {
-            e.assert_contains(
-                ErrorCode::CanisterContractViolation,
-                "ic0::call_with_best_effort_response is not enabled.",
-            );
-        }
-        _ => panic!("Unexpected result"),
-    };
-}
-
-fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
+fn ic0_msg_deadline_best_effort_responses_feature_flag_impl(
     flag: BestEffortResponsesFeature,
 ) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
@@ -3120,29 +3110,18 @@ fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
 }
 
 #[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_not_disabled() {
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag() {
     let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
     for flag in &[
-        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
         BestEffortResponsesFeature::ApplicationSubnetsOnly,
         BestEffortResponsesFeature::Enabled,
     ] {
         assert_eq!(
-            helper_ic0_msg_deadline_best_effort_responses_feature_flag(*flag).unwrap(),
+            ic0_msg_deadline_best_effort_responses_feature_flag_impl(flag.clone()).unwrap(),
             WasmResult::Reply(no_deadline.to_le_bytes().into())
         );
     }
-}
-
-#[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
-    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(
-        BestEffortResponsesFeature::DisabledByTrap,
-    )
-    .unwrap_err();
-
-    err.assert_contains(
-        ErrorCode::CanisterContractViolation,
-        "ic0::msg_deadline is not enabled.",
-    );
 }

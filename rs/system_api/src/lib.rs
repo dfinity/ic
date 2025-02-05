@@ -1131,7 +1131,7 @@ impl SystemApiImpl {
             execution_parameters,
             wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
             canister_backtrace: embedders_config.feature_flags.canister_backtrace,
-            best_effort_responses: embedders_config.feature_flags.best_effort_responses,
+            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
             max_sum_exported_function_name_lengths: embedders_config
                 .max_sum_exported_function_name_lengths,
             stable_memory,
@@ -3412,6 +3412,7 @@ impl SystemApi for SystemApiImpl {
     ///
     /// Fails and returns an error if `set_timeout()` was already called.
     fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
         let subnet_type = self.subnet_type();
         let result = match &mut self.api_type {
             ApiType::Start { .. }
@@ -3456,32 +3457,13 @@ impl SystemApi for SystemApiImpl {
                         })
                     }
 
-                    match self.best_effort_responses {
-                        // Feature disabled: trap.
-                        BestEffortResponsesFeature::DisabledByTrap => {
-                            Err(HypervisorError::ToolchainContractViolation {
-                                error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                            })
-                        }
-
-                        // Feature disabled: no-op, silently fall back to a guaranteed response.
-                        BestEffortResponsesFeature::FallBackToGuaranteedResponse => Ok(()),
-
-                        // On a system subnet, with the feature enabled on application subnets only:
-                        // silently fall back to a guaranteed response.
-                        BestEffortResponsesFeature::ApplicationSubnetsOnly if subnet_type == SubnetType::System => {
-                            Ok(())
-                        }
-
-                        // Feature enabled: set the timeout.
-                        BestEffortResponsesFeature::ApplicationSubnetsOnly // if subnet_type != SubnetType::System
-                        | BestEffortResponsesFeature::Enabled => {
-                            let bounded_timeout =
-                                std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
-                            request.set_timeout(bounded_timeout);
-                            Ok(())
-                        }
+                    // No-op if the feature is disabled on this subnet.
+                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
+                        let bounded_timeout =
+                            std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
+                        request.set_timeout(bounded_timeout);
                     }
+                    Ok(())
                 }
             },
         };
@@ -3502,22 +3484,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                match self.best_effort_responses {
-                    // Feature disabled: trap.
-                    BestEffortResponsesFeature::DisabledByTrap => {
-                        Err(HypervisorError::ToolchainContractViolation {
-                            error: "ic0::msg_deadline is not enabled.".to_string(),
-                        })
-                    }
-
-                    // In all other cases, proceed as usual. Even if the feature is now disabled, we
-                    // may find ourselves immediately after a rollback, with best-effort calls still
-                    // in flight; panicking would be counterproductive; and unnecessary.
-                    _ => {
-                        let deadline = self.sandbox_safe_system_state.msg_deadline();
-                        Ok(Time::from(deadline).as_nanos_since_unix_epoch())
-                    }
-                }
+                let deadline = self.sandbox_safe_system_state.msg_deadline();
+                Ok(Time::from(deadline).as_nanos_since_unix_epoch())
             }
         };
 

@@ -663,7 +663,8 @@ impl BatchProcessorImpl {
             hypervisor_config
                 .embedders_config
                 .feature_flags
-                .best_effort_responses,
+                .best_effort_responses
+                .clone(),
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(

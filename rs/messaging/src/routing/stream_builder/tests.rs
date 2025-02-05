@@ -654,7 +654,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 }
 
 fn build_streams_with_best_effort_messages_impl(
-    best_effort_responses: BestEffortResponsesFeature,
+    best_effort_responses: &BestEffortResponsesFeature,
     local_subnet_type: SubnetType,
     remote_subnet_type: SubnetType,
 ) {
@@ -678,7 +678,7 @@ fn build_streams_with_best_effort_messages_impl(
         ];
 
         let (mut stream_builder, mut provided_state, _) = new_fixture(&log);
-        stream_builder.best_effort_responses = best_effort_responses;
+        stream_builder.best_effort_responses = best_effort_responses.clone();
 
         // Set the subnet types of the local and remote subnets.
         provided_state.metadata.network_topology.subnets = btreemap! {
@@ -715,9 +715,8 @@ fn build_streams_with_best_effort_messages_impl(
 
         // Remote best-effort requests are only routed when enabled for the respective
         // remote subnet type.
-        let remote_request_routed = best_effort_responses == BestEffortResponsesFeature::Enabled
-            || (best_effort_responses == BestEffortResponsesFeature::ApplicationSubnetsOnly
-                && remote_subnet_type != SubnetType::System);
+        let remote_request_routed =
+            best_effort_responses.is_enabled_on(&REMOTE_SUBNET, remote_subnet_type);
         assert_eq!(
             remote_request_routed,
             result_state.streams().contains_key(&REMOTE_SUBNET),
@@ -747,8 +746,9 @@ fn build_streams_with_best_effort_messages_impl(
 #[test]
 fn build_streams_with_best_effort_messages() {
     for best_effort_responses in &[
-        BestEffortResponsesFeature::DisabledByTrap,
-        BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![REMOTE_SUBNET]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![LOCAL_SUBNET, REMOTE_SUBNET]),
         BestEffortResponsesFeature::ApplicationSubnetsOnly,
         BestEffortResponsesFeature::Enabled,
     ] {
@@ -763,7 +763,7 @@ fn build_streams_with_best_effort_messages() {
                 SubnetType::VerifiedApplication,
             ] {
                 build_streams_with_best_effort_messages_impl(
-                    *best_effort_responses,
+                    best_effort_responses,
                     *local_subnet_type,
                     *remote_subnet_type,
                 );

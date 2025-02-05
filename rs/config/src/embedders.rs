@@ -4,7 +4,7 @@ use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages, SubnetId, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
@@ -102,24 +102,26 @@ pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
 /// Best-effort responses feature rollout stage.
 ///
-/// The intent is to incrementally release the feature, first to application
-/// subnets only, then to all subnets, by rolling forward one stage at a time.
-/// Rolling back is also supported, including directly to stage 1. Rolling back
-/// to stage 0 will break all canisters that have started using best-effort
-/// response calls, as they will trap reliably.
+/// The intent is to incrementally release the feature, first to a limited
+/// subset of subnets; then to all application subnets; and finally everywhere;
+/// by rolling forward one stage at a time. Rolling back is also supported,
+/// including directly to stage 1.
+///
+/// Subnets where the feature is disabled silently fall back to guaranteed
+/// response calls; and best-effort requests to these subnets are rejected
+/// before routing. We choose this over trapping in order to avoid breaking
+/// canisters that have started using best-effort calls in case of a roll back.
 //
 // TODO(MR-649): Drop this once best-effort responses are fully rolled out.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum BestEffortResponsesFeature {
-    /// Stage 0: Feature is disabled, API calls trap.
-    DisabledByTrap,
-
-    /// Stage 1: Feature is disabled, `ic0_call_with_best_effort_response` API is a
-    /// no-op, silently falling back to a guaranteed response.
-    FallBackToGuaranteedResponse,
+    /// Stage 1: Feature is enabled on specific subnets subnets only. Other subnets
+    /// fall back to guaranteed responses; and best-effort requests to these subnets
+    /// are rejected before routing.
+    SpecificSubnets(Vec<SubnetId>),
 
     /// Stage 2: Feature is enabled on application (and verified application)
-    /// subnets only. System subnets fall back to guaranteed responses and
+    /// subnets only. System subnets fall back to guaranteed responses; and
     /// best-effort requests to system subnets are rejected before routing.
     ApplicationSubnetsOnly,
 
@@ -127,7 +129,19 @@ pub enum BestEffortResponsesFeature {
     Enabled,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+impl BestEffortResponsesFeature {
+    /// Returns `true` if the feature is enabled on the given subnet, having the
+    /// given subnet type.
+    pub fn is_enabled_on(&self, subnet_id: &SubnetId, subnet_type: SubnetType) -> bool {
+        match self {
+            BestEffortResponsesFeature::SpecificSubnets(subnets) => subnets.contains(subnet_id),
+            BestEffortResponsesFeature::ApplicationSubnetsOnly => subnet_type != SubnetType::System,
+            BestEffortResponsesFeature::Enabled => true,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
@@ -143,22 +157,26 @@ pub struct FeatureFlags {
     pub canister_backtrace: FlagStatus,
 }
 
-impl FeatureFlags {
-    const fn const_default() -> Self {
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        // TODO(MR-649): Comment out for stage 1b -- rollout to specific subnets.
+        // use ic_types::PrincipalId;
+        // use std::str::FromStr;
+        // let subnet_id = |id_str: &str| SubnetId::new(PrincipalId::from_str(id_str).unwrap());
+        let enabled_subnets = vec![
+            // subnet_id("eq6en-6jqla-fbu5s-daskr-h6hx2-376n5-iqabl-qgrng-gfqmv-n3yjr-mqe"),
+            // subnet_id("2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe"),
+            // subnet_id("4zbus-z2bmt-ilreg-xakz4-6tyre-hsqj4-slb4g-zjwqo-snjcc-iqphi-3qe"),
+        ];
+
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::FallBackToGuaranteedResponse,
+            best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(enabled_subnets),
             canister_backtrace: FlagStatus::Enabled,
         }
-    }
-}
-
-impl Default for FeatureFlags {
-    fn default() -> Self {
-        Self::const_default()
     }
 }
 
@@ -282,7 +300,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Config {
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
@@ -294,7 +312,7 @@ impl Config {
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
-            feature_flags: FeatureFlags::const_default(),
+            feature_flags: FeatureFlags::default(),
             metering_type: MeteringType::New,
             stable_memory_dirty_page_limit: StableMemoryPageLimit {
                 message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
