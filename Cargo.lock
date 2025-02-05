@@ -6045,11 +6045,11 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto",
- "ic-crypto-ed25519",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
+ "ic-ed25519",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
@@ -6232,6 +6232,7 @@ dependencies = [
  "serde_json",
  "slog",
  "slog-async",
+ "static_assertions",
  "tempfile",
  "thiserror 2.0.11",
  "tokio",
@@ -6431,8 +6432,8 @@ name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
+ "ic-ed25519",
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -7292,7 +7293,6 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-ecdsa-secp256r1",
- "ic-crypto-ed25519",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -7336,6 +7336,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
+ "ic-ed25519",
  "ic-http-endpoints-async-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7393,23 +7394,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "sha2 0.10.8",
  "simple_asn1",
- "wycheproof",
- "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-ed25519"
-version = "0.9.0"
-dependencies = [
- "curve25519-dalek",
- "ed25519-dalek",
- "hex",
- "hex-literal",
- "hkdf",
- "pem 1.1.1",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "thiserror 2.0.11",
  "wycheproof",
  "zeroize",
 ]
@@ -7529,13 +7513,13 @@ dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
  "hex",
- "ic-crypto-ed25519",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ed25519",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.6",
@@ -8144,8 +8128,8 @@ dependencies = [
 name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-ed25519",
  "ic-crypto-internal-csp-test-utils",
+ "ic-ed25519",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
@@ -8418,7 +8402,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
- "ic-crypto-ed25519",
+ "ic-ed25519",
  "ic-protobuf",
 ]
 
@@ -8594,6 +8578,23 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "wasmparser 0.217.0",
+]
+
+[[package]]
+name = "ic-ed25519"
+version = "0.9.0"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex",
+ "hex-literal",
+ "hkdf",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "thiserror 2.0.11",
+ "wycheproof",
+ "zeroize",
 ]
 
 [[package]]
@@ -9165,8 +9166,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-base-types",
- "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
+ "ic-ed25519",
  "ic-icp-rosetta-runner",
  "ic-ledger-test-utils",
  "ic-nns-governance-api",
@@ -9266,8 +9267,8 @@ dependencies = [
  "clap 4.5.27",
  "hex",
  "ic-agent",
- "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
+ "ic-ed25519",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
@@ -9444,9 +9445,9 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-agent",
- "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ed25519",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
@@ -9991,10 +9992,10 @@ dependencies = [
  "ic-base-types",
  "ic-certification-version",
  "ic-config",
- "ic-crypto-ed25519",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
+ "ic-ed25519",
  "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -11911,9 +11912,9 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-certification-version",
  "ic-config",
- "ic-crypto-ed25519",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-keys",
+ "ic-ed25519",
  "ic-error-types",
  "ic-interfaces",
  "ic-limits",
@@ -12010,10 +12011,10 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-crypto-ed25519",
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-ed25519",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
  "ic-icrc1",
@@ -12772,7 +12773,6 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-utils",
- "ic-crypto-ed25519",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-secp256k1",
@@ -12780,6 +12780,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
+ "ic-ed25519",
  "ic-error-types",
  "ic-execution-environment",
  "ic-http-endpoints-public",
@@ -13220,7 +13221,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-crypto-ed25519",
+ "ic-ed25519",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
@@ -13485,7 +13486,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-canister-client-sender",
- "ic-crypto-ed25519",
+ "ic-ed25519",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -17797,10 +17798,10 @@ dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-cdk 0.16.0",
  "ic-config",
- "ic-crypto-ed25519",
  "ic-crypto-iccsa",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-ed25519",
  "ic-error-types",
  "ic-http-endpoints-public",
  "ic-http-gateway",
@@ -19069,6 +19070,8 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+ "chrono",
+ "clap 4.5.27",
  "colored",
  "futures",
  "ic-agent",
@@ -19083,6 +19086,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -19371,8 +19375,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent",
- "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
+ "ic-ed25519",
  "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
@@ -19839,6 +19843,35 @@ name = "ryu"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea1a2d0a644769cc99faa24c3ad26b379b786fe7c36fd3c546254801650e6dd"
+
+[[package]]
+name = "salt-sharing-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "serde",
+]
+
+[[package]]
+name = "salt_sharing"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "ic-canister-log 0.2.0",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "ic-nns-constants",
+ "ic-stable-structures",
+ "prometheus",
+ "salt-sharing-api",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "time",
+]
 
 [[package]]
 name = "same-file"

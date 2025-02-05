@@ -976,7 +976,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             (node_test_id(2), &dummy_node_key_2),
         ] {
             assert_eq!(
-                ic_crypto_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
+                ic_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
                     .expect("invalid public key")
                     .serialize_rfc8410_der(),
                 *node_public_keys.get(&node_id).unwrap(),
@@ -1428,7 +1428,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
         assert_eq!(
-            ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
+            ic_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
                 .expect("invalid public key")
                 .serialize_rfc8410_der(),
             *node_public_keys.get(&node_test_id(3)).unwrap(),
