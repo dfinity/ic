@@ -1,140 +1,21 @@
-use candid::{CandidType, Decode, Encode, Principal};
+mod stable_mem;
+
+use crate::stable_mem::{
+    NodeMetricsStored, NodeMetricsStoredKey, SubnetIdStored, TimestampNanos,
+    LAST_TS_STORED_PER_SUBNET, NODES_METRICS_PER_SUBNET, SUBNETS_TO_RETRY,
+};
 use futures::FutureExt;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_cdk_macros::*;
-use ic_management_canister_types::{
-    NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
-};
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableVec, Storable};
-use serde::Deserialize;
-use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
-
-type Memory = VirtualMemory<DefaultMemoryImpl>;
-type TimestampNanos = u64;
-
-// Maximum sizes for the storable types chosen as result of test `max_bound_size`
-const MAX_BYTES_SUBNET_ID_STORED: u32 = 38;
-const MAX_BYTES_NODE_METRICS_STORED_KEY: u32 = 60;
-const MAX_BYTES_NODE_METRICS_STORED: u32 = 76;
-
-#[test]
-fn max_bound_size() {
-    let max_principal_id = PrincipalId::from(Principal::from_slice(&[0xFF; 29]));
-
-    let max_subnet_id_stored = SubnetIdStored(max_principal_id.into());
-    let max_node_metrics_stored_key = NodeMetricsStoredKey {
-        timestamp_nanos: u64::MAX,
-        subnet_id: max_principal_id.into(),
-    };
-    let max_node_metrics_stored = NodeMetricsStored(vec![NodeMetrics {
-        node_id: max_principal_id,
-        num_blocks_proposed_total: u64::MAX,
-        num_block_failures_total: u64::MAX,
-    }]);
-
-    assert_eq!(
-        max_subnet_id_stored.to_bytes().len(),
-        MAX_BYTES_SUBNET_ID_STORED as usize
-    );
-
-    assert_eq!(
-        max_node_metrics_stored_key.to_bytes().len(),
-        MAX_BYTES_NODE_METRICS_STORED_KEY as usize
-    );
-
-    assert_eq!(
-        max_node_metrics_stored.to_bytes().len(),
-        MAX_BYTES_NODE_METRICS_STORED as usize
-    );
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-struct SubnetIdStored(SubnetId);
-impl Storable for SubnetIdStored {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(Encode!(self).unwrap())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Decode!(bytes.as_ref(), Self).unwrap()
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_BYTES_SUBNET_ID_STORED,
-        is_fixed_size: false,
-    };
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-struct NodeMetricsStoredKey {
-    timestamp_nanos: TimestampNanos,
-    subnet_id: SubnetId,
-}
-
-impl Storable for NodeMetricsStoredKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(Encode!(self).unwrap())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Decode!(bytes.as_ref(), Self).unwrap()
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_BYTES_NODE_METRICS_STORED_KEY,
-        is_fixed_size: false,
-    };
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct NodeMetricsStored(Vec<NodeMetrics>);
-
-impl Storable for NodeMetricsStored {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(Encode!(self).unwrap())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Decode!(bytes.as_ref(), Self).unwrap()
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        // This size supports subnets with max 400 nodes
-        max_size: MAX_BYTES_NODE_METRICS_STORED * 400,
-        is_fixed_size: false,
-    };
-}
 
 // Management canisters updates node metrics every day
 const HR_IN_SEC: u64 = 60 * 60;
 const DAY_SECONDS: u64 = HR_IN_SEC * 24;
-
-thread_local! {
-    pub static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
-    RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-
-    static NODE_METRICS_MAP: RefCell<StableBTreeMap<NodeMetricsStoredKey, NodeMetricsStored, Memory>> =
-      RefCell::new(StableBTreeMap::init(
-        MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
-    ));
-
-    static LAST_TS_STORED_PER_SUBNET: RefCell<StableBTreeMap<SubnetIdStored, TimestampNanos, Memory>> =
-      RefCell::new(StableBTreeMap::init(
-        MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))
-    ));
-
-    static SUBNETS_TO_RETRY: RefCell<StableVec<SubnetIdStored, Memory>> =
-      RefCell::new(StableVec::init(
-        MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
-    ).unwrap());
-}
 
 /// Fetch metrics
 ///
@@ -189,7 +70,6 @@ async fn sync_subnets_metrics(subnets: Vec<SubnetId>) {
             }
             last_metrics_ts_per_subnet
         });
-
     let fetched_metrics = fetch_subnets_metrics(last_metrics_ts_per_subnet).await;
 
     for (subnet_id, call_result) in fetched_metrics {
@@ -211,7 +91,7 @@ async fn sync_subnets_metrics(subnets: Vec<SubnetId>) {
                         timestamp_nanos: entry.timestamp_nanos,
                         subnet_id,
                     };
-                    NODE_METRICS_MAP.with_borrow_mut(|metrics_map| {
+                    NODES_METRICS_PER_SUBNET.with_borrow_mut(|metrics_map| {
                         metrics_map.insert(key, NodeMetricsStored(entry.node_metrics));
                     });
                 });
@@ -225,7 +105,7 @@ async fn sync_subnets_metrics(subnets: Vec<SubnetId>) {
                 SUBNETS_TO_RETRY.with_borrow_mut(|retry_list| {
                     if !retry_list.iter().any(|s| s == SubnetIdStored(subnet_id)) {
                         retry_list
-                            .push(&SubnetIdStored(subnet_id.clone()))
+                            .push(&SubnetIdStored(subnet_id))
                             .expect("Failed to add subnet to retry list");
                     }
                 });
@@ -310,7 +190,7 @@ fn post_upgrade() {
 
 #[query]
 fn node_metrics_history(args: NodeMetricsHistoryArgs) -> Vec<NodeMetricsHistoryResponse> {
-    NODE_METRICS_MAP.with_borrow(|nodes_metrics| {
+    NODES_METRICS_PER_SUBNET.with_borrow(|nodes_metrics| {
         let mut node_metrics = Vec::new();
         let first_key = NodeMetricsStoredKey {
             timestamp_nanos: args.start_at_timestamp_nanos,
