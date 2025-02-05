@@ -11,9 +11,25 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 use std::ops::Range;
 
+// There is a discrepancy in the way the trait uses indices for
+// adding and getting blocks (see `add_block` and `get_blocks`).
+// This is due to the fact that `HeapBlockData` doesn't store
+// block indices. Once `HeapBlockData` is removed, the getters
+// can be switched to global indices and `Blockchain` code can
+// be simplifies - it currently needs to offset indices passed
+// to getters.
 pub trait BlockData {
+    // The `index` should take into account archived blocks.
+    // I.e. if there are 10 archived blocks and we add 11th block
+    // to the ledger, it should be added with index 10.
     fn add_block(&mut self, index: u64, block: EncodedBlock);
+    // The `range` should be 0 based - independently of the number
+    // of archived blocks. I.e. `get_blocks(0..1)` should always return
+    // the first block stored in the ledger.
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
+    // The `index` should be 0 based - independently of the number
+    // of archived blocks. I.e. `get_block(0)` should always return
+    // the first block stored in the ledger.
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
     fn remove_blocks(&mut self, num_blocks: u64);
     fn len(&self) -> u64;

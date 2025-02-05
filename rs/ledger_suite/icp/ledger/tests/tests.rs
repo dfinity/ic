@@ -1266,6 +1266,9 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
     );
 }
 
+// This function should only be used in small tests (<2000 blocks).
+// It only makes one query to ledger and archives and fails if it is not able
+// to get all blocks this way.
 fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
     let p1 = PrincipalId::new_user_test_id(1);
     let blocks_res = query_encoded_blocks(state_machine, p1.0, ledger_id, 0, u32::MAX.into());
