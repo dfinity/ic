@@ -279,7 +279,7 @@ pub(super) fn create_summary_payload(
             validation_context.registry_version,
         )?,
         height,
-        &reshared_transcripts,
+        reshared_transcripts,
         validation_context.registry_version,
         &vet_key_ids,
     )?);
@@ -551,7 +551,7 @@ pub fn get_dkg_summary_from_cup_contents(
         subnet_id,
         committee,
         height,
-        &transcripts,
+        transcripts.clone(),
         // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
         // the recovered NNS so that the DKG configs point to the correct registry version and new
         // dealings can be created in the first DKG interval.
@@ -584,7 +584,7 @@ pub(crate) fn get_configs_for_local_transcripts(
     subnet_id: SubnetId,
     node_ids: BTreeSet<NodeId>,
     start_block_height: Height,
-    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    mut reshared_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
     vet_key_ids: &[NiDkgMasterPublicKeyId],
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
@@ -600,12 +600,13 @@ pub(crate) fn get_configs_for_local_transcripts(
         let (dealers, resharing_transcript) = match tag {
             NiDkgTag::LowThreshold => (node_ids.clone(), None),
             NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
-                let resharing_transcript = reshared_transcripts.get(&tag);
+                let resharing_transcript = reshared_transcripts.remove(&tag);
                 (
                     resharing_transcript
+                        .as_ref()
                         .map(|transcript| transcript.committee.get().clone())
                         .unwrap_or_else(|| node_ids.clone()),
-                    resharing_transcript.cloned(),
+                    resharing_transcript,
                 )
             }
         };
@@ -967,8 +968,7 @@ mod tests {
             subnet_id,
             receivers.clone(),
             start_block_height,
-            //&reshared_transcript.into_iter().collect(),
-            &reshared_transcripts,
+            reshared_transcripts.clone(),
             registry_version,
             &vet_key_ids,
         )
