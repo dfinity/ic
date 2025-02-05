@@ -160,7 +160,7 @@ where
             None
         } else {
             self.blocks
-                .get_block(height.saturating_sub(self.num_archived_blocks()))
+                .get_block(height.checked_sub(self.num_archived_blocks()).unwrap())
         }
     }
 
