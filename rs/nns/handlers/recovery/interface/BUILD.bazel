@@ -7,6 +7,9 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:serde",
     "@crate_index//:ed25519-dalek",
+    "@crate_index//:hex",
+    "//rs/registry/canister",
+    "//rs/types/base_types",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -26,4 +29,3 @@ rust_library(
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
-

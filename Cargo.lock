@@ -10875,6 +10875,9 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ed25519-dalek",
+ "hex",
+ "ic-base-types",
+ "registry-canister",
  "serde",
 ]
 

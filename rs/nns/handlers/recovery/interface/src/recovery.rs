@@ -1,6 +1,12 @@
+use std::str::FromStr;
+
 use crate::*;
 use candid::{CandidType, Principal};
 use ed25519_dalek::{ed25519::signature::SignerMut, SigningKey};
+use ic_base_types::{PrincipalId, SubnetId};
+use registry_canister::mutations::{
+    do_recover_subnet::RecoverSubnetPayload, do_update_subnet::UpdateSubnetPayload,
+};
 use serde::Deserialize;
 
 use crate::{security_metadata::SecurityMetadata, Ballot};
@@ -139,5 +145,119 @@ impl VerifyIntegirty for NodeOperatorBallot {
 impl VerifyIntegirty for RecoveryProposal {
     fn verify(&self) -> Result<()> {
         self.node_operator_ballots.iter().verify()
+    }
+}
+
+fn nns_principal_id() -> PrincipalId {
+    PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+        .expect("Should be a valid NNS id")
+}
+
+impl TryFrom<RecoveryProposal> for UpdateSubnetPayload {
+    type Error = RecoveryError;
+
+    fn try_from(value: RecoveryProposal) -> std::result::Result<Self, Self::Error> {
+        match value.payload {
+            RecoveryPayload::Halt => Ok(Self {
+                chain_key_config: None,
+                chain_key_signing_disable: None,
+                chain_key_signing_enable: None,
+                dkg_dealings_per_block: None,
+                ecdsa_config: None,
+                ecdsa_key_signing_disable: None,
+                ecdsa_key_signing_enable: None,
+                features: None,
+                halt_at_cup_height: None,
+                initial_notary_delay_millis: None,
+                max_artifact_streams_per_peer: None,
+                max_block_payload_size: None,
+                max_chunk_size: None,
+                max_chunk_wait_ms: None,
+                max_duplicity: None,
+                max_ingress_bytes_per_message: None,
+                max_ingress_messages_per_block: None,
+                max_number_of_canisters: None,
+                pfn_evaluation_period_ms: None,
+                receive_check_cache_size: None,
+                registry_poll_period_ms: None,
+                retransmission_request_ms: None,
+                ssh_backup_access: None,
+                start_as_nns: None,
+                subnet_type: None,
+                unit_delay_millis: None,
+                dkg_interval_length: None,
+
+                set_gossip_config_to_default: false,
+                is_halted: Some(true),
+                subnet_id: SubnetId::from(nns_principal_id()),
+                // TODO: check if this should be configurable
+                ssh_readonly_access: Some(vec!["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPiyAbNALyrFb1PAdPCcV5w6GYqILGyRbyqzLEVspFmJ recovery@dfinity.org".to_string()])
+            }),
+            RecoveryPayload::Unhalt => Ok(Self {
+                chain_key_config: None,
+                chain_key_signing_disable: None,
+                chain_key_signing_enable: None,
+                dkg_dealings_per_block: None,
+                ecdsa_config: None,
+                ecdsa_key_signing_disable: None,
+                ecdsa_key_signing_enable: None,
+                features: None,
+                halt_at_cup_height: None,
+                initial_notary_delay_millis: None,
+                max_artifact_streams_per_peer: None,
+                max_block_payload_size: None,
+                max_chunk_size: None,
+                max_chunk_wait_ms: None,
+                max_duplicity: None,
+                max_ingress_bytes_per_message: None,
+                max_ingress_messages_per_block: None,
+                max_number_of_canisters: None,
+                pfn_evaluation_period_ms: None,
+                receive_check_cache_size: None,
+                registry_poll_period_ms: None,
+                retransmission_request_ms: None,
+                ssh_backup_access: None,
+                start_as_nns: None,
+                subnet_type: None,
+                unit_delay_millis: None,
+                dkg_interval_length: None,
+
+                set_gossip_config_to_default: false,
+                is_halted: Some(false),
+                subnet_id: SubnetId::from(nns_principal_id()),
+                ssh_readonly_access: Some(vec![])
+            }),
+            _ => Err(RecoveryError::InvalidRecoveryProposalPayload(
+                "Cannot map this proposal payload to UpdateSubnetPayload".to_string(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<RecoveryProposal> for RecoverSubnetPayload {
+    type Error = RecoveryError;
+
+    fn try_from(value: RecoveryProposal) -> std::result::Result<Self, Self::Error> {
+        match value.payload {
+            RecoveryPayload::DoRecovery { height, state_hash } => Ok(Self {
+                subnet_id: nns_principal_id(),
+                height,
+                // TODO: Migrate timestamps to nanoseconds in canister
+                time_ns: value.submission_timestamp_seconds,
+                state_hash: hex::decode(state_hash).map_err(|e| {
+                    RecoveryError::PayloadSerialization(format!(
+                        "Cannot deserialize state hash into a byte vector: {}",
+                        e
+                    ))
+                })?,
+                replacement_nodes: None,
+                registry_store_uri: None,
+                ecdsa_config: None,
+                chain_key_config: None,
+            }),
+            _ => Err(RecoveryError::InvalidRecoveryProposalPayload(
+                "Cannot map this proposal payload to UpdateSubnetPayload".to_string(),
+            )),
+        }
     }
 }

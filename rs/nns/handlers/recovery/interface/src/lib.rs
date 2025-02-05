@@ -36,12 +36,22 @@ pub enum RecoveryError {
     /// Candid error while encoding the recovery canister payload
     PayloadSerialization(String),
 
+    /// Errors coming from ic-agent
     AgentError(String),
+    /// Candid errors
     CandidError(String),
 
+    /// Identity in use is invalid to fulfil a desired action
     InvalidIdentity(String),
 
+    /// No proposals exist on the canister which could be voted on
     NoProposalsToVoteOn(String),
+
+    /// Specifies that the recovery proposal payload cannot be
+    /// mapped to a governance proposal. This can happen if the
+    /// library versions used for the canister and client don't
+    /// match
+    InvalidRecoveryProposalPayload(String),
 }
 
 impl From<candid::Error> for RecoveryError {
@@ -64,7 +74,8 @@ impl ToString for RecoveryError {
             | Self::AgentError(s)
             | Self::CandidError(s)
             | Self::InvalidIdentity(s)
-            | Self::NoProposalsToVoteOn(s) => s.to_string(),
+            | Self::NoProposalsToVoteOn(s)
+            | Self::InvalidRecoveryProposalPayload(s) => s.to_string(),
         }
     }
 }

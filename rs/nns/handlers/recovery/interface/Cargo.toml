@@ -10,3 +10,6 @@ edition.workspace = true
 candid = { workspace = true }
 serde = { workspace = true }
 ed25519-dalek.workspace = true
+registry-canister.path = "../../../../registry/canister"
+ic-base-types.path = "../../../../types/base_types"
+hex.workspace = true
