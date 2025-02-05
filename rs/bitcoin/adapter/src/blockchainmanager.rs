@@ -535,6 +535,12 @@ impl BlockchainManager {
             }
         }
 
+        // If a request timed out, there is no point in storing it in getdata_request_info
+        // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
+        for block_hash in retry_queue.iter() {
+            self.getdata_request_info.remove(block_hash);
+        }
+
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
@@ -1182,7 +1188,7 @@ pub mod test {
 
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // The request is considered retried if its timeout is less than the the timeout seconds.
-        let request = blockchain_manager
+        let request: &GetDataRequestInfo = blockchain_manager
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
@@ -1271,8 +1277,11 @@ pub mod test {
         );
     }
 
-    /// This function tests to ensure that the BlockchainManager retries `getdata` requests
-    /// that have failed when calling `sync_blocks` with a full block cache.
+    #[test]
+    fn test() {
+        
+    }
+
     #[test]
     fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
@@ -1326,7 +1335,7 @@ pub mod test {
         let request = blockchain_manager
             .getdata_request_info
             .get(&block_1_hash)
-            .expect("missing request info for block hash 1");
+            .expect("missing request info for block hash 1");\
         assert!(
             request
                 .sent_at
