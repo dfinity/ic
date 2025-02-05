@@ -28,7 +28,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "ed25519",
+    name = "ic-ed25519",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_ed25519",
@@ -38,23 +38,29 @@ rust_library(
 )
 
 rust_doc(
-    name = "ed25519_doc",
-    crate = ":ed25519",
+    name = "doc",
+    crate = ":ic-ed25519",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-ed25519",
+    deps = [":ic-ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(
-    name = "ed25519_test",
+    name = "test",
     aliases = ALIASES,
-    crate = ":ed25519",
+    crate = ":ic-ed25519",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "ed25519_integration",
+    name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
