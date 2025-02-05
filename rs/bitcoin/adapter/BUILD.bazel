@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
+    "@crate_index//:static_assertions",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-socks",
@@ -42,7 +43,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:bitcoind",
     "@crate_index//:criterion",
     "@crate_index//:ic-btc-interface",
-    "@crate_index//:static_assertions",
     "@crate_index//:tempfile",
 ]
 

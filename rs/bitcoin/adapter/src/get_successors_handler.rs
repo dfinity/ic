@@ -5,6 +5,7 @@ use std::{
 
 use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
+use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
@@ -23,7 +24,7 @@ const MAINNET_MAX_RESPONSE_SIZE: usize = 2_000_000;
 
 // Lower than mainnet's response size. The main reason is large serialization time
 // for large blocks.
-const TESTNET_MAX_RESPONSE_SIZE: usize = 1_000_000;
+const TESTNET4_MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
@@ -42,7 +43,16 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 // Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
 const MAINNET_MAX_BLOCKS_BYTES: usize = MAINNET_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
-const TESTNET_MAX_BLOCKS_BYTES: usize = TESTNET_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+
+const_assert_eq!(
+    MAX_NEXT_BYTES + MAINNET_MAX_BLOCKS_BYTES,
+    MAINNET_MAX_RESPONSE_SIZE
+);
+const_assert_eq!(
+    MAX_NEXT_BYTES + TESTNET4_MAX_BLOCKS_BYTES,
+    TESTNET4_MAX_RESPONSE_SIZE
+);
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
@@ -174,7 +184,7 @@ fn get_successor_blocks(
         Network::Testnet | Network::Signet | Network::Regtest | Network::Bitcoin => {
             MAINNET_MAX_BLOCKS_BYTES
         }
-        Network::Testnet4 => TESTNET_MAX_BLOCKS_BYTES,
+        Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
         other => unreachable!("Unsupported network: {:?}", other),
     };
 
@@ -266,7 +276,6 @@ mod test {
 
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
-    use static_assertions::const_assert_eq;
     use tokio::sync::mpsc::channel;
 
     use crate::config::test::ConfigBuilder;
@@ -795,18 +804,6 @@ mod test {
             are_multiple_blocks_allowed(Network::Regtest, u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
-        );
-    }
-
-    #[test]
-    fn response_size() {
-        const_assert_eq!(
-            MAX_NEXT_BYTES + MAINNET_MAX_BLOCKS_BYTES,
-            MAINNET_MAX_RESPONSE_SIZE
-        );
-        const_assert_eq!(
-            MAX_NEXT_BYTES + TESTNET_MAX_BLOCKS_BYTES,
-            TESTNET_MAX_RESPONSE_SIZE
         );
     }
 }

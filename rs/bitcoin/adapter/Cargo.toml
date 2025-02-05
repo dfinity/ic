@@ -30,6 +30,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
+static_assertions = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-socks = "0.5.1"
@@ -46,7 +47,6 @@ ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-static_assertions = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]
