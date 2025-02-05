@@ -4,7 +4,6 @@ use crate::stable_mem::{
     NodeMetricsStored, NodeMetricsStoredKey, SubnetIdStored, TimestampNanos,
     LAST_TS_STORED_PER_SUBNET, NODES_METRICS_PER_SUBNET, SUBNETS_TO_RETRY,
 };
-use futures::FutureExt;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_cdk_macros::*;
