@@ -1634,6 +1634,12 @@ impl CheckpointLayout<ReadOnly> {
         })
     }
 
+    /// Finalizes the checkpoint by marking all files as read-only, ensuring
+    /// they are fully synchronized to disk, and then removing the unverified checkpoint marker.
+    ///
+    /// This function is necessary due to the asynchronous checkpoint writing.
+    /// Marking the files as read-only and performing a sync operation should be the last step
+    /// before removing the unverified checkpoint marker to prevent data inconsistencies.
     pub fn finalize_and_remove_unverified_marker(
         &self,
         thread_pool: Option<&mut scoped_threadpool::Pool>,

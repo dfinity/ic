@@ -457,20 +457,6 @@ pub(crate) fn spawn_tip_thread(
                             own_subnet_type,
                             fd_factory,
                         } => {
-                            {
-                                let _timer =
-                                    request_timer(&metrics, "mark_files_readonly_and_sync");
-                                if let Err(err) = checkpoint_layout
-                                    .mark_files_readonly_and_sync(Some(&mut thread_pool))
-                                {
-                                    fatal!(
-                                        &log,
-                                        "Failed to mark checkpoint {} readonly and sync: {:#}",
-                                        checkpoint_layout.raw_path().display(),
-                                        err
-                                    )
-                                }
-                            }
                             let _timer = request_timer(&metrics, "validate_replicated_state");
                             if let Err(err) =
                                 validate_and_finalize_checkpoint_and_remove_unverified_marker(
