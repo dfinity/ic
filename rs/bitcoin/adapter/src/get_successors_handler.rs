@@ -29,10 +29,13 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 const MAX_BLOCKS_LENGTH: usize = 100;
 
 // The maximum number of get blocks requests that can be in-flight at any given time.
-// The number of blokcs outside of hte main chain easily exceeds 100 currently.
+const MAX_IN_FLIGHT_BLOCKS: usize = 100;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+// The number of blocks outside of the main chain easily exceeds 100 currently on testnet4.
 // Setting this to 100 would prevent the adapter from making progress,
 // as it gets stuck on these blocks, whose requests timeout indefinitely.
-const MAX_IN_FLIGHT_BLOCKS: usize = 1000;
+const TESTNET4_MAX_IN_FLIGHT_BLOCKS: usize = 1000;
 
 const BLOCK_HEADER_SIZE: usize = 80;
 
@@ -120,6 +123,7 @@ impl GetSuccessorsHandler {
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
+                self.network,
             );
             (blocks, next)
         };
@@ -135,9 +139,7 @@ impl GetSuccessorsHandler {
         if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
-                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    next.clone(),
-                ))
+                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
                 .ok();
         }
         // TODO: better handling of full channel as the receivers are never closed.
@@ -211,11 +213,15 @@ fn get_successor_blocks(
 }
 
 /// Get the next headers for blocks that may possibly be sent in upcoming GetSuccessor responses.
+/// This returns the first MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers from the anchor in BFS fashion
+/// which are not in processed nor are they in the current response. Essentially representing the
+/// blocks that should be returned in the next response.
 fn get_next_headers(
     state: &BlockchainState,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[Arc<Block>],
+    network: Network,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
@@ -228,9 +234,14 @@ fn get_next_headers(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
+    let max_in_flight_blocks = match network {
+        Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
+        _ => MAX_IN_FLIGHT_BLOCKS,
+    };
+
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
-        if next_headers.len() >= MAX_IN_FLIGHT_BLOCKS {
+        if next_headers.len() >= max_in_flight_blocks {
             break;
         }
 
