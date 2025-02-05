@@ -852,15 +852,15 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 1);
     wait_for_connection(&client2, 1);
 
-    client1.generate_to_address(5, &address1).unwrap();
-    client2.generate_to_address(10, &address2).unwrap();
+    client1.generate_to_address(3, &address1).unwrap();
+    client2.generate_to_address(6, &address2).unwrap();
 
-    wait_for_blocks(&client1, 25);
-    wait_for_blocks(&client2, 30);
+    wait_for_blocks(&client1, 23);
+    wait_for_blocks(&client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 35, 201);
-    assert_eq!(blocks.len(), 35);
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 29, 201);
+    assert_eq!(blocks.len(), 29);
 }
 
 /// Checks that the adapter returns blocks in BFS order.
