@@ -258,11 +258,11 @@ impl WasmExecutor for WasmExecutorImpl {
             }),
             None => None,
         };
-        let system_api = match instance_or_system_api {
+        let mut system_api = match instance_or_system_api {
             Ok(instance) => instance.into_store_data().system_api.unwrap(),
             Err(system_api) => system_api,
         };
-        let system_state_modifications = system_api.into_system_state_modifications();
+        let system_state_modifications = system_api.take_system_state_modifications();
 
         (
             compilation_result,

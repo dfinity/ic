@@ -173,7 +173,7 @@ impl Execution {
                             .system_api_mut()
                             .expect("System api not present in the wasmtime instance")
                             .take_system_state_modifications(),
-                        Err(system_api) => system_api.into_system_state_modifications(),
+                        Err(mut system_api) => system_api.take_system_state_modifications(),
                     };
 
                     let execution_state_modifications = deltas.map(

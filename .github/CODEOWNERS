@@ -250,6 +250,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution
 /rs/tests/financial_integrations/                       @dfinity/finint
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
+/rs/tests/nested/                                       @dfinity/node
 /rs/tests/networking/                                   @dfinity/consensus
 /rs/tests/nns/                                          @dfinity/nns-team
 /rs/tests/node/                                         @dfinity/node
