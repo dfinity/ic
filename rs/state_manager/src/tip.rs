@@ -116,9 +116,6 @@ pub(crate) enum TipRequest {
         height: Height,
         replicated_state: Box<ReplicatedState>,
     },
-    MarkCheckpointReadOnlyAndSync {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
-    },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: *
     ComputeManifest {
@@ -129,7 +126,7 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    ValidateReplicatedState {
+    ValidateReplicatedStateAndFinalize {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         reference_state: Arc<ReplicatedState>,
         own_subnet_type: SubnetType,
@@ -454,26 +451,26 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::MarkCheckpointReadOnlyAndSync { checkpoint_layout } => {
-                            let _timer = request_timer(&metrics, "mark_files_readonly_and_sync");
-                            if let Err(err) = checkpoint_layout
-                                .mark_files_readonly_and_sync(Some(&mut thread_pool))
-                            {
-                                fatal!(
-                                    &log,
-                                    "Failed to mark checkpoint {} readonly and sync: {:#}",
-                                    checkpoint_layout.raw_path().display(),
-                                    err
-                                )
-                            }
-                        }
-
-                        TipRequest::ValidateReplicatedState {
+                        TipRequest::ValidateReplicatedStateAndFinalize {
                             checkpoint_layout,
                             reference_state,
                             own_subnet_type,
                             fd_factory,
                         } => {
+                            {
+                                let _timer =
+                                    request_timer(&metrics, "mark_files_readonly_and_sync");
+                                if let Err(err) = checkpoint_layout
+                                    .mark_files_readonly_and_sync(Some(&mut thread_pool))
+                                {
+                                    fatal!(
+                                        &log,
+                                        "Failed to mark checkpoint {} readonly and sync: {:#}",
+                                        checkpoint_layout.raw_path().display(),
+                                        err
+                                    )
+                                }
+                            }
                             let _timer = request_timer(&metrics, "validate_replicated_state");
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,

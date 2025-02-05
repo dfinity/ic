@@ -770,18 +770,6 @@ impl StateLayout {
         self.checkpoint::<ReadOnly>(height)
     }
 
-    // Draft notes:
-    // The checkpoint is rw so that we can write proto files.
-    // The checkpoint is rw but still tracked, which is different from untracked rw tip. This is because we want to prevent it from being accidentally deleted.
-    // Although remove_states_below remove checkpoints based on states metadata, it is still good to not fully rely on that implementation.
-    // Ideally, the checkpoint should be limited to only writing the proto files, but we don't have such precise control yet. It is to be discussed whether to introduce a new policy for this.
-    pub fn checkpoint_in_async_writing(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy<()>>, LayoutError> {
-        self.checkpoint::<RwPolicy<()>>(height)
-    }
-
     /// Returns if a checkpoint with the given height is verified or not.
     /// If the checkpoint is not found, an error is returned.
     pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {

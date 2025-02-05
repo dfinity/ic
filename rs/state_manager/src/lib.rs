@@ -2573,8 +2573,7 @@ impl StateManagerImpl {
                 self.lsmt_status,
             )
         };
-        let _checkpoint_layout_for_async_writing =
-            self.state_layout.checkpoint_in_async_writing(height);
+
         let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
@@ -2640,27 +2639,9 @@ impl StateManagerImpl {
             );
         }
 
-        //_checkpoint_layout_for_async_checkpointing could be used here for serializing protos to checkpoint here.
-        // self.tip_channel
-        //     .send(TipRequest::SerializeProtosToCheckpoint {
-        //         checkpoint_layout: _checkpoint_layout_for_async_checkpointing,
-        //         replicated_state: Arc::clone(&state),
-        //     })
-        //     .unwrap();
-
-        // Draft notes:
-        // Before we come out with a new policy, ReadOnly checkpoint layout is still used below in MarkCheckpointReadOnlyAndSync and ValidateReplicatedState.
-        // The order of mark checkpoint readonly, sync, load, validate is still to be determined. They could be merged into one request.
-        // Removing the marker should be the last step, which is currently happening in ValidateReplicatedState.
-        self.tip_channel
-            .send(TipRequest::MarkCheckpointReadOnlyAndSync {
-                checkpoint_layout: cp_layout.clone(),
-            })
-            .expect("Failed to send Validate request");
-
         let state = Arc::new(state);
         self.tip_channel
-            .send(TipRequest::ValidateReplicatedState {
+            .send(TipRequest::ValidateReplicatedStateAndFinalize {
                 checkpoint_layout: cp_layout.clone(),
                 reference_state: Arc::clone(&state),
                 own_subnet_type: self.own_subnet_type,
