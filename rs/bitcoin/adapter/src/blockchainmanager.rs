@@ -754,14 +754,13 @@ impl BlockchainManager {
 }
 
 // Only returns a block if the cache is not full.
-// Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as 
+// Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
 // blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
 fn get_next_block_hash_to_sync(
     is_cache_full: bool,
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-
     if is_cache_full {
         return None;
     }
@@ -1622,7 +1621,7 @@ pub mod test {
             .expect("Sync queue should have 1 item.");
         let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
         // The queues have not changed, the result should be None.
-        assert!(matches!(result, None));
+        assert!(result.is_none());
         assert_eq!(retry_queue.len(), 1);
         assert_eq!(sync_queue.len(), 1);
     }
