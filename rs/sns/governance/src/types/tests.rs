@@ -1522,3 +1522,29 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
         }
     );
 }
+
+#[test]
+fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
+    let manage_ledger_parameters = ManageLedgerParameters {
+        transfer_fee: Some(111),
+        token_name: Some("abc".to_string()),
+        token_symbol: Some("xyz".to_string()),
+        token_logo: None,
+    };
+
+    let observed = LedgerUpgradeArgs::from(manage_ledger_parameters);
+
+    assert_eq!(
+        observed,
+        LedgerUpgradeArgs {
+            metadata: None,
+            token_name: Some("abc".to_string()),
+            token_symbol: Some("xyz".to_string()),
+            transfer_fee: Some(Nat::from(111_u64)),
+            change_fee_collector: None,
+            max_memo_length: None,
+            feature_flags: None,
+            change_archive_options: None,
+        }
+    );
+}

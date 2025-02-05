@@ -38,6 +38,8 @@ proposal, e.g.:
 
 * Do not redact chunked Wasm data in `ProposalInfo` served from `SnsGov.list_proposals`.
 * Added the `query_stats` field for `canister_status`/`get_sns_canisters_summary` methods.
+* Fix a bug due to which SNS ledger logos were sometimes unset after changing unrelated
+  SNS ledger metadata fields.
 
 ## Changed
 
