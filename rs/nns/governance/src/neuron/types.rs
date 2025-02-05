@@ -24,7 +24,7 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use std::{
     collections::{BTreeSet, HashMap},
     time::Duration,
@@ -294,7 +294,7 @@ impl Neuron {
             > 0
     }
 
-    /// How much swap this neuron has when it casts its vote on proposals.
+    /// How much sway this neuron has when it casts its vote on proposals.
     pub fn deciding_voting_power(
         &self,
         voting_power_economics: &VotingPowerEconomics,
@@ -318,8 +318,10 @@ impl Neuron {
         // Main calculation.
         let result = adjustment_factor * Decimal::from(potential_voting_power);
 
-        // Convert (back) to u64.
-        let result = result.round();
+        // Convert (back) to u64. The particular type of rounding used here does
+        // not matter to us very much, because we are not for example
+        // apportioning (where rounding down is best), nor anything like that.
+        let result = result.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
         u64::try_from(result).unwrap_or_else(|err| {
             // Log and fall back to potential voting power. Assuming
             // adjustment_factor is in [0, 1], I see no way this can happen.
