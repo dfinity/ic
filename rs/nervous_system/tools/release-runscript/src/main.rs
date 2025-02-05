@@ -52,7 +52,12 @@ struct CreateForumPost {
     sns_proposal_ids: Vec<String>,
 }
 #[derive(Debug, Parser)]
-struct ScheduleVote;
+struct ScheduleVote {
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_ids: Vec<String>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_ids: Vec<String>,
+}
 
 #[derive(Debug, Parser)]
 struct UpdateCanistersJson;
@@ -611,10 +616,52 @@ fn run_create_forum_post(cmd: CreateForumPost) {
     );
 
     // Continue to the next automated step.
-    run_schedule_vote(ScheduleVote);
+    run_schedule_vote(ScheduleVote {
+        nns_proposal_ids,
+        sns_proposal_ids,
+    });
 }
 
-fn run_schedule_vote(_: ScheduleVote) {
+fn run_schedule_vote(cmd: ScheduleVote) {
+    let ScheduleVote {
+        nns_proposal_ids,
+        sns_proposal_ids,
+    } = cmd;
+
+    if nns_proposal_ids.is_empty() && sns_proposal_ids.is_empty() {
+        println!("No proposals to schedule vote for.");
+        return;
+    }
+
+    use std::fmt::Write;
+
+    let instructions = format!(
+        "Vote YES on the following proposals:
+NNS: {}
+SNS: {}",
+        nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+            let _ = write!(
+                acc,
+                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
+                id
+            );
+            acc
+        }),
+        sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+            let _ = write!(
+                acc,
+                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
+                id
+            );
+            acc
+        }),
+    );
+
+    println!("Copying instructions for Trusted Neurons to clipboard...");
+    copy(instructions.as_bytes()).unwrap();
+    input("Press Enter to open the calendar event...");
+    open_webpage(&Url::parse("https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc").unwrap()).unwrap();
+
     print_step(7,
         "Schedule Trusted Neurons Vote",
         "Schedule calendar event for Trusted Neurons to vote the following Monday.
@@ -730,6 +777,8 @@ fn input_with_default(text: &str, default: &str) -> String {
 }
 
 fn open_webpage(url: &Url) -> Result<()> {
+    println!("Opening webpage: {}", url);
+
     let command = "open";
     Command::new(command).arg(url.to_string()).spawn()?.wait()?;
 
