@@ -136,6 +136,10 @@ impl BlockchainState {
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
     }
+    
+    pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().cloned().collect()
+    }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
     /// Headers are expected to be sorted. If they are not, the headers will be likely be rejected
