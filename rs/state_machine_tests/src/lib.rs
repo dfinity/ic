@@ -759,22 +759,20 @@ impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
-    pub node_signing_key: ic_crypto_ed25519::PrivateKey,
-    pub committee_signing_key: ic_crypto_ed25519::PrivateKey,
-    pub dkg_dealing_encryption_key: ic_crypto_ed25519::PrivateKey,
-    pub idkg_mega_encryption_key: ic_crypto_ed25519::PrivateKey,
+    pub node_signing_key: ic_ed25519::PrivateKey,
+    pub committee_signing_key: ic_ed25519::PrivateKey,
+    pub dkg_dealing_encryption_key: ic_ed25519::PrivateKey,
+    pub idkg_mega_encryption_key: ic_ed25519::PrivateKey,
     pub http_ip_addr: Ipv6Addr,
     pub xnet_ip_addr: Ipv6Addr,
 }
 
 impl StateMachineNode {
     fn new(rng: &mut StdRng) -> Self {
-        let node_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let committee_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let dkg_dealing_encryption_key =
-            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let idkg_mega_encryption_key =
-            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let node_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let committee_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let dkg_dealing_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let idkg_mega_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
         let mut http_ip_addr_bytes = rng.gen::<[u8; 16]>();
         http_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
@@ -800,7 +798,7 @@ impl StateMachineNode {
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_crypto_secp256k1::PrivateKey),
     SchnorrBip340(ic_crypto_secp256k1::PrivateKey),
-    Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
+    Ed25519(ic_ed25519::DerivedPrivateKey),
 }
 
 /// Represents a replicated state machine detached from the network layer that
@@ -1728,7 +1726,7 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                     SchnorrAlgorithm::Ed25519 => {
-                        use ic_crypto_ed25519::{DerivationIndex, DerivationPath, PrivateKey};
+                        use ic_ed25519::{DerivationIndex, DerivationPath, PrivateKey};
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -2228,7 +2226,7 @@ impl StateMachine {
                 }
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
-                let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
+                let path = ic_ed25519::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
                     &context.derivation_path[..],
                 );

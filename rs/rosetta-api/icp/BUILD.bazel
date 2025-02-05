@@ -68,8 +68,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-ed25519",
     "//packages/pocket-ic",
-    "//rs/crypto/ed25519",
     "//rs/ledger_suite/icp/test_utils",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/test_utils",
