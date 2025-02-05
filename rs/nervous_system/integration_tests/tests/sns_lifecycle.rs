@@ -1726,9 +1726,7 @@ async fn test_sns_lifecycle(
     // to a function in the `rs/sns/audit` crate.
     {
         let sns_neuron_recipes =
-            sns::swap::list_sns_neuron_recipes(&pocket_ic, sns.swap.canister_id)
-                .await
-                .sns_neuron_recipes;
+            sns::swap::list_sns_neuron_recipes(&pocket_ic, sns.swap.canister_id).await;
         use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;
         {
             let direct_participant_sns_neuron_recipes: Vec<_> = sns_neuron_recipes

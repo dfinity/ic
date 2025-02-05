@@ -25,6 +25,8 @@ registry-canister = { path = "../../registry/canister" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

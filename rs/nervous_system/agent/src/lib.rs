@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 
 pub mod agent_impl;
+pub mod ledger;
 pub mod management_canister;
 pub mod nns;
 mod null_request;

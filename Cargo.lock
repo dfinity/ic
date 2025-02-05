@@ -10331,6 +10331,8 @@ dependencies = [
  "ic-sns-swap",
  "ic-sns-wasm",
  "ic-state-machine-tests",
+ "icp-ledger",
+ "icrc-ledger-types",
  "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
