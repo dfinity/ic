@@ -1,3 +1,4 @@
+use candid::Decode;
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::init;
@@ -6,14 +7,17 @@ use ic_nervous_system_common::serve_metrics;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
 
-use ic_cdk::{post_upgrade, query, update};
+use ic_cdk::{api::call::arg_data_raw, post_upgrade, query, update};
 use ic_nns_handler_recovery::{
     metrics::encode_metrics,
-    node_operator_sync::{get_node_operators_in_nns, sync_node_operators},
+    node_operator_sync::{
+        get_node_operators_in_nns, set_initial_node_operators, sync_node_operators,
+    },
     recovery_proposal::{get_recovery_proposals, submit_recovery_proposal, vote_on_proposal_inner},
 };
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_init::RecoveryInitArgs,
     simple_node_operator_record::SimpleNodeOperatorRecord,
 };
 
@@ -91,6 +95,17 @@ fn init() {
 }
 
 async fn setup_node_operator_update() {
+    let data = arg_data_raw();
+    ic_cdk::println!("Received: {:?}", data);
+    match Decode!(&data, RecoveryInitArgs) {
+        Ok(args) => {
+            set_initial_node_operators(args.initial_node_operator_records);
+        }
+        Err(e) => {
+            ic_cdk::println!("Couldn't deseriliaze candid init payload. Skipping setting initial node operators. Error: {}", e.to_string())
+        }
+    }
+
     ic_cdk::println!("Started Sync for new node operators on NNS");
     if let Err(e) = sync_node_operators().await {
         ic_cdk::println!("{}", e);

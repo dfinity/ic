@@ -8,6 +8,7 @@ use ic_nns_handler_root::root_proposals::{
 
 thread_local! {
   static NODE_OPERATORS_IN_NNS: RefCell<Vec<SimpleNodeOperatorRecord>> = const { RefCell::new(Vec::new()) };
+  static INITIAL_NODE_OPERATORS: RefCell<Vec<SimpleNodeOperatorRecord>> = const { RefCell::new(Vec::new()) };
 }
 
 pub async fn sync_node_operators() -> Result<(), String> {
@@ -30,13 +31,34 @@ pub async fn sync_node_operators() -> Result<(), String> {
 
     let new_simple_records = new_simple_records
         .into_iter()
-        .map(|(principal, nodes)| SimpleNodeOperatorRecord { principal, nodes })
+        .map(|(operator_id, nodes)| SimpleNodeOperatorRecord { operator_id, nodes })
         .collect();
     NODE_OPERATORS_IN_NNS.replace(new_simple_records);
 
     Ok(())
 }
 
+pub fn set_initial_node_operators(initial: Vec<SimpleNodeOperatorRecord>) {
+    INITIAL_NODE_OPERATORS.replace(initial);
+}
+
 pub fn get_node_operators_in_nns() -> Vec<SimpleNodeOperatorRecord> {
-    NODE_OPERATORS_IN_NNS.with_borrow(|records| records.clone())
+    let initial = INITIAL_NODE_OPERATORS.with_borrow(|records| records.clone());
+    let obtained_from_sync = NODE_OPERATORS_IN_NNS.with_borrow(|records| records.clone());
+
+    let mut merged: Vec<_> = obtained_from_sync
+        .clone()
+        .into_iter()
+        .chain(initial.clone())
+        .collect();
+    merged.sort_by(|a, b| b.nodes.len().cmp(&a.nodes.len()));
+    merged.dedup_by(|a, b| a.operator_id == b.operator_id);
+
+    if !initial.is_empty() {
+        ic_cdk::println!("Initial: {:?}", initial);
+        ic_cdk::println!("Obtained: {:?}", obtained_from_sync);
+        ic_cdk::println!("Merged: {:?}", merged);
+    }
+
+    merged
 }

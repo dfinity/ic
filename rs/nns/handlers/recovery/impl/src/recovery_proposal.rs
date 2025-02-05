@@ -31,7 +31,7 @@ pub fn submit_recovery_proposal(
     // Check if the caller has nodes in nns
     if !node_operators_in_nns
         .iter()
-        .any(|node| node.principal == caller.0)
+        .any(|node| node.operator_id == caller.0)
     {
         let message = format!(
             "Caller: {} is not eligible to submit proposals to this canister",
@@ -170,7 +170,7 @@ fn initialize_ballots(
     simple_node_records
         .iter()
         .map(|operator_record| NodeOperatorBallot {
-            principal: operator_record.principal.clone(),
+            principal: operator_record.operator_id.clone(),
             nodes_tied_to_ballot: operator_record.nodes.clone(),
             ballot: Ballot::Undecided,
             security_metadata: SecurityMetadata::empty(),

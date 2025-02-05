@@ -34,6 +34,7 @@ use test_helpers::{
     prepare_registry_with_nodes_and_node_operator_id,
 };
 
+mod initial_args_test;
 mod node_providers_sync_tests;
 mod proposal_logic_tests;
 mod test_helpers;
