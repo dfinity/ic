@@ -10572,6 +10572,7 @@ dependencies = [
  "comparable",
  "dfn_core",
  "ic-base-types",
+ "ic-cdk 0.16.0",
  "ic-crypto-sha2",
  "ic-nervous-system-common",
  "ic-nns-common-protobuf-generator",
