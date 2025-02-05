@@ -141,11 +141,6 @@ impl BlockchainState {
         self.block_cache.keys().cloned().collect()
     }
 
-    /// Returns the hashes of all cached blocks.
-    pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
-        self.block_cache.keys().cloned().collect()
-    }
-
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
     /// Headers are expected to be sorted. If they are not, the headers will be likely be rejected
     /// with a [AddHeaderError::PrevHeaderNotCached](AddHeaderError::PrevHeaderNotCached) error.
