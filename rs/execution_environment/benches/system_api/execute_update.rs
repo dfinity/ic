@@ -971,7 +971,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_replication_factor()".into(),
             Module::Test.from_ic0(
-                "cycles_replication_factor",
+                "replication_factor",
                 Params2(1_i32, 2_i32),
                 Result::I32,
                 Wasm64::Disabled,
@@ -981,7 +981,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_replication_factor()".into(),
             Module::Test.from_ic0(
-                "cycles_replication_factor",
+                "replication_factor",
                 Params2(1_i64, 2_i64),
                 Result::I32,
                 Wasm64::Enabled,
@@ -991,7 +991,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_call()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_call",
+                "cost_call",
                 Params3(1_i64, 2_i64, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1001,7 +1001,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_call()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_call",
+                "cost_call",
                 Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
@@ -1011,7 +1011,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_create_canister()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_create_canister",
+                "cost_create_canister",
                 Param1(1_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1021,7 +1021,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_create_canister()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_create_canister",
+                "cost_create_canister",
                 Param1(1_i64),
                 Result::No,
                 Wasm64::Enabled,
@@ -1031,7 +1031,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_http_request()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_http_request",
+                "cost_http_request",
                 Params3(1_i64, 2_i64, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1041,7 +1041,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_http_request()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_http_request",
+                "cost_http_request",
                 Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
@@ -1051,7 +1051,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_sign_with_ecdsa()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_sign_with_ecdsa",
+                "cost_sign_with_ecdsa",
                 Params4(1_i32, 2_i32, 3_i32, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1061,7 +1061,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_sign_with_ecdsa()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_sign_with_ecdsa",
+                "cost_sign_with_ecdsa",
                 Params4(1_i64, 2_i64, 3_i32, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
@@ -1071,7 +1071,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_sign_with_schnorr()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_sign_with_schnorr",
+                "cost_sign_with_schnorr",
                 Params4(1_i32, 2_i32, 3_i32, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1081,7 +1081,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_sign_with_schnorr()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_sign_with_schnorr",
+                "cost_sign_with_schnorr",
                 Params4(1_i64, 2_i64, 3_i32, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
@@ -1091,7 +1091,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm32/ic0_cost_vetkd_derive_encrypted_key()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_encrypted_key",
                 Params4(1_i32, 2_i32, 3_i32, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
@@ -1101,7 +1101,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "wasm64/ic0_cost_vetkd_derive_encrypted_key()".into(),
             Module::Test.from_ic0(
-                "cycles_cost_vetkd_derive_encrypted_key",
+                "cost_vetkd_derive_encrypted_key",
                 Params4(1_i64, 2_i64, 3_i32, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
