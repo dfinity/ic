@@ -140,3 +140,4 @@ Feb 05 10:43:39.391 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:
 Feb 05 10:43:44.489 INFO s:/n:/ic_btc_adapter/stream Failed to connect to [2a02:ff0:220:5d0c:11b5:932b:2e6b:cbf4]:48333 ::: Connecting to the stream timed out.
 Feb 05 10:43:46.186 INFO s:/n:/ic_btc_adapter/addressbook Added 235 address(es) from [2401:b140:3::92:204]:48333.
 Feb 05 10:46:22.926 INFO s:/n:/ic_btc_adapter/blockchainmanager Added headers: Height = 68946, Active chain's tip = 00000000d5cc3c80b8ae8bfca15b837c3c9e97f2c8ce7db8134301a91554167f
+Feb 05 11:02:25.115 INFO Caught SIGINT
