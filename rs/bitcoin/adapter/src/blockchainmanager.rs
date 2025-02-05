@@ -1281,7 +1281,25 @@ pub mod test {
 
     #[test]
     fn test() {
-        
+        let genesis_block = genesis_block(Network::Regtest);
+        let headers = generate_headers(
+            genesis_block.block_hash(),
+            genesis_block.header.time,
+            3,
+            &[],
+        );
+        // Sync queue starts with 2 times
+        let mut sync_queue: LinkedHashSet<BlockHash> =
+            headers.iter().map(|h| h.block_hash()).take(2).collect();
+        // Retry queue starts with 1 item.
+        let mut retry_queue: LinkedHashSet<BlockHash> = headers
+            .iter()
+            .map(|h| h.block_hash())
+            .skip(2)
+            .take(1)
+            .collect();
+
+        // Try with `is_cache_full` set to false.
     }
 
     #[test]
