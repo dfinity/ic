@@ -21,11 +21,9 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
-    canister_state::CanisterEnv,
-    canister_state::{governance, governance_mut, set_governance},
+    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
     governance::Governance,
-    is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -107,10 +105,6 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
 
 fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
-    if !is_prune_following_enabled() {
-        return;
-    }
-
     ic_cdk_timers::set_timer(delay, move || {
         let carry_on =
             || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
