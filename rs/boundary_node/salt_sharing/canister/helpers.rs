@@ -27,7 +27,7 @@ pub async fn init_async(init_arg: InitArg) {
     match init_arg.salt_generation_strategy {
         SaltGenerationStrategy::StartOfMonth => schedule_monthly_salt_generation(),
     }
-    // Periodically poll API boundary nodes
+    // Set up periodical job to get all API boundary node IDs from the registry.
     let period = Duration::from_secs(init_arg.registry_polling_interval_secs);
     set_timer_interval(period, || spawn(poll_api_boundary_nodes()));
 }
