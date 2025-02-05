@@ -205,8 +205,6 @@ where
     }
 
     pub fn remove_archived_blocks(&mut self, len: usize) {
-        // redundant since split_off would panic, but here we can give a more
-        // descriptive message
         if len as u64 > self.blocks.len() {
             panic!(
                 "Asked to remove more blocks than present. Present: {}, to remove: {}",
