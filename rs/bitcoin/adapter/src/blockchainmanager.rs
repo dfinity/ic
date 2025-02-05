@@ -1280,29 +1280,6 @@ pub mod test {
     }
 
     #[test]
-    fn test() {
-        let genesis_block = genesis_block(Network::Regtest);
-        let headers = generate_headers(
-            genesis_block.block_hash(),
-            genesis_block.header.time,
-            3,
-            &[],
-        );
-        // Sync queue starts with 2 times
-        let mut sync_queue: LinkedHashSet<BlockHash> =
-            headers.iter().map(|h| h.block_hash()).take(2).collect();
-        // Retry queue starts with 1 item.
-        let mut retry_queue: LinkedHashSet<BlockHash> = headers
-            .iter()
-            .map(|h| h.block_hash())
-            .skip(2)
-            .take(1)
-            .collect();
-
-        // Try with `is_cache_full` set to false.
-    }
-
-    #[test]
     fn test_ensure_getdata_requests_are_not_retried_with_a_full_cache() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
@@ -1350,14 +1327,10 @@ pub mod test {
 
         blockchain_manager.sync_blocks(&mut channel);
 
-        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // The `getdata_request_info` should be empty as the block cache is at the size threshold.
+        // Additionally, the previous entry in get_data_request_info was removed because it timed out.
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 0);
         // The request is considered retried if its timeout is less than the the timeout seconds.
-        let request = blockchain_manager
-            .getdata_request_info
-            .get(&block_1_hash)
-            .expect("missing request info for block hash 1");
-        // The request should not have been retried as the block cache is full.
-        assert!(request.sent_at.is_none());
         while let Some(command) = channel.pop_front() {
             assert!(
                 !matches!(command.message, NetworkMessage::GetData(_)),
