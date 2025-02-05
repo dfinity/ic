@@ -33,6 +33,15 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 // We limit the number of blocks because serializing many blocks to pb can take some time.
 const MAX_BLOCKS_LENGTH: usize = 100;
 
+// The maximum number of get blocks requests that can be in-flight at any given time.
+const MAX_IN_FLIGHT_BLOCKS: usize = 100;
+
+// The maximum number of get blocks requests that can be in-flight at any given time.
+// The number of blocks outside of the main chain easily exceeds 100 currently on testnet4.
+// Setting this to 100 would prevent the adapter from making progress,
+// as it gets stuck on these blocks, whose requests timeout indefinitely.
+const TESTNET4_MAX_IN_FLIGHT_BLOCKS: usize = 1000;
+
 const BLOCK_HEADER_SIZE: usize = 80;
 
 // The maximum number of bytes the `next` field in a response can take.
@@ -109,7 +118,7 @@ impl GetSuccessorsHandler {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let response = {
+        let (blocks, next) = {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
@@ -128,19 +137,23 @@ impl GetSuccessorsHandler {
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
+                self.network,
             );
-            GetSuccessorsResponse { blocks, next }
+            (blocks, next)
+        };
+        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        let response = GetSuccessorsResponse {
+            blocks,
+            next: response_next.to_vec(),
         };
         self.metrics
             .response_blocks
             .observe(response.blocks.len() as f64);
 
-        if !response.next.is_empty() {
+        if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
-                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
-                    response.next.clone(),
-                ))
+                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
                 .ok();
         }
         // TODO: better handling of full channel as the receivers are never closed.
@@ -220,11 +233,15 @@ fn get_successor_blocks(
 }
 
 /// Get the next headers for blocks that may possibly be sent in upcoming GetSuccessor responses.
+/// This returns the first MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers from the anchor in BFS fashion
+/// which are not in processed nor are they in the current response. Essentially representing the
+/// blocks that should be returned in the next response.
 fn get_next_headers(
     state: &BlockchainState,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[Arc<Block>],
+    network: Network,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
@@ -237,9 +254,14 @@ fn get_next_headers(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
+    let max_in_flight_blocks = match network {
+        Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
+        _ => MAX_IN_FLIGHT_BLOCKS,
+    };
+
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
-        if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
+        if next_headers.len() >= max_in_flight_blocks {
             break;
         }
 
