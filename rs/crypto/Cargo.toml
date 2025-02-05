@@ -17,7 +17,6 @@ ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
-ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -32,6 +31,7 @@ ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validatio
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-tls = { path = "utils/tls" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

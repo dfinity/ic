@@ -5,9 +5,8 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        inspect_message, install_code::validate_controller,
-        replicated_query::execute_replicated_query, response::execute_response,
-        update::execute_update,
+        call_or_task::execute_call_or_task, inspect_message, install_code::validate_controller,
+        response::execute_response,
     },
     execution_environment_metrics::{
         ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
@@ -1704,11 +1703,10 @@ impl ExecutionEnvironment {
 
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
-                // A query call is expected to finish quickly, so DTS is not supported for it.
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Disabled,
+                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
-                    max_instructions_per_message_without_dts,
+                    instruction_limits.slice(),
                 );
                 let execution_parameters = self.execution_parameters(
                     &canister,
@@ -1717,16 +1715,19 @@ impl ExecutionEnvironment {
                     // Effectively disable subnet memory resource reservation for queries.
                     ResourceSaturation::default(),
                 );
-                let result = execute_replicated_query(
+                let result = execute_call_or_task(
                     canister,
-                    req,
+                    CanisterCallOrTask::Query(req),
                     method,
+                    prepaid_execution_cycles,
                     execution_parameters,
                     time,
                     round,
                     round_limits,
                     subnet_size,
-                    &self.metrics.state_changes_error,
+                    &self.call_tree_metrics,
+                    self.config.dirty_page_logging,
+                    self.deallocator_thread.sender(),
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
@@ -1747,9 +1748,9 @@ impl ExecutionEnvironment {
                     ExecutionMode::Replicated,
                     self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 );
-                execute_update(
+                execute_call_or_task(
                     canister,
-                    CanisterCallOrTask::Call(req),
+                    CanisterCallOrTask::Update(req),
                     method,
                     prepaid_execution_cycles,
                     execution_parameters,
@@ -1785,7 +1786,7 @@ impl ExecutionEnvironment {
             ExecutionMode::Replicated,
             self.subnet_memory_saturation(&round_limits.subnet_available_memory),
         );
-        execute_update(
+        execute_call_or_task(
             canister,
             CanisterCallOrTask::Task(task.clone()),
             WasmMethod::System(SystemMethod::from(task)),
@@ -2172,7 +2173,7 @@ impl ExecutionEnvironment {
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
-        let old_canister = match state.take_canister_state(&canister_id) {
+        let mut old_canister = match state.take_canister_state(&canister_id) {
             None => {
                 return (
                     Err(UserError::new(
@@ -2186,14 +2187,17 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
+        let resource_saturation =
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
-            &old_canister,
+            &mut old_canister,
             snapshot_id,
             state,
             round_limits,
             origin,
+            &resource_saturation,
             &self.metrics.long_execution_already_in_progress,
         );
 

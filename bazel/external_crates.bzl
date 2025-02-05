@@ -332,10 +332,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.8",
+                version = "^0.1.9",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.8",
+                version = "^0.1.9",
             ),
             "candid": crate.spec(
                 version = "^0.10.13",
@@ -380,7 +380,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "cloudflare": crate.spec(
                 git = "https://github.com/dfinity/cloudflare-rs.git",
-                rev = "a6538a036926bd756986c9c0a5de356daef48881",
+                rev = "0b1805bf11ed526445712559e6f18d3b8e024b06",
                 default_features = False,
                 features = [
                     "rustls-tls",

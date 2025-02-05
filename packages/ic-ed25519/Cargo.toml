@@ -1,5 +1,5 @@
 [package]
-name = "ic-crypto-ed25519"
+name = "ic-ed25519"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
