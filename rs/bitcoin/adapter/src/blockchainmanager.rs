@@ -595,10 +595,10 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                // Technically peers are ordered on the number of availble requests they have, so 
+                // Technically peers are ordered on the number of availble requests they have, so
                 // if for example the first peer has an empty inventory, that means that all subsequent
                 // peers will have an empty inventory as well.
-                // However, breaking here is a bit hard to read and an "optimization hack", which doesn't 
+                // However, breaking here is a bit hard to read and an "optimization hack", which doesn't
                 // bring a lot of value. Explicitly trying all peers instead is clearer.
                 continue;
             }
