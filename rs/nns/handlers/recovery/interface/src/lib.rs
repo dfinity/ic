@@ -1,4 +1,5 @@
 use candid::CandidType;
+use recovery::RecoveryProposal;
 use serde::Deserialize;
 
 pub mod recovery;
@@ -83,4 +84,29 @@ where
             .find(|res| res.is_err())
             .unwrap_or(Ok(()))
     }
+}
+
+/// Convenience method that explicitly checks the authenticity
+/// of sent proposal chain. It is equivalent to calling `proposals.iter().verify()`
+pub fn verify_signatures_and_authenticity_of_all_proposals_and_votes(
+    proposals: Vec<&RecoveryProposal>,
+) -> Result<()> {
+    proposals
+        .clone()
+        .iter()
+        .map(|proposal| {
+            proposal
+                .node_operator_ballots
+                .clone()
+                .iter()
+                .map(|ballot| {
+                    ballot
+                        .security_metadata
+                        .validate_metadata(&ballot.principal)
+                })
+                .find(|ballot_validation_response| ballot_validation_response.is_err())
+                .unwrap_or(Ok(()))
+        })
+        .find(|proposal_validation_response| proposal_validation_response.is_err())
+        .unwrap_or(Ok(()))
 }

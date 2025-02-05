@@ -4,7 +4,7 @@ use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload},
     recovery_init::RecoveryInitArgs,
     simple_node_operator_record::SimpleNodeOperatorRecord,
-    Ballot,
+    Ballot, VerifyIntegirty,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
 
@@ -92,5 +92,6 @@ fn initial_operators_should_be_able_to_place_proposals_and_vote() {
 
     let pending = get_pending(&pic, canister);
     let last = pending.last().unwrap();
-    assert!(!last.is_byzantine_majority_yes())
+    assert!(!last.is_byzantine_majority_yes());
+    assert!(last.verify().is_ok())
 }
