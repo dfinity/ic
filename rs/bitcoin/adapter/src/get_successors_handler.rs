@@ -187,24 +187,17 @@ fn get_successor_blocks(
     while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
-            match state.get_block(block_hash) {
-                Some(block) => {
-                    let block_size = block.total_size();
-                    if response_block_size == 0
-                        || (response_block_size + block_size <= MAX_BLOCKS_BYTES
-                            && successor_blocks.len() < MAX_BLOCKS_LENGTH
-                            && allow_multiple_blocks)
-                    {
-                        successor_blocks.push(block.clone());
-                        response_block_size += block_size;
-                    } else {
-                        break;
-                    }
-                }
-                None => {
-                    // Cache miss has occurred. This block or any of its successors cannot
-                    // be returned. Discarding this subtree from the BFS.
-                    continue;
+            if let Some(block) = state.get_block(block_hash) {
+                let block_size = block.total_size();
+                if response_block_size == 0
+                    || (response_block_size + block_size <= MAX_BLOCKS_BYTES
+                        && successor_blocks.len() < MAX_BLOCKS_LENGTH
+                        && allow_multiple_blocks)
+                {
+                    successor_blocks.push(block.clone());
+                    response_block_size += block_size;
+                } else {
+                    break;
                 }
             }
         }
