@@ -1271,7 +1271,7 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
 }
 
 #[test]
-fn test_multi_step_migration_from_mainnet() {
+fn test_multi_step_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
@@ -1291,16 +1291,16 @@ fn test_multi_step_migration_from_v2() {
 #[test]
 fn test_downgrade_from_incompatible_version() {
     ic_ledger_suite_state_machine_tests::test_downgrade_from_incompatible_version(
-        ledger_wasm_mainnet_v3(),
+        ledger_wasm_mainnet(),
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
 }
 
 #[test]
-fn test_stable_migration_endpoints_disabled_from_mainnet() {
+fn test_stable_migration_endpoints_disabled_from_v3() {
     test_stable_migration_endpoints_disabled(ledger_wasm_mainnet_v3());
 }
 
@@ -1346,7 +1346,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
 }
 
 #[test]
-fn test_incomplete_migration_from_mainnet() {
+fn test_incomplete_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
         ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
@@ -1364,7 +1364,7 @@ fn test_incomplete_migration_from_v2() {
 }
 
 #[test]
-fn test_incomplete_migration_to_current_from_mainnet() {
+fn test_incomplete_migration_to_current_from_v3() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
         ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
@@ -1382,7 +1382,7 @@ fn test_incomplete_migration_to_current_from_v2() {
 }
 
 #[test]
-fn test_metrics_while_migrating_from_mainnet() {
+fn test_metrics_while_migrating_from_v3() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_wasm_mainnet_v3(),
         ledger_wasm_low_instruction_limits(),
