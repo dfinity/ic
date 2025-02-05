@@ -255,6 +255,25 @@ async fn validate_signals_invalid_reject_signals() {
                 &state,
             )
         );
+
+        // Number of signals above 2 * `MAX_STREAM_MESSAGES` are invalid (dishonest subnet guard).
+        const MAX_SIGNALS: u64 = 2 * MAX_STREAM_MESSAGES as u64;
+        assert_eq!(
+            Invalid,
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                (MAX_SIGNALS + 42).into(),
+                &vec![
+                    RejectSignal::new(RejectReason::CanisterStopped, 10.into()),
+                    RejectSignal::new(RejectReason::Unknown, (MAX_SIGNALS / 2 + 123).into()),
+                    RejectSignal::new(RejectReason::QueueFull, MAX_SIGNALS.into()),
+                    RejectSignal::new(RejectReason::OutOfMemory, ((MAX_SIGNALS * 3) / 2).into()),
+                ]
+                .into(),
+                5.into(), // Expected signal index.
+                &state,
+            )
+        );
     });
 }
 
