@@ -517,24 +517,26 @@ impl Display for CanisterMessageOrTask {
     }
 }
 
-/// A wrapper around canister messages and tasks.
+/// A wrapper around canister calls and tasks that are executed in
+/// replicated mode.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterCallOrTask {
-    Call(CanisterCall),
+    Update(CanisterCall),
+    Query(CanisterCall),
     Task(CanisterTask),
 }
 
 impl CanisterCallOrTask {
     pub fn cycles(&self) -> Cycles {
         match self {
-            CanisterCallOrTask::Call(msg) => msg.cycles(),
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.cycles(),
             CanisterCallOrTask::Task(_) => Cycles::zero(),
         }
     }
 
     pub fn caller(&self) -> Option<PrincipalId> {
         match self {
-            CanisterCallOrTask::Call(msg) => Some(*msg.sender()),
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => Some(*msg.sender()),
             CanisterCallOrTask::Task(_) => None,
         }
     }
@@ -543,7 +545,7 @@ impl CanisterCallOrTask {
     /// messages and tasks.
     pub fn deadline(&self) -> CoarseTime {
         match self {
-            CanisterCallOrTask::Call(msg) => msg.deadline(),
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.deadline(),
             CanisterCallOrTask::Task(_) => NO_DEADLINE,
         }
     }
