@@ -4786,3 +4786,37 @@ pub fn generate_transactions(
         start.elapsed()
     );
 }
+
+pub fn test_setting_fee_collector_to_minting_account<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(MINTER),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    match env.install_canister(ledger_wasm.clone(), args, None) {
+        Ok(_) => {
+            panic!("should not install ledger with minting account and fee collector set to the same account")
+        }
+        Err(err) => {
+            err.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "The fee collector account cannot be the same account as the minting account",
+            );
+        }
+    }
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(Account::from(PrincipalId::new_user_test_id(1).0)),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    env.install_canister(ledger_wasm, args, None)
+        .expect("should successfully install ledger");
+}
