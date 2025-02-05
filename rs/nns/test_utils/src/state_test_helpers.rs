@@ -1619,6 +1619,7 @@ pub fn list_neurons_by_principal(
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: None,
         },
     )
 }
