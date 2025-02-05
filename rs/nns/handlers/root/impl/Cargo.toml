@@ -20,7 +20,6 @@ path = "src/lib.rs"
 [dependencies]
 build-info = { workspace = true }
 candid = { workspace = true }
-dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
@@ -67,6 +66,7 @@ build-info-build = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }
