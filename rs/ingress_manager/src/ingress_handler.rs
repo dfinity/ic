@@ -23,21 +23,20 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     type Mutations = Mutations;
 
     fn on_state_change(&self, pool: &T) -> Mutations {
-        // Skip on_state_change when ingress_message_setting is not available in
-        // registry.
+        // Skip on_state_change when ingress_message_setting is not available in registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
             return Mutations::new();
         };
 
-        let _timer = self.metrics.ingress_handler_time.start_timer();
-        let get_status = self.ingress_hist_reader.get_latest_status();
-
         // Do not run on_state_change if consensus_time is not initialized yet.
         let Some(consensus_time) = self.consensus_time.consensus_time() else {
             return Mutations::new();
         };
+
+        let _timer = self.metrics.ingress_handler_time.start_timer();
+        let get_status = self.ingress_hist_reader.get_latest_status();
 
         let mut change_set = Vec::new();
 
