@@ -81,7 +81,7 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
-    "rs/crypto/secp256k1",
+    "packages/ic-secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
