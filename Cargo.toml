@@ -37,6 +37,8 @@ members = [
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
     "rs/boundary_node/rate_limits/canister_client",
+    "rs/boundary_node/salt_sharing",
+    "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
@@ -486,11 +488,6 @@ opt-level = 3
 
 [profile.dev.package.p256]
 opt-level = 3
-
-[patch.crates-io]
-# Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
-# released this can be removed.
-jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
 actix-web = "4.9.0"

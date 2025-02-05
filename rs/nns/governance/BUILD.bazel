@@ -65,7 +65,6 @@ DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",

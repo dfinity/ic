@@ -91,7 +91,11 @@ pub fn validate_header(
     if let Err(err) = header.validate_pow(Target::from_compact(compact_target)) {
         match err {
             ValidationError::BadProofOfWork => println!("bad proof of work"),
-            ValidationError::BadTarget => println!("bad target"),
+            ValidationError::BadTarget => println!(
+                "bad target {:?}, {:?}",
+                Target::from_compact(compact_target),
+                header.target()
+            ),
             _ => {}
         };
         return Err(ValidateHeaderError::InvalidPoWForComputedTarget);
@@ -164,7 +168,7 @@ fn get_next_compact_target(
     timestamp: u32,
 ) -> CompactTarget {
     match network {
-        Network::Testnet | Network::Regtest => {
+        Network::Testnet | Network::Regtest | Network::Testnet4 => {
             if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
                 // This if statements is reached only for Regtest and Testnet networks
                 // Here is the quote from "https://en.bitcoin.it/wiki/Testnet"
@@ -206,8 +210,9 @@ fn find_next_difficulty_in_chain(
 ) -> CompactTarget {
     // This is the maximum difficulty target for the network
     let pow_limit_bits = pow_limit_bits(network);
+
     match network {
-        Network::Testnet | Network::Regtest => {
+        Network::Testnet | Network::Regtest | Network::Testnet4 => {
             let mut current_header = *prev_header;
             let mut current_height = prev_height;
             let mut current_hash = current_header.block_hash();
@@ -282,7 +287,20 @@ fn compute_next_difficulty(
     let actual_interval =
         std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
 
-    CompactTarget::from_next_work_required(prev_header.bits, actual_interval, *network)
+    //TODO: ideally from_next_work_required works by itself
+    // On Testnet networks, prev_header.bits could be different than last_adjustment_header.bits
+    // if prev_header took more than 20 minutes to be created.
+    // Testnet3 (mistakenly) uses the temporary difficulty drop of prev_header to calculate
+    // the difficulty of th next epoch; this results in the whole epoch having a very low difficulty,
+    // and therefore likely blockstorms.
+    // Testnet4 uses the last_adjustment_header.bits to calculate the next epoch's difficulty, making it
+    // more stable.
+    //TODO(mihailjianu): add a test for testnet4.
+    let previous_difficulty = match network {
+        Network::Testnet4 => last_adjustment_header.bits,
+        _ => prev_header.bits,
+    };
+    CompactTarget::from_next_work_required(previous_difficulty, actual_interval, *network)
 }
 
 #[cfg(test)]
@@ -294,6 +312,8 @@ mod test {
         block::Version, consensus::deserialize, hashes::hex::FromHex, hashes::Hash, TxMerkleNode,
     };
     use csv::Reader;
+
+    use rstest::rstest;
 
     use super::*;
     use crate::constants::test::{
@@ -559,9 +579,49 @@ mod test {
     }
 
     #[test]
-    fn test_compute_next_difficulty_for_backdated_blocks() {
+    fn test_compute_next_difficulty_for_temporary_difficulty_drops_testnet4() {
+        // Arrange
+        let network = Network::Testnet4;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = CompactTarget::from_consensus(473956288);
+
+        // Create the genesis header and initialize the header store with 2014 blocks
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..(chain_length - 1) {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time + 1,
+                ..last_header
+            };
+            store.add(new_header);
+            last_header = new_header;
+        }
+        // Add the last header in the epoch, which has the lowest difficulty, or highest possible target.
+        // This can happen if the block is created more than 20 minutes after the previous block.
+        let last_header_in_epoch = BlockHeader {
+            prev_blockhash: last_header.block_hash(),
+            time: last_header.time + 1,
+            bits: max_target(&network).to_compact_lossy(),
+            ..last_header
+        };
+        store.add(last_header_in_epoch);
+
+        // Act.
+        let difficulty =
+            compute_next_difficulty(&network, &store, &last_header_in_epoch, chain_length);
+
+        // Assert.
+        // Note: testnet3 would produce 473956288, as it depends on the previous header's difficulty.
+        assert_eq!(difficulty, CompactTarget::from_consensus(470810608));
+    }
+
+    #[rstest]
+    #[case(Network::Testnet)]
+    #[case(Network::Testnet4)]
+    fn test_compute_next_difficulty_for_backdated_blocks(#[case] network: Network) {
         // Arrange: Set up the test network and parameters
-        let network = Network::Testnet;
         let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
         let genesis_difficulty = CompactTarget::from_consensus(486604799);
 
