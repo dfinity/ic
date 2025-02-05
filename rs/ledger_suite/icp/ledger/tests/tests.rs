@@ -1235,7 +1235,7 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn test_upgrade_serialization_from_mainnet() {
+fn test_upgrade_serialization_from_v3() {
     test_upgrade_serialization(ledger_wasm_mainnet_v3());
 }
 
