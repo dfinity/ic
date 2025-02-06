@@ -122,7 +122,7 @@ impl Environment for CanisterEnvironment {
     }
 
     fn set_certified_data(&self, data: &[u8]) {
-        dfn_core::api::set_certified_data(data)
+        ic_cdk::api::set_certified_data(data)
     }
 }
 
