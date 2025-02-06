@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn guard_limits_one_principal() {
+    fn guard_limits_one_account() {
         // test that two guards for the same principal cannot exist in the same block
         // and that a guard is properly dropped at end of the block
 
@@ -155,17 +155,22 @@ mod tests {
     }
 
     #[test]
-    fn guard_prevents_more_than_max_concurrent_principals() {
+    fn guard_prevents_more_than_max_concurrent_accounts() {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal
 
         init(test_state_args());
-        let guards: Vec<_> = (0..MAX_CONCURRENT)
+        let guards: Vec<_> = (0..MAX_CONCURRENT / 2)
             .map(|id| {
+                balance_update_guard(test_account(0, Some(id as u8))).unwrap_or_else(|e| {
+                    panic!("Could not create guard for subaccount num {}: {:#?}", id, e)
+                })
+            })
+            .chain((MAX_CONCURRENT / 2..MAX_CONCURRENT).map(|id| {
                 balance_update_guard(test_account(id as u64, None)).unwrap_or_else(|e| {
                     panic!("Could not create guard for principal num {}: {:#?}", id, e)
                 })
-            })
+            }))
             .collect();
         assert_eq!(guards.len(), MAX_CONCURRENT);
         let account = test_account(MAX_CONCURRENT as u64 + 1, None);
