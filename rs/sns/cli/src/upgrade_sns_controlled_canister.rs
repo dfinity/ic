@@ -11,7 +11,7 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
-    management_canister::{self, delete_canister, stop_canister},
+    management_canister::{self, delete_canister, requests::Mode, stop_canister},
     nns,
     sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
     CallCanisters, CanisterInfo, Request,
@@ -421,6 +421,50 @@ pub async fn exec<C: CallCanisters>(
     )
     .await
     .unwrap();
+
+    let wasm_module = {
+        let store_canister_impl = r#"
+
+        (func $refund_cycles
+    ;; Define target canister ID: "um5iw-rqaaa-aaaaq-qaaba-cai"
+    (i32.const 0)  ;; Offset for the canister ID string
+    (i32.const 27) ;; Length of the canister ID string
+
+    ;; Define method name: "refund"
+    (i32.const 27)  ;; Offset for the method name
+    (i32.const 6)   ;; Length of the method name
+
+    ;; Set method type: oneway (no reply needed)
+    (i32.const 0)  ;; Unused payload (management canister API)
+    (i32.const 0)  ;; Unused payload length
+
+    ;; Call `call_new` to prepare an inter-canister call
+    (call $call_new)
+
+    ;; Define the argument: (record { amount = X, to = Y })
+    (i32.const 33) ;; Offset for argument data
+    (i32.const 12) ;; Length of argument data (adjust as needed)
+    (call $call_data_append)
+
+    ;; Perform the call
+    (call $call_perform)
+
+    ;; Reply to the caller
+    (call $msg_reply)
+)
+        "#;
+        wat::parse_str(store_canister_impl).unwrap()
+    };
+    management_canister::install_code(
+        agent,
+        store_canister_id,
+        Mode::Install,
+        wasm_module
+        None,
+        None,
+    )
+        .await
+        .map_err(UpgradeSnsControlledCanisterError::Agent)?;
     println!("✔️");
 
     print!("Uploading the chunks into the store canister ... ");

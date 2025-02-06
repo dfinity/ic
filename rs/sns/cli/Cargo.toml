@@ -51,6 +51,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+wat = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }

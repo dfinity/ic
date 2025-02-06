@@ -181,6 +181,78 @@ impl Request for CanisterStatusArgs {
 }
 
 // ```
+// type wasm_module = blob;
+//
+// type canister_install_mode = variant {
+//     install;
+//     reinstall;
+//     upgrade : opt record {
+//         skip_pre_upgrade : opt bool;
+//         wasm_memory_persistence : opt variant {
+//             keep;
+//             replace;
+//         };
+//     };
+// };
+//
+// type install_code_args = record {
+//     mode : canister_install_mode;
+//     canister_id : canister_id;
+//     wasm_module : wasm_module;
+//     arg : blob;
+//     sender_canister_version : opt nat64;
+// };
+// ```
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner {
+    #[serde(rename = "keep")]
+    Keep,
+    #[serde(rename = "replace")]
+    Replace,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInstallModeUpgradeInner {
+    pub wasm_memory_persistence: Option<CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner>,
+    pub skip_pre_upgrade: Option<bool>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum Mode {
+    #[serde(rename = "reinstall")]
+    Reinstall,
+    #[serde(rename = "upgrade")]
+    Upgrade(Option<CanisterInstallModeUpgradeInner>),
+    #[serde(rename = "install")]
+    Install,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct InstallCodeArgs {
+    pub mode: Mode,
+    pub canister_id: Principal,
+    pub wasm_module: Vec<u8>,
+    pub arg: Vec<u8>,
+    pub sender_canister_version: Option<u64>,
+}
+
+impl Request for InstallCodeArgs {
+    fn method(&self) -> &'static str {
+        "install_code"
+    }
+
+    fn update(&self) -> bool {
+        true
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        candid::encode_one(self)
+    }
+
+    type Response = ();
+}
+
+// ```
 // type stop_canister_args = record {
 //     canister_id : canister_id;
 // };

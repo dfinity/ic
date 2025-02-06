@@ -26,6 +26,30 @@ pub async fn canister_status<C: CallCanisters>(
     Ok(response)
 }
 
+pub async fn install_code<C: CallCanisters>(
+    agent: &C,
+    canister_id: CanisterId,
+    mode: Mode,
+    wasm_module: Vec<u8>,
+    arg: Option<Vec<u8>>,
+    sender_canister_version: Option<u64>,
+) -> Result<(), C::Error> {
+    let response = agent
+        .call(
+            Principal::management_canister(),
+            InstallCodeArgs {
+                canister_id: canister_id.get().0,
+                arg: arg.unwrap_or_default(),
+                mode,
+                wasm_module,
+                sender_canister_version,
+            },
+        )
+        .await?;
+
+    Ok(response)
+}
+
 pub async fn stop_canister<C: CallCanisters>(
     agent: &C,
     canister_id: CanisterId,

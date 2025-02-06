@@ -42,6 +42,7 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:url",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []

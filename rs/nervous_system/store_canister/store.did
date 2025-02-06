@@ -1,0 +1,8 @@
+type RefundResult = variant {
+  Error : text;
+  RefundedCycles : nat;
+};
+
+service -> {
+  refund : (to : principal) -> (RefundResult);
+}
