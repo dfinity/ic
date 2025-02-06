@@ -1,6 +1,6 @@
 [Unit]
 Description=Custom HostOS metrics
-After=node_exporter.service
+Before=node_exporter.service
 
 [Service]
 Type=oneshot
