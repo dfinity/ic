@@ -10,7 +10,7 @@ use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
-    wait_ledger_ready, AllowanceProvider, FEE, MINTER,
+    AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
@@ -1183,8 +1183,6 @@ fn test_block_transformation() {
     transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
-
-    wait_ledger_ready(&env, canister_id, 100);
 
     // Fetch all blocks before the upgrade
     let resp_pre_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
