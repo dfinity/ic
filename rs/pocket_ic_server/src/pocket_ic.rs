@@ -2132,7 +2132,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
+struct PocketNodeSigner(pub ic_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(

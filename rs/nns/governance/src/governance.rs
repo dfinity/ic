@@ -14,8 +14,7 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
-        prune_some_following, NeuronMetrics, NeuronStore,
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -2241,6 +2240,7 @@ impl Governance {
             include_public_neurons_in_full_neurons,
             page_number,
             page_size,
+            neuron_subaccounts,
         } = list_neurons;
 
         let page_number = page_number.unwrap_or(0);
@@ -2276,10 +2276,27 @@ impl Governance {
             BTreeSet::new()
         };
 
+        let mut neurons_by_subaccount: BTreeSet<NeuronId> = neuron_subaccounts
+            .as_ref()
+            .map(|subaccounts| {
+                subaccounts
+                    .iter()
+                    .flat_map(|neuron_subaccount| {
+                        Self::bytes_to_subaccount(&neuron_subaccount.subaccount)
+                            .ok()
+                            .and_then(|subaccount| {
+                                self.neuron_store.get_neuron_id_for_subaccount(subaccount)
+                            })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         // Concatenate (explicit and implicit)-ly included neurons.
         let mut requested_neuron_ids: BTreeSet<NeuronId> =
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
+        requested_neuron_ids.append(&mut neurons_by_subaccount);
 
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
@@ -5991,14 +6008,6 @@ impl Governance {
             begin,
             carry_on,
         )
-    }
-
-    pub fn backfill_some_voting_power_refreshed_timestamps(
-        &mut self,
-        begin: std::ops::Bound<NeuronId>,
-        carry_on: impl FnMut() -> bool,
-    ) -> std::ops::Bound<NeuronId> {
-        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
     }
 
     pub fn backfill_install_code_hashes(&mut self) {

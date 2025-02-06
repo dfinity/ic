@@ -1,5 +1,5 @@
 [package]
-name = "salt-api"
+name = "salt-sharing-api"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

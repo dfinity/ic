@@ -74,7 +74,6 @@ fn make_checkpoint_and_get_state_impl(
         height,
         tip_channel,
         &state_manager_metrics(log).checkpoint_metrics,
-        ic_config::state_manager::lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| {
         panic!(
@@ -202,7 +201,6 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             HEIGHT,
             &tip_channel,
             &state_manager_metrics.checkpoint_metrics,
-            ic_config::state_manager::lsmt_config_default().lsmt_status,
         );
 
         match replicated_state {

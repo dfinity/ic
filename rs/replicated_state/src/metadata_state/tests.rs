@@ -329,10 +329,9 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.network_topology = network_topology;
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der =
-        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
-            .unwrap()
-            .serialize_rfc8410_der();
+    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+        .unwrap()
+        .serialize_rfc8410_der();
 
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,

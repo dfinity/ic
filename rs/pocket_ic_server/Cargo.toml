@@ -33,10 +33,10 @@ ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
-ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../types/error_types" }
 ic-http-gateway = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }

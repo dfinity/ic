@@ -29,6 +29,7 @@ rust_binary(
     name = "release-runscript",
     srcs = [
         "src/main.rs",
+        "src/utils.rs",
     ],
     deps = DEPENDENCIES,
 )

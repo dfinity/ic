@@ -1124,7 +1124,7 @@ impl CanisterQueues {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),

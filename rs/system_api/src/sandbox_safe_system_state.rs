@@ -151,7 +151,7 @@ impl SystemStateModifications {
 
     fn reject_subnet_message_routing(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: ResolveDestinationError,
         logger: &ReplicaLogger,
@@ -178,7 +178,7 @@ impl SystemStateModifications {
 
     fn reject_subnet_message_user_error(
         system_state: &mut SystemState,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
         msg: Request,
         err: UserError,
         logger: &ReplicaLogger,
@@ -367,7 +367,7 @@ impl SystemStateModifications {
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
-        let subnet_ids: Vec<PrincipalId> =
+        let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
