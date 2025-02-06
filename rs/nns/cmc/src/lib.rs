@@ -1,4 +1,5 @@
 use candid::{CandidType, Nat};
+use std::time::{Duration, SystemTime};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
@@ -25,6 +26,29 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
+
+pub fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        ic_cdk::api::time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
+}
+
+pub fn now_seconds() -> u64 {
+    Duration::from_nanos(now_nanoseconds()).as_secs()
+}
+
+pub fn now_system_time() -> SystemTime {
+    let nanos = now_nanoseconds();
+    let duration = Duration::from_nanos(nanos);
+    SystemTime::UNIX_EPOCH + duration
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ExchangeRateCanister {

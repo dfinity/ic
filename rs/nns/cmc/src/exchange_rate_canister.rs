@@ -498,6 +498,7 @@ mod test {
         DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
         DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
     };
+    use cycles_minting_canister::now_seconds;
     use futures::FutureExt;
     use ic_xrc_types::ExchangeRateMetadata;
     use std::{
@@ -956,12 +957,7 @@ mod test {
             initial_average_icp_xdr_conversion_rate
         );
 
-        let now_timestamp_seconds = (dfn_core::api::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 60)
-            * 60;
+        let now_timestamp_seconds = (now_seconds() / 60) * 60;
 
         let env = TestExchangeRateCanisterEnvironment {
             now_timestamp_seconds,
