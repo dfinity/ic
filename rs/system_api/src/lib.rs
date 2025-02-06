@@ -3420,13 +3420,14 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
                         .to_string(),
                 }),
-                Some(request) => {
-                    if request.is_timeout_set() {
-                        return Err(HypervisorError::ToolchainContractViolation {
-                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
-                        })
-                    }
 
+                Some(request) if request.is_timeout_set() =>
+                    Err(HypervisorError::ToolchainContractViolation {
+                        error: "ic0_call_with_best_effort_response failed because a timeout is already set."
+                            .to_string(),
+                    }),
+
+                Some(request) => {
                     // No-op if the feature is disabled on this subnet.
                     if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
                         let bounded_timeout =
