@@ -12,7 +12,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex};
@@ -89,14 +89,14 @@ impl BtcService for BtcServiceImpl {
             .start_timer();
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
-        debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
+        info!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
 
         match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await?,
         ) {
             Ok(res) => {
-                debug!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);
+                info!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);
                 Ok(Response::new(res))
             }
             Err(err) => Err(err),
