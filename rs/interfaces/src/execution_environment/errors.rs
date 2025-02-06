@@ -512,7 +512,7 @@ impl HypervisorError {
         let description = if help.is_empty() {
             format!("Error from Canister {}: {}", canister_id, &self,)
         } else {
-            format!("Error from Canister {}: {}\n{}", canister_id, &self, help)
+            format!("Error from Canister {}: {}.\n{}", canister_id, &self, help)
         };
 
         let code = match self {
