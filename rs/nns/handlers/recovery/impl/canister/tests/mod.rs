@@ -265,7 +265,7 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
     pic.add_cycles(canister, 100_000_000_000_000);
     pic.install_canister(
         canister,
-        fetch_canister_wasm("BACKUP_ROOT_WASM_PATH"),
+        fetch_canister_wasm("RECOVERY_WASM_PATH"),
         candid::encode_one(RecoveryInitArgs::default()).unwrap(),
         None,
     );

@@ -10867,6 +10867,7 @@ dependencies = [
  "ic-agent",
  "ic-nns-handler-recovery-interface",
  "serde",
+ "tokio",
 ]
 
 [[package]]

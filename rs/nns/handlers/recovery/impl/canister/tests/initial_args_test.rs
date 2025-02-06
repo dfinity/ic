@@ -28,7 +28,7 @@ fn setup_and_install_canister(initial_arg: RecoveryInitArgs) -> (PocketIc, Princ
     println!("Size: {}", encoded.len());
     pic.install_canister(
         canister,
-        fetch_canister_wasm("BACKUP_ROOT_WASM_PATH"),
+        fetch_canister_wasm("RECOVERY_WASM_PATH"),
         encoded,
         None,
     );

@@ -13,3 +13,6 @@ ed25519-dalek.workspace = true
 ic-agent.workspace = true
 async-trait.workspace = true
 ic-nns-handler-recovery-interface.path = "../interface"
+
+[dev-dependencies]
+tokio.workspace = true

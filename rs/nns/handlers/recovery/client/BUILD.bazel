@@ -12,10 +12,13 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait"
+    "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "//packages/pocket-ic",
+    "@crate_index//:tokio",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 
@@ -31,3 +34,19 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_test(
+    name = "client-tests",
+    srcs = glob(["src/**/*.rs"]),
+    data = [
+        "//rs/nns/handlers/recovery/impl:recovery-canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    env = {
+        "RECOVERY_WASM_PATH": "$(rootpath //rs/nns/handlers/recovery/impl:recovery-canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
+    },
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":client"]
+)
