@@ -1,4 +1,7 @@
-use ic_nns_handler_recovery_interface::recovery::{NewRecoveryProposal, RecoveryPayload};
+use ic_nns_handler_recovery_interface::{
+    recovery::{NewRecoveryProposal, RecoveryPayload},
+    Ballot,
+};
 
 use crate::{
     tests::{generate_node_operators, preconfigured_recovery_init_args},
@@ -41,4 +44,29 @@ async fn can_place_proposals() {
 
     println!("{:?}", response);
     assert!(response.is_ok());
+}
+
+#[tokio::test]
+async fn can_vote_on_proposals() {
+    let node_operators_with_keys = generate_node_operators();
+    let (mut pic, canister) =
+        init_pocket_ic(preconfigured_recovery_init_args(&node_operators_with_keys)).await;
+
+    let mut node_operator_iter = node_operators_with_keys.iter();
+    let first = node_operator_iter.next().unwrap();
+    let mut first_client = first
+        .into_recovery_canister_client(&mut pic, canister)
+        .await;
+
+    first_client
+        .submit_new_recovery_proposal(NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+        })
+        .await
+        .unwrap();
+
+    let response = first_client.vote_on_latest_proposal(Ballot::Yes).await;
+
+    println!("{:?}", response);
+    assert!(response.is_ok())
 }

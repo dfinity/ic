@@ -86,7 +86,6 @@ fn main() {}
 #[init]
 fn init(arg: RecoveryInitArgs) {
     ic_cdk_timers::set_timer(std::time::Duration::from_secs(0), || {
-        ic_cdk::println!("Received: {:?}", arg);
         ic_cdk::spawn(setup_node_operator_update(Some(arg)));
     });
     ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(60 * 60 * 24), || {

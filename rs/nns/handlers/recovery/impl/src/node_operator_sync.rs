@@ -5,6 +5,7 @@ use ic_nns_handler_recovery_interface::simple_node_operator_record::SimpleNodeOp
 use ic_nns_handler_root::root_proposals::{
     get_nns_membership, get_nns_subnet_id, get_node_operator_pid_of_node,
 };
+use itertools::Itertools;
 
 thread_local! {
   static NODE_OPERATORS_IN_NNS: RefCell<Vec<SimpleNodeOperatorRecord>> = const { RefCell::new(Vec::new()) };
@@ -55,10 +56,22 @@ pub fn get_node_operators_in_nns() -> Vec<SimpleNodeOperatorRecord> {
     merged.dedup_by(|a, b| a.operator_id == b.operator_id);
 
     if !initial.is_empty() {
-        ic_cdk::println!("Initial: {:?}", initial);
-        ic_cdk::println!("Obtained: {:?}", obtained_from_sync);
-        ic_cdk::println!("Merged: {:?}", merged);
+        ic_cdk::println!("Initial: {}", format_node_operators(&initial));
+        ic_cdk::println!("Obtained: {}", format_node_operators(&obtained_from_sync));
     }
-
+    ic_cdk::println!("Merged: {}", format_node_operators(&merged));
     merged
+}
+
+fn format_node_operators(operators: &Vec<SimpleNodeOperatorRecord>) -> String {
+    operators
+        .iter()
+        .map(|operator| {
+            format!(
+                "Principal: {}, Nodes: [{}]",
+                operator.operator_id.to_string(),
+                operator.nodes.iter().map(|n| n.to_string()).join(", ")
+            )
+        })
+        .join("\n")
 }
