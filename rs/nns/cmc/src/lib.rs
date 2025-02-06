@@ -1,6 +1,9 @@
 use candid::{CandidType, Nat};
+use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+use dfn_core::api::ic0;
+use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_management_canister_types_private::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
 };
@@ -13,6 +16,7 @@ use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use on_wire::{FromWire, IntoWire, NewType};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
@@ -32,6 +36,31 @@ pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 I
 // Not available in ic_cdk
 pub fn ic0_mint_cycles(amount: u64) -> u64 {
     unsafe { ic0::mint_cycles(amount) }
+}
+
+// Duplicating some functionality that is no longer available
+// after migration to ic_cdk
+pub async fn call_protobuf<Arg, Res>(
+    canister_id: CanisterId,
+    method_name: &str,
+    arg: Arg,
+) -> CallResult<Res>
+where
+    Arg: ToProto,
+    Res: ToProto,
+{
+    let bytes = ProtoBuf::new(arg)
+        .into_bytes()
+        .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
+
+    let res: CallResult<Vec<u8>> =
+        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
+
+    res.and_then(|bytes| {
+        Ok(ProtoBuf::<Res>::from_bytes(bytes)
+            .map_err(|e| (RejectionCode::Unknown, e.to_string()))?
+            .into_inner())
+    })
 }
 
 pub fn now_nanoseconds() -> u64 {

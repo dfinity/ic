@@ -1551,10 +1551,9 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
             error_message,
         }
     }
-    let BlockRes(b) =
-        dfn_core::api::call_with_cleanup(ledger_id, "block_pb", protobuf, block_index)
-            .await
-            .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
+    let BlockRes(b) = call_protobuf(ledger_id, "block_pb", block_index)
+        .await
+        .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
 
     let raw_block = match b {
         None => {
@@ -1565,19 +1564,14 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
-            let BlockRes(b) = dfn_core::api::call_with_cleanup(
-                canister_id,
-                "get_block_pb",
-                protobuf,
-                block_index,
-            )
-            .await
-            .map_err(|e| {
-                failed_to_fetch_block(format!(
-                    "Failed to fetch block from {}: {}",
-                    canister_id, e.1
-                ))
-            })?;
+            let BlockRes(b) = call_protobuf(canister_id, "get_block_pb", block_index)
+                .await
+                .map_err(|e| {
+                    failed_to_fetch_block(format!(
+                        "Failed to fetch block from {}: {}",
+                        canister_id, e.1
+                    ))
+                })?;
             b.ok_or_else(|| {
                 failed_to_fetch_block(format!(
                     "Block {} not found in archive {}",
@@ -2240,13 +2234,12 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         to: minting_account_id,
         created_at_time: None,
     };
-    let res: Result<BlockIndex, (Option<i32>, String)> =
-        dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+    let res: CallResult<BlockIndex> = call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
         Ok(block) => print(format!("{} done in block {}.", msg, block)),
         Err((code, err)) => {
-            let code = code.unwrap_or_default();
+            let code = code as i32;
             print(format!("{} failed with code {}: {:?}", msg, code, err))
         }
     }
@@ -2290,11 +2283,10 @@ async fn refund_icp(
             to,
             created_at_time: None,
         };
-        let send_res: Result<BlockIndex, (Option<i32>, String)> =
-            dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args)
-                .await;
+        let send_res: CallResult<BlockIndex> =
+            call_protobuf(ledger_canister_id, "send_pb", send_args).await;
         let block = send_res.map_err(|(code, err)| {
-            let code = code.unwrap_or_default();
+            let code = code as i32;
             NotifyError::Other {
                 error_code: NotifyErrorCode::RefundFailed as u64,
                 error_message: format!("Refund to {} failed with code {}: {}", to, code, err),
@@ -2556,21 +2548,17 @@ fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
 }
 
 async fn get_rng() -> Result<StdRng, String> {
-    let res: Result<Vec<u8>, (Option<i32>, String)> = dfn_core::api::call_with_cleanup(
-        IC_00,
-        &Method::RawRand.to_string(),
-        dfn_candid::candid_one,
-        (),
-    )
-    .await;
+    let res: CallResult<(Vec<u8>,)> =
+        ic_cdk::call(IC_00.get().0, &Method::RawRand.to_string(), ()).await;
 
-    let bytes = res.map_err(|(code, msg)| {
-        format!(
-            "Getting random bytes failed with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
-        )
-    })?;
+    let bytes = res
+        .map_err(|(code, msg)| {
+            format!(
+                "Getting random bytes failed with code {}: {:?}",
+                code as i32, msg
+            )
+        })?
+        .0;
 
     Ok(StdRng::from_seed(bytes[0..32].try_into().unwrap()))
 }
