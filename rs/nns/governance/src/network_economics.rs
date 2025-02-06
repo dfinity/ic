@@ -257,3 +257,7 @@ impl InheritFrom for VotingPowerEconomics {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "./network_economics_tests.rs"]
+mod network_economics_tests;
