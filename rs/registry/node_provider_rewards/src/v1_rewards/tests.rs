@@ -82,6 +82,42 @@ fn mocked_rewards_table() -> NodeRewardsTable {
 
     NodeRewardsTable { table }
 }
+
+#[test]
+fn test_invalid_subnet_metric_error() {
+    let from_ts: u64 = 1_000;
+    let to_ts: u64 = 2_000;
+
+    let rewarding_period = RewardingPeriod::new(from_ts, to_ts).unwrap();
+    let subnet_id: SubnetId = PrincipalId::new_user_test_id(1).into();
+
+    let invalid_metric = NodeMetricsHistoryResponse {
+        timestamp_nanos: 500,
+        node_metrics: vec![NodeMetrics::default()],
+    };
+
+    let mut subnet_metrics = HashMap::new();
+    subnet_metrics.insert(subnet_id, vec![invalid_metric]);
+
+    let rewards_table = NodeRewardsTable::default();
+    let rewardable_nodes: Vec<RewardableNode> = vec![];
+
+    let result = calculate_rewards(
+        rewarding_period,
+        &rewards_table,
+        subnet_metrics,
+        &rewardable_nodes,
+    );
+    assert_eq!(
+        result,
+        Err(RewardCalculationError::InvalidSubnetMetric {
+            subnet_id,
+            timestamp: 500,
+            from_ts,
+            to_ts
+        })
+    );
+}
 #[test]
 fn test_daily_node_metrics() {
     let subnet1: SubnetId = PrincipalId::new_user_test_id(1).into();

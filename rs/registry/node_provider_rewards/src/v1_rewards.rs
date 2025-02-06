@@ -4,6 +4,7 @@ use itertools::Itertools;
 use num_traits::ToPrimitive;
 
 use crate::v1_logs::LogLevel;
+use crate::v1_rewarding_period::RewardingPeriod;
 use crate::v1_types::TimestampNanos;
 use crate::{
     v1_logs::{LogEntry, Operation, RewardsLog},
@@ -15,6 +16,82 @@ use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryResponse};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::collections::HashMap;
+use std::fmt;
+
+#[derive(Debug, PartialEq)]
+pub enum RewardCalculationError {
+    InvalidSubnetMetric {
+        subnet_id: SubnetId,
+        timestamp: TimestampNanos,
+        from_ts: TimestampNanos,
+        to_ts: TimestampNanos,
+    },
+    EmptyRewardables,
+    NodeNotInRewardables(NodeId),
+}
+
+impl fmt::Display for RewardCalculationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RewardCalculationError::InvalidSubnetMetric {
+                subnet_id,
+                timestamp,
+                from_ts,
+                to_ts,
+            } => {
+                write!(
+                    f,
+                    "Subnet metric for subnet {} is out of range: {} not in [{} - {}]",
+                    subnet_id, timestamp, from_ts, to_ts
+                )
+            }
+            RewardCalculationError::EmptyRewardables => {
+                write!(f, "No rewardable nodes were provided")
+            }
+            RewardCalculationError::NodeNotInRewardables(node_id) => {
+                write!(f, "Node {} has metrics in rewarding period but it is not part of rewardable_nodes", node_id)
+            }
+        }
+    }
+}
+
+pub fn validate_input(
+    rewarding_period: &RewardingPeriod,
+    subnet_metrics: &HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
+    rewardable_nodes: &[RewardableNode],
+) -> Result<(), RewardCalculationError> {
+    if rewardable_nodes.is_empty() {
+        return Err(RewardCalculationError::EmptyRewardables);
+    }
+
+    let from_ts = rewarding_period.start_metrics_ts();
+    let to_ts = rewarding_period.end_metrics_ts();
+
+    for (subnet_id, metrics) in subnet_metrics {
+        for metric in metrics {
+            if metric.timestamp_nanos < from_ts || metric.timestamp_nanos > to_ts {
+                return Err(RewardCalculationError::InvalidSubnetMetric {
+                    subnet_id: *subnet_id,
+                    timestamp: metric.timestamp_nanos,
+                    from_ts,
+                    to_ts,
+                });
+            }
+        }
+    }
+
+    for metrics in subnet_metrics.values().flatten() {
+        for node_metrics in &metrics.node_metrics {
+            let node_id: NodeId = node_metrics.node_id.into();
+
+            if !rewardable_nodes.iter().any(|node| node.node_id == node_id) {
+                return Err(RewardCalculationError::NodeNotInRewardables(node_id));
+            }
+        }
+    }
+
+    Ok(())
+}
 
 const FULL_REWARDS_MACHINES_LIMIT: u32 = 3;
 const MIN_FAILURE_RATE: Decimal = dec!(0.1);
@@ -23,11 +100,13 @@ const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 const RF: &str = "Linear Reduction factor";
 
 pub fn calculate_rewards(
-    days_in_period: u64,
+    rewarding_period: RewardingPeriod,
     rewards_table: &NodeRewardsTable,
     subnet_metrics: HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
     rewardable_nodes: &[RewardableNode],
-) -> RewardsPerNodeProvider {
+) -> Result<RewardsPerNodeProvider, RewardCalculationError> {
+    validate_input(&rewarding_period, &subnet_metrics, rewardable_nodes)?;
+
     let mut rewards_per_node_provider = HashMap::default();
     let mut rewards_log_per_node_provider = HashMap::default();
 
@@ -60,7 +139,7 @@ pub fn calculate_rewards(
             &mut logger,
             &nodes,
             node_daily_fr,
-            days_in_period,
+            rewarding_period.days_between(),
             rewards_table,
         );
 
@@ -68,10 +147,10 @@ pub fn calculate_rewards(
         rewards_per_node_provider.insert(node_provider_id, rewards);
     }
 
-    RewardsPerNodeProvider {
+    Ok(RewardsPerNodeProvider {
         rewards_per_node_provider,
         rewards_log_per_node_provider,
-    }
+    })
 }
 
 /// Computes the relative node failure rates discounting the subnet systematic failure rate.
