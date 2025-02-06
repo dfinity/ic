@@ -829,9 +829,7 @@ fn convert_conversion_rate_to_payload(
     serializer.self_describe().unwrap();
     mixed_hash_tree
         .serialize(&mut serializer)
-        .unwrap_or_else(|e| {
-            dfn_core::api::trap_with(&format!("failed to serialize a hash tree: {}", e))
-        });
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to serialize a hash tree: {}", e)));
 
     serializer.into_inner()
 }
