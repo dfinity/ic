@@ -183,11 +183,12 @@ impl Default for LedgerState {
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
+///   * 3 - the blocks are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 2;
+pub const LEDGER_VERSION: u64 = 3;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 3;
+pub const LEDGER_VERSION: u64 = 4;
 
 type StableLedgerBalances = Balances<StableBalances>;
 

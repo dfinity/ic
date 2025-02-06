@@ -1341,7 +1341,7 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
