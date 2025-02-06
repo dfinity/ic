@@ -38,6 +38,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
     "@crate_index//:yansi",
+    "@crate_index//:ic-cdk"
 ]
 
 MACRO_DEPENDENCIES = [
