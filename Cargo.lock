@@ -3211,6 +3211,7 @@ dependencies = [
  "dfn_protobuf",
  "futures",
  "ic-base-types",
+ "ic-cdk 0.16.0",
  "ic-certified-map",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-tree-hash",
