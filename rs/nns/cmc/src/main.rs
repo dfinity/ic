@@ -17,6 +17,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
+use ic_cdk::api::call::CallResult;
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
@@ -2312,20 +2313,18 @@ async fn deposit_cycles(
         ensure_balance(cycles)?;
     }
 
-    let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds_and_cleanup(
-        IC_00,
+    let res: CallResult<()> = ic_cdk::api::call::call_with_payment(
+        IC_00.get().0,
         &Method::DepositCycles.to_string(),
-        dfn_candid::candid_multi_arity,
         (CanisterIdRecord::from(canister_id),),
-        dfn_core::api::Funds::new(u128::from(cycles) as u64),
+        u128::from(cycles) as u64,
     )
     .await;
 
     res.map_err(|(code, msg)| {
         format!(
             "Depositing cycles failed with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
+            code as i32, msg
         )
     })?;
 
@@ -2348,21 +2347,19 @@ async fn do_mint_cycles(
         to: account,
         memo: deposit_memo,
     };
-    let result: Result<(CyclesLedgerDepositResult,), (Option<i32>, String)> =
-        dfn_core::api::call_with_funds_and_cleanup(
-            cycles_ledger_canister_id,
-            "deposit",
-            dfn_candid::candid_multi_arity,
-            (arg,),
-            dfn_core::api::Funds::new(u128::from(cycles) as u64),
-        )
-        .await;
+
+    let result: CallResult<(CyclesLedgerDepositResult,)> = ic_cdk::api::call::call_with_payment(
+        cycles_ledger_canister_id.get().0,
+        "deposit",
+        (arg,),
+        u128::from(cycles) as u64,
+    )
+    .await;
 
     result.map(|r| r.0).map_err(|(code, msg)| {
         format!(
             "Cycles ledger rejected deposit call with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
+            code as i32, msg
         )
     })
 }
@@ -2458,26 +2455,23 @@ async fn do_create_canister(
         });
 
     for subnet_id in subnets {
-        let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
-            subnet_id.into(),
+        let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment(
+            subnet_id.get().0,
             &Method::CreateCanister.to_string(),
-            dfn_candid::candid_one,
-            CreateCanisterArgs {
+            (CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
-            },
-            dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
+            },),
+            cycles.get().try_into().unwrap(),
         )
         .await;
 
         let canister_id = match result {
-            Ok(canister_id) => canister_id.get_canister_id(),
+            Ok(canister_id) => canister_id.0.get_canister_id(),
             Err((code, msg)) => {
                 let err = format!(
                     "Creating canister in subnet {} failed with code {}: {}",
-                    subnet_id,
-                    code.unwrap_or_default(),
-                    msg
+                    subnet_id, code as i32, msg
                 );
                 print(format!("[cycles] {}", err));
                 last_err = Some(err);
