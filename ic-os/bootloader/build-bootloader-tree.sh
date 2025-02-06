@@ -6,6 +6,15 @@
 
 set -exo pipefail
 
+cleanup() {
+  sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
+  rm -rf "${TMPDIR}"
+  sudo umount "${TMPFS}"
+  rm -rf "${TMPFS}"
+}
+trap cleanup EXIT
+
+
 while getopts "o:" OPT; do
     case "${OPT}" in
         o)
@@ -18,11 +27,9 @@ while getopts "o:" OPT; do
     esac
 done
 
-trap 'mountpoint "${TMPFS}" && sudo umount "${TMPFS}"; rm -rf "${TMPFS}"' exit
 TMPFS=$(mktemp -d /tmp/mytempdir.XXXXXX)
 sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
 
-trap 'rm -rf "${TMPDIR}"; sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"' exit
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
