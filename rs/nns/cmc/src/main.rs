@@ -118,10 +118,7 @@ pub struct CanisterEnvironment;
 
 impl Environment for CanisterEnvironment {
     fn now_timestamp_seconds(&self) -> u64 {
-        dfn_core::api::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Could not get the duration.")
-            .as_secs()
+        now_seconds()
     }
 
     fn set_certified_data(&self, data: &[u8]) {
@@ -920,12 +917,10 @@ fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRat
     {
         recent_rates[index] = new_rate.clone();
         // Update the average ICP/XDR rate and the maturity modulation.
-        if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
-            state.average_icp_xdr_conversion_rate =
-                compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
-            state.maturity_modulation_permyriad =
-                Some(compute_maturity_modulation(recent_rates, time.as_secs()));
-        }
+        let time = now_seconds();
+        state.average_icp_xdr_conversion_rate =
+            compute_average_icp_xdr_rate_at_time(recent_rates, time);
+        state.maturity_modulation_permyriad = Some(compute_maturity_modulation(recent_rates, time));
     }
 }
 
@@ -2504,7 +2499,7 @@ async fn do_create_canister(
 }
 
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
-    let now = dfn_core::api::now();
+    let now = now_system_time();
 
     let current_balance = Cycles::from(dfn_core::api::canister_cycle_balance());
     let cycles_to_mint = cycles - current_balance;
