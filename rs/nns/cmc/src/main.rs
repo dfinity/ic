@@ -1648,8 +1648,10 @@ async fn fetch_transaction(
         }
     };
 
-    let expected_to =
-        AccountIdentifier::new(dfn_core::api::id().get(), Some(expected_to_subaccount));
+    let expected_to = AccountIdentifier::new(
+        PrincipalId::from(ic_cdk::api::id()),
+        Some(expected_to_subaccount),
+    );
     if to != expected_to {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
@@ -1815,8 +1817,10 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             fee: _,
             spender: _,
         } => {
-            let incoming_to_account_identifier =
-                AccountIdentifier::new(dfn_core::api::id().get(), Some(incoming_to_subaccount));
+            let incoming_to_account_identifier = AccountIdentifier::new(
+                PrincipalId::from(ic_cdk::api::id()),
+                Some(incoming_to_subaccount),
+            );
             if to != &incoming_to_account_identifier {
                 // As long as callers always pass us Transfers where the
                 // destination matches incoming_to_subaccount, this code will
