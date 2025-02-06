@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_ID>
-    PROPOSAL_ID: The ID of a recently executed Governance backend canister upgrade proposal.
+    PROPOSAL_ID: The ID of a recently proposed Governance backend canister upgrade proposal.
 
     Moves the pending new changelog entry from unreleased_changelog.md to CHANGELOG.md.
 
@@ -44,10 +44,10 @@ if [[ "${LEN}" -ne 1 ]]; then
 fi
 PROPOSAL_INFO=$(echo "${PROPOSAL_INFO}" | jq '.[0]')
 
-# Assert was executed.
-EXECUTED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.executed_timestamp_seconds | tonumber')
-if [[ "${EXECUTED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
-    print_red "💀 Proposal ${PROPOSAL_ID} exists, but was not successfully executed." >&2
+# Get proposal creation timestam.
+PROPOSED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.proposal_creation_timestamp_seconds | tonumber')
+if [[ "${PROPOSED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
+    print_red "💀 Proposal ${PROPOSAL_ID} exists, but had no proposal_creation_timestamp_seconds." >&2
     exit 1
 fi
 
@@ -74,13 +74,13 @@ else
     print_red "(In particular, unable to determine which canister and commit.)" >&2
     exit 1
 fi
-SECONDS_AGO=$(($(date +%s) - "${EXECUTED_TIMESTAMP_SECONDS}"))
-EXECUTED_ON=$(
+SECONDS_AGO=$(($(date +%s) - "${PROPOSED_TIMESTAMP_SECONDS}"))
+PROPOSED_ON=$(
     date --utc \
-        --date=@"${EXECUTED_TIMESTAMP_SECONDS}" \
+        --date=@"${PROPOSED_TIMESTAMP_SECONDS}" \
         --iso-8601
 )
-print_cyan "🏃 ${GOVERNANCE_TYPE} ${CANISTER_NAME} proposal was executed ${SECONDS_AGO} seconds ago." >&2
+print_cyan "🏃 ${GOVERNANCE_TYPE} ${CANISTER_NAME} proposal was submitted ${SECONDS_AGO} seconds ago." >&2
 
 # Fail if the proposal's commit is not checked out.
 if [[ $(git rev-parse HEAD) != $DESTINATION_COMMIT_ID* ]]; then
@@ -117,7 +117,7 @@ if [[ -z "${NEW_FEATURES_AND_FIXES}" ]]; then
     print_red "💀 ${GOVERNANCE_TYPE} ${CANISTER_NAME}'s unreleased_changelog.md is EMPTY." >&2
     exit 1
 fi
-NEW_ENTRY="# ${EXECUTED_ON}: Proposal ${PROPOSAL_ID}
+NEW_ENTRY="# ${PROPOSED_ON}: Proposal ${PROPOSAL_ID}
 
 http://dashboard.internetcomputer.org/proposals/${PROPOSAL_ID}
 
