@@ -244,7 +244,7 @@ fn signature_from_random_keypair<R: Rng + CryptoRng>(
 
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {
-            let private_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
+            let private_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
             let signature_bytes = private_key.sign_message(&bytes_to_sign).to_vec();
             let public_key_bytes = private_key.public_key().serialize_raw().to_vec();
             (signature_bytes, public_key_bytes)

@@ -14,9 +14,9 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ed25519",
         "//rs/canonical_state/certification_version",
         "//rs/config",
-        "//rs/crypto/ed25519",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
