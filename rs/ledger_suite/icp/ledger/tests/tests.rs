@@ -1235,6 +1235,11 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn test_upgrade_serialization_from_mainnet() {
+    test_upgrade_serialization(ledger_wasm_mainnet());
+}
+
+#[test]
 fn test_upgrade_serialization_from_v3() {
     test_upgrade_serialization(ledger_wasm_mainnet_v3());
 }
@@ -1313,6 +1318,16 @@ fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<En
 }
 
 #[test]
+fn test_multi_step_migration_from_mainnet() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+        get_all_blocks,
+    );
+}
+
+#[test]
 fn test_multi_step_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet_v3(),
@@ -1341,6 +1356,11 @@ fn test_downgrade_from_incompatible_version() {
         encode_init_args,
         false,
     );
+}
+
+#[test]
+fn test_stable_migration_endpoints_disabled_from_mainnet() {
+    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet());
 }
 
 #[test]
