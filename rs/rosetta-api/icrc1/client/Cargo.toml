@@ -19,7 +19,7 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
-ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-icrc-rosetta = { path = ".." }
 ic-rosetta-api = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
