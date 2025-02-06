@@ -594,7 +594,6 @@ pub async fn submit_create_application_subnet_proposal(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

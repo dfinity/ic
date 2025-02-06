@@ -185,9 +185,6 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
@@ -758,7 +755,6 @@ pub async fn create_new_subnet_with_keys(
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
         // Unused section follows
-        ecdsa_config: None,
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),
         gossip_max_chunk_wait_ms: Default::default(),

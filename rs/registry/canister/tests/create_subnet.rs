@@ -392,7 +392,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
