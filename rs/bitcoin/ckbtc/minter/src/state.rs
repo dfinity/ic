@@ -931,7 +931,7 @@ impl CkBtcMinterState {
     /// Return UTXOs of the given account that are known to the minter.
     pub fn known_utxos_for_account(&self, account: &Account) -> Vec<Utxo> {
         let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account);
+        let maybe_finalized_utxos = self.finalized_utxos.get(account);
         match (maybe_existing_utxos, maybe_finalized_utxos) {
             (Some(existing_utxos), Some(finalized_utxos)) => existing_utxos
                 .union(finalized_utxos)
@@ -964,7 +964,7 @@ impl CkBtcMinterState {
                 .unwrap_or(false)
                 || self
                     .finalized_utxos
-                    .get(&account)
+                    .get(account)
                     .map(|utxos| utxos.contains(utxo))
                     .unwrap_or(false)
         };
