@@ -2151,7 +2151,7 @@ fn ic0_call_with_best_effort_response_feature_stages() {
             api.ic0_call_perform().unwrap();
 
             // Propagate system state changes
-            let system_state_modifications = api.into_system_state_modifications();
+            let system_state_modifications = api.take_system_state_modifications();
             system_state_modifications
                 .apply_changes(
                     UNIX_EPOCH,
