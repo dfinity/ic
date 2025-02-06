@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use colored::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -91,4 +91,135 @@ pub(crate) fn input_yes_or_no(text: &str, default: bool) -> Result<bool> {
 pub(crate) fn press_enter_to_continue() -> Result<()> {
     input(&format!("\n{}", "Press Enter to continue...".bright_blue()))?;
     Ok(())
+}
+
+pub(crate) fn ensure_gh_setup() -> Result<()> {
+    let output = Command::new("gh").arg("--version").output()?;
+    if !output.status.success() {
+        bail!("gh is not installed. Try installing with `brew install gh`")
+    }
+    let output = Command::new("gh").arg("auth").arg("status").output()?;
+    if !output.status.success() {
+        bail!("gh is not authenticated. Try running `gh auth login`")
+    }
+    let stderr = String::from_utf8(output.stderr)?;
+    if !stderr.contains("Logged in to github.com") {
+        bail!("gh is not logged in. Try running `gh auth login`")
+    }
+
+    println!("{}", "GitHub CLI is configured ✓".bright_green());
+
+    Ok(())
+}
+
+pub(crate) fn commit_all_into_branch(branch: &str) -> Result<()> {
+    let ic = ic_dir();
+
+    {
+        // Check if branch exists
+        let output = Command::new("git")
+            .current_dir(&ic)
+            .args(["branch", "--list", branch])
+            .output()?;
+
+        let branch_exists = !String::from_utf8_lossy(&output.stdout).trim().is_empty();
+        if branch_exists {
+            if input_yes_or_no(
+                &format!("Branch '{}' already exists. Delete it?", branch),
+                false,
+            )? {
+                // Delete the branch
+                let output = Command::new("git")
+                    .current_dir(&ic)
+                    .args(["branch", "-D", branch])
+                    .output()?;
+                if !output.status.success() {
+                    bail!(
+                        "Failed to delete branch: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                }
+                println!(
+                    "{}",
+                    format!("Deleted existing branch '{}'", branch).bright_blue()
+                );
+            } else {
+                bail!("Cannot continue with existing branch");
+            }
+        }
+    }
+
+    let output = Command::new("git")
+        .current_dir(&ic)
+        .args(["checkout", "-b", branch])
+        .output()?;
+    if !output.status.success() {
+        return Err(
+            anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr))
+                .context("Failed to create branch"),
+        );
+    }
+
+    let output = Command::new("git")
+        .current_dir(&ic)
+        .args(["add", "."])
+        .output()?;
+    if !output.status.success() {
+        return Err(
+            anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr))
+                .context("Failed to add all files to branch"),
+        );
+    }
+
+    let output = Command::new("git")
+        .current_dir(&ic)
+        .args(["commit", "-m", "chore(nervous-system): update changelog"])
+        .output()?;
+    if !output.status.success() {
+        return Err(
+            anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr))
+                .context("Failed to commit all files to branch"),
+        );
+    }
+
+    Ok(())
+}
+
+pub(crate) fn create_pr(title: &str, body: &str) -> Result<url::Url> {
+    // push the current branch to the remote repository
+    // e.g. git push --set-upstream origin <branch-name>
+    let branch = Command::new("git")
+        .arg("branch")
+        .arg("--show-current")
+        .output()?;
+    let branch = String::from_utf8(branch.stdout)?;
+    let output = Command::new("git")
+        .arg("push")
+        .arg("--set-upstream")
+        .arg("origin")
+        .arg("--force")
+        .arg(branch.trim())
+        .output()?;
+    if !output.status.success() {
+        return Err(
+            anyhow::anyhow!("{}", String::from_utf8_lossy(&output.stderr))
+                .context("Failed to push branch to remote"),
+        );
+    }
+
+    let output = Command::new("gh")
+        .arg("pr")
+        .arg("create")
+        .arg("--title")
+        .arg(title)
+        .arg("--body")
+        .arg(body)
+        .output()?;
+    if output.status.success() {
+        println!("{}", "PR created successfully!".bright_green());
+        let pr_url = std::str::from_utf8(&output.stdout)?;
+        Ok(Url::parse(pr_url)?)
+    } else {
+        bail!("Failed to create PR. Try running `gh auth login`")
+    }
 }
