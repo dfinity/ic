@@ -3137,6 +3137,18 @@ impl StateMachine {
             .contains_key(&canister)
     }
 
+    /// Returns the canister version.
+    pub fn canister_version(&self, canister_id: CanisterId) -> u64 {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .get(&canister_id)
+            .unwrap()
+            .system_state
+            .canister_version
+    }
+
     /// Returns true if the canister with the specified id exists and is not empty.
     pub fn canister_not_empty(&self, canister: CanisterId) -> bool {
         self.state_manager

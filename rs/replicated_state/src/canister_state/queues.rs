@@ -1199,7 +1199,7 @@ impl CanisterQueues {
 
     /// Returns a reference to the (non-stale) message at the front of the respective
     /// output queue, if any.
-    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
+    pub(crate) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         let output_queue = &self.canister_queues.get(canister_id)?.1;
 
         Some(self.store.get(output_queue.peek()?))

@@ -17,7 +17,7 @@ pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
     Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    RawRandAction, RoundInstructions, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1295,6 +1295,7 @@ impl ExecutionTest {
             &self.replica_version,
             &self.registry_settings,
             &mut round_limits,
+            &RawRandAction::Execute,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;

@@ -2,7 +2,7 @@ use crate::{
     canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
-        ExecutionEnvironment, RoundInstructions, RoundLimits,
+        ExecutionEnvironment, RawRandAction, RoundInstructions, RoundLimits,
     },
     metrics::MeasurementScope,
     util::process_responses,
@@ -246,6 +246,7 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
+        raw_rand_action: &RawRandAction,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
@@ -283,6 +284,7 @@ impl SchedulerImpl {
                     state,
                     csprng,
                     round_limits,
+                    raw_rand_action,
                     registry_settings,
                     replica_version,
                     measurement_scope,
@@ -315,6 +317,7 @@ impl SchedulerImpl {
         state: ReplicatedState,
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
+        raw_rand_action: &RawRandAction,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
@@ -336,6 +339,7 @@ impl SchedulerImpl {
             replica_version,
             registry_settings,
             round_limits,
+            raw_rand_action,
         );
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
@@ -426,6 +430,7 @@ impl SchedulerImpl {
         let mut total_heap_delta = NumBytes::from(0);
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+        let mut raw_rand_action = RawRandAction::Execute;
         let mut round_executed_canister_ids = BTreeSet::new();
         // The set of canisters marked as fully executed: have no messages to execute
         // or were scheduled first on a core.
@@ -454,6 +459,7 @@ impl SchedulerImpl {
                         csprng,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
+                        &raw_rand_action,
                         registry_settings,
                         replica_version,
                         chain_key_subnet_public_keys,
@@ -580,6 +586,7 @@ impl SchedulerImpl {
             }
 
             is_first_iteration = false;
+            raw_rand_action = RawRandAction::Postpone(current_round);
             drop(finalization_timer);
         }; // end iteration loop.
 
@@ -970,9 +977,9 @@ impl SchedulerImpl {
     /// moving them from the source to the destination canister if the
     /// destination canister has room for them.
     ///
-    /// This method only handles messages sent to self and to other canisters.
-    /// Messages sent to the subnet are not handled i.e. they take the slow path
-    /// through message routing.
+    /// This method also handles messages sent to the same subnet, moving
+    /// a canister management request to the subnet input queue, and a response
+    /// from the subnet to a local canister.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
         let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
@@ -1040,9 +1047,26 @@ impl SchedulerImpl {
                                     &err
                                 );
                             }),
-                        None => Err(()),
+                        None => {
+                            if msg.is_addressed_to_subnet(state.metadata.own_subnet_id) {
+                                state
+                                    .push_input((*msg).clone(), &mut subnet_available_memory)
+                                    .map_err(|(err, msg)| {
+                                        error!(
+                                            self.log,
+                                            "Inducting {:?} on same subnet failed with error '{}'.",
+                                            &msg,
+                                            &err
+                                        );
+                                    })
+                                    .map(|_bool| ())
+                            } else {
+                                Err(())
+                            }
+                        }
                     }
                 });
+
             let messages_after_induction = source_canister
                 .system_state
                 .queues()
@@ -1377,6 +1401,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
+                    &RawRandAction::Execute,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
@@ -1436,6 +1461,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
+                    &RawRandAction::Execute,
                     registry_settings,
                     replica_version,
                     &measurement_scope,
