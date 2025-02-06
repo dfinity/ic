@@ -140,7 +140,10 @@ echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
 bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
-query="$(IFS="+"; "${BAZEL_TARGETS[*]}")"
+query="$(
+    IFS="+"
+    "${BAZEL_TARGETS[*]}"
+)"
 
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
