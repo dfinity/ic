@@ -5875,7 +5875,7 @@ fn assert_checkpoints_are_readonly(layout: &StateLayout) {
 #[test]
 fn checkpoints_are_readonly() {
     state_manager_test(|_metrics, state_manager| {
-        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        // We flush the tip channel so that asynchronous tip initialization cannot hide the issue
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
