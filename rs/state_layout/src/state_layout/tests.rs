@@ -288,6 +288,7 @@ fn test_removal_when_last_dropped() {
                 Height::new(1),
             )
             .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
         let cp2 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
@@ -298,8 +299,9 @@ fn test_removal_when_last_dropped() {
                 Height::new(2),
             )
             .unwrap();
+        cp2.finalize_and_remove_unverified_marker(None).unwrap();
         // Add one checkpoint so that we never remove the last one and crash
-        let _cp3 = state_layout
+        let cp3 = state_layout
             .promote_scratchpad_to_unverified_checkpoint(
                 CheckpointLayout::<RwPolicy<()>>::new_untracked(
                     scratchpad_dir.path().to_path_buf().join("3"),
@@ -309,11 +311,11 @@ fn test_removal_when_last_dropped() {
                 Height::new(3),
             )
             .unwrap();
+        cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
             state_layout.checkpoint_heights().unwrap(),
         );
-
         std::mem::drop(cp1);
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         state_layout.remove_checkpoint_when_unused(Height::new(2));
