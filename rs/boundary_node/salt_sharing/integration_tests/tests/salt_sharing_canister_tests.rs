@@ -1,7 +1,7 @@
 use candid::{Encode, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use pocket_ic::nonblocking::PocketIc;
-use salt_sharing_api::{InitArg, SaltGenerationStrategy};
+use salt_sharing_api::{GetSaltError, GetSaltResponse, InitArg, SaltGenerationStrategy};
 use salt_sharing_canister_integration_tests::pocket_ic_helpers::{
     canister_call, install_salt_sharing_canister_on_ii_subnet, setup_subnets_and_registry_canister,
 };
@@ -30,6 +30,31 @@ async fn main() {
     };
     let (canister_id, wasm) =
         install_salt_sharing_canister_on_ii_subnet(&pocket_ic, init_payload).await;
+    // Check access control
+    let response: GetSaltResponse = canister_call(
+        &pocket_ic,
+        "get_salt",
+        "query",
+        canister_id,
+        Principal::anonymous(),
+        Encode!(&b"").unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.unwrap_err(), GetSaltError::Unauthorized);
+    // Check access control (inspect_message hook)
+    let response: Result<GetSaltResponse, String> = canister_call(
+        &pocket_ic,
+        "get_salt",
+        "update",
+        canister_id,
+        Principal::anonymous(),
+        Encode!(&b"").unwrap(),
+    )
+    .await;
+    let err_msg = response.unwrap_err();
+    assert!(err_msg
+        .contains("message_inspection_failed: method call is prohibited in the current context"));
     // Initialize metrics extractor for the canister, which helps to make indirect assertions about canister state
     let metrics_extractor = MetricsExtractor {
         canister_id,
