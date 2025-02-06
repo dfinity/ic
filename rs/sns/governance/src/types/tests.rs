@@ -6,6 +6,7 @@ use crate::pb::v1::{
     neuron::Followees,
     ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
 };
+use candid::Nat;
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::ChunkHash;
@@ -1490,5 +1491,60 @@ fn test_validate_chunked_wasm_management_canister_call_returns_junk() {
             "Cannot decode response from calling stored_chunks for {}: Cannot parse header ",
             store_canister_id
         )]),
+    );
+}
+
+#[test]
+fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
+    let manage_ledger_parameters = ManageLedgerParameters {
+        transfer_fee: Some(111),
+        token_name: Some("abc".to_string()),
+        token_symbol: Some("xyz".to_string()),
+        token_logo: Some("<logo>".to_string()),
+    };
+
+    let observed = LedgerUpgradeArgs::from(manage_ledger_parameters);
+
+    assert_eq!(
+        observed,
+        LedgerUpgradeArgs {
+            metadata: Some(vec![(
+                "icrc1:logo".to_string(),
+                MetadataValue::Text("<logo>".to_string())
+            )]),
+            token_name: Some("abc".to_string()),
+            token_symbol: Some("xyz".to_string()),
+            transfer_fee: Some(Nat::from(111_u64)),
+            change_fee_collector: None,
+            max_memo_length: None,
+            feature_flags: None,
+            change_archive_options: None,
+        }
+    );
+}
+
+#[test]
+fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
+    let manage_ledger_parameters = ManageLedgerParameters {
+        transfer_fee: Some(111),
+        token_name: Some("abc".to_string()),
+        token_symbol: Some("xyz".to_string()),
+        token_logo: None,
+    };
+
+    let observed = LedgerUpgradeArgs::from(manage_ledger_parameters);
+
+    assert_eq!(
+        observed,
+        LedgerUpgradeArgs {
+            metadata: None,
+            token_name: Some("abc".to_string()),
+            token_symbol: Some("xyz".to_string()),
+            transfer_fee: Some(Nat::from(111_u64)),
+            change_fee_collector: None,
+            max_memo_length: None,
+            feature_flags: None,
+            change_archive_options: None,
+        }
     );
 }

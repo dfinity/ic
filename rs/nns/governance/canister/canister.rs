@@ -42,11 +42,11 @@ use ic_nns_governance_api::{
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsProto, ListNeuronsResponse,
+        ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
+        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
+        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
         SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
@@ -907,8 +907,10 @@ fn list_neurons_pb() {
     );
 
     ic_cdk::setup();
-    let request = ListNeurons::decode(&arg_data_raw()[..]).expect("Could not decode ListNeurons");
-    let res: ListNeuronsResponse = list_neurons(request);
+    let request =
+        ListNeuronsProto::decode(&arg_data_raw()[..]).expect("Could not decode ListNeuronsProto");
+    let candid_request = ListNeurons::from(request);
+    let res: ListNeuronsResponse = list_neurons(candid_request);
     let mut buf = Vec::with_capacity(res.encoded_len());
     res.encode(&mut buf)
         .map_err(|e| e.to_string())

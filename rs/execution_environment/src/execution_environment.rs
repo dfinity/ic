@@ -2173,7 +2173,7 @@ impl ExecutionEnvironment {
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
-        let old_canister = match state.take_canister_state(&canister_id) {
+        let mut old_canister = match state.take_canister_state(&canister_id) {
             None => {
                 return (
                     Err(UserError::new(
@@ -2187,14 +2187,17 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
+        let resource_saturation =
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
-            &old_canister,
+            &mut old_canister,
             snapshot_id,
             state,
             round_limits,
             origin,
+            &resource_saturation,
             &self.metrics.long_execution_already_in_progress,
         );
 

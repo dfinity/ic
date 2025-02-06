@@ -16006,8 +16006,10 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "libc",
+ "memmap2",
  "nix 0.24.3",
  "proptest 1.6.0",
+ "rayon",
  "slog",
  "tempfile",
 ]
