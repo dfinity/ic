@@ -83,9 +83,6 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
 ///   * 3 - the blocks are stored in stable structures.
-// TODO: When moving to version 3 consider adding `#[serde(default, skip_serializing)]`
-// to `balances` and `approvals` fields of the `Ledger` struct.
-// Since `balances` don't use a default, this can only be done with an incompatible change.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 3;
 
