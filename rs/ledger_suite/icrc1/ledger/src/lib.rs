@@ -1313,24 +1313,15 @@ impl BlockData for StableBlockData {
 
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock> {
         BLOCKS_MEMORY.with_borrow(|blocks| {
-            let mut result = vec![];
-            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
-            let start = range.start + first_index;
-            let end = range.end + first_index;
-            for block in blocks.range(start..end) {
-                result.push(EncodedBlock::from_vec(block.1));
-            }
-            result
+            blocks
+                .range(range)
+                .map(|kv| EncodedBlock::from_vec(kv.1))
+                .collect()
         })
     }
 
     fn get_block(&self, index: u64) -> Option<EncodedBlock> {
-        BLOCKS_MEMORY.with_borrow(|blocks| {
-            let first_index = blocks.first_key_value().unwrap_or((0, vec![])).0;
-            blocks
-                .get(&(index + first_index))
-                .map(EncodedBlock::from_vec)
-        })
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.get(&index).map(EncodedBlock::from_vec))
     }
 
     fn remove_blocks(&mut self, num_blocks: u64) {

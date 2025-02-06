@@ -36,8 +36,8 @@ use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
     ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
     QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
@@ -864,6 +864,7 @@ fn migrate_next_part(instruction_limit: u64) {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
     let mut migrated_balances = 0;
+    let mut migrated_blocks = 0;
 
     print("Migrating part of the ledger state.");
 
@@ -892,13 +893,20 @@ fn migrate_next_part(instruction_limit: u64) {
                 if ledger.migrate_one_balance() {
                     migrated_balances += 1;
                 } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+                }
+            }
+            LedgerField::Blocks => {
+                if ledger.migrate_one_block() {
+                    migrated_blocks += 1;
+                } else {
                     set_ledger_state(LedgerState::Ready);
                 }
             }
         }
     }
     let instructions_migration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
         instruction_counter());
     if !is_ready() {
         print(format!(
@@ -1321,17 +1329,18 @@ fn icrc1_total_supply_candid() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
+    panic_if_not_ready();
     over(protobuf, |IterBlocksArgs { start, length }| {
         let length = std::cmp::min(length, max_blocks_per_request(&caller()));
         let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
-        let start = std::cmp::min(start, blocks_len);
-        let end = std::cmp::min(start + length, blocks_len);
+        let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks as usize;
+        let start = archived_len + std::cmp::min(start, blocks_len);
+        let end = archived_len + std::cmp::min(start + length, blocks_len);
         let blocks = LEDGER
             .read()
             .unwrap()
             .blockchain
-            .blocks
-            .get_blocks(std::ops::Range {
+            .block_slice(std::ops::Range {
                 start: start as u64,
                 end: end as u64,
             });
@@ -1343,11 +1352,17 @@ fn iter_blocks_() {
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
+    panic_if_not_ready();
     over(protobuf, |GetBlocksArgs { start, length }| {
         let length = std::cmp::min(length, max_blocks_per_request(&caller()) as u64);
         let blockchain = &LEDGER.read().unwrap().blockchain;
-        let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks_ledger(&blockchain.blocks, start_offset, start, length as usize)
+        let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
+        let requested_range = start..start + length;
+        if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+            requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
+        }
+        GetBlocksRes(Ok(blockchain.block_slice(requested_range)))
     });
 }
 
@@ -1358,6 +1373,7 @@ fn icrc1_supported_standards_candid() {
 
 #[candid_method(query, rename = "query_blocks")]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
+    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
@@ -1578,6 +1594,7 @@ fn http_request() {
 fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
+    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
