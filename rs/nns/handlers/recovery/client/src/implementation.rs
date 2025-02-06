@@ -4,7 +4,7 @@ use ed25519_dalek::SigningKey;
 use ic_agent::Agent;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
-    security_metadata::SecurityMetadata,
+    security_metadata::{der_encode_public_key, SecurityMetadata},
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot, RecoveryError, Result, VerifyIntegirty,
 };
@@ -99,7 +99,9 @@ impl RecoveryCanister for RecoveryCanisterImpl {
                 security_metadata: SecurityMetadata {
                     signature,
                     payload: last_proposal.signature_payload()?,
-                    pub_key: self.signing_key.verifying_key().to_bytes(),
+                    pub_key_der: der_encode_public_key(
+                        self.signing_key.verifying_key().to_bytes().to_vec(),
+                    ),
                 },
                 ballot,
             })?,

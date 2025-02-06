@@ -2,7 +2,7 @@ use candid::Principal;
 use ed25519_dalek::SigningKey;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal},
-    security_metadata::SecurityMetadata,
+    security_metadata::{der_encode_public_key, SecurityMetadata},
     Ballot,
 };
 
@@ -121,7 +121,9 @@ fn disallow_votes_bad_signature() {
             security_metadata: SecurityMetadata {
                 payload: vec![],
                 signature: [[0; 32]; 2],
-                pub_key: first.signing_key.verifying_key().to_bytes(),
+                pub_key_der: der_encode_public_key(
+                    first.signing_key.verifying_key().to_bytes().to_vec(),
+                ),
             },
         },
     );
@@ -166,7 +168,9 @@ fn disallow_votes_wrong_public_key() {
                     .signature_payload()
                     .expect("Should be able to serialize payload"),
                 signature,
-                pub_key: new_key_pair.verifying_key().to_bytes(),
+                pub_key_der: der_encode_public_key(
+                    new_key_pair.verifying_key().to_bytes().to_vec(),
+                ),
             },
             ballot: Ballot::Yes,
         },
@@ -199,11 +203,7 @@ fn disallow_votes_anonymous() {
         canister,
         Principal::anonymous(),
         VoteOnRecoveryProposal {
-            security_metadata: SecurityMetadata {
-                payload: vec![],
-                signature: [[0; 32]; 2],
-                pub_key: [0; 32],
-            },
+            security_metadata: SecurityMetadata::empty(),
             ballot: Ballot::Yes,
         },
     );

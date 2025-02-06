@@ -349,7 +349,9 @@ fn vote_with_only_ballot(
                     .signature_payload()
                     .expect("Should be able to fetch payload"),
                 signature,
-                pub_key: sender.signing_key.verifying_key().to_bytes(),
+                pub_key_der: der_encode_public_key(
+                    sender.signing_key.verifying_key().to_bytes().to_vec(),
+                ),
             },
             ballot,
         },

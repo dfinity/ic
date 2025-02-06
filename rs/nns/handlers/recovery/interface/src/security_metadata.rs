@@ -23,10 +23,10 @@ pub struct SecurityMetadata {
     /// all fields in a proposal except the ballots of node operators
     /// serialized as vector of bytes.
     pub payload: Vec<u8>,
-    /// Verifying key.
+    /// Der encoded public key.
     ///
     /// It is used to verify the authenticity of a signature.
-    pub pub_key: [u8; 32],
+    pub pub_key_der: Vec<u8>,
 }
 
 impl SecurityMetadata {
@@ -34,7 +34,7 @@ impl SecurityMetadata {
         Self {
             signature: [[0; 32]; 2],
             payload: vec![],
-            pub_key: [0; 32],
+            pub_key_der: vec![],
         }
     }
 
@@ -46,8 +46,7 @@ impl SecurityMetadata {
 
     /// Verifies the signature authenticity of security metadata.
     pub fn verify_signature(&self) -> Result<()> {
-        println!("Loaded key: {:?}", self.pub_key);
-        let loaded_public_key = VerifyingKey::from_bytes(&self.pub_key)
+        let loaded_public_key = VerifyingKey::from_bytes(&self.decode_der_pub_key())
             .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
         let signature = Signature::from_slice(self.signature.as_flattened())
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
@@ -59,10 +58,8 @@ impl SecurityMetadata {
 
     /// Verifies if the passed principal is derived from a given public key (also known as
     /// verifying key).
-    /// TODO: This is not possible since not everything has the same oid
     pub fn principal_matches_public_key(&self, principal: &Principal) -> Result<()> {
-        let loaded_principal =
-            Principal::self_authenticating(der_encode_public_key(self.pub_key.to_vec()));
+        let loaded_principal = Principal::self_authenticating(&self.pub_key_der);
 
         match loaded_principal.eq(principal) {
             true => Ok(()),
@@ -71,6 +68,13 @@ impl SecurityMetadata {
                 loaded_principal, principal,
             ))),
         }
+    }
+
+    fn decode_der_pub_key(&self) -> [u8; 32] {
+        // TODO: Logic for reversing other keys
+        let mut key = [0; 32];
+        key.copy_from_slice(&self.pub_key_der[self.pub_key_der.len() - 32..]);
+        key
     }
 }
 
