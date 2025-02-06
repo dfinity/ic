@@ -170,7 +170,7 @@ fn test_minter_event_upload_mainnet() {
     let setup = Setup::new(network);
     upload_events(&setup, &file_name);
 
-    let result = call_candid::<(), (u64,Option<u64>)>(
+    let result = call_candid::<(), (u64, Option<u64>)>(
         &setup.env,
         setup.minter_id,
         pocket_ic::common::rest::RawEffectivePrincipal::None,
