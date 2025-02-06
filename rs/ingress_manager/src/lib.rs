@@ -34,7 +34,7 @@ use ic_types::{
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntGauge};
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::BuildHasher;
 use std::{
@@ -52,6 +52,7 @@ type IngressPayloadCache =
 
 /// Keeps the metrics to be exported by the IngressManager
 struct IngressManagerMetrics {
+    on_state_change_duration: HistogramVec,
     ingress_handler_time: Histogram,
     ingress_selector_get_payload_time: Histogram,
     ingress_selector_validate_payload_time: Histogram,
@@ -80,7 +81,22 @@ impl IngressManagerMetrics {
                 "ingress_payload_cache_size",
                 "The number of HashSets in payload builder's ingress payload cache.",
             ),
+            on_state_change_duration: metrics_registry.histogram_vec(
+                "ingress_handler_on_state_change_duration",
+                "Ingress handler on state change duration in seconds, labelled by an operation",
+                decimal_buckets(-3, 1),
+                &["operation"],
+            ),
         }
+    }
+
+    pub(crate) fn start_on_state_change_timer(
+        &self,
+        operation: &str,
+    ) -> prometheus::HistogramTimer {
+        self.on_state_change_duration
+            .with_label_values(&[operation])
+            .start_timer()
     }
 }
 
@@ -139,8 +155,10 @@ pub struct IngressManager {
     log: ReplicaLogger,
     messages_to_purge: RwLock<Vec<Vec<IngressMessageId>>>,
 
-    /// Remember last purge time to control purge frequency.
-    pub(crate) last_purge_time: RwLock<Time>,
+    /// The last `consensus_time` when the expired messages were purged.
+    pub(crate) expired_messages_last_purge_time: RwLock<Time>,
+    /// The last state height at which the known messages were purged.
+    pub(crate) known_messages_last_purge_height: RwLock<Height>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
 
@@ -196,7 +214,8 @@ impl IngressManager {
             metrics: IngressManagerMetrics::new(metrics_registry),
             subnet_id,
             log,
-            last_purge_time: RwLock::new(UNIX_EPOCH),
+            expired_messages_last_purge_time: RwLock::new(UNIX_EPOCH),
+            known_messages_last_purge_height: RwLock::new(Height::new(0)),
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,
@@ -320,9 +339,12 @@ pub(crate) mod tests {
         let consensus_time = consensus_time.unwrap_or_else(|| Arc::new(MockConsensusTime::new()));
 
         let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_latest_state_height()
+            .return_const(Height::new(1));
         state_manager.expect_get_state_at().return_const(Ok(
             ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
+                Height::new(1),
                 Arc::new(state.unwrap_or_else(|| ReplicatedStateBuilder::default().build())),
             ),
         ));
