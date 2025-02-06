@@ -57,4 +57,3 @@ CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d 
 
 sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
-find "${TMPDIR}/boot" -type f -exec sha256sum {} \; | sed "s|${TMPDIR}||"
