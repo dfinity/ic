@@ -54,7 +54,7 @@ anchors:
 
 jobs:
 
-  bazel-test-bare:
+  bazel-test-bare-test-2:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
     timeout-minutes: 120
