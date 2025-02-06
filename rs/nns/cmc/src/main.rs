@@ -376,7 +376,11 @@ fn print<S: std::convert::AsRef<str>>(s: S)
 where
     yansi::Paint<S>: std::string::ToString,
 {
+    #[cfg(target_arch = "wasm32")]
     ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", yansi::Paint::yellow(s).to_string());
 }
 
 #[export_name = "canister_init"]
