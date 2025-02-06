@@ -703,10 +703,7 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height.
     /// If the checkpoint is not found, an error is returned.
-    fn checkpoint<Permissions: AccessPolicy>(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<Permissions>, LayoutError> {
+    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -735,7 +732,7 @@ impl StateLayout {
                 }
             }
         }
-        CheckpointLayout::<Permissions>::new(path, height, self.clone())
+        CheckpointLayout::new(path, height, self.clone())
     }
 
     /// Returns the layout of a verified checkpoint with the given height.
@@ -744,7 +741,7 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp = self.checkpoint::<ReadOnly>(height)?;
+        let cp = self.checkpoint(height)?;
         if !cp.is_checkpoint_verified() {
             return Err(LayoutError::CheckpointUnverified(height));
         };
@@ -760,7 +757,7 @@ impl StateLayout {
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        self.checkpoint::<ReadOnly>(height)
+        self.checkpoint(height)
     }
 
     /// Returns if a checkpoint with the given height is verified or not.
