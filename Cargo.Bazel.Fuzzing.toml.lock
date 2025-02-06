@@ -2182,7 +2182,7 @@ dependencies = [
 [[package]]
 name = "cloudflare"
 version = "0.12.0"
-source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=0b1805bf11ed526445712559e6f18d3b8e024b06#0b1805bf11ed526445712559e6f18d3b8e024b06"
 dependencies = [
  "chrono",
  "http 0.2.12",
@@ -3233,7 +3233,7 @@ dependencies = [
  "ciborium",
  "cidr",
  "clap 4.5.20",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
+ "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=0b1805bf11ed526445712559e6f18d3b8e024b06)",
  "colored",
  "comparable",
  "console 0.11.3",
