@@ -60,9 +60,6 @@ struct ScheduleVote {
 }
 
 #[derive(Debug, Parser)]
-struct UpdateCanistersJson;
-
-#[derive(Debug, Parser)]
 struct UpdateChangelog;
 
 #[derive(Debug, Subcommand)]
@@ -81,9 +78,7 @@ enum Step {
     CreateForumPost(CreateForumPost),
     #[command(about = "Step 7: Schedule Trusted Neurons Vote")]
     ScheduleVote(ScheduleVote),
-    #[command(about = "Step 8: Update Mainnet Canisters")]
-    UpdateCanistersJson(UpdateCanistersJson),
-    #[command(about = "Step 9: Update Changelog")]
+    #[command(about = "Step 8: Update Changelog")]
     UpdateChangelog(UpdateChangelog),
 }
 
@@ -122,7 +117,6 @@ fn main() -> Result<()> {
         Some(Step::SubmitProposals(cmd)) => run_submit_proposals(cmd),
         Some(Step::CreateForumPost(cmd)) => run_create_forum_post(cmd),
         Some(Step::ScheduleVote(cmd)) => run_schedule_vote(cmd),
-        Some(Step::UpdateCanistersJson(cmd)) => run_update_canisters_json(cmd),
         Some(Step::UpdateChangelog(cmd)) => run_update_changelog(cmd),
     }
 
@@ -687,36 +681,12 @@ Calendar Event Setup:
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
     );
 
-    run_update_canisters_json(UpdateCanistersJson);
-}
-
-fn run_update_canisters_json(_: UpdateCanistersJson) {
-    print_step(
-        8,
-        "Update Mainnet Canisters",
-        "After proposal execution, update mainnet-canisters.json:
-
-1. Run the sync command:
-   bazel run //rs/nervous_system/tools/sync-with-released-nevous-system-wasms
-
-   Note: If you encounter problems, try adding --config=local
-
-2. Purpose of these changes:
-   - Tells bazel what versions are running in production
-   - Used by tests to verify upgrade compatibility
-   - Maintains build hermeticity
-
-3. Note on automation:
-   - There was a ticket for automating this (NNS1-2201)
-   - Currently marked as won't do",
-    );
-
     run_update_changelog(UpdateChangelog);
 }
 
 fn run_update_changelog(_: UpdateChangelog) {
     print_step(
-        9,
+        8,
         "Update Changelog",
         "Update CHANGELOG.md file(s) for each proposal:
 
