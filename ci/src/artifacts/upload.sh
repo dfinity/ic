@@ -37,7 +37,6 @@ fi
 # of /opt/namespace) we simply skip the upload.
 if [ -d /opt/namespace ]; then
     touch "$2"
-    touch "$3"
     exit 0
 fi
 
@@ -66,4 +65,3 @@ AWS_PROFILE=cf "$RCLONE" \
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
 echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
-echo "http://download.proxy-global.dfinity.network:8080/${URL_PATH}" >"$3"

@@ -1573,6 +1573,38 @@ pub fn list_neurons(
     Decode!(&result, ListNeuronsResponse).unwrap()
 }
 
+/// This function is intended to ensure all neurons are paged through.  It
+/// recursively calls `list_neurons`.  This method will panic if more than 20 requests are made
+/// this method could be adjusted.
+pub fn list_all_neurons_and_combine_responses(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: ListNeurons,
+) -> ListNeuronsResponse {
+    assert_eq!(
+        request.page_number.unwrap_or_default(),
+        0,
+        "This method is intended to ensure all neurons \
+                        are paged through.  `page_number` should be None or Some(0)"
+    );
+
+    let mut response = list_neurons(state_machine, sender, request.clone());
+
+    let pages_needed = response.total_pages_available.unwrap();
+
+    for page in 1..=pages_needed {
+        let mut new_request = request.clone();
+        new_request.page_number = Some(page);
+        let mut new_response = list_neurons(state_machine, sender, new_request);
+        response.full_neurons.append(&mut new_response.full_neurons);
+        response
+            .neuron_infos
+            .extend(new_response.neuron_infos.into_iter());
+    }
+
+    response
+}
+
 pub fn list_neurons_by_principal(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1585,6 +1617,9 @@ pub fn list_neurons_by_principal(
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     )
 }

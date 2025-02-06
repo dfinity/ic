@@ -13,6 +13,7 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }
@@ -23,7 +24,10 @@ ic-nervous-system-runtime = { path = "../runtime" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-governance-api = { path = "../../sns/governance/api" }
+ic-sns-cli = { path = "../../sns/cli" }
 ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 icp-ledger = { path = "../../ledger_suite/icp" }
@@ -35,8 +39,9 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
 rust_decimal_macros = "1.36.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-
+url = { workspace = true }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

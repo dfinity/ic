@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -54,6 +54,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, Subnets,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -77,7 +78,7 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
+    SubnetInstructionConfig, SubnetKind, SubnetSpec, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
@@ -1166,29 +1167,52 @@ pub struct SetTime {
     pub time: Time,
 }
 
-impl Operation for SetTime {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Time is kept in sync across subnets, so one can take any subnet.
-        let current_time: SystemTime = pic.any_subnet().time();
-        let set_time: SystemTime = self.time.into();
-        match current_time.cmp(&set_time) {
-            std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
-                systemtime_to_unix_epoch_nanos(current_time),
-                systemtime_to_unix_epoch_nanos(set_time),
-            ))),
-            std::cmp::Ordering::Equal => OpOut::NoOutput,
-            std::cmp::Ordering::Less => {
-                // Sets the time on all subnets.
-                for subnet in pic.subnets.get_all() {
+fn set_time(pic: &PocketIc, time: Time, certified: bool) -> OpOut {
+    // Time is kept in sync across subnets, so one can take any subnet.
+    let current_time: SystemTime = pic.any_subnet().time();
+    let set_time: SystemTime = time.into();
+    match current_time.cmp(&set_time) {
+        std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
+            systemtime_to_unix_epoch_nanos(current_time),
+            systemtime_to_unix_epoch_nanos(set_time),
+        ))),
+        std::cmp::Ordering::Equal => OpOut::NoOutput,
+        std::cmp::Ordering::Less => {
+            // Sets the time on all subnets.
+            for subnet in pic.subnets.get_all() {
+                if certified {
+                    subnet.state_machine.set_certified_time(set_time);
+                } else {
                     subnet.state_machine.set_time(set_time);
                 }
-                OpOut::NoOutput
             }
+            OpOut::NoOutput
         }
+    }
+}
+
+impl Operation for SetTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, false)
     }
 
     fn id(&self) -> OpId {
         OpId(format!("set_time_{}", self.time))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SetCertifiedTime {
+    pub time: Time,
+}
+
+impl Operation for SetCertifiedTime {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        set_time(pic, self.time, true)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("set_certified_time_{}", self.time))
     }
 }
 
@@ -1305,6 +1329,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
+                    socks_proxy_addrs: vec![],
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -1472,6 +1497,7 @@ fn process_mock_canister_https_response(
                     timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
+                    socks_proxy_addrs: vec![],
                 })
                 .unwrap();
             let response = loop {
@@ -1554,14 +1580,82 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Tick;
+#[derive(Clone, Debug)]
+pub struct Tick {
+    pub configs: TickConfigs,
+}
+
+impl Tick {
+    fn validate_blockmakers_per_subnet(
+        &self,
+        pic: &mut PocketIc,
+        subnets_blockmaker: &[SubnetBlockmaker],
+    ) -> Result<(), OpOut> {
+        for subnet_blockmaker in subnets_blockmaker {
+            if subnet_blockmaker
+                .failed_blockmakers
+                .contains(&subnet_blockmaker.blockmaker)
+            {
+                return Err(OpOut::Error(PocketIcError::BlockmakerContainedInFailed(
+                    subnet_blockmaker.blockmaker,
+                )));
+            }
+
+            let Some(state_machine) = pic.get_subnet_with_id(subnet_blockmaker.subnet) else {
+                return Err(OpOut::Error(PocketIcError::SubnetNotFound(
+                    subnet_blockmaker.subnet.get().0,
+                )));
+            };
+
+            let mut request_blockmakers = subnet_blockmaker.failed_blockmakers.clone();
+            request_blockmakers.push(subnet_blockmaker.blockmaker);
+            let subnet_nodes: Vec<_> = state_machine.nodes.iter().map(|n| n.node_id).collect();
+            for blockmaker in request_blockmakers {
+                if !subnet_nodes.contains(&blockmaker) {
+                    return Err(OpOut::Error(PocketIcError::BlockmakerNotFound(blockmaker)));
+                }
+            }
+        }
+        Ok(())
+    }
+}
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        for subnet in pic.subnets.get_all() {
-            subnet.state_machine.execute_round();
+        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
+            cfg.blockmakers_per_subnet
+                .iter()
+                .cloned()
+                .map(SubnetBlockmaker::from)
+                .collect_vec()
+        });
+
+        if let Some(ref bm_per_subnet) = blockmakers_per_subnet {
+            if let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet) {
+                return error;
+            }
         }
+
+        let subnets = pic.subnets.subnets.read().unwrap();
+        for (subnet_id, subnet) in subnets.iter() {
+            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
+                bm_per_subnet
+                    .iter()
+                    .find(|bm| bm.subnet == *subnet_id)
+                    .map(|bm| BlockmakerMetrics {
+                        blockmaker: bm.blockmaker,
+                        failed_blockmakers: bm.failed_blockmakers.clone(),
+                    })
+            });
+
+            match blockmaker_metrics {
+                Some(metrics) => subnet
+                    .state_machine
+                    .execute_round_with_blockmaker_metrics(metrics),
+                None => subnet.state_machine.execute_round(),
+            }
+        }
+
         OpOut::NoOutput
     }
 
@@ -2038,7 +2132,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Clone)]
-struct PocketNodeSigner(pub ic_crypto_ed25519::PrivateKey);
+struct PocketNodeSigner(pub ic_ed25519::PrivateKey);
 
 impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(

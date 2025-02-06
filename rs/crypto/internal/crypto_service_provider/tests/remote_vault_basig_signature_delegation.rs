@@ -81,7 +81,7 @@ fn should_sign_a_large_hundred_megabytes_message() {
         .sign(
             AlgorithmId::Ed25519,
             message.clone(),
-            KeyId::try_from(&node_signing_public_key).unwrap(),
+            KeyId::from(&node_signing_public_key),
         )
         .expect("could not sign large message");
 

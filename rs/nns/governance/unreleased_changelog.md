@@ -9,39 +9,27 @@ on the process that this file is part of, see
 
 ## Added
 
-### Periodic Confirmation
+### List Neurons API Change: Query by Subaccount
 
-Enabled voting power adjustment and follow pruning.
+The `list_neurons` API now supports querying by neuron subaccount.  This is useful for neuron holders who
+have many neurons and want to list only the neurons associated with a particular subaccount.
 
-#### Prior Work
+A new field `neuron_subaccounts` is added to the request, which is a list of subaccounts to query
+for.  If this field is present, any neurons found will be added to the response.  If duplicate
+neurons are found between this field and others, they will be deduplicated before returning the value.
 
-This section describes related changes in previous releases.
-
-We already started recording how long it's been since neurons have confirmed
-their following (aka refreshed voting power). Neurons were also given the
-ability to confirm their following. Those who have never confirmed are
-considered as having refreshed on Sep 1, 2024.
-
-This feature was proposed and approved in motion [proposal 132411].
-
-[proposal 132411]: https://dashboard.internetcomputer.org/proposal/132411
-
-#### New Behavior(s) (In This Release)
-
-With this enablement, not refreshing for more than 6 months will start to affect
-the neuron. More precisely,
-
-1. If a neuron has not refreshed in 6 months, then votes have less influence on
-   the outcome of proposals.
-
-2. If a neuron has not refreshed in 7 months,
-
-    a. It stops following other neurons (except on the NeuronManagement topic;
-       those followees are retained).
-
-    b. Its influence on proposals goes to 0.
+This new field works in the same way that the existing `neuron_ids` field works.
 
 ## Changed
+
+* `InstallCode` proposal payload hashes are now computed when making the proposal instead of when
+  listing proposal. Hashes for existing proposals are backfilled.
+
+* The `list_neurons` behavior is slightly changed: the `include_empty_neurons_readable_by_caller`
+  was default to true before, and now it's default to true. More details can be found at:
+  https://forum.dfinity.org/t/listneurons-api-change-empty-neurons/40311
+
+* The limit of the number of neurons is increased from 380K to 400K.
 
 ## Deprecated
 
