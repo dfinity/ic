@@ -10880,6 +10880,7 @@ dependencies = [
  "ic-base-types",
  "registry-canister",
  "serde",
+ "simple_asn1",
 ]
 
 [[package]]

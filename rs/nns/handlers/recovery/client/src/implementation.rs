@@ -38,7 +38,7 @@ impl RecoveryCanisterImpl {
             .await
             .map(|response| candid::decode_one(&response))
             .map_err(|e| RecoveryError::AgentError(e.to_string()))?
-            .map_err(|e| RecoveryError::CandidError(e.to_string()))
+            .map_err(|e| e.into())
     }
 
     async fn update<T, P>(&self, method: &str, args: P) -> Result<T>
@@ -74,7 +74,7 @@ impl RecoveryCanisterImpl {
 #[async_trait]
 impl RecoveryCanister for RecoveryCanisterImpl {
     async fn get_node_operators_in_nns(&self) -> Result<Vec<SimpleNodeOperatorRecord>> {
-        self.query("get_node_operators_in_nns", candid::encode_one(())?)
+        self.query("get_current_nns_node_operators", candid::encode_one(())?)
             .await
     }
 

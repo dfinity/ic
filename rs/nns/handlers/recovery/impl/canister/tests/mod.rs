@@ -7,7 +7,7 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
     recovery_init::RecoveryInitArgs,
-    security_metadata::SecurityMetadata,
+    security_metadata::{der_encode_public_key, SecurityMetadata},
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot,
 };
@@ -110,7 +110,9 @@ impl NodeOperatorArg {
         let signing_key = SigningKey::generate(&mut csprng);
 
         Self {
-            principal: PrincipalId::new_self_authenticating(signing_key.verifying_key().as_bytes()),
+            principal: PrincipalId::new_self_authenticating(&der_encode_public_key(
+                signing_key.verifying_key().as_bytes().to_vec(),
+            )),
             num_nodes,
             signing_key,
         }

@@ -39,5 +39,6 @@ async fn can_place_proposals() {
         })
         .await;
 
+    println!("{:?}", response);
     assert!(response.is_ok());
 }

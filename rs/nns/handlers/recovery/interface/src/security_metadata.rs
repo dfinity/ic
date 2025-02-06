@@ -2,6 +2,10 @@ use super::*;
 use candid::{CandidType, Principal};
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
+use simple_asn1::{
+    oid, to_der,
+    ASN1Block::{BitString, ObjectIdentifier, Sequence},
+};
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 /// Wrapper struct containing information regarding integrity.
@@ -55,7 +59,8 @@ impl SecurityMetadata {
     /// Verifies if the passed principal is derived from a given public key (also known as
     /// verifying key).
     pub fn principal_matches_public_key(&self, principal: &Principal) -> Result<()> {
-        let loaded_principal = Principal::self_authenticating(self.pub_key);
+        let loaded_principal =
+            Principal::self_authenticating(der_encode_public_key(self.pub_key.to_vec()));
 
         match loaded_principal.eq(principal) {
             true => Ok(()),
@@ -65,4 +70,15 @@ impl SecurityMetadata {
             ))),
         }
     }
+}
+
+// Copied from agent-rs
+pub fn der_encode_public_key(public_key: Vec<u8>) -> Vec<u8> {
+    // see Section 4 "SubjectPublicKeyInfo" in https://tools.ietf.org/html/rfc8410
+
+    let id_ed25519 = oid!(1, 3, 101, 112);
+    let algorithm = Sequence(0, vec![ObjectIdentifier(0, id_ed25519)]);
+    let subject_public_key = BitString(0, public_key.len() * 8, public_key);
+    let subject_public_key_info = Sequence(0, vec![algorithm, subject_public_key]);
+    to_der(&subject_public_key_info).unwrap()
 }
