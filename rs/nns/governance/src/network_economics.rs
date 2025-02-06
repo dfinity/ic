@@ -1,7 +1,10 @@
-use crate::pb::v1::{NetworkEconomics, NeuronsFundEconomics, VotingPowerEconomics, NeuronsFundMatchedFundingCurveCoefficients};
+use crate::pb::v1::{
+    NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
+    VotingPowerEconomics,
+};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_linear_map::LinearMap;
+use ic_nervous_system_proto::pb::v1::Percentage;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rust_decimal::Decimal;
 use std::time::Duration;
@@ -126,9 +129,11 @@ impl InheritFrom for u32 {
 
 impl InheritFrom for ic_nervous_system_proto::pb::v1::Decimal {
     fn inherit_from(&self, filler: &Self) -> Self {
-        if self == &(ic_nervous_system_proto::pb::v1::Decimal {
-            human_readable: Some("0".to_string()),
-        }) {
+        if self
+            == &(ic_nervous_system_proto::pb::v1::Decimal {
+                human_readable: Some("0".to_string()),
+            })
+        {
             return filler.clone();
         }
 
@@ -138,7 +143,11 @@ impl InheritFrom for ic_nervous_system_proto::pb::v1::Decimal {
 
 impl InheritFrom for Percentage {
     fn inherit_from(&self, filler: &Self) -> Self {
-        if self == &(Percentage { basis_points: Some(0) }) {
+        if self
+            == &(Percentage {
+                basis_points: Some(0),
+            })
+        {
             return *filler;
         }
 
