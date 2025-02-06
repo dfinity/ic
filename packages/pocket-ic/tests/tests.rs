@@ -1740,6 +1740,19 @@ fn get_controllers_of_nonexisting_canister() {
 }
 
 #[test]
+fn try_get_controllers_of_nonexisting_canister() {
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 100_000_000_000_000);
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.delete_canister(canister_id, None).unwrap();
+
+    let res = pic.try_get_controllers(canister_id);
+    assert!(res.is_err())
+}
+
+#[test]
 fn test_canister_snapshots() {
     let pic = PocketIc::new();
     let canister_id = deploy_counter_canister(&pic);
