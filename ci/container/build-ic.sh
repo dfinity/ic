@@ -56,6 +56,14 @@ echo_blue() {
     tp sgr0
 }
 
+# Join a bash array with a string
+# https://stackoverflow.com/a/17841619
+function join_by {
+    local IFS="$1"
+    shift
+    echo "$*"
+}
+
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
@@ -140,10 +148,7 @@ echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
 bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
-query="$(
-    IFS="+"
-    "${BAZEL_TARGETS[*]}"
-)"
+query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
