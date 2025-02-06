@@ -27,6 +27,11 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
 
+// Not available in ic_cdk
+pub fn ic0_mint_cycles(amount: u64) -> u64 {
+    unsafe { ic0::mint_cycles(amount) }
+}
+
 pub fn now_nanoseconds() -> u64 {
     if cfg!(target_arch = "wasm32") {
         ic_cdk::api::time()
