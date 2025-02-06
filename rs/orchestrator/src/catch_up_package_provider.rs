@@ -367,7 +367,7 @@ impl CatchUpPackageProvider {
 
         let registry_cup = self
             .registry
-            .get_registry_cup(registry_version, subnet_id)
+            .get_registry_cup(registry_version, subnet_id, local_cup_height)
             .map(pb::CatchUpPackage::from)
             .ok();
 

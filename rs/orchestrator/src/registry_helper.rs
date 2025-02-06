@@ -138,9 +138,15 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
         subnet_id: SubnetId,
+        local_height: Option<Height>,
     ) -> OrchestratorResult<CatchUpPackage> {
-        make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
-            .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
+        make_registry_cup(
+            &*self.registry_client,
+            subnet_id,
+            local_height,
+            &self.logger,
+        )
+        .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 
     pub(crate) fn get_firewall_rules(
