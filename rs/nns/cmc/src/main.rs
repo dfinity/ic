@@ -852,7 +852,7 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
         IcpXdrConversionRateCertifiedResponse {
             data: icp_xdr_conversion_rate.clone(),
             hash_tree: payload,
-            certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+            certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
         }
     })
 }
@@ -884,7 +884,7 @@ fn get_average_icp_xdr_conversion_rate_() {
                 IcpXdrConversionRateCertifiedResponse {
                     data: average_icp_xdr_conversion_rate.clone(),
                     hash_tree: payload,
-                    certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+                    certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
                 }
             },
         )
