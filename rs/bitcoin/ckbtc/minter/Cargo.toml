@@ -29,7 +29,7 @@ ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
