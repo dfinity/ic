@@ -483,16 +483,18 @@ mod tests {
             timeout: request_timeout,
             canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
-                Encode!(&ic_management_canister_types_private::CanisterHttpResponsePayload {
-                    status,
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| {
-                            ic_management_canister_types_private::HttpHeader { name, value }
-                        })
-                        .collect(),
-                    body,
-                })
+                Encode!(
+                    &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                        status,
+                        headers: headers
+                            .into_iter()
+                            .map(|HttpHeader { name, value }| {
+                                ic_management_canister_types_private::HttpHeader { name, value }
+                            })
+                            .collect(),
+                        body,
+                    }
+                )
                 .unwrap(),
             ),
         }
@@ -800,17 +802,19 @@ mod tests {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Ok((
                 Ok(WasmResult::Reply(
-                    Encode!(&ic_management_canister_types_private::CanisterHttpResponsePayload {
-                        status: 200_u128,
-                        headers: adapter_h
-                            .clone()
-                            .into_iter()
-                            .map(|HttpHeader { name, value }| {
-                                ic_management_canister_types_private::HttpHeader { name, value }
-                            })
-                            .collect(),
-                        body: adapter_b.clone(),
-                    })
+                    Encode!(
+                        &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                            status: 200_u128,
+                            headers: adapter_h
+                                .clone()
+                                .into_iter()
+                                .map(|HttpHeader { name, value }| {
+                                    ic_management_canister_types_private::HttpHeader { name, value }
+                                })
+                                .collect(),
+                            body: adapter_b.clone(),
+                        }
+                    )
                     .unwrap(),
                 )),
                 current_time(),

@@ -339,7 +339,8 @@ pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId)
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
         .update_(
-            ic_management_canister_types_private::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+            ic_management_canister_types_private::Method::ProvisionalCreateCanisterWithCycles
+                .to_string(),
             candid,
             (ProvisionalCreateCanisterWithCyclesArgs::new(
                 None,

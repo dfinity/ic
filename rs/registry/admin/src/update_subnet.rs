@@ -351,7 +351,9 @@ impl ProposalPayload<do_update_subnet::UpdateSubnetPayload> for ProposeToUpdateS
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_types::PrincipalId;
 

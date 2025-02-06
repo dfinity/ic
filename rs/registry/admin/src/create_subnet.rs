@@ -310,7 +310,9 @@ impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateS
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

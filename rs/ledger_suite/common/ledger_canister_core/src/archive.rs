@@ -385,12 +385,14 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         IC_00,
         "update_settings",
         0,
-        (ic_management_canister_types_private::UpdateSettingsArgs::new(
-            node_canister_id,
-            ic_management_canister_types_private::CanisterSettingsArgsBuilder::new()
-                .with_controllers(controller_ids)
-                .build(),
-        ),),
+        (
+            ic_management_canister_types_private::UpdateSettingsArgs::new(
+                node_canister_id,
+                ic_management_canister_types_private::CanisterSettingsArgsBuilder::new()
+                    .with_controllers(controller_ids)
+                    .build(),
+            ),
+        ),
     )
     .await;
 

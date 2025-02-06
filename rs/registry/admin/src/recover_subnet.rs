@@ -223,7 +223,9 @@ impl ProposalPayload<do_recover_subnet::RecoverSubnetPayload> for ProposeToUpdat
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

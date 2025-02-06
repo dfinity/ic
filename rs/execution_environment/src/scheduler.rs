@@ -19,7 +19,9 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types_private::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
+use ic_management_canister_types_private::{
+    CanisterStatusType, MasterPublicKeyId, Method as Ic00Method,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
