@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
 use dfn_candid::candid_one;
-use dfn_core::{api::call_with_cleanup, CanisterId};
+use dfn_core::CanisterId;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
@@ -56,7 +56,8 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
             timestamp: None,
         };
         let result: Result<GetExchangeRateResult, (Option<i32>, String)> =
-            call_with_cleanup(self.0, "get_exchange_rate", candid_one, payload).await;
+            dfn_core::api::call_with_cleanup(self.0, "get_exchange_rate", candid_one, payload)
+                .await;
         result
             .map_err(|(code, message)| GetExchangeRateError::Call {
                 code: code.unwrap_or(-1),
