@@ -1,6 +1,6 @@
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload},
-    Ballot,
+    Ballot, VerifyIntegirty,
 };
 
 use crate::{
@@ -66,7 +66,8 @@ async fn can_vote_on_proposals() {
         .unwrap();
 
     let response = first_client.vote_on_latest_proposal(Ballot::Yes).await;
+    assert!(response.is_ok());
 
-    println!("{:?}", response);
-    assert!(response.is_ok())
+    let latest = first_client.get_pending_recovery_proposals().await.unwrap();
+    assert!(latest.iter().verify().is_ok())
 }

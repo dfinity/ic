@@ -144,7 +144,10 @@ impl VerifyIntegirty for NodeOperatorBallot {
 
 impl VerifyIntegirty for RecoveryProposal {
     fn verify(&self) -> Result<()> {
-        self.node_operator_ballots.iter().verify()
+        self.node_operator_ballots
+            .iter()
+            .filter(|ballot| !ballot.ballot.eq(&Ballot::Undecided))
+            .verify()
     }
 }
 

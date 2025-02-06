@@ -40,7 +40,7 @@ impl SecurityMetadata {
 
     /// Verify the authenticity of a whole vote on a recovery canister proposal.
     pub fn validate_metadata(&self, caller: &Principal) -> Result<()> {
-        // self.principal_matches_public_key(caller)?;
+        self.principal_matches_public_key(caller)?;
         self.verify_signature()
     }
 
@@ -59,6 +59,7 @@ impl SecurityMetadata {
 
     /// Verifies if the passed principal is derived from a given public key (also known as
     /// verifying key).
+    /// TODO: This is not possible since not everything has the same oid
     pub fn principal_matches_public_key(&self, principal: &Principal) -> Result<()> {
         let loaded_principal =
             Principal::self_authenticating(der_encode_public_key(self.pub_key.to_vec()));
