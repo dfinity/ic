@@ -1,11 +1,13 @@
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
-// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use dfn_core::api::ic0;
+
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_management_canister_types_private::{
-    BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
+    // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+    BoundedControllers,
+    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    LogVisibilityV2,
 };
 
 use dfn_core::api::ic0;
@@ -33,9 +35,20 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
 
+#[cfg(target_arch = "wasm32")]
+#[link(wasm_import_module = "ic0")]
+extern "C" {
+    pub fn mint_cycles(amount: u64) -> u64;
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub unsafe fn mint_cycles(amount: u64) -> u64 {
+    panic!("mint_cycles should only be called inside canisters.");
+}
+
 // Not available in ic_cdk
 pub fn ic0_mint_cycles(amount: u64) -> u64 {
-    unsafe { ic0::mint_cycles(amount) }
+    unsafe { mint_cycles(amount) }
 }
 
 // Duplicating some functionality that is no longer available
