@@ -151,6 +151,10 @@ def _checksum_rule_impl(ctx):
         output=$(mktemp) # temporary file bc sha256 doesn't support writing to stdout (or /dev/stdout) directly
 
         for input in "$@"; do
+            if ! [[ $input =~ (\\.tar|\\.gz) ]]; then
+                echo "skipping non-archive file $input"
+                continue
+            fi
             {sha256} "$input" "$output"
             cat "$output" >> "$out_checksums"
             # '*' added for compatibility with determinism tests
