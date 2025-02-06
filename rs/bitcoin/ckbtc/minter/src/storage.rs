@@ -117,19 +117,12 @@ pub fn events() -> impl Iterator<Item = Event> {
 
 pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
-    #[cfg(feature = "canbench-rs")]
-    let _p = canbench_rs::bench_scope("v0_events_with");
     V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
         if old.len() > 0 {
-            #[cfg(feature = "canbench-rs")]
-            let _p = canbench_rs::bench_scope("migrate_events");
             V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });
-
-            #[cfg(feature = "canbench-rs")]
-            let _p = canbench_rs::bench_scope("replace_memory");
             *old = MEMORY_MANAGER.with(|m| {
                 StableLog::new(
                     m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
@@ -201,6 +194,29 @@ mod benches {
 
     #[bench(raw)]
     fn migrate_events_bench() -> canbench_rs::BenchResult {
+        // These thread local state must be re-initialized after
+        // canbench loads the stable memory from a file.
+        MEMORY_MANAGER
+            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+        V0_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V0_LOG_DATA_MEMORY_ID),
+                )
+                .expect("failed to initialize stable log")
+            })
+        });
+        V1_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V1_LOG_DATA_MEMORY_ID),
+                )
+                .expect("failed to initialize stable log")
+            })
+        });
+
         canbench_rs::bench_fn(migrate_old_events_if_not_empty)
     }
 }
