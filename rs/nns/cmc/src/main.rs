@@ -1531,11 +1531,11 @@ async fn create_canister(
 
     match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
         Ok(canister_id) => {
-            dfn_core::api::msg_cycles_accept(cycles);
+            ic_cdk::api::call::msg_cycles_accept(cycles);
             Ok(canister_id)
         }
         Err(create_error) => {
-            dfn_core::api::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
+            ic_cdk::api::call::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
             let refund_amount = ic_cdk::api::call::msg_cycles_available();
             Err(CreateCanisterError::Refunded {
                 refund_amount: refund_amount.into(),
