@@ -51,9 +51,10 @@ impl RecoveryCanisterImpl {
             .with_arg(args)
             .call_and_wait()
             .await
-            .map(|response| candid::decode_one(&response))
+            .map(|response| candid::decode_one::<std::result::Result<T, String>>(&response))
             .map_err(|e| RecoveryError::AgentError(e.to_string()))?
-            .map_err(|e| e.into())
+            .map_err(|e| RecoveryError::CandidError(e.to_string()))?
+            .map_err(|e| RecoveryError::CanisterError(e.to_string()))
     }
 
     fn ensure_not_anonymous(&self) -> Result<()> {

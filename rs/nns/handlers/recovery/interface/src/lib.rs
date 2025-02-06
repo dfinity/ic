@@ -52,6 +52,9 @@ pub enum RecoveryError {
     /// library versions used for the canister and client don't
     /// match
     InvalidRecoveryProposalPayload(String),
+
+    /// Errors received from the canister
+    CanisterError(String),
 }
 
 impl From<candid::Error> for RecoveryError {
@@ -75,7 +78,8 @@ impl ToString for RecoveryError {
             | Self::CandidError(s)
             | Self::InvalidIdentity(s)
             | Self::NoProposals(s)
-            | Self::InvalidRecoveryProposalPayload(s) => s.to_string(),
+            | Self::InvalidRecoveryProposalPayload(s)
+            | Self::CanisterError(s) => s.to_string(),
         }
     }
 }
