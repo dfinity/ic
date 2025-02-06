@@ -2,15 +2,13 @@ use candid::{candid_method, CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{
-    api::{call_with_cleanup, caller},
-    over, over_async, over_init, over_may_reject, stable,
-};
+use dfn_core::{api::caller, over, over_async, over_init, over_may_reject, stable};
 use dfn_protobuf::protobuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
+use ic_cdk::call;
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -1553,9 +1551,10 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
             error_message,
         }
     }
-    let BlockRes(b) = call_with_cleanup(ledger_id, "block_pb", protobuf, block_index)
-        .await
-        .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
+    let BlockRes(b) =
+        dfn_core::api::call_with_cleanup(ledger_id, "block_pb", protobuf, block_index)
+            .await
+            .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
 
     let raw_block = match b {
         None => {
@@ -1566,14 +1565,19 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
-            let BlockRes(b) = call_with_cleanup(canister_id, "get_block_pb", protobuf, block_index)
-                .await
-                .map_err(|e| {
-                    failed_to_fetch_block(format!(
-                        "Failed to fetch block from {}: {}",
-                        canister_id, e.1
-                    ))
-                })?;
+            let BlockRes(b) = dfn_core::api::call_with_cleanup(
+                canister_id,
+                "get_block_pb",
+                protobuf,
+                block_index,
+            )
+            .await
+            .map_err(|e| {
+                failed_to_fetch_block(format!(
+                    "Failed to fetch block from {}: {}",
+                    canister_id, e.1
+                ))
+            })?;
             b.ok_or_else(|| {
                 failed_to_fetch_block(format!(
                     "Block {} not found in archive {}",
@@ -2237,7 +2241,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
         created_at_time: None,
     };
     let res: Result<BlockIndex, (Option<i32>, String)> =
-        call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+        dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
 
     match res {
         Ok(block) => print(format!("{} done in block {}.", msg, block)),
@@ -2287,7 +2291,8 @@ async fn refund_icp(
             created_at_time: None,
         };
         let send_res: Result<BlockIndex, (Option<i32>, String)> =
-            call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args).await;
+            dfn_core::api::call_with_cleanup(ledger_canister_id, "send_pb", protobuf, send_args)
+                .await;
         let block = send_res.map_err(|(code, err)| {
             let code = code.unwrap_or_default();
             NotifyError::Other {
