@@ -16,7 +16,7 @@ pub fn verify_generate_attestation_token_request(
 
     let expected_custom_data = GenerateAttestationTokenCustomData {
         nonce: OctetStringRef::new(&request.nonce).map_err(VerificationError::internal)?,
-        tls_public_key: OctetStringRef::new(&request.tls_public_key)
+        tls_public_key: OctetStringRef::new(&request.tls_public_key_der)
             .map_err(VerificationError::internal)?,
     }
     .to_bytes()

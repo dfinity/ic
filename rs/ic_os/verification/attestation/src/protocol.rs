@@ -11,7 +11,7 @@ pub struct GenerateAttestationTokenChallenge {
 
 #[derive(CandidType, candid::Deserialize)]
 pub struct InitiateGenerateAttestationTokenRequest {
-    pub tls_public_key: Vec<u8>,
+    pub tls_public_key_pem: String,
 }
 
 #[derive(CandidType, candid::Deserialize)]
@@ -21,9 +21,21 @@ pub struct InitiateGenerateAttestationTokenResponse {
 
 #[derive(CandidType, candid::Deserialize)]
 pub struct GenerateAttestationTokenRequest {
-    pub tls_public_key: Vec<u8>,
+    pub tls_public_key_der: Vec<u8>,
     pub nonce: Vec<u8>,
     pub sev_attestation_report: SevAttestationReport,
+}
+
+#[derive(CandidType, candid::Deserialize)]
+pub struct GenerateTlsCertificateRequest {
+    pub tls_public_key_pem: String,
+    pub nonce: Vec<u8>,
+    pub sev_attestation_report: SevAttestationReport,
+}
+
+#[derive(CandidType, candid::Deserialize)]
+pub struct GenerateTlsCertificateResponse {
+    pub tls_certificate_pem: String,
 }
 
 #[derive(CandidType, candid::Deserialize)]

@@ -8,14 +8,14 @@ type FetchAttestationTokenResponse = record { attestation_token : blob };
 
 type GenerateAttestationTokenChallenge = record { nonce : blob };
 
-type GenerateAttestationTokenRequest = record {
-  tls_public_key : blob;
+type GenerateTlsCertificateRequest = record {
+  tls_public_key_pem : text;
   sev_attestation_report : SevAttestationReport;
   nonce : blob;
 };
 
 type InitiateGenerateAttestationTokenRequest = record {
-  tls_public_key : blob
+  tls_public_key_pem : text
 };
 
 type InitiateGenerateAttestationTokenResponse = record {
@@ -27,10 +27,12 @@ type FetchAttestationTokenResult = variant {
   Err : VerificationError;
 };
 
-type GenerateAttestationTokenResponse = record {};
+type GenerateTlsCertificateResponse = record {
+  tls_certificate_pem : text
+};
 
-type GenerateAttestationTokenResult = variant {
-  Ok : GenerateAttestationTokenResponse;
+type GenerateTlsCertificateResult = variant {
+  Ok : GenerateTlsCertificateResponse;
   Err : VerificationError
 };
 
@@ -54,12 +56,12 @@ type VerificationErrorDetail = variant {
   InvalidNonce : reserved;
   AttestationTokenNotFound : reserved;
   NonceNotFound : reserved;
+  UnsupportedTlsKey : record { message: text };
   InvalidAttestationReport : record { message: text };
   NonceTooOld : reserved;
 };
 
 service : {
-  fetch_attestation_token : (FetchAttestationTokenRequest) -> (FetchAttestationTokenResult) query;
-  generate_attestation_token : (GenerateAttestationTokenRequest) -> (GenerateAttestationTokenResult);
+  generate_tls_certificate : (GenerateTlsCertificateRequest) -> (GenerateTlsCertificateResult);
   initiate_generate_attestation_token : (InitiateGenerateAttestationTokenRequest) -> (InitiateGenerateAttestationTokenResult);
 }

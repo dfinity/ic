@@ -16,10 +16,10 @@ anyhow = "1.0.93"
 #der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
 #mockall = "0.13.1"
 #tokio = { version = "1.42.0", features = ["macros"] }
-ic-certification = "3.0"
+#ic-certification = "3.0"
 serde_cbor = "0.11"
-attestation-token = { path = "../attestation_token"}
-ic-cdk = "0.17"
+#attestation-token = { path = "../attestation_token"}
+ic-cdk = { version = "0.17" }
 #ic-certified-map = "0.4"
 ic-cbor = "3.0"
 serde = { version = "1.0.215", features = ["derive"] }
@@ -27,6 +27,9 @@ attestation = { path = "../attestation" }
 ic-stable-structures = "0.6"
 prost = "0.13"
 prost-types = "0.13"
+ed25519 = { version = "2.2", features = ["pkcs8", "alloc"] }
+x509-cert = { version = "0.2.5", features = ["builder"] }
+getrandom = { version = "0.2", features = ["custom"] }
 
 [build-dependencies]
 prost-build = "0.13"

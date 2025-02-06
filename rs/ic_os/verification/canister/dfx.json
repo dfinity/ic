@@ -1,6 +1,6 @@
 {
   "canisters": {
-    "verification_backend": {
+    "verification": {
       "candid": "verification.did",
       "package": "verification-canister",
       "type": "rust"

@@ -1,6 +1,7 @@
 use attestation::protocol::{
     FetchAttestationTokenRequest, FetchAttestationTokenResponse, GenerateAttestationTokenRequest,
-    GenerateAttestationTokenResponse, InitiateGenerateAttestationTokenRequest,
+    GenerateAttestationTokenResponse, GenerateTlsCertificateRequest,
+    GenerateTlsCertificateResponse, InitiateGenerateAttestationTokenRequest,
     InitiateGenerateAttestationTokenResponse, VerificationError,
 };
 use candid::{CandidType, Decode, Encode, Error, Principal};
@@ -31,6 +32,11 @@ pub trait VerificationAgent: Send + Sync {
         request: &GenerateAttestationTokenRequest,
     ) -> VerificationAgentResult<GenerateAttestationTokenResponse>;
 
+    async fn generate_tls_certificate(
+        &self,
+        request: &GenerateTlsCertificateRequest,
+    ) -> VerificationAgentResult<GenerateTlsCertificateResponse>;
+
     async fn fetch_attestation_token(
         &self,
         request: &FetchAttestationTokenRequest,
@@ -51,7 +57,7 @@ impl VerificationCanisterClient {
             .build()
             .unwrap();
         Self {
-            verification_canister: Principal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai").unwrap(),
+            verification_canister: Principal::from_text("be2us-64aaa-aaaaa-qaabq-cai").unwrap(),
             agent,
         }
     }
@@ -123,6 +129,14 @@ impl VerificationAgent for VerificationCanisterClient {
         request: &GenerateAttestationTokenRequest,
     ) -> VerificationAgentResult<GenerateAttestationTokenResponse> {
         self.call("generate_attestation_token", request, CallType::Update)
+            .await
+    }
+
+    async fn generate_tls_certificate(
+        &self,
+        request: &GenerateTlsCertificateRequest,
+    ) -> VerificationAgentResult<GenerateTlsCertificateResponse> {
+        self.call("generate_tls_certificate", request, CallType::Update)
             .await
     }
 

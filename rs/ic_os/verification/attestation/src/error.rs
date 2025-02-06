@@ -9,6 +9,7 @@ pub enum VerificationErrorDetail {
     NonceNotFound,
     NonceTooOld,
     AttestationTokenNotFound,
+    UnsupportedTlsKey { message: String },
     InvalidAttestationReport { message: String },
 }
 

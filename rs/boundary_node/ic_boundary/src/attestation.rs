@@ -1,7 +1,13 @@
 use anyhow::Context;
 use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapAny};
-use rcgen::{generate_simple_self_signed, CertificateParams, CustomExtension, Error, KeyPair};
+use base64ct::LineEnding;
+use der::EncodePem;
+use rcgen::{
+    generate_simple_self_signed, Certificate, CertificateParams, CustomExtension, Error, KeyPair,
+};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::CertificateDer;
 use rustls::pki_types::PrivateKeyDer::Pkcs8;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
@@ -81,38 +87,43 @@ impl AttestationTokenRefresher {
     }
 
     async fn new_tls_key_with_attestation_token() -> Result<Arc<CertifiedKey>> {
-        let certificate = Self::generate_tls_cert().await?;
-        let key = rustls::crypto::ring::sign::any_ecdsa_type(&Pkcs8(
-            certificate.key_pair.serialized_der().into(),
-        ))
-        .context("Could not parse private key")?;
-        Ok(Arc::new(CertifiedKey {
-            cert: vec![certificate.cert.der().clone()],
-            key,
-            ocsp: None,
-        }))
-    }
-
-    async fn generate_tls_cert() -> Result<rcgen::CertifiedKey> {
         let key_pair = KeyPair::generate()?;
-        let attestation_token_der =
-            attestee::fetch_attestation_token(key_pair.public_key_raw(), &mut vec![].as_slice())
+        let attestation_token_pem =
+            attestee::fetch_tls_certificate(key_pair.public_key_pem(), &mut vec![].as_slice())
                 .await
-                .context("Could not fetch attestation token")?;
-                // .to_der()?;
-        println!("Fetches attestation token: {:x?}", attestation_token_der);
-        let mut params = CertificateParams::new(vec![])?;
-        params
-            .custom_extensions
-            .push(CustomExtension::from_oid_content(
-                &[1, 3, 6, 1, 4, 1, 56387, 42, 1],
-                attestation_token_der.0,
-            ));
-        params.signed_by()
-        let cert = params.self_signed(&key_pair)?;
+                .context("Could not fetch tls certificate")?;
+        println!("PEM:");
+        println!("{}", attestation_token_pem);
 
-        Ok(rcgen::CertifiedKey { cert, key_pair })
+        let certificate_chain = CertificateDer::pem_slice_iter(attestation_token_pem.as_bytes())
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Certificate chain error")?;
+        println!("Certificates in chain: {}", certificate_chain.len());
+        let key =
+            rustls::crypto::ring::sign::any_ecdsa_type(&Pkcs8(key_pair.serialized_der().into()))?;
+        Ok(Arc::new(CertifiedKey::new(certificate_chain, key)))
     }
+
+    // async fn generate_tls_cert() -> Result<rcgen::CertifiedKey> {
+    //     let key_pair = KeyPair::generate()?;
+    //     println!("{}", key_pair.public_key_pem());
+    //     let attestation_token_pem =
+    //         attestee::fetch_tls_certificate(key_pair.public_key_pem(), &mut vec![].as_slice())
+    //             .await
+    //             .context("Could not fetch attestation token")?;
+    //             // .to_der()?;
+    //     println!("Fetches attestation token: {:x?}", attestation_token_pem);
+    //     // let mut params = CertificateParams::new(vec![])?;
+    //     // params
+    //     //     .custom_extensions
+    //     //     .push(CustomExtension::from_oid_content(
+    //     //         &[1, 3, 6, 1, 4, 1, 56387, 42, 1],
+    //     //         attestation_token_der.0,
+    //     //     ));
+    //     // let cert = params.self_signed(&key_pair)?;
+    //
+    //     Ok(rcgen::CertifiedKey { cert: Certificate, key_pair })
+    // }
 }
 
 impl ResolvesServerCert for ResolverWithAttestation {

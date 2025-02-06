@@ -2,6 +2,7 @@ use crate::{AttestationToken, AttestationTokenPayload};
 use ic_certificate_verification::VerifyCertificate;
 use ic_certification::LookupResult;
 use ic_principal::Principal;
+use std::fmt::Debug;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -18,17 +19,30 @@ const VERIFICATION_CANISTER_ID: Principal = Principal::from_slice(&[]);
 
 enum AttestationTokenError {}
 
+trait TimeSource: Debug + Send + Sync {
+    fn get_current_time(&self) -> SystemTime;
+}
+
+#[derive(Debug)]
+struct SystemTimeSource;
+
+impl TimeSource for SystemTimeSource {
+    fn get_current_time(&self) -> SystemTime {
+        SystemTime::now()
+    }
+}
+
 #[derive(Debug)]
 pub struct AttestationTokenVerifier {
-    time_source: Box<dyn Fn() -> SystemTime>,
+    time_source: Box<dyn TimeSource>,
     verification_canister_id: Principal,
     root_public_key: Vec<u8>,
     tls_public_key: Vec<u8>,
 }
 
 impl AttestationTokenVerifier {
-    pub fn set_time_source(mut self, time_source: Box<dyn Fn() -> SystemTime>) -> Self {
-        self.time_source = Box::new(time_source);
+    pub fn set_time_source(mut self, time_source: Box<dyn TimeSource>) -> Self {
+        self.time_source = time_source;
         self
     }
 
@@ -46,7 +60,7 @@ impl AttestationTokenVerifier {
 impl Default for AttestationTokenVerifier {
     fn default() -> Self {
         Self {
-            time_source: Box::new(|| SystemTime::now()),
+            time_source: Box::new(SystemTimeSource),
             verification_canister_id: VERIFICATION_CANISTER_ID,
             root_public_key: NNS_PUBLIC_KEY.to_vec(),
             tls_public_key: Vec::new(),
@@ -61,7 +75,9 @@ impl AttestationTokenVerifier {
             .verify(
                 self.verification_canister_id.as_slice(),
                 &self.root_public_key,
-                &(self.time_source)()
+                &self
+                    .time_source
+                    .get_current_time()
                     .duration_since(UNIX_EPOCH)
                     .expect("Current time must be > 1970-01-01")
                     .as_nanos(),
@@ -96,7 +112,9 @@ impl AttestationTokenVerifier {
             serde_cbor::from_slice(serialized_attestation_token_payload)
                 .map_err(|err| format!("Could not deserialize payload {err}"))?;
 
-        if (self.time_source)() > UNIX_EPOCH.add(Duration::from_secs(payload.expires_epoch_sec)) {
+        if self.time_source.get_current_time()
+            > UNIX_EPOCH.add(Duration::from_secs(payload.expires_epoch_sec))
+        {
             return Err("Attestation token expired".to_string());
         }
 
