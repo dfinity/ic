@@ -5,8 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
-use dfn_candid::candid_one;
-use dfn_core::CanisterId;
+use ic_base_types::CanisterId;
 use ic_cdk::api::call::CallResult;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
