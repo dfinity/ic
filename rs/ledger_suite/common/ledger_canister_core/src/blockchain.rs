@@ -12,7 +12,8 @@ use ic_ledger_hash_of::HashOf;
 use std::ops::Range;
 
 // There is a discrepancy in the way the trait uses indices for
-// adding and getting blocks (see `add_block` and `get_blocks`).
+// adding and getting blocks - `add_block` uses global indices
+// while `get_blocks` uses 0-based indices (local).
 // This is due to the fact that `HeapBlockData` doesn't store
 // block indices. Once `HeapBlockData` is removed, the getters
 // can be switched to global indices and `Blockchain` code can
