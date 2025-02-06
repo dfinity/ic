@@ -23,7 +23,9 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -42,6 +44,31 @@ pub async fn get_subnet_list_record(registry: &Canister<'_>) -> SubnetListRecord
 
 pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> SubnetRecord {
     get_value_or_panic::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
+}
+
+pub fn get_subnet_holding_ecdsa_keys(
+    ecdsa_key_ids: &[EcdsaKeyId],
+    node_ids: Vec<NodeId>,
+) -> SubnetRecord {
+    let mut record: SubnetRecord = CreateSubnetPayload {
+        unit_delay_millis: 10,
+        replica_version_id: ReplicaVersion::default().into(),
+        node_ids,
+        ..Default::default()
+    }
+    .into();
+
+    let ecdsa_config = EcdsaConfig {
+        quadruples_to_create_in_advance: 1,
+        key_ids: ecdsa_key_ids.to_vec(),
+        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    };
+    record.chain_key_config = Some(ChainKeyConfig::from(ecdsa_config.clone()).into());
+    record.ecdsa_config = Some(ecdsa_config.into());
+
+    record
 }
 
 pub fn get_subnet_holding_chain_keys(
@@ -240,7 +267,7 @@ pub async fn get_cup_contents(
 }
 
 /// Requests an ECDSA public key several times until it succeeds.
-async fn wait_for_ecdsa_setup(
+pub async fn wait_for_ecdsa_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
     key_id: &EcdsaKeyId,
@@ -274,7 +301,7 @@ async fn wait_for_ecdsa_setup(
 }
 
 /// Requests a Schnorr public key several times until it succeeds.
-async fn wait_for_schnorr_setup(
+pub async fn wait_for_schnorr_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
     key_id: &SchnorrKeyId,
