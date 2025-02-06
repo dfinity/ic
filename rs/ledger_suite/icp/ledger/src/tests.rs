@@ -519,6 +519,62 @@ fn duplicate_txns() {
 }
 
 #[test]
+fn get_blocks_returns_correct_blocks() {
+    let mut blocks = vec![];
+
+    // instead of the mint transaction
+    let txn = Transaction::new(
+        PrincipalId::new_user_test_id(0).into(),
+        PrincipalId::new_user_test_id(0).into(),
+        None,
+        Tokens::new(1000000, 0).unwrap(),
+        tokens(1),
+        Memo(0),
+        TimeStamp::new(1, 0),
+    );
+    blocks.push(
+        Block {
+            parent_hash: None,
+            transaction: txn,
+            timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
+        }
+        .encode(),
+    );
+
+    for i in 0..10 {
+        let txn = Transaction::new(
+            PrincipalId::new_user_test_id(0).into(),
+            PrincipalId::new_user_test_id(1).into(),
+            None,
+            Tokens::new(1, 0).unwrap(),
+            tokens(1),
+            Memo(i),
+            TimeStamp::new(1, 0),
+        );
+
+        let block = Block {
+            parent_hash: None,
+            transaction: txn,
+            timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
+        };
+
+        blocks.push(block.encode());
+    }
+
+    let first_blocks = icp_ledger::get_blocks(&blocks, 0, 1, 5).0.unwrap();
+    for i in 0..first_blocks.len() {
+        let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
+        assert_eq!(block.transaction.memo.0, i as u64);
+    }
+
+    let last_blocks = icp_ledger::get_blocks(&blocks, 0, 6, 5).0.unwrap();
+    for i in 0..last_blocks.len() {
+        let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
+        assert_eq!(block.transaction.memo.0, 5 + i as u64);
+    }
+}
+
+#[test]
 fn test_purge() {
     let mut ledger = Ledger::default();
     let genesis = SystemTime::now().into();
