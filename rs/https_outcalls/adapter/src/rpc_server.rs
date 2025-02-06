@@ -1,7 +1,7 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
-    LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use crate::Config;
 use core::convert::TryFrom;
@@ -146,12 +146,22 @@ impl CanisterHttp {
     ) {
         match (result, dl_result) {
             (Ok(_), Ok(_)) => {
-                info!(self.logger, "SOCKS_PROXY_DL: Both requests succeeded");
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
+                    .inc();
             }
             (Err(_), Err(_)) => {
-                info!(self.logger, "SOCKS_PROXY_DL: Both requests failed");
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_ERROR])
+                    .inc();
             }
             (Ok(_), Err(err)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_ERROR])
+                    .inc();
                 info!(
                     self.logger,
                     "SOCKS_PROXY_DL: regular request succeeded, DL request failed with error {}",
@@ -159,6 +169,10 @@ impl CanisterHttp {
                 );
             }
             (Err(err), Ok(_)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK])
+                    .inc();
                 info!(
                     self.logger,
                     "SOCKS_PROXY_DL: DL request succeeded, regular request failed with error {}",

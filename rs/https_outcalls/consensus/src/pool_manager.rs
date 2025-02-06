@@ -34,7 +34,7 @@ use std::{
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
-//TODO(SOCKS_PROXY_DL): Make this > 0.
+//TODO(SOCKS_PROXY_DL): Make this 100.
 /// The probability of using api boundary node addresses for SOCKS proxy dark launch.
 const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 10;
 
@@ -59,11 +59,10 @@ pub struct CanisterHttpPoolManagerImpl {
 }
 
 //TODO(SOCKS_PROXY_DL): Remove this function.
-#[allow(clippy::absurd_extreme_comparisons)]
 fn should_dl_socks_proxy() -> bool {
     let mut rng = rand::thread_rng();
     let random_number: u32 = rng.gen_range(0..100);
-    // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
+    // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
     random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
