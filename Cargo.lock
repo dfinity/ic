@@ -8582,7 +8582,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.9.0"
+version = "0.1.0"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
