@@ -86,8 +86,7 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
+trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
     ///   - newly arrived artifacts (passed as input parameters)
@@ -134,8 +133,7 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub fn run_artifact_processor<
+fn run_artifact_processor<
     Artifact: IdentifiableArtifact,
     I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
 >(
@@ -317,8 +315,7 @@ pub fn create_artifact_handler<
     )
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
+struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
     unused: std::marker::PhantomData<A>,
