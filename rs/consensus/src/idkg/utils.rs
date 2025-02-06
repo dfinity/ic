@@ -617,7 +617,7 @@ mod tests {
     use super::*;
     use crate::idkg::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
-        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
+        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
         IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -948,7 +948,7 @@ mod tests {
 
     #[test]
     fn test_get_pre_signature_ids_to_deliver_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_get_pre_signature_ids_to_deliver(key_id);
         }
@@ -1020,7 +1020,7 @@ mod tests {
 
     #[test]
     fn test_block_without_key_should_not_deliver_pre_signatures_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_block_without_key_should_not_deliver_pre_signatures(key_id);
         }
