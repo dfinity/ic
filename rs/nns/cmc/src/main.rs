@@ -377,7 +377,7 @@ fn print<S: std::convert::AsRef<str>>(s: S)
 where
     yansi::Paint<S>: std::string::ToString,
 {
-    dfn_core::api::print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
 }
 
 #[export_name = "canister_init"]
