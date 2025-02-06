@@ -2523,7 +2523,7 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         Ok(())
     })?;
 
-    dfn_core::api::mint_cycles(
+    ic0_mint_cycles(
         cycles_to_mint
             .get()
             .try_into()
