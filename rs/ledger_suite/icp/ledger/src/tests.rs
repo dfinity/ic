@@ -522,20 +522,19 @@ fn duplicate_txns() {
 fn get_blocks_returns_correct_blocks() {
     let mut blocks = vec![];
 
-    // instead of the mint transaction
-    let txn = Transaction::new(
-        PrincipalId::new_user_test_id(0).into(),
-        PrincipalId::new_user_test_id(0).into(),
-        None,
-        Tokens::new(1000000, 0).unwrap(),
-        tokens(1),
-        Memo(0),
-        TimeStamp::new(1, 0),
-    );
+    let tx = Transaction {
+        operation: Operation::Mint {
+            to: PrincipalId::new_user_test_id(0).into(),
+            amount: Tokens::from_e8s(1000),
+        },
+        memo: Memo(0),
+        created_at_time: None,
+        icrc1_memo: None,
+    };
     blocks.push(
         Block {
             parent_hash: None,
-            transaction: txn,
+            transaction: tx,
             timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
         }
         .encode(),
