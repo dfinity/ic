@@ -2464,7 +2464,7 @@ async fn do_create_canister(
             dfn_candid::candid_one,
             CreateCanisterArgs {
                 settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
-                sender_canister_version: Some(dfn_core::api::canister_version()),
+                sender_canister_version: Some(ic_cdk::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
         )
