@@ -13,7 +13,9 @@ DEPENDENCIES = [
     "@crate_index//:clap",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:indoc",
+]
 
 ALIASES = {}
 
