@@ -85,7 +85,7 @@ impl ToString for RecoveryError {
 }
 
 pub trait VerifyIntegirty {
-    fn verify(&self) -> Result<()>;
+    fn verify_integrity(&self) -> Result<()>;
 }
 
 impl<'a, I, T> VerifyIntegirty for I
@@ -93,16 +93,16 @@ where
     I: Iterator<Item = &'a T> + Clone,
     T: VerifyIntegirty + 'a,
 {
-    fn verify(&self) -> Result<()> {
+    fn verify_integrity(&self) -> Result<()> {
         self.clone()
-            .map(|item| item.verify())
+            .map(|item| item.verify_integrity())
             .find(|res| res.is_err())
             .unwrap_or(Ok(()))
     }
 }
 
 /// Convenience method that explicitly checks the authenticity
-/// of sent proposal chain. It is equivalent to calling `proposals.iter().verify()`
+/// of sent proposal chain. It is equivalent to calling `proposals.iter().verify_integrity()`
 pub fn verify_signatures_and_authenticity_of_all_proposals_and_votes(
     proposals: Vec<&RecoveryProposal>,
 ) -> Result<()> {

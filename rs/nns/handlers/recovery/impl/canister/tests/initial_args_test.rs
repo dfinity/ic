@@ -93,5 +93,5 @@ fn initial_operators_should_be_able_to_place_proposals_and_vote() {
     let pending = get_pending(&pic, canister);
     let last = pending.last().unwrap();
     assert!(!last.is_byzantine_majority_yes());
-    assert!(last.verify().is_ok())
+    assert!(last.verify_integrity().is_ok())
 }

@@ -3439,6 +3439,7 @@ dependencies = [
  "slog-scope",
  "slog-term",
  "socket2 0.5.7",
+ "spki 0.7.3",
  "ssh2",
  "static_assertions",
  "strum 0.26.3",

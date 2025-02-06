@@ -1,13 +1,13 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use candid::Principal;
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{pkcs8::EncodePublicKey, SigningKey};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
     recovery_init::RecoveryInitArgs,
-    security_metadata::{der_encode_public_key, SecurityMetadata},
+    security_metadata::SecurityMetadata,
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot,
 };
@@ -110,9 +110,13 @@ impl NodeOperatorArg {
         let signing_key = SigningKey::generate(&mut csprng);
 
         Self {
-            principal: PrincipalId::new_self_authenticating(&der_encode_public_key(
-                signing_key.verifying_key().as_bytes().to_vec(),
-            )),
+            principal: PrincipalId::new_self_authenticating(
+                &signing_key
+                    .verifying_key()
+                    .to_public_key_der()
+                    .unwrap()
+                    .into_vec(),
+            ),
             num_nodes,
             signing_key,
         }
@@ -349,9 +353,12 @@ fn vote_with_only_ballot(
                     .signature_payload()
                     .expect("Should be able to fetch payload"),
                 signature,
-                pub_key_der: der_encode_public_key(
-                    sender.signing_key.verifying_key().to_bytes().to_vec(),
-                ),
+                pub_key_der: sender
+                    .signing_key
+                    .verifying_key()
+                    .to_public_key_der()
+                    .unwrap()
+                    .into_vec(),
             },
             ballot,
         },

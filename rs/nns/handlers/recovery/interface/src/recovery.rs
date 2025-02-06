@@ -114,7 +114,7 @@ impl RecoveryProposal {
                 // Each vote has the weight of 1 times
                 // the amount of nodes the node operator
                 // has in the nns subnet
-                true => 1 * vote.nodes_tied_to_ballot.len(),
+                true => vote.nodes_tied_to_ballot.len(),
                 false => 0,
             })
             .sum::<usize>();
@@ -137,17 +137,17 @@ impl RecoveryProposal {
 }
 
 impl VerifyIntegirty for NodeOperatorBallot {
-    fn verify(&self) -> Result<()> {
+    fn verify_integrity(&self) -> Result<()> {
         self.security_metadata.validate_metadata(&self.principal)
     }
 }
 
 impl VerifyIntegirty for RecoveryProposal {
-    fn verify(&self) -> Result<()> {
+    fn verify_integrity(&self) -> Result<()> {
         self.node_operator_ballots
             .iter()
             .filter(|ballot| !ballot.ballot.eq(&Ballot::Undecided))
-            .verify()
+            .verify_integrity()
     }
 }
 

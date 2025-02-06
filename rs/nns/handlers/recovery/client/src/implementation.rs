@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
+use ed25519_dalek::pkcs8::EncodePublicKey;
 use ed25519_dalek::SigningKey;
 use ic_agent::Agent;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
-    security_metadata::{der_encode_public_key, SecurityMetadata},
+    security_metadata::SecurityMetadata,
     simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot, RecoveryError, Result, VerifyIntegirty,
 };
@@ -83,7 +84,7 @@ impl RecoveryCanister for RecoveryCanisterImpl {
         let response: Vec<RecoveryProposal> = self
             .query("get_pending_recovery_proposals", candid::encode_one(())?)
             .await?;
-        response.iter().verify()?;
+        response.iter().verify_integrity()?;
 
         Ok(response)
     }
@@ -99,9 +100,12 @@ impl RecoveryCanister for RecoveryCanisterImpl {
                 security_metadata: SecurityMetadata {
                     signature,
                     payload: last_proposal.signature_payload()?,
-                    pub_key_der: der_encode_public_key(
-                        self.signing_key.verifying_key().to_bytes().to_vec(),
-                    ),
+                    pub_key_der: self
+                        .signing_key
+                        .verifying_key()
+                        .to_public_key_der()
+                        .unwrap()
+                        .into_vec(),
                 },
                 ballot,
             })?,

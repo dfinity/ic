@@ -1,6 +1,16 @@
+use candid::Principal;
 use ic_nns_handler_recovery_interface::{
-    recovery::{NewRecoveryProposal, RecoveryPayload},
+    recovery::{NewRecoveryProposal, RecoveryPayload, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery_init::RecoveryInitArgs,
+    security_metadata::SecurityMetadata,
+    simple_node_operator_record::SimpleNodeOperatorRecord,
     Ballot, VerifyIntegirty,
+};
+use p256::{
+    ecdsa::{self, signature::SignerMut, SigningKey},
+    elliptic_curve::{rand_core::OsRng, SecretKey},
+    pkcs8::EncodePublicKey,
+    NistP256,
 };
 
 use crate::{
@@ -69,5 +79,74 @@ async fn can_vote_on_proposals() {
     assert!(response.is_ok());
 
     let latest = first_client.get_pending_recovery_proposals().await.unwrap();
-    assert!(latest.iter().verify().is_ok())
+    assert!(latest.iter().verify_integrity().is_ok())
+}
+
+#[tokio::test]
+async fn can_use_prime256_keys() {
+    let new_key_pair: SecretKey<NistP256> = SecretKey::random(&mut OsRng);
+    let pub_key = new_key_pair.public_key();
+    let node_operator = SimpleNodeOperatorRecord {
+        operator_id: Principal::self_authenticating(pub_key.to_public_key_der().unwrap()),
+        nodes: vec![Principal::anonymous()],
+    };
+
+    let (pic, canister) = init_pocket_ic(RecoveryInitArgs {
+        initial_node_operator_records: vec![node_operator.clone()],
+    })
+    .await;
+
+    pic.update_call(
+        canister,
+        node_operator.operator_id,
+        "submit_new_recovery_proposal",
+        candid::encode_one(NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+        })
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let pending = pic
+        .query_call(
+            canister,
+            Principal::anonymous(),
+            "get_pending_recovery_proposals",
+            candid::encode_one(()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let pending: Vec<RecoveryProposal> = candid::decode_one(&pending).unwrap();
+    let last = pending.last().unwrap();
+
+    let mut signing_key: SigningKey = new_key_pair.into();
+    let signature: ecdsa::Signature = signing_key
+        .try_sign(&last.signature_payload().unwrap())
+        .unwrap();
+
+    let mut r = [0; 32];
+    let mut s = [0; 32];
+    r.copy_from_slice(&signature.r().as_ref().to_bytes());
+    s.copy_from_slice(&signature.s().as_ref().to_bytes());
+
+    let response = pic
+        .update_call(
+            canister,
+            node_operator.operator_id,
+            "vote_on_proposal",
+            candid::encode_one(VoteOnRecoveryProposal {
+                security_metadata: SecurityMetadata {
+                    signature: [r, s],
+                    payload: last.signature_payload().unwrap(),
+                    pub_key_der: pub_key.to_public_key_der().unwrap().into_vec(),
+                },
+                ballot: Ballot::Yes,
+            })
+            .unwrap(),
+        )
+        .await;
+
+    assert!(response.is_ok())
 }

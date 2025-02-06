@@ -13,4 +13,5 @@ ed25519-dalek.workspace = true
 registry-canister.path = "../../../../registry/canister"
 ic-base-types.path = "../../../../types/base_types"
 hex.workspace = true
-simple_asn1.workspace = true
+spki.workspace = true
+p256.workspace = true

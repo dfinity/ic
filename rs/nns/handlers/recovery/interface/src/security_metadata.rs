@@ -1,11 +1,9 @@
 use super::*;
 use candid::{CandidType, Principal};
-use ed25519_dalek::{Signature, VerifyingKey};
+use p256::ecdsa::signature::Verifier;
+use p256::pkcs8::DecodePublicKey;
 use serde::Deserialize;
-use simple_asn1::{
-    oid, to_der,
-    ASN1Block::{BitString, ObjectIdentifier, Sequence},
-};
+use spki::{Document, SubjectPublicKeyInfoRef};
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 /// Wrapper struct containing information regarding integrity.
@@ -46,14 +44,11 @@ impl SecurityMetadata {
 
     /// Verifies the signature authenticity of security metadata.
     pub fn verify_signature(&self) -> Result<()> {
-        let loaded_public_key = VerifyingKey::from_bytes(&self.decode_der_pub_key())
-            .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
-        let signature = Signature::from_slice(self.signature.as_flattened())
-            .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
-
-        loaded_public_key
-            .verify_strict(&self.payload, &signature)
-            .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
+        valid_signature(
+            &self.pub_key_der,
+            self.signature.as_flattened(),
+            &self.payload,
+        )
     }
 
     /// Verifies if the passed principal is derived from a given public key (also known as
@@ -69,22 +64,39 @@ impl SecurityMetadata {
             ))),
         }
     }
-
-    fn decode_der_pub_key(&self) -> [u8; 32] {
-        // TODO: Logic for reversing other keys
-        let mut key = [0; 32];
-        key.copy_from_slice(&self.pub_key_der[self.pub_key_der.len() - 32..]);
-        key
-    }
 }
 
-// Copied from agent-rs
-pub fn der_encode_public_key(public_key: Vec<u8>) -> Vec<u8> {
-    // see Section 4 "SubjectPublicKeyInfo" in https://tools.ietf.org/html/rfc8410
+fn valid_signature(pub_key_der: &Vec<u8>, signature: &[u8], payload: &Vec<u8>) -> Result<()> {
+    let document: Document = Document::from_public_key_der(&pub_key_der)
+        .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
 
-    let id_ed25519 = oid!(1, 3, 101, 112);
-    let algorithm = Sequence(0, vec![ObjectIdentifier(0, id_ed25519)]);
-    let subject_public_key = BitString(0, public_key.len() * 8, public_key);
-    let subject_public_key_info = Sequence(0, vec![algorithm, subject_public_key]);
-    to_der(&subject_public_key_info).unwrap()
+    let info: SubjectPublicKeyInfoRef = document.decode_msg().unwrap();
+
+    let maybe_ed25519: Result<ed25519_dalek::VerifyingKey> = info
+        .clone()
+        .try_into()
+        .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()));
+    let maybe_p256: Result<p256::ecdsa::VerifyingKey> = info
+        .try_into()
+        .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()));
+
+    match (maybe_ed25519, maybe_p256) {
+        (Ok(k), _) => {
+            let signature = ed25519_dalek::Signature::from_slice(signature)
+                .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
+
+            k.verify_strict(&payload, &signature)
+                .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
+        }
+        (_, Ok(k)) => {
+            let signature = p256::ecdsa::Signature::from_slice(&signature)
+                .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
+
+            k.verify(payload, &signature)
+                .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
+        }
+        _ => Err(RecoveryError::InvalidPubKey(
+            "Unknown der format".to_string(),
+        )),
+    }
 }

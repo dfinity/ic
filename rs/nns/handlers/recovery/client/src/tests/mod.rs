@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use candid::Principal;
+use ed25519_dalek::pkcs8::EncodePublicKey;
 use ed25519_dalek::{ed25519::signature::rand_core::OsRng, SigningKey};
 use ic_agent::{agent::AgentBuilder, identity::BasicIdentity, Agent};
 use ic_nns_handler_recovery_interface::{
-    recovery_init::RecoveryInitArgs, security_metadata::der_encode_public_key,
-    simple_node_operator_record::SimpleNodeOperatorRecord,
+    recovery_init::RecoveryInitArgs, simple_node_operator_record::SimpleNodeOperatorRecord,
 };
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 
@@ -101,9 +101,9 @@ fn generate_node_operators() -> Vec<NodeOperatorWithKey> {
             let key = SigningKey::generate(&mut OsRng);
             NodeOperatorWithKey {
                 record: SimpleNodeOperatorRecord {
-                    operator_id: Principal::self_authenticating(der_encode_public_key(
-                        key.verifying_key().to_bytes().to_vec(),
-                    )),
+                    operator_id: Principal::self_authenticating(
+                        key.verifying_key().to_public_key_der().unwrap().into_vec(),
+                    ),
                     nodes: (0..4).map(|_| Principal::anonymous()).collect(),
                 },
                 key,

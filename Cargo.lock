@@ -10864,8 +10864,11 @@ dependencies = [
  "async-trait",
  "candid",
  "ed25519-dalek",
+ "elliptic-curve 0.13.8",
  "ic-agent",
  "ic-nns-handler-recovery-interface",
+ "p256",
+ "pocket-ic",
  "serde",
  "tokio",
 ]
@@ -10878,9 +10881,10 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "ic-base-types",
+ "p256",
  "registry-canister",
  "serde",
- "simple_asn1",
+ "spki 0.7.3",
 ]
 
 [[package]]
