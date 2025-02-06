@@ -2,7 +2,7 @@ workspace(
     name = "ic",
 )
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
@@ -270,3 +270,12 @@ idl_to_json(name = "idl2json")
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")
+
+# IC-OS deps
+http_file(
+    name = "ubuntu-base-24.04.1-base-amd64.tar.gz",
+    sha256 = "5b0ffb1e31d4b85f5a2214f105d1377ba616c453b38ff46c278dc6472b21e2d8",
+    url = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.1/release/ubuntu-base-24.04.1-base-amd64.tar.gz",
+)
+
+# End of IC-OS deps
