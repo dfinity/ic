@@ -10,9 +10,9 @@ curl -sfS --retry 5 --retry-delay 10 \
     "https://download.dfinity.systems/ic/$VERSION/$PATH0/SHA256SUMS" \
     -o "$PATH0/SHA256SUMS"
 
-# TODO(IDX): remove when issue is identified and addressed
-# https://gitlab.com/dfinity-lab/public/ic/-/snippets/3704313
-sed -i -e '/genesis-token-canister.wasm.gz/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+# ignore *.wasm.gz.did files (these are checksummed by upload_artifacts but
+# not by build-ic.sh)
+sed -i -e '/.wasm.gz.did/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
 
 # for hostos / guestos we only care about update-img
 sed -i -e '/disk-img/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
