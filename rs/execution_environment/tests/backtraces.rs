@@ -126,7 +126,7 @@ fn no_backtrace_without_feature() {
         .unwrap_err();
     result.assert_contains(
         ErrorCode::CanisterTrapped,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: unreachable",
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: 'Canister trapped: unreachable",
     );
     assert!(
         !result.description().contains("Backtrace"),

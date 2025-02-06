@@ -590,7 +590,7 @@ fn check_memo() {
             .assert_contains(
                 ErrorCode::CanisterCalledTrap,
                 "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-                `ic0.trap` with message: the memo field is too large",
+                `ic0.trap` with message: 'the memo field is too large",
             );
     }
 }
