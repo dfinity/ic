@@ -51,10 +51,10 @@ sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
-IMAGE=$(cut -d':' -f2 < "${TMPDIR}/iidfile")
+IMAGE_ID=$(cut -d':' -f2 < "${TMPDIR}/iidfile")
 
-CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "$IMAGE")
+CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
 
-sudo podman --root "${TMPFS}" export "$CONTAINER" | tar -C "$TMPDIR" --strip-components=1 -x build
+sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
-find "$TMPDIR/boot" -type f -exec sha256sum {} \; | sed "s|$TMPDIR||"
+find "${TMPDIR}/boot" -type f -exec sha256sum {} \; | sed "s|${TMPDIR}||"
