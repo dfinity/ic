@@ -534,9 +534,12 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageId::VetKdKeyShare(_, _) => {
-            // TODO(CON-1424): Accept VetKd shares
-            BouncerValue::Unwanted
+        IDkgMessageId::VetKdKeyShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
         }
         IDkgMessageId::Complaint(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
@@ -563,7 +566,7 @@ mod tests {
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_types::consensus::idkg::{
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData,
+        opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
     };
     use ic_types::{
         consensus::idkg::{RequestId, SigShareIdData},
@@ -712,6 +715,13 @@ mod tests {
                 BouncerValue::Wants,
             ),
             (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
+            ),
+            (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
@@ -726,6 +736,13 @@ mod tests {
                 BouncerValue::Wants,
             ),
             (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
+            ),
+            (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
@@ -735,6 +752,13 @@ mod tests {
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
+            ),
+            (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
                 BouncerValue::MaybeWantsLater,
