@@ -119,11 +119,9 @@ fn main() -> Result<()> {
         Some(Step::ScheduleVote(cmd)) => run_schedule_vote(cmd),
         Some(Step::UpdateChangelog(cmd)) => run_update_changelog(cmd),
     }
-
-    Ok(())
 }
 
-fn run_pick_commit() {
+fn run_pick_commit() -> Result<()> {
     // Get the ic directory.
     let ic = ic_dir();
 
@@ -134,33 +132,32 @@ fn run_pick_commit() {
     let output = Command::new(cmd_path)
         .arg("latest_commit_with_prebuilt_artifacts")
         .current_dir(&ic)
-        .output()
-        .unwrap();
+        .output()?;
 
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
         println!("A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.");
-        input_with_default("Commit to release", &commit)
+        input_with_default("Commit to release", &commit)?
     } else {
         println!(
             "Automatically determining the commit hash failed with error:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         // get input from user for the commit
-        input("Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`")
+        input("Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`")?
     };
 
     print_step(
         1,
         "Pick Release Candidate Commit",
         &format!("Chosen commit: {}", commit),
-    );
+    )?;
 
     // Continue to next step.
-    run_determine_targets(DetermineTargets { commit });
+    run_determine_targets(DetermineTargets { commit })
 }
 
-fn run_determine_targets(cmd: DetermineTargets) {
+fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     let DetermineTargets { commit } = cmd;
     println!("Now choose which canisters to upgrade. You can run ./testnet/tools/nns-tools/list-new-commits.sh to see the changes for each canister.");
 
@@ -183,7 +180,7 @@ fn run_determine_targets(cmd: DetermineTargets) {
     // Ask about NNS canisters.
     println!("NNS canisters:");
     for &canister in nns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false) {
+        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
             nns_canisters.push(canister.to_string().to_lowercase());
         }
     }
@@ -191,7 +188,7 @@ fn run_determine_targets(cmd: DetermineTargets) {
     // Ask about SNS canisters.
     println!("SNS canisters:");
     for &canister in sns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false) {
+        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
             sns_canisters.push(canister.to_string().to_lowercase());
         }
     }
@@ -204,16 +201,16 @@ fn run_determine_targets(cmd: DetermineTargets) {
             nns_canisters.join(", "),
             sns_canisters.join(", ")
         ),
-    );
+    )?;
 
     run_run_tests(RunTests {
         commit,
         nns_canisters,
         sns_canisters,
-    });
+    })
 }
 
-fn run_run_tests(cmd: RunTests) {
+fn run_run_tests(cmd: RunTests) -> Result<()> {
     let RunTests {
         commit,
         nns_canisters,
@@ -230,16 +227,16 @@ If not, you can also run the upgrade tests manually:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
    - Example: Test at rs/nervous_system/integration_tests/tests/sns_release_qualification.rs",
-    );
+    )?;
 
     run_create_proposal_texts(CreateProposalTexts {
         commit,
         nns_canisters,
         sns_canisters,
-    });
+    })
 }
 
-fn run_create_proposal_texts(cmd: CreateProposalTexts) {
+fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
     let CreateProposalTexts {
         commit,
         nns_canisters,
@@ -258,11 +255,11 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) {
     // check if the directory exists
     if proposals_dir.exists() {
         println!("Removing existing proposals/ directory");
-        std::fs::remove_dir_all(&proposals_dir).unwrap();
+        std::fs::remove_dir_all(&proposals_dir)?;
     }
     std::fs::create_dir_all(&proposals_dir).expect("Failed to create proposals directory");
 
-    let proposals_dir = proposals_dir.canonicalize().unwrap();
+    let proposals_dir = proposals_dir.canonicalize()?;
 
     println!(
         "Creating proposal texts for {} NNS canisters and {} SNS canisters at commit {}",
@@ -287,7 +284,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) {
                 .output()
                 .expect("Failed to run NNS proposal text script")
         } else {
-            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "'()'");
+            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "'()'")?;
             Command::new(script)
                 .arg(canister)
                 .arg(&commit)
@@ -297,7 +294,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) {
                 .expect("Failed to run NNS proposal text script")
         };
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
                 canister,
                 String::from_utf8_lossy(&output.stdout),
@@ -324,7 +321,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) {
             .output()
             .expect("Failed to run SNS proposal text script");
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Failed to create proposal text for SNS canister {} due to error: {}",
                 canister,
                 String::from_utf8_lossy(&output.stderr)
@@ -374,36 +371,36 @@ SNS proposal texts: {}",
                 acc
             })
         )
-    );
+    )?;
 
     run_submit_proposals(SubmitProposals {
         nns_proposal_text_paths,
         sns_proposal_text_paths,
-    });
+    })
 }
 
-fn run_submit_proposals(cmd: SubmitProposals) {
+fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     let SubmitProposals {
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     } = cmd;
 
-    if !input_yes_or_no("Do you want to submit upgrade proposals?", false) {
+    if !input_yes_or_no("Do you want to submit upgrade proposals?", false)? {
         println!("Skipping upgrade proposal submission and all following steps.");
-        return;
+        return Ok(());
     }
     println!();
 
     // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
     println!("We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>.");
-    let neuron_id = input("Enter your neuron ID (e.g. 51)");
+    let neuron_id = input("Enter your neuron ID (e.g. 51)")?;
 
     println!("Plug in your HSM key. Unplug your Ubikey.");
     println!("Once you have done that, you can test your key hardware with the following command:");
     println!("    pkcs11-tool --list-slots");
     println!("And you can practice entering your password with: ");
     println!("    pkcs11-tool --login --test");
-    input("Press Enter to continue...");
+    input("Press Enter to continue...")?;
 
     let ic = ic_dir();
 
@@ -424,7 +421,7 @@ fn run_submit_proposals(cmd: SubmitProposals) {
             .output()
             .expect("Failed to run submit-mainnet-nns-upgrade-proposal.sh");
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Submission failed for {}: {}",
                 proposal_path.display(),
                 String::from_utf8_lossy(&output.stderr)
@@ -432,7 +429,7 @@ fn run_submit_proposals(cmd: SubmitProposals) {
         }
 
         println!("Submission successful for {}", proposal_path.display());
-        nns_proposal_ids.push(input("Enter the proposal ID"));
+        nns_proposal_ids.push(input("Enter the proposal ID")?);
     }
 
     // For each SNS proposal, run the submission script.
@@ -449,7 +446,7 @@ fn run_submit_proposals(cmd: SubmitProposals) {
             .output()
             .expect("Failed to run submit-mainnet-publish-sns-wasm-proposal.sh");
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Submission failed for {}: {}",
                 proposal_path.display(),
                 String::from_utf8_lossy(&output.stderr)
@@ -457,7 +454,7 @@ fn run_submit_proposals(cmd: SubmitProposals) {
         }
 
         println!("Submission successful for {}", proposal_path.display());
-        sns_proposal_ids.push(input("Enter the proposal ID"));
+        sns_proposal_ids.push(input("Enter the proposal ID")?);
     }
 
     use std::fmt::Write;
@@ -485,17 +482,17 @@ fn run_submit_proposals(cmd: SubmitProposals) {
                 acc
             })
         ),
-    );
+    )?;
 
     run_create_forum_post(CreateForumPost {
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
         sns_proposal_ids,
-    });
+    })
 }
 
-fn run_create_forum_post(cmd: CreateForumPost) {
+fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let CreateForumPost {
         nns_proposal_text_paths,
         nns_proposal_ids,
@@ -515,25 +512,25 @@ fn run_create_forum_post(cmd: CreateForumPost) {
             .expect("Failed to run generate_forum_post_nns_upgrades");
 
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Failed to generate NNS forum post: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
 
-        copy(&output.stdout).unwrap();
+        copy(&output.stdout)?;
 
         let title = format!("NNS Updates {}", chrono::Local::now().format("%Y-%m-%d"));
         let body =
             "Please paste the post in here! It should already be copied into your clipboard.";
-        let mut url = Url::parse("https://forum.dfinity.org/new-topic").unwrap();
+        let mut url = Url::parse("https://forum.dfinity.org/new-topic")?;
         url.query_pairs_mut()
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
             .append_pair("tags", "nns");
 
-        open_webpage(&url).unwrap();
+        open_webpage(&url)?;
 
         use std::fmt::Write;
         println!(
@@ -549,9 +546,9 @@ fn run_create_forum_post(cmd: CreateForumPost) {
         );
 
         print!("Press Enter to continue...");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()?;
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)?;
     }
 
     // --- Generate SNS forum post ---
@@ -564,25 +561,25 @@ fn run_create_forum_post(cmd: CreateForumPost) {
             .expect("Failed to run generate_forum_post_sns_wasm_publish");
 
         if !output.status.success() {
-            panic!(
+            bail!(
                 "Failed to generate SNS forum post: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
 
-        copy(&output.stdout).unwrap();
+        copy(&output.stdout)?;
 
         let title = format!("SNS Updates {}", chrono::Local::now().format("%Y-%m-%d"));
         let body =
             "Please paste the post in here! It should already be copied into your clipboard.";
-        let mut url = Url::parse("https://forum.dfinity.org/new-topic").unwrap();
+        let mut url = Url::parse("https://forum.dfinity.org/new-topic")?;
         url.query_pairs_mut()
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
             .append_pair("tags", "SNS");
 
-        open_webpage(&url).unwrap();
+        open_webpage(&url)?;
 
         use std::fmt::Write;
         println!(
@@ -598,25 +595,25 @@ fn run_create_forum_post(cmd: CreateForumPost) {
         );
 
         print!("Press Enter to continue...");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()?;
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)?;
     }
 
     print_step(
         6,
         "Post to the DFINITY forum",
         "Make sure to add the proposal IDs to the forum post!",
-    );
+    )?;
 
     // Continue to the next automated step.
     run_schedule_vote(ScheduleVote {
         nns_proposal_ids,
         sns_proposal_ids,
-    });
+    })
 }
 
-fn run_schedule_vote(cmd: ScheduleVote) {
+fn run_schedule_vote(cmd: ScheduleVote) -> Result<()> {
     let ScheduleVote {
         nns_proposal_ids,
         sns_proposal_ids,
@@ -624,7 +621,7 @@ fn run_schedule_vote(cmd: ScheduleVote) {
 
     if nns_proposal_ids.is_empty() && sns_proposal_ids.is_empty() {
         println!("No proposals to schedule vote for.");
-        return;
+        return Ok(());
     }
 
     use std::fmt::Write;
@@ -652,9 +649,9 @@ SNS: {}",
     );
 
     println!("Copying instructions for Trusted Neurons to clipboard...");
-    copy(instructions.as_bytes()).unwrap();
-    input("Press Enter to open the calendar event...");
-    open_webpage(&Url::parse("https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc").unwrap()).unwrap();
+    copy(instructions.as_bytes())?;
+    input("Press Enter to open the calendar event...")?;
+    open_webpage(&Url::parse("https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc")?)?;
 
     print_step(7,
         "Schedule Trusted Neurons Vote",
@@ -679,12 +676,12 @@ Calendar Event Setup:
    - Click 'Save' to create event
    - Send email invitations when prompted
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
-    );
+    )?;
 
-    run_update_changelog(UpdateChangelog);
+    run_update_changelog(UpdateChangelog)
 }
 
-fn run_update_changelog(_: UpdateChangelog) {
+fn run_update_changelog(_: UpdateChangelog) -> Result<()> {
     print_step(
         8,
         "Update Changelog",
@@ -702,10 +699,12 @@ fn run_update_changelog(_: UpdateChangelog) {
 
 2. Best Practice:
    - Combine this change with mainnet-canisters.json update in the same PR",
-    );
+    )?;
 
     println!("{}", "\nRelease process complete!".bright_green().bold());
     println!("Please verify that all steps were completed successfully.");
+
+    Ok(())
 }
 
 fn print_header() {
@@ -714,7 +713,7 @@ fn print_header() {
     println!("This script will guide you through the NNS release process.\n");
 }
 
-fn print_step(number: usize, title: &str, description: &str) {
+fn print_step(number: usize, title: &str, description: &str) -> Result<()> {
     println!(
         "{} {}",
         format!("Step {}:", number).bright_blue().bold(),
@@ -723,26 +722,27 @@ fn print_step(number: usize, title: &str, description: &str) {
     println!("{}", "---".bright_blue());
     println!("{}\n", description);
     print!("\nPress Enter to continue to next step...");
-    io::stdout().flush().unwrap();
+    io::stdout().flush()?;
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
+    io::stdin().read_line(&mut input)?;
     print!("\x1B[2J\x1B[1;1H");
+    Ok(())
 }
 
-fn input(text: &str) -> String {
+fn input(text: &str) -> Result<String> {
     print!("{}: ", text);
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush()?;
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
 }
 
-fn input_with_default(text: &str, default: &str) -> String {
-    let input = input(&format!("{} (default: {})", text, default));
+fn input_with_default(text: &str, default: &str) -> Result<String> {
+    let input = input(&format!("{} (default: {})", text, default))?;
     if input.is_empty() {
-        default.to_string()
+        Ok(default.to_string())
     } else {
-        input
+        Ok(input)
     }
 }
 
@@ -766,7 +766,7 @@ fn copy(text: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn input_yes_or_no(text: &str, default: bool) -> bool {
+fn input_yes_or_no(text: &str, default: bool) -> Result<bool> {
     loop {
         let input = input(&format!(
             "{} {}",
@@ -776,13 +776,13 @@ fn input_yes_or_no(text: &str, default: bool) -> bool {
             } else {
                 "y/N (default: no)"
             }
-        ));
+        ))?;
         if input.is_empty() {
-            return default;
+            return Ok(default);
         } else if input.to_lowercase() == "y" {
-            return true;
+            return Ok(true);
         } else if input.to_lowercase() == "n" {
-            return false;
+            return Ok(false);
         }
     }
 }
