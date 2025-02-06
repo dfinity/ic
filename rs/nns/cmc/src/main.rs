@@ -2618,7 +2618,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
 fn canister_heartbeat() {
     if with_state(|state| state.exchange_rate_canister_id.is_some()) {
         let future = update_exchange_rate();
-        dfn_core::api::futures::spawn(future);
+        ic_cdk::spawn(future);
     }
 }
 
