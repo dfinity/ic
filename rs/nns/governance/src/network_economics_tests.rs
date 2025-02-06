@@ -15,7 +15,7 @@ fn test_inherit_from_recursively() {
             start_reducing_voting_power_after_seconds: Some(42),
 
             // This should not show up in the result.
-            clear_following_after_seconds: None
+            clear_following_after_seconds: None,
         }),
 
         // This should not show up in the result.
