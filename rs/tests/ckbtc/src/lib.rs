@@ -19,7 +19,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -335,7 +335,7 @@ pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId)
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
         .update_(
-            ic_management_canister_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+            ic_management_canister_types_private::Method::ProvisionalCreateCanisterWithCycles.to_string(),
             candid,
             (ProvisionalCreateCanisterWithCyclesArgs::new(
                 None,

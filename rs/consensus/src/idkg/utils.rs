@@ -8,7 +8,7 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
+use ic_management_canister_types_private::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -627,7 +627,7 @@ mod tests {
         IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::{EcdsaKeyId, SchnorrKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId};
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;

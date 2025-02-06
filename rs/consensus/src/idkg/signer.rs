@@ -857,7 +857,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::{MasterPublicKeyId, SchnorrAlgorithm};
+    use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, ThresholdArguments,
     };

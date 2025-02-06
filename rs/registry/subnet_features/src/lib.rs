@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -257,7 +257,7 @@ impl From<EcdsaConfig> for ChainKeyConfig {
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types::EcdsaCurve;
+    use ic_management_canister_types_private::EcdsaCurve;
 
     use super::*;
     use std::str::FromStr;

@@ -383,7 +383,7 @@ pub fn syscalls<
         // by the log capacity and the remaining space in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
-        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types`
+        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
         Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)

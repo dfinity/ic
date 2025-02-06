@@ -3,7 +3,7 @@ use crate::message_routing::MessageRoutingMetrics;
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::Method;
+use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{

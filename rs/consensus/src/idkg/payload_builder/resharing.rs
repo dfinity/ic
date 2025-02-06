@@ -66,7 +66,7 @@ fn make_reshare_dealings_response(
             ic_types::batch::ConsensusResponse::new(
                 *callback_id,
                 ic_types::messages::Payload::Data(
-                    ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
+                    ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
                         initial_dkg_dealings: initial_dealings.into(),
                     }
                     .encode(),
@@ -185,7 +185,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
+    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgPayload;
@@ -222,7 +222,7 @@ mod tests {
         ic_types::batch::ConsensusResponse::new(
             callback_id,
             ic_types::messages::Payload::Data(
-                ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
+                ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
                     initial_dkg_dealings: initial_dealings.into(),
                 }
                 .encode(),
