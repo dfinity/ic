@@ -267,10 +267,6 @@ struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
     features: SubnetFeatures,
-    // TODO: Remove this field
-    #[allow(unused)]
-    ecdsa_config: EcdsaConfig,
-    /// This field will replace ecdsa_config.
     chain_key_config: ChainKeyConfig,
     max_number_of_canisters: u64,
 }
@@ -732,7 +728,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 http_requests: true,
                 ..Default::default()
             },
-            ecdsa_config: EcdsaConfig::default(),
             chain_key_config: ChainKeyConfig {
                 key_configs: vec![
                     KeyConfig {
@@ -1715,24 +1710,28 @@ fn process_batch_updates_subnet_metrics() {
                 http_requests: true,
                 ..Default::default()
             },
-            ecdsa_config: EcdsaConfig {
-                key_ids: vec![
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 1".to_string(),
+            max_number_of_canisters: 387,
+            chain_key_config: ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 1".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
                     },
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 2".to_string(),
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 2".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
                     },
                 ],
-                max_queue_size: Some(891),
                 ..Default::default()
             },
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: ChainKeyConfig::default(),
-
-            max_number_of_canisters: 387,
         };
 
         let own_transcript = dummy_transcript_for_tests_with_params(

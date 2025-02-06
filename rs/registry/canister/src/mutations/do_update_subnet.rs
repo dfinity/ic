@@ -646,7 +646,7 @@ mod tests {
                 .into(),
             ),
             ecdsa_config: None,
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
+            ecdsa_key_signing_enable: None,
             ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
