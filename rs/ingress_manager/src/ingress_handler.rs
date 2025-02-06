@@ -43,8 +43,6 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
         let current_time = self.time_source.get_relative_time();
         let expiry_range = current_time..=(current_time + MAX_INGRESS_TTL);
 
-        self.purge_expired_messages(consensus_time, &mut change_set);
-
         self.validate_messages(
             consensus_time,
             pool,
@@ -55,8 +53,8 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
             &mut change_set,
         );
 
+        self.purge_expired_messages(consensus_time, &mut change_set);
         self.purge_known_messages(pool, expiry_range, &get_status, &mut change_set);
-
         self.purge_delivered_messages(&mut change_set);
 
         change_set
@@ -131,7 +129,7 @@ impl IngressManager {
     /// `consensus_time`.
     fn purge_expired_messages(&self, consensus_time: Time, change_set: &mut Mutations) {
         // Purge only when consensus_time has changed.
-        let mut last_purge_time = self.last_purge_time.write().unwrap();
+        let mut last_purge_time = self.expired_messages_last_purge_time.write().unwrap();
         if consensus_time != *last_purge_time {
             *last_purge_time = consensus_time;
             change_set.push(PurgeBelowExpiry(consensus_time));
@@ -151,7 +149,7 @@ impl IngressManager {
             .metrics
             .start_on_state_change_timer("purge_known_messages");
 
-        let mut last_purge_height = self.last_purge_height.write().unwrap();
+        let mut last_purge_height = self.known_messages_last_purge_height.write().unwrap();
         // no need to do anything if the state hasn't changed since the last purge
         if *last_purge_height == self.state_reader.latest_state_height() {
             return;

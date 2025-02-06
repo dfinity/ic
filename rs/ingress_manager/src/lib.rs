@@ -155,9 +155,10 @@ pub struct IngressManager {
     log: ReplicaLogger,
     messages_to_purge: RwLock<Vec<Vec<IngressMessageId>>>,
 
-    /// Remember last purge time to control purge frequency.
-    pub(crate) last_purge_time: RwLock<Time>,
-    pub(crate) last_purge_height: RwLock<Height>,
+    /// The last `consensus_time` when the expired messages were purged.
+    pub(crate) expired_messages_last_purge_time: RwLock<Time>,
+    /// The last state height at which the known messages were purged.
+    pub(crate) known_messages_last_purge_height: RwLock<Height>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
 
@@ -213,8 +214,8 @@ impl IngressManager {
             metrics: IngressManagerMetrics::new(metrics_registry),
             subnet_id,
             log,
-            last_purge_time: RwLock::new(UNIX_EPOCH),
-            last_purge_height: RwLock::new(Height::new(0)),
+            expired_messages_last_purge_time: RwLock::new(UNIX_EPOCH),
+            known_messages_last_purge_height: RwLock::new(Height::new(0)),
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,
