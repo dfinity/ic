@@ -16,7 +16,6 @@ use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
-    blockchain::BlockData,
     ledger::{
         apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
         TransferError as CoreTransferError,
@@ -1359,7 +1358,7 @@ fn get_blocks_() {
         let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
         let requested_range = start..start + length;
         if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+            return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
             requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
         }
         GetBlocksRes(Ok(blockchain.block_slice(requested_range)))
