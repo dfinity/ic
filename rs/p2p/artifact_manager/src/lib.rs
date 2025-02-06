@@ -327,7 +327,7 @@ impl<
         C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > Processor<A, P, C>
 {
-    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
+    fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
             pool,
             change_set_producer,
@@ -372,7 +372,7 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
+struct IngressProcessor<P: MutablePool<SignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
@@ -385,7 +385,7 @@ pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
 }
 
 impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
-    pub fn new(
+    fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
             dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
