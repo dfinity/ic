@@ -1513,7 +1513,7 @@ async fn create_canister(
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
-    let cycles = dfn_core::api::msg_cycles_available();
+    let cycles = ic_cdk::api::call::msg_cycles_available();
 
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
@@ -1536,7 +1536,7 @@ async fn create_canister(
         }
         Err(create_error) => {
             dfn_core::api::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
-            let refund_amount = dfn_core::api::msg_cycles_available();
+            let refund_amount = ic_cdk::api::call::msg_cycles_available();
             Err(CreateCanisterError::Refunded {
                 refund_amount: refund_amount.into(),
                 create_error,
