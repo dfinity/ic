@@ -14,7 +14,7 @@ pub(crate) const LABEL_URL_PARSE: &str = "url_parse";
 pub(crate) const LABEL_UPLOAD: &str = "up";
 pub(crate) const LABEL_DOWNLOAD: &str = "down";
 pub(crate) const LABEL_SOCKS_PROXY_OK: &str = "ok";
-pub(crate) const LABEL_SOCKS_PROXY_ERROR: &str = "ERROR";
+pub(crate) const LABEL_SOCKS_PROXY_ERROR: &str = "error";
 
 #[derive(Clone, Debug)]
 pub struct AdapterMetrics {
