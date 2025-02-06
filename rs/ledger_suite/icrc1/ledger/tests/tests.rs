@@ -248,12 +248,12 @@ fn encode_init_args_with_small_sized_archive(
     }
 }
 
-fn encode_init_args_with_large_archive_trigger_threshold(
+fn encode_init_args_no_archiving(
     args: ic_ledger_suite_state_machine_tests::InitArgs,
 ) -> LedgerArgument {
     match encode_init_args(args) {
         LedgerArgument::Init(mut init_args) => {
-            init_args.archive_options.trigger_threshold = 1000;
+            init_args.archive_options.trigger_threshold = 1_000_000_000_000;
             LedgerArgument::Init(init_args)
         }
         LedgerArgument::Upgrade(_) => {
@@ -565,7 +565,7 @@ fn icrc1_test_multi_step_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_with_large_archive_trigger_threshold,
+        encode_init_args_no_archiving,
         get_all_blocks,
     );
 }
@@ -637,7 +637,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_wasm_mainnet,
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_with_large_archive_trigger_threshold,
+        encode_init_args_no_archiving,
         vec![
             ("get_blocks", get_blocks_arg.clone()),
             ("get_transactions", get_blocks_arg),
@@ -651,7 +651,7 @@ fn icrc1_test_incomplete_migration_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_with_large_archive_trigger_threshold,
+        encode_init_args_no_archiving,
     );
 }
 
@@ -687,7 +687,7 @@ fn icrc1_test_incomplete_migration_to_current_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_with_large_archive_trigger_threshold,
+        encode_init_args_no_archiving,
     );
 }
 
@@ -750,7 +750,7 @@ fn icrc1_test_metrics_while_migrating_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
-        encode_init_args_with_large_archive_trigger_threshold,
+        encode_init_args_no_archiving,
     );
 }
 
