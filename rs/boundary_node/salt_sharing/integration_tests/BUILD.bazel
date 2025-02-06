@@ -7,11 +7,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-    "//rs/types/base_types",
     "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
     "@crate_index//:assert_matches",
-    "@crate_index//:chrono",
     "@crate_index//:candid",
+    "@crate_index//:chrono",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
