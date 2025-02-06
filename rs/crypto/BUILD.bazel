@@ -13,8 +13,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",

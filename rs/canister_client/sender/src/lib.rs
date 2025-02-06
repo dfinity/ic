@@ -33,7 +33,7 @@ pub struct Ed25519KeyPair {
 impl Ed25519KeyPair {
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let mut rng = ChaCha20Rng::from_seed(rng.gen());
-        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut rng);
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut rng);
         Self {
             secret_key: key.serialize_raw(),
             public_key: key.public_key().serialize_raw(),
@@ -41,8 +41,8 @@ impl Ed25519KeyPair {
     }
 
     /// Parses an Ed25519KeyPair from a PEM string.
-    pub fn from_pem(pem: &str) -> Result<Self, ic_crypto_ed25519::PrivateKeyDecodingError> {
-        let key = ic_crypto_ed25519::PrivateKey::deserialize_pkcs8_pem(pem)?;
+    pub fn from_pem(pem: &str) -> Result<Self, ic_ed25519::PrivateKeyDecodingError> {
+        let key = ic_ed25519::PrivateKey::deserialize_pkcs8_pem(pem)?;
         Ok(Ed25519KeyPair {
             secret_key: key.serialize_raw(),
             public_key: key.public_key().serialize_raw(),
@@ -50,12 +50,12 @@ impl Ed25519KeyPair {
     }
 
     pub fn to_pem(&self) -> String {
-        let key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
-        key.serialize_pkcs8_pem(ic_crypto_ed25519::PrivateKeyFormat::Pkcs8v2WithRingBug)
+        let key = ic_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
+        key.serialize_pkcs8_pem(ic_ed25519::PrivateKeyFormat::Pkcs8v2WithRingBug)
     }
 
     pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
-        let key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
+        let key = ic_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
         key.sign_message(msg)
     }
 }

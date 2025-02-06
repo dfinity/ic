@@ -6,6 +6,7 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-ed25519",
     "packages/ic-ethereum-types",
     "packages/ic-metrics-assert",
     "packages/ic-sha3",
@@ -65,7 +66,6 @@ members = [
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
-    "rs/crypto/ed25519",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -607,6 +607,7 @@ libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 macaddr = "1.0"
+memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"

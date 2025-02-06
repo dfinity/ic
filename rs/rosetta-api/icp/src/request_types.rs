@@ -1,18 +1,19 @@
-use crate::models::amount::{signed_amount, tokens_to_amount};
-use crate::models::operation::OperationType;
-use crate::models::seconds::Seconds;
-use crate::models::OperationIdentifier;
 use crate::{
     convert::to_model_account_identifier,
     errors::ApiError,
-    models::{self, Operation},
+    models::{
+        self,
+        amount::{signed_amount, tokens_to_amount},
+        operation::OperationType,
+        seconds::Seconds,
+        Operation, OperationIdentifier,
+    },
     transaction_id::TransactionIdentifier,
 };
 pub use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
-use rosetta_core::convert::principal_id_from_public_key;
-use rosetta_core::objects::ObjectMap;
+use rosetta_core::{convert::principal_id_from_public_key, objects::ObjectMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -96,7 +97,7 @@ pub enum RequestType {
     },
     #[serde(rename = "LIST_NEURONS")]
     #[serde(alias = "ListNeurons")]
-    ListNeurons,
+    ListNeurons { page_number: u64 },
     #[serde(rename = "FOLLOW")]
     #[serde(alias = "Follow")]
     Follow {
@@ -370,6 +371,7 @@ pub struct NeuronInfo {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ListNeurons {
     pub account: icp_ledger::AccountIdentifier,
+    pub page_number: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -851,6 +853,34 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
             Ok(Value::Object(o)) => Ok(o),
             Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
             Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct ListNeuronsMetadata {
+    pub page_number: Option<u64>,
+}
+
+impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse LIST_NEURONS operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl TryFrom<ListNeuronsMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ListNeuronsMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -1391,7 +1421,10 @@ impl TransactionBuilder {
     }
 
     pub fn list_neurons(&mut self, req: &ListNeurons) -> Result<(), ApiError> {
-        let ListNeurons { account } = req;
+        let ListNeurons {
+            account,
+            page_number,
+        } = req;
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
@@ -1401,7 +1434,12 @@ impl TransactionBuilder {
             amount: None,
             related_operations: None,
             coin_change: None,
-            metadata: None,
+            metadata: Some(
+                ListNeuronsMetadata {
+                    page_number: *page_number,
+                }
+                .try_into()?,
+            ),
         });
         Ok(())
     }

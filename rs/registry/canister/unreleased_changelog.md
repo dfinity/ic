@@ -24,6 +24,13 @@ meet the requirements for an API boundary node (i.e., is configured with a domai
 
 ## Deprecated
 
+The legacy ECDSA-specific fields are no longer supported in Registry canister's subnet operations
+(creation, updating, recovery). Please use the more expressive chain key configuration keys:
+
+* `ecdsa_config` → `chain_key_config`
+* `ecdsa_key_signing_enable` → `chain_key_signing_enable`
+* `ecdsa_key_signing_disable` → `chain_key_signing_disable`
+
 ## Removed
 
 ## Fixed
