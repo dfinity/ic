@@ -29,8 +29,7 @@ use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
-use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
-use ic_registry_subnet_features::{DEFAULT_ECDSA_MAX_QUEUE_SIZE, SubnetFeatures};
+use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -49,6 +48,7 @@ use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use slog::{debug, info, Logger};
 use std::{
     env,
@@ -253,13 +253,11 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
         chain_key_config: Some(ChainKeyConfig {
-            key_configs: vec![
-                KeyConfig {
-                    key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(10),
-                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                },
-            ],
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id.clone()),
+                pre_signatures_to_create_in_advance: Some(10),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }),

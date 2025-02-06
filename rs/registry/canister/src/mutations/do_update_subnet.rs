@@ -537,13 +537,6 @@ mod tests {
     use maplit::btreemap;
     use std::str::FromStr;
 
-    fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
-        EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: name.to_string(),
-        }
-    }
-
     fn make_empty_update_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         UpdateSubnetPayload {
             subnet_id,
