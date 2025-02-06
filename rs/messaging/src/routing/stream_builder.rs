@@ -386,8 +386,8 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    // Reject messages with oversized payloads, as they may
-                    // cause streams to permanently stall.
+                    // Reject messages with oversized payloads, as they may cause streams to
+                    // permanently stall. Also reject best-effort requests to unsupported subnets.
                     match msg {
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
@@ -468,7 +468,7 @@ impl StreamBuilderImpl {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.entry(dst_subnet_id).or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
                     };
                 }

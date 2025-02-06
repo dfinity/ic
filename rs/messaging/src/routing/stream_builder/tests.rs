@@ -726,20 +726,38 @@ fn build_streams_with_best_effort_messages_impl(
             remote_subnet_type,
         );
 
+        let maybe_reject_response = result_state
+            .canister_state(&local_canister_id)
+            .unwrap()
+            .clone()
+            .pop_input();
         // If the remote request was not routed, a reject response was enqueued.
         assert_eq!(
-            !remote_request_routed as usize,
-            result_state
-                .canister_state(&local_canister_id)
-                .unwrap()
-                .system_state
-                .queues()
-                .input_queues_response_count(),
+            !remote_request_routed,
+            maybe_reject_response.is_some(),
             "Best-effort responses feature: {:?}, Local subnet type: {:?}, Remote subnet type: {:?}",
             best_effort_responses,
             local_subnet_type,
             remote_subnet_type,
         );
+        if let Some(reject_respomse) = maybe_reject_response {
+            let expected_reject_response: RequestOrResponse = Response {
+                originator: local_canister_id,
+                respondent: remote_canister_id,
+                originator_reply_callback: CallbackId::from(2),
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new(
+                    RejectCode::DestinationInvalid,
+                    format!(
+                        "Best-effort call to unsupported subnet: {} -> {}",
+                        local_canister_id, remote_canister_id
+                    ),
+                )),
+                deadline: SOME_DEADLINE,
+            }
+            .into();
+            assert_eq!(reject_respomse, expected_reject_response.into());
+        }
     });
 }
 

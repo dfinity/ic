@@ -2145,8 +2145,6 @@ fn ic0_call_with_best_effort_response_feature_stages() {
             // Make a call to something that isn't `IC_00`.
             api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
                 .unwrap();
-
-            // Call should never trap (because we never run with `DisabledByTrap`).
             api.ic0_call_with_best_effort_response(13).unwrap();
             api.ic0_call_perform().unwrap();
 
