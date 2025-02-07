@@ -45,7 +45,7 @@ fi
 PROPOSAL_INFO=$(echo "${PROPOSAL_INFO}" | jq '.[0]')
 
 # Get proposal creation timestam.
-PROPOSED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.proposal_creation_timestamp_seconds | tonumber')
+PROPOSED_TIMESTAMP_SECONDS=$(echo "${PROPOSAL_INFO}" | jq '.proposal_creation_timestamp_seconds // .proposal_timestamp_seconds | tonumber')
 if [[ "${PROPOSED_TIMESTAMP_SECONDS}" -eq 0 ]]; then
     print_red "💀 Proposal ${PROPOSAL_ID} exists, but had no proposal_creation_timestamp_seconds." >&2
     exit 1
