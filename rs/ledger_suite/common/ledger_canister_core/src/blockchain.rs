@@ -32,7 +32,8 @@ pub trait BlockData {
     // of archived blocks. I.e. `get_block(0)` should always return
     // the first block stored in the ledger.
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
-    fn remove_blocks(&mut self, num_blocks: u64);
+    /// Removes `num_blocks` with the smallest index.
+    fn remove_oldest_blocks(&mut self, num_blocks: u64);
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
     fn last(&self) -> Option<EncodedBlock>;
@@ -62,7 +63,7 @@ impl BlockData for HeapBlockData {
         self.blocks.get(index as usize).cloned()
     }
 
-    fn remove_blocks(&mut self, num_blocks: u64) {
+    fn remove_oldest_blocks(&mut self, num_blocks: u64) {
         self.blocks = self.blocks.split_off(num_blocks as usize);
     }
 
@@ -213,7 +214,7 @@ where
                 len
             );
         }
-        self.blocks.remove_blocks(len as u64);
+        self.blocks.remove_oldest_blocks(len as u64);
         self.num_archived_blocks += len as u64;
     }
 
