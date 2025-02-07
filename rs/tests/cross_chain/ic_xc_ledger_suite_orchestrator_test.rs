@@ -10,7 +10,7 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg,
 };
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;

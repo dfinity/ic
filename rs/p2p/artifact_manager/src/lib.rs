@@ -86,8 +86,7 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
+trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
     ///   - newly arrived artifacts (passed as input parameters)
@@ -134,8 +133,7 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub fn run_artifact_processor<
+fn run_artifact_processor<
     Artifact: IdentifiableArtifact,
     I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
 >(
@@ -279,8 +277,7 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
 ) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let inbound_rx_stream =
-        tokio_stream::wrappers::UnboundedReceiverStream::new(channel.inbound_rx);
+    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
     let user_ingress_rx_stream =
         tokio_stream::wrappers::UnboundedReceiverStream::new(user_ingress_rx);
     run_artifact_processor(
@@ -307,8 +304,7 @@ pub fn create_artifact_handler<
 ) -> Box<dyn JoinGuard> {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
-    let inbound_rx_stream =
-        tokio_stream::wrappers::UnboundedReceiverStream::new(channel.inbound_rx);
+    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -319,8 +315,7 @@ pub fn create_artifact_handler<
     )
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
+struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
     unused: std::marker::PhantomData<A>,
@@ -332,7 +327,7 @@ impl<
         C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > Processor<A, P, C>
 {
-    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
+    fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
             pool,
             change_set_producer,
@@ -377,7 +372,7 @@ impl<
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
+struct IngressProcessor<P: MutablePool<SignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
@@ -390,7 +385,7 @@ pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
 }
 
 impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
-    pub fn new(
+    fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
             dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
@@ -446,7 +441,7 @@ mod tests {
     use ic_types::artifact::UnvalidatedArtifactMutation;
     use std::{convert::Infallible, sync::Arc};
     use tokio::sync::mpsc::channel;
-    use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
+    use tokio_stream::wrappers::ReceiverStream;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
 
@@ -534,11 +529,10 @@ mod tests {
 
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
-        #[allow(clippy::disallowed_methods)]
-        let (_, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (_, inbound_rx) = tokio::sync::mpsc::channel(100);
         run_artifact_processor::<
             DummyArtifact,
-            UnboundedReceiverStream<UnvalidatedArtifactMutation<DummyArtifact>>,
+            ReceiverStream<UnvalidatedArtifactMutation<DummyArtifact>>,
         >(
             time_source,
             MetricsRegistry::default(),

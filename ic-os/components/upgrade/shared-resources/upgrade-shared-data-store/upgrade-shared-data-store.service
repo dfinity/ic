@@ -1,8 +1,7 @@
 [Unit]
 Description=Initialize node data storage
 DefaultDependencies=no
-Requires=var-lib-ic-data.mount
-After=var-lib-ic-data.mount
+RequiresMountsFor=/var/lib/ic/data
 Before=setup-permissions.service
 
 [Install]

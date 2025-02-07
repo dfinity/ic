@@ -1,7 +1,7 @@
 {
     "boundary-node": "eng-boundary-nodes",
-    "Consensus": "eng-consensus",
-    "cross-chain-team": "eng-cross-chain",
+    "Consensus": "eng-consensus-prs",
+    "cross-chain-team": "eng-cross-chain-prs",
     "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
     "execution": "eng-execution-mrs",

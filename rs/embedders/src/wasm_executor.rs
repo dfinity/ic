@@ -258,11 +258,11 @@ impl WasmExecutor for WasmExecutorImpl {
             }),
             None => None,
         };
-        let system_api = match instance_or_system_api {
+        let mut system_api = match instance_or_system_api {
             Ok(instance) => instance.into_store_data().system_api.unwrap(),
             Err(system_api) => system_api,
         };
-        let system_state_modifications = system_api.into_system_state_modifications();
+        let system_state_modifications = system_api.take_system_state_modifications();
 
         (
             compilation_result,
@@ -632,9 +632,7 @@ pub fn process(
         canister_current_message_memory_usage,
         execution_parameters.clone(),
         subnet_available_memory,
-        embedder.config().feature_flags.wasm_native_stable_memory,
-        embedder.config().feature_flags.canister_backtrace,
-        embedder.config().max_sum_exported_function_name_lengths,
+        embedder.config(),
         stable_memory.clone(),
         wasm_memory.size,
         out_of_instructions_handler,

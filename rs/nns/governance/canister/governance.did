@@ -450,6 +450,11 @@ type ListNeurons = record {
 
   page_number: opt nat64;
   page_size: opt nat64;
+  neuron_subaccounts: opt vec NeuronSubaccount;
+};
+
+type NeuronSubaccount = record {
+  subaccount : blob;
 };
 
 // Output of the list_neurons method.
