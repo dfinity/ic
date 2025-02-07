@@ -19,18 +19,18 @@ impl super::Signer for Prime256 {
             ))?;
 
         let signature: Signature = signing_key
-            .try_sign(&payload)
+            .try_sign(payload)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 
         let r = signature.r().to_bytes().to_vec();
         let s = signature.s().to_bytes().to_vec();
-        Ok(r.into_iter().chain(s.into_iter()).collect())
+        Ok(r.into_iter().chain(s).collect())
     }
 }
 
 impl super::Verifier for Prime256 {
     fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
-        let signature = Signature::from_slice(&signature)
+        let signature = Signature::from_slice(signature)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 
         self.verifying_key
@@ -67,7 +67,7 @@ impl Prime256 {
 
     pub fn new(signing_key: SigningKey) -> Self {
         Self {
-            verifying_key: signing_key.verifying_key().clone(),
+            verifying_key: *signing_key.verifying_key(),
             signing_key: Some(signing_key),
         }
     }

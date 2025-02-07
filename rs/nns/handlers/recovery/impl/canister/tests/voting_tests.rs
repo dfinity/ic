@@ -87,7 +87,7 @@ fn disallow_votes_bad_signature() {
     let response = vote(
         &pic,
         canister,
-        first.principal.0.clone(),
+        first.principal.0,
         VoteOnRecoveryProposal {
             ballot: Ballot::Yes,
             security_metadata: SecurityMetadata {
@@ -133,7 +133,7 @@ fn disallow_votes_wrong_public_key() {
     let response = vote(
         &pic,
         canister,
-        first.principal.0.clone(),
+        first.principal.0,
         VoteOnRecoveryProposal {
             security_metadata: SecurityMetadata {
                 payload,

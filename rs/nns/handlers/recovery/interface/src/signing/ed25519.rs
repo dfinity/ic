@@ -18,18 +18,18 @@ impl super::Signer for EdwardsCurve {
                 "Signing key missing".to_string(),
             ))?;
 
-        let signature = signing_key.sign(&payload);
+        let signature = signing_key.sign(payload);
         Ok(signature.to_vec())
     }
 }
 
 impl super::Verifier for EdwardsCurve {
     fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
-        let signature = Signature::from_slice(&signature)
+        let signature = Signature::from_slice(signature)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 
         self.verifying_key
-            .verify_strict(&payload, &signature)
+            .verify_strict(payload, &signature)
             .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
     }
 

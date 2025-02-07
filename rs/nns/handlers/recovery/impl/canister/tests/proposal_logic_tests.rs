@@ -121,7 +121,7 @@ fn disallow_unknown_node_operators_from_placing_proposals() {
 
     let response = pic
         .update_call(
-            canister.into(),
+            canister,
             Principal::anonymous(),
             "submit_new_recovery_proposal",
             candid::encode_one(NewRecoveryProposal {
@@ -162,7 +162,7 @@ fn place_and_execute_first_proposal(
 ) -> (PocketIc, Principal) {
     let (pic, canister) = init_pocket_ic(args);
 
-    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators = extract_node_operators_from_init_data(args);
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
@@ -398,7 +398,7 @@ fn place_and_execute_second_proposal(
 ) -> (PocketIc, Principal) {
     let (pic, canister) = place_and_execute_first_proposal(args);
 
-    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators = extract_node_operators_from_init_data(args);
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
@@ -540,15 +540,15 @@ fn submit_proposal_lag_more_than_threshold() {
     // Duration from epoch
     let from_epoch = SystemTime::UNIX_EPOCH.elapsed().unwrap();
     let before_one_hour = from_epoch
-        .checked_sub(Duration::from_secs(1 * 60 * 60))
+        .checked_sub(Duration::from_secs(60 * 60))
         .unwrap();
     let seconds_payload = before_one_hour.as_secs().to_le_bytes().to_vec();
     let signature = first.signing_key.sign(&seconds_payload);
     let signature = signature.to_vec();
 
     let response = pic.update_call(
-        canister.into(),
-        first.principal.0.clone(),
+        canister,
+        first.principal.0,
         "submit_new_recovery_proposal",
         candid::encode_one(NewRecoveryProposal {
             payload: RecoveryPayload::Halt,

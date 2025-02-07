@@ -63,7 +63,7 @@ impl RecoveryCanisterImpl {
         let principal = self
             .ic_agent
             .get_principal()
-            .map_err(|e| RecoveryError::AgentError(e))?;
+            .map_err(RecoveryError::AgentError)?;
 
         match Principal::anonymous().eq(&principal) {
             false => Ok(()),

@@ -42,7 +42,10 @@ pub fn submit_recovery_proposal(
     }
 
     // Verify metadata integrity
-    new_proposal.security_metadata.validate_metadata(&caller.0).map_err(|e| e.to_string())?;
+    new_proposal
+        .security_metadata
+        .validate_metadata(&caller.0)
+        .map_err(|e| e.to_string())?;
     // Ensure that timestamp sent doesn't differ more than
     // the threshold
     check_secs_difference(&new_proposal.security_metadata.payload)?;
@@ -55,12 +58,12 @@ pub fn submit_recovery_proposal(
                 match &new_proposal.payload {
                     RecoveryPayload::Halt => {
                         proposals.push(RecoveryProposal {
-                            proposer: caller.0.clone(),
+                            proposer: caller.0,
                             // TODO: Use nanoseconds
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Halt,
-                            security_metadata: new_proposal.security_metadata.clone()
+                            security_metadata: new_proposal.security_metadata.clone(),
                         });
                     }
                     _ => {
@@ -80,7 +83,8 @@ pub fn submit_recovery_proposal(
 
                 // No need to check if it is a majority no because it will be removed if it is
                 if !first.is_byzantine_majority_yes() {
-                    let message = format!("Can't submit a proposal until the previous is decided");
+                    let message =
+                        "Can't submit a proposal until the previous is decided".to_string();
                     ic_cdk::println!("{}", message);
                     return Err(message);
                 }
@@ -94,11 +98,11 @@ pub fn submit_recovery_proposal(
                     }
                     | RecoveryPayload::Unhalt => {
                         proposals.push(RecoveryProposal {
-                            proposer: caller.0.clone(),
+                            proposer: caller.0,
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: new_proposal.payload.clone(),
-                            security_metadata: new_proposal.security_metadata.clone()
+                            security_metadata: new_proposal.security_metadata.clone(),
                         });
                     }
                     _ => {
@@ -113,12 +117,14 @@ pub fn submit_recovery_proposal(
             }
             2 => {
                 // There are two previous options:
-                //     1. Recovery - if this is previous proposal allow placing of the next only if it is voted in
-                //     2. Unhalt - if this is previous proposal don't allow placing new proposal
+                //     1. Recovery - if this is previous proposal allow placing
+                //          of the next only if it is voted in
+                //     2. Unhalt - if this is previous proposal
+                //          don't allow placing new proposal
                 let second_proposal = proposals.get(1).expect("Must have at least two proposals");
                 if !second_proposal.is_byzantine_majority_yes() {
                     let message =
-                        format!("Can't submit a proposal until the previous is decided");
+                        "Can't submit a proposal until the previous is decided".to_string();
                     ic_cdk::println!("{}", message);
                     return Err(message);
                 }
@@ -131,28 +137,37 @@ pub fn submit_recovery_proposal(
                         RecoveryPayload::Unhalt,
                     ) => {
                         proposals.push(RecoveryProposal {
-                            proposer: caller.0.clone(),
+                            proposer: caller.0,
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Unhalt,
-                            security_metadata: new_proposal.security_metadata.clone()
+                            security_metadata: new_proposal.security_metadata.clone(),
                         });
-                    },
+                    }
                     // Allow submitting a new recovery proposal only if the current one
                     // is voted in. This could happen if the recovery from this proposal
                     // failed and we need to submit a new one with different args.
-                    (RecoveryPayload::DoRecovery { height: _, state_hash: _ }, RecoveryPayload::DoRecovery { height: _, state_hash: _ }) => {
+                    (
+                        RecoveryPayload::DoRecovery {
+                            height: _,
+                            state_hash: _,
+                        },
+                        RecoveryPayload::DoRecovery {
+                            height: _,
+                            state_hash: _,
+                        },
+                    ) => {
                         // Remove the second_one
                         proposals.pop();
 
                         proposals.push(RecoveryProposal {
-                            proposer: caller.0.clone(),
-                            submission_timestamp_seconds: now_seconds(), 
+                            proposer: caller.0,
+                            submission_timestamp_seconds: now_seconds(),
                             security_metadata: new_proposal.security_metadata.clone(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
-                            payload: new_proposal.payload.clone() 
+                            payload: new_proposal.payload.clone(),
                         });
-                    },
+                    }
                     (_, _) => {
                         let message = format!(
                             "Caller {} tried to place proposal {:?} which is currently not allowed",
@@ -172,21 +187,17 @@ pub fn submit_recovery_proposal(
                 ic_cdk::println!("{}", message);
                 return Err(message);
             }
-            _ => unreachable!(
-                "There is an error in the logic since its not possible to have more than 3 proposals"
-            ),
+            _ => unreachable!("not possible to have more than 3 proposals"),
         }
         Ok(())
     })
 }
 
-fn initialize_ballots(
-    simple_node_records: &Vec<SimpleNodeOperatorRecord>,
-) -> Vec<NodeOperatorBallot> {
+fn initialize_ballots(simple_node_records: &[SimpleNodeOperatorRecord]) -> Vec<NodeOperatorBallot> {
     simple_node_records
         .iter()
         .map(|operator_record| NodeOperatorBallot {
-            principal: operator_record.operator_id.clone(),
+            principal: operator_record.operator_id,
             nodes_tied_to_ballot: operator_record.nodes.clone(),
             ballot: Ballot::Undecided,
             security_metadata: SecurityMetadata::empty(),
@@ -208,7 +219,7 @@ fn vote_on_last_proposal(
 ) -> Result<(), String> {
     let last_proposal = proposals
         .last_mut()
-        .ok_or(format!("There are no proposals"))?;
+        .ok_or("There are no proposals".to_string())?;
 
     let correlated_ballot = last_proposal
         .node_operator_ballots
@@ -250,9 +261,12 @@ const ALLOWED_LAG: u64 = 10 * 60; // 10 minutes
 
 fn check_secs_difference(seconds_payload: &[u8]) -> Result<(), String> {
     let now = now_seconds();
-    
+
     if seconds_payload.len() != 8 {
-        return Err(format!("Incorect signature lenght: {}", seconds_payload.len()));
+        return Err(format!(
+            "Incorect signature lenght: {}",
+            seconds_payload.len()
+        ));
     }
 
     let mut total_input = [0; 8];
@@ -263,7 +277,10 @@ fn check_secs_difference(seconds_payload: &[u8]) -> Result<(), String> {
     let abs_diff = now.abs_diff(payload_seconds);
 
     match abs_diff > ALLOWED_LAG {
-        true => Err(format!("Proposal submittion timestamp lags more than allowed {} seconds", ALLOWED_LAG)),
-        false => Ok(())
+        true => Err(format!(
+            "Proposal submittion timestamp lags more than allowed {} seconds",
+            ALLOWED_LAG
+        )),
+        false => Ok(()),
     }
 }

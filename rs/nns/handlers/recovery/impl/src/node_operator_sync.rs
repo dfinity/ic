@@ -63,13 +63,13 @@ pub fn get_node_operators_in_nns() -> Vec<SimpleNodeOperatorRecord> {
     merged
 }
 
-fn format_node_operators(operators: &Vec<SimpleNodeOperatorRecord>) -> String {
+fn format_node_operators(operators: &[SimpleNodeOperatorRecord]) -> String {
     operators
         .iter()
         .map(|operator| {
             format!(
                 "Principal: {}, Nodes: [{}]",
-                operator.operator_id.to_string(),
+                operator.operator_id,
                 operator.nodes.iter().map(|n| n.to_string()).join(", ")
             )
         })

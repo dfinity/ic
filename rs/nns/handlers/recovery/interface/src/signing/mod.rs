@@ -20,19 +20,16 @@ pub trait Signer: Verifier + Send + Sync {
 }
 
 pub fn verify_payload_naive(public_key_der: &[u8], payload: &[u8], signature: &[u8]) -> Result<()> {
-    match EdwardsCurve::from_public_key_der(public_key_der) {
-        Ok(verifier) => return verify_payload_naive_inner(verifier, payload, signature),
-        _ => {}
+    if let Ok(verifier) = EdwardsCurve::from_public_key_der(public_key_der) {
+        return verify_payload_naive_inner(verifier, payload, signature);
     }
 
-    match Prime256::from_public_key_der(public_key_der) {
-        Ok(verifier) => return verify_payload_naive_inner(verifier, payload, signature),
-        _ => {}
+    if let Ok(verifier) = Prime256::from_public_key_der(public_key_der) {
+        return verify_payload_naive_inner(verifier, payload, signature);
     }
 
-    match Secp256k1::from_public_key_der(public_key_der) {
-        Ok(verifier) => return verify_payload_naive_inner(verifier, payload, signature),
-        _ => {}
+    if let Ok(verifier) = Secp256k1::from_public_key_der(public_key_der) {
+        return verify_payload_naive_inner(verifier, payload, signature);
     }
 
     Err(RecoveryError::InvalidPubKey(

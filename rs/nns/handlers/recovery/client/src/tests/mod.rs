@@ -12,10 +12,9 @@ mod general;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     let path: PathBuf = std::env::var(env)
-        .expect(&format!("Path should be set in environment variable {env}"))
-        .try_into()
-        .unwrap();
-    std::fs::read(&path).expect(&format!("Failed to read path {}", path.display()))
+        .unwrap_or_else(|_| panic!("Path should be set in environment variable {env}"))
+        .into();
+    std::fs::read(&path).unwrap_or_else(|_| panic!("Failed to read path {}", path.display()))
 }
 
 async fn init_pocket_ic(recovery_init_args: RecoveryInitArgs) -> (PocketIc, Principal) {
@@ -42,7 +41,7 @@ async fn init_pocket_ic(recovery_init_args: RecoveryInitArgs) -> (PocketIc, Prin
 }
 
 fn preconfigured_recovery_init_args(
-    operators_with_keys: &Vec<NodeOperatorWithKey>,
+    operators_with_keys: &[NodeOperatorWithKey],
 ) -> RecoveryInitArgs {
     RecoveryInitArgs {
         initial_node_operator_records: operators_with_keys

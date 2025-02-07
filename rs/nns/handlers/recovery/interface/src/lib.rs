@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use candid::CandidType;
 use recovery::RecoveryProposal;
 use serde::Deserialize;
@@ -67,21 +69,25 @@ impl From<candid::Error> for RecoveryError {
 /// Convenience type to wrap all results in the library
 pub type Result<T> = std::result::Result<T, RecoveryError>;
 
-impl ToString for RecoveryError {
-    fn to_string(&self) -> String {
-        match self {
-            Self::InvalidPubKey(s)
-            | Self::InvalidSignatureFormat(s)
-            | Self::InvalidSignature(s)
-            | Self::PrincipalPublicKeyMismatch(s)
-            | Self::PayloadSerialization(s)
-            | Self::AgentError(s)
-            | Self::CandidError(s)
-            | Self::InvalidIdentity(s)
-            | Self::NoProposals(s)
-            | Self::InvalidRecoveryProposalPayload(s)
-            | Self::CanisterError(s) => s.to_string(),
-        }
+impl Display for RecoveryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::InvalidPubKey(s)
+                | Self::InvalidSignatureFormat(s)
+                | Self::InvalidSignature(s)
+                | Self::PrincipalPublicKeyMismatch(s)
+                | Self::PayloadSerialization(s)
+                | Self::AgentError(s)
+                | Self::CandidError(s)
+                | Self::InvalidIdentity(s)
+                | Self::NoProposals(s)
+                | Self::InvalidRecoveryProposalPayload(s)
+                | Self::CanisterError(s) => s,
+            }
+        )
     }
 }
 

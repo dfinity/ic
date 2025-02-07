@@ -43,10 +43,9 @@ mod voting_tests;
 
 fn fetch_canister_wasm(env: &str) -> Vec<u8> {
     let path: PathBuf = std::env::var(env)
-        .expect(&format!("Path should be set in environment variable {env}"))
-        .try_into()
-        .unwrap();
-    std::fs::read(&path).expect(&format!("Failed to read path {}", path.display()))
+        .unwrap_or_else(|_| panic!("Path should be set in environment variable {env}"))
+        .into();
+    std::fs::read(&path).unwrap_or_else(|_| panic!("Failed to read path {}", path.display()))
 }
 
 fn add_replica_version_records(total_mutations: &mut Vec<RegistryMutation>) {
@@ -180,7 +179,7 @@ fn prepare_registry(
             let (mutation, nodes) = prepare_registry_with_nodes_and_node_operator_id(
                 operator_mutation_ids,
                 operator_arg.num_nodes as u64,
-                operator_arg.principal.clone(),
+                operator_arg.principal,
             );
             operator_mutation_ids += operator_arg.num_nodes;
 
@@ -206,7 +205,7 @@ fn prepare_registry(
             .subnet_node_operators
             .iter()
             .find_map(|arg| match arg.subnet_type {
-                SubnetType::System => Some(arg.subnet_id.clone()),
+                SubnetType::System => Some(arg.subnet_id),
                 _ => None,
             })
             .expect("Missing system subnet"),
@@ -315,8 +314,8 @@ fn submit_proposal(
     let signature = signature.to_vec();
 
     let response = pic.update_call(
-        canister.into(),
-        sender.principal.0.clone(),
+        canister,
+        sender.principal.0,
         "submit_new_recovery_proposal",
         candid::encode_one(NewRecoveryProposal {
             payload: arg,
@@ -341,7 +340,7 @@ fn submit_proposal(
 fn get_pending(pic: &PocketIc, canister: Principal) -> Vec<RecoveryProposal> {
     let response = pic
         .query_call(
-            canister.into(),
+            canister,
             Principal::anonymous(),
             "get_pending_recovery_proposals",
             candid::encode_one(()).unwrap(),
@@ -370,7 +369,7 @@ fn vote_with_only_ballot(
     vote(
         pic,
         canister,
-        sender.principal.0.clone(),
+        sender.principal.0,
         VoteOnRecoveryProposal {
             security_metadata: SecurityMetadata {
                 payload,
@@ -395,7 +394,7 @@ fn vote(
 ) -> Result<(), String> {
     let response = pic
         .update_call(
-            canister.into(),
+            canister,
             sender,
             "vote_on_proposal",
             candid::encode_one(arg).unwrap(),
@@ -414,7 +413,7 @@ fn get_current_node_operators(
 ) -> Vec<SimpleNodeOperatorRecord> {
     let response = pic
         .query_call(
-            canister.into(),
+            canister,
             Principal::anonymous(),
             "get_current_nns_node_operators",
             candid::encode_one(()).unwrap(),

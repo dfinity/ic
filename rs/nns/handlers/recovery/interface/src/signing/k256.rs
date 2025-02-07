@@ -16,7 +16,7 @@ impl super::Verifier for Secp256k1 {
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 
         self.verifying_key
-            .verify(&payload, &signature)
+            .verify(payload, &signature)
             .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
     }
 
@@ -38,12 +38,12 @@ impl super::Signer for Secp256k1 {
             ))?;
 
         let signature: Signature = signing_key
-            .try_sign(&payload)
+            .try_sign(payload)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 
         let r = signature.r().to_bytes().to_vec();
         let s = signature.s().to_bytes().to_vec();
-        Ok(r.into_iter().chain(s.into_iter()).collect())
+        Ok(r.into_iter().chain(s).collect())
     }
 }
 
@@ -68,7 +68,7 @@ impl Secp256k1 {
 
     pub fn new(signing_key: SigningKey) -> Self {
         Self {
-            verifying_key: signing_key.verifying_key().clone(),
+            verifying_key: *signing_key.verifying_key(),
             signing_key: Some(signing_key),
         }
     }
