@@ -94,12 +94,12 @@ const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 const RF: &str = "Linear Reduction factor";
 
 pub fn calculate_rewards(
-    rewarding_period: RewardPeriod,
+    reward_period: RewardPeriod,
     rewards_table: &NodeRewardsTable,
     subnet_metrics: HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
     rewardable_nodes: &[RewardableNode],
 ) -> Result<RewardsPerNodeProvider, RewardCalculationError> {
-    validate_input(&rewarding_period, &subnet_metrics, rewardable_nodes)?;
+    validate_input(&reward_period, &subnet_metrics, rewardable_nodes)?;
 
     let mut rewards_per_node_provider = HashMap::default();
     let mut rewards_log_per_node_provider = HashMap::default();
@@ -133,7 +133,7 @@ pub fn calculate_rewards(
             &mut logger,
             &nodes,
             node_daily_fr,
-            rewarding_period.days_between(),
+            reward_period.days_between(),
             rewards_table,
         );
 
