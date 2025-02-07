@@ -10864,7 +10864,6 @@ dependencies = [
  "async-trait",
  "candid",
  "ed25519-dalek",
- "elliptic-curve 0.13.8",
  "ic-agent",
  "ic-nns-handler-recovery-interface",
  "p256",

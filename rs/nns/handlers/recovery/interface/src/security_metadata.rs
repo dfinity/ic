@@ -14,7 +14,7 @@ pub struct SecurityMetadata {
     ///
     /// Should be verified with a corresponding public key (also
     /// known as verifying key).
-    pub signature: [[u8; 32]; 2],
+    pub signature: Vec<u8>,
     /// What is being signed.
     ///
     /// In context of recovery canister proposal it includes
@@ -30,7 +30,7 @@ pub struct SecurityMetadata {
 impl SecurityMetadata {
     pub fn empty() -> Self {
         Self {
-            signature: [[0; 32]; 2],
+            signature: vec![],
             payload: vec![],
             pub_key_der: vec![],
         }
@@ -44,11 +44,7 @@ impl SecurityMetadata {
 
     /// Verifies the signature authenticity of security metadata.
     pub fn verify_signature(&self) -> Result<()> {
-        valid_signature(
-            &self.pub_key_der,
-            self.signature.as_flattened(),
-            &self.payload,
-        )
+        valid_signature(&self.pub_key_der, &self.signature, &self.payload)
     }
 
     /// Verifies if the passed principal is derived from a given public key (also known as

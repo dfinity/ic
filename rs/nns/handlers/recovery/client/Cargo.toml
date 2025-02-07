@@ -17,5 +17,4 @@ ic-nns-handler-recovery-interface.path = "../interface"
 [dev-dependencies]
 tokio.workspace = true
 p256.workspace = true
-elliptic-curve.workspace = true
 pocket-ic.path = "../../../../../packages/pocket-ic"
