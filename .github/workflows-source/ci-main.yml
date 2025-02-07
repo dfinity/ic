@@ -94,7 +94,7 @@ jobs:
     name: Bazel Test All
     <<: *dind-large-setup
     runs-on:
-      group: ln1
+      group: zh1
       labels: dind-large
     env:
       CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -343,10 +343,8 @@ jobs:
           name: build-ic
       - name: Build Determinism Test
         id: build-determinism
-        shell: bash
         run: |
-          set -eExuo pipefail
-          sudo apt update && sudo apt install -y curl
+          tar -xf build-ic.tar # build-determinism.sh expects ./build-ic/
           "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}

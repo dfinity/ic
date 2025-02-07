@@ -9,6 +9,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
         CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings, LogVisibility,
+        QueryStats,
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
@@ -226,6 +227,12 @@ impl SpyNnsRootCanisterClientReply {
             cycles: candid::Nat::from(42_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),
             reserved_cycles: Some(candid::Nat::from(44_u32)),
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(candid::Nat::from(45_u32)),
+                num_instructions_total: Some(candid::Nat::from(46_u32)),
+                request_payload_bytes_total: Some(candid::Nat::from(47_u32)),
+                response_payload_bytes_total: Some(candid::Nat::from(48_u32)),
+            }),
         }))
     }
 

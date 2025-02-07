@@ -1,5 +1,5 @@
 {
-  "checksum": "328a35840f7c103c76777c84791d47b1d1606b7503677e77bb1754e48206dbb4",
+  "checksum": "ac36051bb3fd1c488e3c6fdbdfc95fff29f3760abf119cb1fa2e1d829f1251f8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10484,14 +10484,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.1.8": {
+    "canbench 0.1.9": {
       "name": "canbench",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.1.8/download",
-          "sha256": "cb548f9e006ad29b160d37e07435c499af7d2741918e18d95ddc87dfe97a0b8d"
+          "url": "https://static.crates.io/crates/canbench/0.1.9/download",
+          "sha256": "c3eba78c84aa78e67f27c5c5a7d6c3d33cc301f95886171748e8f6ed8a31b258"
         }
       },
       "targets": [
@@ -10528,7 +10528,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.1.8",
+              "id": "canbench-rs 0.1.9",
               "target": "canbench_rs"
             },
             {
@@ -10587,7 +10587,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.8"
+        "version": "0.1.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10595,14 +10595,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.1.8": {
+    "canbench-rs 0.1.9": {
       "name": "canbench-rs",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.1.8/download",
-          "sha256": "497d900e11ab1891dd9743dd45dbeaada540ce323aa1adc7fc0ce1da2c6e86ff"
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.9/download",
+          "sha256": "588701e2d05679b79603acca6a6f8b78fe0d21f5f7a9c06fe689f769ae797008"
         }
       },
       "targets": [
@@ -10645,13 +10645,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.1.8",
+              "id": "canbench-rs-macros 0.1.9",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.8"
+        "version": "0.1.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10659,14 +10659,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.1.8": {
+    "canbench-rs-macros 0.1.9": {
       "name": "canbench-rs-macros",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.8/download",
-          "sha256": "5a5509bcfe6eeb86f057d46fbf20a2ba6b6bf9a1099b053a8f491cd7a909dfa6"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.9/download",
+          "sha256": "e05fe21a7dfc85c3be8e40edbbcb3fe23b4c070fac4741eff18129f1d0f11aa9"
         }
       },
       "targets": [
@@ -10706,7 +10706,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.8"
+        "version": "0.1.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -13311,7 +13311,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
+            "Rev": "0b1805bf11ed526445712559e6f18d3b8e024b06"
           },
           "strip_prefix": "cloudflare"
         }
@@ -19491,11 +19491,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.1.8",
+              "id": "canbench 0.1.9",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.1.8",
+              "id": "canbench-rs 0.1.9",
               "target": "canbench_rs"
             },
             {
@@ -19974,6 +19974,10 @@
             {
               "id": "maxminddb 0.24.0",
               "target": "maxminddb"
+            },
+            {
+              "id": "memmap2 0.9.5",
+              "target": "memmap2"
             },
             {
               "id": "metrics-proxy 0.1.0",
@@ -41035,7 +41039,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.104",
+                "id": "openssl-sys 0.9.105",
                 "target": "openssl_sys"
               }
             ]
@@ -41081,7 +41085,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.104",
+                "id": "openssl-sys 0.9.105",
                 "target": "openssl_sys"
               }
             ]
@@ -43242,6 +43246,56 @@
         },
         "edition": "2018",
         "version": "0.5.10"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "memmap2 0.9.5": {
+      "name": "memmap2",
+      "version": "0.9.5",
+      "package_url": "https://github.com/RazrFalcon/memmap2-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/memmap2/0.9.5/download",
+          "sha256": "fd3f7eed9d3848f8b98834af67102b720745c4ec028fcd0aa0239277e7de374f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "memmap2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "memmap2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.9.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -47768,14 +47822,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.69": {
+    "openssl 0.10.70": {
       "name": "openssl",
-      "version": "0.10.69",
+      "version": "0.10.70",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.69/download",
-          "sha256": "f5e534d133a060a3c19daec1eb3e98ec6f4685978834f2dbadfe2ec215bab64e"
+          "url": "https://static.crates.io/crates/openssl/0.10.70/download",
+          "sha256": "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
         }
       },
       "targets": [
@@ -47832,11 +47886,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.69",
+              "id": "openssl 0.10.70",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.104",
+              "id": "openssl-sys 0.9.105",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -47853,7 +47907,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.69"
+        "version": "0.10.70"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -47865,7 +47919,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.104",
+              "id": "openssl-sys 0.9.105",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -48022,14 +48076,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.104": {
+    "openssl-sys 0.9.105": {
       "name": "openssl-sys",
-      "version": "0.9.104",
+      "version": "0.9.105",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.104/download",
-          "sha256": "45abf306cbf99debc8195b66b7346498d7b10c210de50418b5ccd7ceba08c741"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.105/download",
+          "sha256": "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
         }
       },
       "targets": [
@@ -48070,14 +48124,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.104",
+              "id": "openssl-sys 0.9.105",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.104"
+        "version": "0.9.105"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -90179,7 +90233,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.1.8",
+    "canbench 0.1.9",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -91209,8 +91263,8 @@
     "byteorder 1.5.0",
     "bytes 1.9.0",
     "cached 0.49.2",
-    "canbench 0.1.8",
-    "canbench-rs 0.1.8",
+    "canbench 0.1.9",
+    "canbench-rs 0.1.9",
     "candid 0.10.13",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
@@ -91334,6 +91388,7 @@
     "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
+    "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
@@ -91510,11 +91565,5 @@
     "zstd 0.13.2"
   ],
   "direct_dev_deps": [],
-  "unused_patches": [
-    {
-      "name": "jsonrpc",
-      "version": "0.12.1",
-      "source": "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"
-    }
-  ]
+  "unused_patches": []
 }

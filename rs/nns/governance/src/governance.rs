@@ -14,8 +14,7 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
-        prune_some_following, NeuronMetrics, NeuronStore,
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -78,7 +77,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -154,8 +152,9 @@ use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_NEURON_DESC,
-    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC,
-    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURONS_DESC,
+    SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -207,7 +206,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 380_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 400_000;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
@@ -372,6 +371,17 @@ impl VotingPowerEconomics {
         Self::DEFAULT
     }
 
+    /// Returns 1 if a neuron has refreshed (its voting power/following)
+    /// recently.
+    ///
+    /// Otherwise, if a neuron has not refreshed for >
+    /// start_reducing_voting_power_after_seconds, returns < 1 (but >= 0).
+    ///
+    /// Once a neuron has not refresehd for
+    /// start_reducing_voting_power_after_seconds +
+    /// clear_following_after_seconds, this returns 0.
+    ///
+    /// Between these two points, the decrease is linear.
     pub fn deciding_voting_power_adjustment_factor(
         &self,
         time_since_last_voting_power_refreshed: Duration,
@@ -1854,7 +1864,7 @@ impl Governance {
             env.seed_rng(rng_seed);
         }
 
-        let mut governance = Self {
+        Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1866,10 +1876,7 @@ impl Governance {
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
             neuron_rate_limits: NeuronRateLimits::default(),
-        };
-        // TODO: Remove after the backfill has been run once.
-        governance.backfill_install_code_hashes();
-        governance
+        }
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2229,6 +2236,7 @@ impl Governance {
             include_public_neurons_in_full_neurons,
             page_number,
             page_size,
+            neuron_subaccounts,
         } = list_neurons;
 
         let page_number = page_number.unwrap_or(0);
@@ -2264,10 +2272,27 @@ impl Governance {
             BTreeSet::new()
         };
 
+        let mut neurons_by_subaccount: BTreeSet<NeuronId> = neuron_subaccounts
+            .as_ref()
+            .map(|subaccounts| {
+                subaccounts
+                    .iter()
+                    .flat_map(|neuron_subaccount| {
+                        Self::bytes_to_subaccount(&neuron_subaccount.subaccount)
+                            .ok()
+                            .and_then(|subaccount| {
+                                self.neuron_store.get_neuron_id_for_subaccount(subaccount)
+                            })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         // Concatenate (explicit and implicit)-ly included neurons.
         let mut requested_neuron_ids: BTreeSet<NeuronId> =
             neuron_ids.iter().map(|id| NeuronId { id: *id }).collect();
         requested_neuron_ids.append(&mut implicitly_requested_neuron_ids);
+        requested_neuron_ids.append(&mut neurons_by_subaccount);
 
         // These will be assembled into the final result.
         let mut neuron_infos = hashmap![];
@@ -5981,46 +6006,6 @@ impl Governance {
         )
     }
 
-    pub fn backfill_some_voting_power_refreshed_timestamps(
-        &mut self,
-        begin: std::ops::Bound<NeuronId>,
-        carry_on: impl FnMut() -> bool,
-    ) -> std::ops::Bound<NeuronId> {
-        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
-    }
-
-    pub fn backfill_install_code_hashes(&mut self) {
-        for proposal in self.heap_data.proposals.values_mut() {
-            let Some(proposal) = proposal.proposal.as_mut() else {
-                continue;
-            };
-            let Some(Action::InstallCode(install_code)) = proposal.action.as_mut() else {
-                continue;
-            };
-            if install_code.wasm_module_hash.is_none() {
-                if let Some(wasm_module) = install_code.wasm_module.as_ref() {
-                    install_code.wasm_module_hash = Some(Sha256::hash(wasm_module).to_vec());
-                }
-            }
-            if install_code.arg_hash.is_none() {
-                let arg_hash = match install_code.arg.as_ref() {
-                    Some(arg) => {
-                        // We could calculate the hash of an empty arg, but it would be confusing for the
-                        // proposal reviewers, since the arg_hash is the only thing they can see, and it would
-                        // not be obvious that the arg is empty.
-                        if arg.is_empty() {
-                            Some(vec![])
-                        } else {
-                            Some(Sha256::hash(arg).to_vec())
-                        }
-                    }
-                    None => Some(vec![]),
-                };
-                install_code.arg_hash = arg_hash;
-            }
-        }
-    }
-
     /// Creates a new neuron or refreshes the stake of an existing
     /// neuron from a ledger account.
     ///
@@ -6077,6 +6062,7 @@ impl Governance {
     }
 
     /// Refreshes the stake of a given neuron by checking it's account.
+    #[cfg_attr(feature = "tla", tla_update_method(REFRESH_NEURON_DESC.clone()))]
     async fn refresh_neuron(
         &mut self,
         nid: NeuronId,
@@ -6099,6 +6085,7 @@ impl Governance {
         )?;
 
         // Get the balance of the neuron from the ledger canister.
+        tla_log_locals! { neuron_id: nid.id };
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
