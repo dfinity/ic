@@ -3,12 +3,12 @@ use anyhow::anyhow;
 use anyhow::Context;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::identity::Identity;
-use ic_crypto_secp256k1::KeyDecodingError;
-use ic_crypto_secp256k1::{PrivateKey as Secp256k1PrivateKey, PublicKey as Secp256k1PublicKey};
 use ic_ed25519::{
     PrivateKey as Ed25519SecretKey, PrivateKeyDecodingError, PrivateKeyFormat,
     PublicKey as Ed25519PublicKey,
 };
+use ic_secp256k1::KeyDecodingError;
+use ic_secp256k1::{PrivateKey as Secp256k1PrivateKey, PublicKey as Secp256k1PublicKey};
 use ic_types::PrincipalId;
 use std::sync::Arc;
 

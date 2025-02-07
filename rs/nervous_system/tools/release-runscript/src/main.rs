@@ -1,10 +1,13 @@
+mod commit_switcher;
+mod utils;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::*;
-use std::io::{self, Write};
+use commit_switcher::CommitSwitcher;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use url::Url;
+use utils::*;
 
 #[derive(Debug, Parser)]
 struct DetermineTargets {
@@ -34,6 +37,8 @@ struct CreateProposalTexts {
 
 #[derive(Debug, Parser)]
 struct SubmitProposals {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -42,6 +47,8 @@ struct SubmitProposals {
 
 #[derive(Debug, Parser)]
 struct CreateForumPost {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_text_paths: Vec<PathBuf>,
     #[arg(long, num_args = 0..,)]
@@ -53,6 +60,8 @@ struct CreateForumPost {
 }
 #[derive(Debug, Parser)]
 struct ScheduleVote {
+    #[arg(long)]
+    commit: String,
     #[arg(long, num_args = 0..,)]
     nns_proposal_ids: Vec<String>,
     #[arg(long, num_args = 0..,)]
@@ -60,7 +69,14 @@ struct ScheduleVote {
 }
 
 #[derive(Debug, Parser)]
-struct UpdateChangelog;
+struct UpdateChangelog {
+    #[arg(long)]
+    commit: String,
+    #[arg(long, num_args = 0..,)]
+    nns_proposal_ids: Vec<String>,
+    #[arg(long, num_args = 0..,)]
+    sns_proposal_ids: Vec<String>,
+}
 
 #[derive(Debug, Subcommand)]
 enum Step {
@@ -93,12 +109,6 @@ struct ReleaseRunscript {
     step: Option<Step>,
 }
 
-fn ic_dir() -> PathBuf {
-    let workspace_dir =
-        std::env::var("BUILD_WORKSPACE_DIRECTORY").expect("BUILD_WORKSPACE_DIRECTORY not set");
-    PathBuf::from(&workspace_dir)
-}
-
 fn main() -> Result<()> {
     let args = match ReleaseRunscript::try_parse_from(std::env::args()) {
         Ok(args) => args,
@@ -107,6 +117,7 @@ fn main() -> Result<()> {
         }
     };
 
+    ensure_gh_setup()?;
     print_header();
 
     match args.step {
@@ -374,6 +385,7 @@ SNS proposal texts: {}",
     )?;
 
     run_submit_proposals(SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     })
@@ -381,6 +393,7 @@ SNS proposal texts: {}",
 
 fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     let SubmitProposals {
+        commit,
         nns_proposal_text_paths,
         sns_proposal_text_paths,
     } = cmd;
@@ -400,7 +413,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     println!("    pkcs11-tool --list-slots");
     println!("And you can practice entering your password with: ");
     println!("    pkcs11-tool --login --test");
-    input("Press Enter to continue...")?;
+    press_enter_to_continue()?;
 
     let ic = ic_dir();
 
@@ -485,6 +498,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     )?;
 
     run_create_forum_post(CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -494,6 +508,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
 
 fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
     let CreateForumPost {
+        commit,
         nns_proposal_text_paths,
         nns_proposal_ids,
         sns_proposal_text_paths,
@@ -545,10 +560,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             })
         );
 
-        print!("Press Enter to continue...");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        press_enter_to_continue()?;
     }
 
     // --- Generate SNS forum post ---
@@ -594,10 +606,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             })
         );
 
-        print!("Press Enter to continue...");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        press_enter_to_continue()?;
     }
 
     print_step(
@@ -608,6 +617,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // Continue to the next automated step.
     run_schedule_vote(ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     })
@@ -615,6 +625,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
 fn run_schedule_vote(cmd: ScheduleVote) -> Result<()> {
     let ScheduleVote {
+        commit,
         nns_proposal_ids,
         sns_proposal_ids,
     } = cmd;
@@ -678,111 +689,101 @@ Calendar Event Setup:
    - If people don't respond, ping @trusted-neurons in #eng-release channel",
     )?;
 
-    run_update_changelog(UpdateChangelog)
+    run_update_changelog(UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    })
 }
 
-fn run_update_changelog(_: UpdateChangelog) -> Result<()> {
+fn run_update_changelog(cmd: UpdateChangelog) -> Result<()> {
+    let UpdateChangelog {
+        commit,
+        nns_proposal_ids,
+        sns_proposal_ids,
+    } = cmd;
+
+    let ic = ic_dir();
+
+    use std::fmt::Write;
     print_step(
         8,
         "Update Changelog",
-        "Update CHANGELOG.md file(s) for each proposal:
-
-1. For each proposal ID:
-   ```bash
-   PROPOSAL_IDS=...
-
-   for PROPOSAL_ID in $PROPOSAL_IDS do
-       ./testnet/tools/nns-tools/add-release-to-changelog.sh \\
-           $PROPOSAL_ID
-   done
-   ```
-
-2. Best Practice:
-   - Combine this change with mainnet-canisters.json update in the same PR",
+        &format!(
+            "Now I'm going to update the changelog for the released canisters. This applies to the following proposals:
+NNS: {}
+SNS: {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(acc, "\n  - {}", id);
+                acc
+            }),
+        ),
     )?;
+
+    {
+        // switch to the commit being released
+        let _commit_switcher = CommitSwitcher::switch(commit)?;
+
+        // update the changelog for each proposal
+        for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
+            println!("Updating changelog for proposal {}", proposal_id);
+            let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
+            let output = Command::new(script)
+                .arg(proposal_id)
+                .current_dir(&ic)
+                .output()?;
+
+            if !output.status.success() {
+                println!("{}", String::from_utf8_lossy(&output.stderr));
+                println!("Failed to update changelog for proposal {}", proposal_id);
+            }
+        }
+
+        println!("Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`.");
+        press_enter_to_continue()?;
+
+        // Create branch with today's date
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let branch_name = format!("changelog-update-{}", today);
+        commit_all_into_branch(&branch_name)?;
+
+        // Create PR
+        let title = format!(
+            "chore(nervous-system): Update changelog for release {}",
+            today
+        );
+        let body = &format!(
+            "Update CHANGELOG.md for today's release.
+
+## NNS {}
+
+## SNS {}",
+            nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+            sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
+                let _ = write!(
+                    acc,
+                    "\n  - [{id}](https://dashboard.internetcomputer.org/proposal/{id})",
+                );
+                acc
+            }),
+        );
+        let pr_url = create_pr(&title, body)?;
+        open_webpage(&pr_url)?;
+        println!("PR created. Please share it with the team. It can be merged before the proposals are executed.");
+    }
 
     println!("{}", "\nRelease process complete!".bright_green().bold());
     println!("Please verify that all steps were completed successfully.");
 
     Ok(())
-}
-
-fn print_header() {
-    println!("{}", "\nNNS Release Runscript".bright_green().bold());
-    println!("{}", "===================".bright_green());
-    println!("This script will guide you through the NNS release process.\n");
-}
-
-fn print_step(number: usize, title: &str, description: &str) -> Result<()> {
-    println!(
-        "{} {}",
-        format!("Step {}:", number).bright_blue().bold(),
-        title.white().bold()
-    );
-    println!("{}", "---".bright_blue());
-    println!("{}\n", description);
-    print!("\nPress Enter to continue to next step...");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    print!("\x1B[2J\x1B[1;1H");
-    Ok(())
-}
-
-fn input(text: &str) -> Result<String> {
-    print!("{}: ", text);
-    std::io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    Ok(input.trim().to_string())
-}
-
-fn input_with_default(text: &str, default: &str) -> Result<String> {
-    let input = input(&format!("{} (default: {})", text, default))?;
-    if input.is_empty() {
-        Ok(default.to_string())
-    } else {
-        Ok(input)
-    }
-}
-
-fn open_webpage(url: &Url) -> Result<()> {
-    println!("Opening webpage: {}", url);
-
-    let command = "open";
-    Command::new(command).arg(url.to_string()).spawn()?.wait()?;
-
-    Ok(())
-}
-
-fn copy(text: &[u8]) -> Result<()> {
-    let mut copy = Command::new("pbcopy").stdin(Stdio::piped()).spawn()?;
-    copy.stdin
-        .take()
-        .ok_or(anyhow::anyhow!("Failed to take stdin"))?
-        .write_all(text)?;
-    copy.wait()?;
-
-    Ok(())
-}
-
-fn input_yes_or_no(text: &str, default: bool) -> Result<bool> {
-    loop {
-        let input = input(&format!(
-            "{} {}",
-            text,
-            if default {
-                "Y/n (default: yes)"
-            } else {
-                "y/N (default: no)"
-            }
-        ))?;
-        if input.is_empty() {
-            return Ok(default);
-        } else if input.to_lowercase() == "y" {
-            return Ok(true);
-        } else if input.to_lowercase() == "n" {
-            return Ok(false);
-        }
-    }
 }
