@@ -23,8 +23,8 @@ pub enum RewardCalculationError {
     InvalidSubnetMetric {
         subnet_id: SubnetId,
         timestamp: TimestampNanos,
-        from_ts: TimestampNanos,
-        to_ts: TimestampNanos,
+        start_metrics_ts: TimestampNanos,
+        end_metrics_ts: TimestampNanos,
     },
     EmptyRewardables,
     NodeNotInRewardables(NodeId),
@@ -36,13 +36,13 @@ impl fmt::Display for RewardCalculationError {
             RewardCalculationError::InvalidSubnetMetric {
                 subnet_id,
                 timestamp,
-                from_ts,
-                to_ts,
+                start_metrics_ts,
+                end_metrics_ts,
             } => {
                 write!(
                     f,
-                    "Subnet metric for subnet {} is out of range: {} not in [{} - {}]",
-                    subnet_id, timestamp, from_ts, to_ts
+                    "Subnet metric for subnet {} is out of range: {} not in accepted metrics range [{} - {}]",
+                    subnet_id, timestamp, start_metrics_ts, end_metrics_ts
                 )
             }
             RewardCalculationError::EmptyRewardables => {
@@ -73,8 +73,8 @@ pub fn validate_input(
                 return Err(RewardCalculationError::InvalidSubnetMetric {
                     subnet_id: *subnet_id,
                     timestamp: metric.timestamp_nanos,
-                    from_ts,
-                    to_ts,
+                    start_metrics_ts: from_ts,
+                    end_metrics_ts: to_ts,
                 });
             }
         }

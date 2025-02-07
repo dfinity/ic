@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 
 const HR_NANOS: u64 = 60 * 60 * 1_000_000_000;
-const DAY_IN_NANOS: u64 = HR_NANOS * 24;
+pub(crate) const DAY_IN_NANOS: u64 = HR_NANOS * 24;
 
 #[cfg(target_arch = "wasm32")]
 fn current_time() -> Time {
@@ -42,7 +42,7 @@ impl fmt::Display for RewardingPeriodError {
 
 impl Error for RewardingPeriodError {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct RewardingPeriod {
     from_ts: TimestampNanos,
     to_ts: TimestampNanos,

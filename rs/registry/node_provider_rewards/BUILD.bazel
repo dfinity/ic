@@ -4,9 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/types/base_types",
+    "//rs/types/types",
     "//rs/types/management_canister_types",
     "//rs/protobuf",
-    "@crate_index//:chrono",
     "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
     "@crate_index//:itertools",
@@ -18,6 +18,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:rust_decimal_macros",
+]
+
+TEST_DEPENDENCIES = [
+    "@crate_index//:chrono",
 ]
 
 rust_library(
@@ -32,5 +36,5 @@ rust_library(
 rust_test(
     name = "node_provider_rewards_test",
     crate = ":node_provider_rewards",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )

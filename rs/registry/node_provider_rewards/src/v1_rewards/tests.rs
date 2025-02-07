@@ -1,5 +1,7 @@
 use super::*;
+use crate::v1_rewarding_period::DAY_IN_NANOS;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardRates;
+use ic_types::time::current_time;
 use num_traits::FromPrimitive;
 use std::collections::BTreeMap;
 
@@ -85,22 +87,28 @@ fn mocked_rewards_table() -> NodeRewardsTable {
 
 #[test]
 fn test_invalid_subnet_metric_error() {
-    let from_ts: u64 = 1_000;
-    let to_ts: u64 = 2_000;
+    let to_ts: u64 = current_time().as_nanos_since_unix_epoch() - DAY_IN_NANOS;
+    let from_ts: u64 = to_ts - DAY_IN_NANOS;
 
     let rewarding_period = RewardingPeriod::new(from_ts, to_ts).unwrap();
     let subnet_id: SubnetId = PrincipalId::new_user_test_id(1).into();
+    let default_metrics = NodeMetrics::default();
 
     let invalid_metric = NodeMetricsHistoryResponse {
         timestamp_nanos: 500,
-        node_metrics: vec![NodeMetrics::default()],
+        node_metrics: vec![default_metrics.clone()],
     };
 
     let mut subnet_metrics = HashMap::new();
     subnet_metrics.insert(subnet_id, vec![invalid_metric]);
 
     let rewards_table = NodeRewardsTable::default();
-    let rewardable_nodes: Vec<RewardableNode> = vec![];
+    let rewardable_nodes: Vec<RewardableNode> = vec![RewardableNode {
+        node_id: default_metrics.node_id.into(),
+        node_provider_id: PrincipalId::new_user_test_id(1),
+        region: "region1".to_string(),
+        node_type: "type1".to_string(),
+    }];
 
     let result = calculate_rewards(
         rewarding_period,
@@ -113,8 +121,8 @@ fn test_invalid_subnet_metric_error() {
         Err(RewardCalculationError::InvalidSubnetMetric {
             subnet_id,
             timestamp: 500,
-            from_ts,
-            to_ts
+            start_metrics_ts: rewarding_period.start_metrics_ts(),
+            end_metrics_ts: rewarding_period.end_metrics_ts()
         })
     );
 }
