@@ -4,7 +4,7 @@ use itertools::Itertools;
 use num_traits::ToPrimitive;
 
 use crate::v1_logs::LogLevel;
-use crate::v1_rewarding_period::RewardingPeriod;
+use crate::v1_reward_period::RewardPeriod;
 use crate::v1_types::TimestampNanos;
 use crate::{
     v1_logs::{LogEntry, Operation, RewardsLog},
@@ -20,11 +20,10 @@ use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum RewardCalculationError {
-    InvalidSubnetMetric {
+    SubnetMetricsOutOfRange {
         subnet_id: SubnetId,
         timestamp: TimestampNanos,
-        start_metrics_ts: TimestampNanos,
-        end_metrics_ts: TimestampNanos,
+        reward_period: RewardPeriod,
     },
     EmptyRewardables,
     NodeNotInRewardables(NodeId),
@@ -33,16 +32,15 @@ pub enum RewardCalculationError {
 impl fmt::Display for RewardCalculationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RewardCalculationError::InvalidSubnetMetric {
+            RewardCalculationError::SubnetMetricsOutOfRange {
                 subnet_id,
                 timestamp,
-                start_metrics_ts,
-                end_metrics_ts,
+                reward_period,
             } => {
                 write!(
                     f,
-                    "Subnet metric for subnet {} is out of range: {} not in accepted metrics range [{} - {}]",
-                    subnet_id, timestamp, start_metrics_ts, end_metrics_ts
+                    "Subnet {} has metrics outside the reward period: timestamp: {} not in {}",
+                    subnet_id, timestamp, reward_period
                 )
             }
             RewardCalculationError::EmptyRewardables => {
@@ -56,7 +54,7 @@ impl fmt::Display for RewardCalculationError {
 }
 
 pub fn validate_input(
-    rewarding_period: &RewardingPeriod,
+    reward_period: &RewardPeriod,
     subnet_metrics: &HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
     rewardable_nodes: &[RewardableNode],
 ) -> Result<(), RewardCalculationError> {
@@ -64,17 +62,13 @@ pub fn validate_input(
         return Err(RewardCalculationError::EmptyRewardables);
     }
 
-    let from_ts = rewarding_period.start_metrics_ts();
-    let to_ts = rewarding_period.end_metrics_ts();
-
     for (subnet_id, metrics) in subnet_metrics {
         for metric in metrics {
-            if metric.timestamp_nanos < from_ts || metric.timestamp_nanos > to_ts {
-                return Err(RewardCalculationError::InvalidSubnetMetric {
+            if !reward_period.contains(metric.timestamp_nanos) {
+                return Err(RewardCalculationError::SubnetMetricsOutOfRange {
                     subnet_id: *subnet_id,
                     timestamp: metric.timestamp_nanos,
-                    start_metrics_ts: from_ts,
-                    end_metrics_ts: to_ts,
+                    reward_period: reward_period.clone(),
                 });
             }
         }
@@ -100,7 +94,7 @@ const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 const RF: &str = "Linear Reduction factor";
 
 pub fn calculate_rewards(
-    rewarding_period: RewardingPeriod,
+    rewarding_period: RewardPeriod,
     rewards_table: &NodeRewardsTable,
     subnet_metrics: HashMap<SubnetId, Vec<NodeMetricsHistoryResponse>>,
     rewardable_nodes: &[RewardableNode],
