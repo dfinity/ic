@@ -1306,7 +1306,10 @@ fn switch_to_checkpoint(
             )?);
     }
     let elapsed = start.elapsed();
-    eprintln!("lazily loading pagemaps took {:?}", elapsed);
+    eprintln!(
+        "switch_to_checkpoint lazily loading pagemaps took {:?}",
+        elapsed
+    );
 
     let start = Instant::now();
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
@@ -1337,7 +1340,10 @@ fn switch_to_checkpoint(
         }
     }
     let elapsed = start.elapsed();
-    eprintln!("eagerly loading wasm took {:?}", elapsed);
+    eprintln!(
+        "switch_to_checkpoint eagerly loading wasm took {:?}",
+        elapsed
+    );
     Ok(())
 }
 
@@ -1369,9 +1375,12 @@ fn release_lock_and_persist_metadata(
     let states_metadata = states.states_metadata.clone();
     // This should be the only place where we lock this mutex
     let _guard = persist_metadata_lock.lock().unwrap();
-    eprintln!("release_lock_and_persist_metadata locked persist_metadata_lock");
+    info!(
+        log,
+        "release_lock_and_persist_metadata locked persist_metadata_lock"
+    );
     drop(states);
-    eprintln!("release_lock_and_persist_metadata dropped states");
+    info!(log, "release_lock_and_persist_metadata dropped states");
     persist_metadata_or_die(log, metrics, state_layout, &states_metadata);
 }
 
@@ -2196,9 +2205,15 @@ impl StateManagerImpl {
             self.metrics.max_resident_height.set(latest_height as i64);
             self.metrics.state_size.set(state_size_bytes);
         }
-        eprintln!("on_synced_checkpoint start release_lock_and_persist_metadata");
+        info!(
+            self.log,
+            "on_synced_checkpoint start release_lock_and_persist_metadata"
+        );
         self.release_lock_and_persist_metadata(states);
-        eprintln!("on_synced_checkpoint finish release_lock_and_persist_metadata");
+        info!(
+            self.log,
+            "on_synced_checkpoint finish release_lock_and_persist_metadata"
+        );
 
         // Note: it might feel tempting to also set states.tip here.  We should
         // NOT do that.  We might be applying blocks and fetching states in
@@ -2395,14 +2410,21 @@ impl StateManagerImpl {
 
         if number_of_checkpoints != states.states_metadata.len() {
             // We removed a checkpoint, so states_metadata needs to be updated on disk
-            eprintln!(
+            info!(
+                self.log,
                 "remove_states_below_impl states_metadata before:{:?}, now :{:?}",
                 number_of_checkpoints_heights,
                 states.states_metadata.keys().cloned().collect::<Vec<_>>()
             );
-            eprintln!("remove_states_below_impl start release_lock_and_persist_metadata");
+            info!(
+                self.log,
+                "remove_states_below_impl start release_lock_and_persist_metadata"
+            );
             self.release_lock_and_persist_metadata(states);
-            eprintln!("remove_states_below_impl finish release_lock_and_persist_metadata");
+            info!(
+                self.log,
+                "remove_states_below_impl finish release_lock_and_persist_metadata"
+            );
         } else {
             drop(states);
         }
@@ -3228,7 +3250,7 @@ impl StateManager for StateManagerImpl {
         root_hash: CryptoHashOfState,
         cup_interval_length: Height,
     ) {
-        eprintln!("Start fetch_state at height {}", height);
+        info!(self.log, "Start fetch_state at height {}", height);
         let _timer = self
             .metrics
             .api_call_duration
@@ -3735,9 +3757,15 @@ impl StateManager for StateManagerImpl {
         states.tip = next_tip;
 
         if scope == CertificationScope::Full {
-            eprintln!("commit_and_certify start release_lock_and_persist_metadata");
+            info!(
+                self.log,
+                "commit_and_certify start release_lock_and_persist_metadata"
+            );
             self.release_lock_and_persist_metadata(states);
-            eprintln!("commit_and_certify finish release_lock_and_persist_metadata");
+            info!(
+                self.log,
+                "commit_and_certify finish release_lock_and_persist_metadata"
+            );
         }
         for req in follow_up_tip_requests {
             self.tip_channel
@@ -3787,9 +3815,15 @@ impl StateManager for StateManagerImpl {
         }
 
         states.states_metadata.split_off(&height);
-        eprintln!("report_diverged_checkpoint start release_lock_and_persist_metadata");
+        info!(
+            self.log,
+            "report_diverged_checkpoint start release_lock_and_persist_metadata"
+        );
         self.release_lock_and_persist_metadata(states);
-        eprintln!("report_diverged_checkpoint finish release_lock_and_persist_metadata");
+        info!(
+            self.log,
+            "report_diverged_checkpoint finish release_lock_and_persist_metadata"
+        );
         fatal!(self.log, "Replica diverged at height {}", height)
     }
 }
