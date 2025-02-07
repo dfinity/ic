@@ -1322,19 +1322,16 @@ fn icrc1_total_supply_candid() {
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
-        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
-        let start = std::cmp::min(start, blocks_len);
+        let length = std::cmp::min(length, max_blocks_per_request(&caller())) as u64;
+        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks();
+        let start = std::cmp::min(start as u64, blocks_len);
         let end = std::cmp::min(start + length, blocks_len);
         let blocks = LEDGER
             .read()
             .unwrap()
             .blockchain
             .blocks
-            .get_blocks(std::ops::Range {
-                start: start as u64,
-                end: end as u64,
-            });
+            .get_blocks(start..end);
         IterBlocksRes(blocks)
     });
 }
