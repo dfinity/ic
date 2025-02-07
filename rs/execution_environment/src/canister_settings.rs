@@ -484,16 +484,6 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
-        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            if wasm_memory_threshold > wasm_memory_limit {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
-                });
-            }
-        }
-    }
-
     let new_memory_allocation = settings
         .memory_allocation
         .unwrap_or(canister_memory_allocation);
