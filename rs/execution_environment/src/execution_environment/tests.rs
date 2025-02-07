@@ -1,7 +1,7 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2,
@@ -173,7 +173,12 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
         .encode(),
         Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
             derivation_id: vec![],
-            encryption_public_key: vec![],
+            encryption_public_key: [
+                // Generated via TransportSecretKey::from_seed(vec![0; 32]).unwrap().public_key()
+                178, 211, 206, 216, 102, 5, 127, 108, 175, 41, 31, 129, 99, 3, 1, 87, 24, 22, 102,
+                58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
+                19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
+            ],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_vetkd(key_id),
         }

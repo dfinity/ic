@@ -1146,7 +1146,7 @@ mod rotate_idkg_dealing_encryption_keys {
     #[test]
     fn should_not_rotate_key_when_no_ecdsa_config_exists() {
         let setup = Setup::builder()
-            .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_ecdsa_config(
+            .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_chain_key_config(
                 subnet_id(),
                 Some(node_id()),
             ))
