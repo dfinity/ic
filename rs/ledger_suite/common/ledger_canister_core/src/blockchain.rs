@@ -225,7 +225,7 @@ where
         // Upon reaching the `trigger_threshold` we will archive
         // `num_blocks_to_archive`. For example, when set to (2000, 1000)
         // archiving will trigger when there are 2000 blocks in the ledger and
-        // the 1000 oldest bocks will be archived, leaving the remaining 1000
+        // the 1000 oldest blocks will be archived, leaving the remaining 1000
         // blocks in place.
         let num_blocks_before = self.num_unarchived_blocks();
 
