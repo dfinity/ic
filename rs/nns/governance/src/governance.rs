@@ -4526,6 +4526,9 @@ impl Governance {
         proposal_id: u64,
         proposed_network_economics: NetworkEconomics,
     ) {
+        // This does all the "real work". This may look a little strange, but it
+        // ensures that we do NOT forget to call
+        // self.set_proposal_execution_status (e.g. when we return early). let
         let mut main = || -> Result<(), GovernanceError> {
             let default_network_economics = NetworkEconomics::with_default_values();
 
