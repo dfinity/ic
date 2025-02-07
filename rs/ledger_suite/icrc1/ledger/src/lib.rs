@@ -981,7 +981,7 @@ impl Ledger {
 
         let local_blocks: Vec<B> = self
             .blockchain
-            .block_slice(local_blocks_range)
+            .get_blocks(local_blocks_range)
             .iter()
             .map(decode)
             .collect();

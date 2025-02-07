@@ -182,12 +182,12 @@ where
         self.num_archived_blocks..self.num_archived_blocks + self.blocks.len()
     }
 
-    /// Returns the slice of blocks stored locally.
+    /// Returns the blocks stored locally.
     ///
     /// # Panic
     ///
     /// This function panics if the specified range is not a subset of locally available blocks.
-    pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
+    pub fn get_blocks(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         use crate::range_utils::{is_subrange, offset};
 
         assert!(
