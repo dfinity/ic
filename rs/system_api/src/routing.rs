@@ -558,7 +558,7 @@ mod tests {
             key_id,
             derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             derivation_id: vec![1; 32],
-            encryption_public_key: vec![1; 32],
+            encryption_public_key: [1; 48],
         };
         Encode!(&args).unwrap()
     }
