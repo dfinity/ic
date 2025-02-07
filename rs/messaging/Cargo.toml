@@ -11,9 +11,9 @@ ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
-ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
@@ -70,6 +70,7 @@ rand_chacha = { workspace = true }
 random-traffic-test = { path = "../rust_canisters/random_traffic_test" }
 serde = { workspace = true }
 tempfile = { workspace = true }
+test-strategy = "0.3.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
 [features]

@@ -15,6 +15,7 @@ from notification.notification_event import (
     ScanJobSucceededNotificationEvent,
 )
 from notification.notification_handler import NotificationHandler
+from scanner.scanner_job_type import ScannerJobType
 
 SLACK_CHANNEL_ID = "C04815E0T16"
 SLACK_CHANNEL = "#security-vulnerability-management"
@@ -72,9 +73,10 @@ class SlackDefaultNotificationHandler(NotificationHandler):
         )
 
     def __handle_scan_job_failed_(self, event: ScanJobFailedNotificationEvent):
-        self.slack_api.send_message(
-            f'Scan Job with type {event.job_type.name} and ID {event.scanner_id} failed with reason "{event.reason}" in CI Pipeline {event.ci_job_url} {APP_OWNERS}'
-        )
+        msg = f'Scan Job with type {event.job_type.name} and ID {event.scanner_id} failed with reason "{event.reason}" in CI Pipeline {event.ci_job_url}'
+        if event.job_type != ScannerJobType.MERGE_SCAN:
+            msg += f" {APP_OWNERS}"
+        self.slack_api.send_message(msg)
 
     def __get_risk_assessors(self, finding: Finding) -> str:
         if finding.risk_assessor is None or len(finding.risk_assessor) == 0:

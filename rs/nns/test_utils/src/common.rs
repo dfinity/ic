@@ -88,7 +88,7 @@ impl NnsInitPayloadsBuilder {
                 governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
-                last_purged_notification: Some(1),
+                last_purged_notification: None,
                 cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
@@ -343,6 +343,11 @@ pub fn build_ledger_wasm() -> Wasm {
 pub fn build_cmc_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("cycles-minting-canister", &features)
+}
+/// Build mainnet Wasm for NNS CMC
+pub fn build_mainnet_cmc_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-cycles-minting-canister", &features)
 }
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {

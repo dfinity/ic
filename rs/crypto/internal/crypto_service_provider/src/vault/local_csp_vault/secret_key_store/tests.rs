@@ -15,7 +15,7 @@ fn key_should_be_present_only_after_generation() {
     let public_key1 = csp_vault1
         .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
-    let key_id1 = KeyId::try_from(&public_key1).unwrap();
+    let key_id1 = KeyId::from(&public_key1);
     assert!(
         csp_vault1.sks_contains(key_id1).expect("SKS call failed"),
         "Key should be present after generation."
@@ -28,7 +28,7 @@ fn key_should_be_present_only_after_generation() {
     let public_key2 = csp_vault2
         .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
-    let key_id2 = KeyId::try_from(&public_key2).unwrap();
+    let key_id2 = KeyId::from(&public_key2);
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."
@@ -54,7 +54,7 @@ fn tls_key_should_be_present_only_after_generation() {
     let public_key_cert1 = csp_vault1
         .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("error generating TLS key pair");
-    let key_id1 = KeyId::try_from(&public_key_cert1).unwrap();
+    let key_id1 = KeyId::from(&public_key_cert1);
     assert!(
         csp_vault1.sks_contains(key_id1).expect("SKS call failed"),
         "TLS key should be present after generation."
@@ -67,7 +67,7 @@ fn tls_key_should_be_present_only_after_generation() {
     let public_key_cert2 = csp_vault2
         .gen_tls_key_pair(node_test_id(NODE_1))
         .expect("error generating TLS key pair");
-    let key_id2 = KeyId::try_from(&public_key_cert2).unwrap();
+    let key_id2 = KeyId::from(&public_key_cert2);
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."

@@ -1,7 +1,7 @@
 [Unit]
 Description=Update GuestOS Configuration
 After=bootstrap-ic-node.service
-Requires=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

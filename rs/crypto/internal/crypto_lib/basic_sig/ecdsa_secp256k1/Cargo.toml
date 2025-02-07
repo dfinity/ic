@@ -8,10 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../../secp256k1" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+ic-secp256k1 = { path = "../../../../../../packages/ic-secp256k1" }
 ic-types = { path = "../../../../../types/types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
