@@ -12,7 +12,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     get_signature_with_logger, make_bip340_key_id, make_ecdsa_key_id, make_eddsa_key_id,
     scale_cycles, setup_without_ecdsa_on_nns,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;

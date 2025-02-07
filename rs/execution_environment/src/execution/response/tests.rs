@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::NumWasmPages;
