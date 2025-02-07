@@ -1360,7 +1360,7 @@ fn get_blocks_() {
             return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
             requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
         }
-        GetBlocksRes(Ok(blockchain.block_slice(requested_range)))
+        GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
     });
 }
 
