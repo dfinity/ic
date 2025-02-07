@@ -50,7 +50,6 @@ pub enum PayloadCreationError {
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
     MissingDkgStartBlock,
-    InvalidSubnetId,
 }
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
