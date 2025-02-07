@@ -62,9 +62,7 @@ impl NetworkEconomics {
             // This would not occur in practice, because ManageNetworkEconomics
             // proposals do not have the ability to set this (nor any other
             // field) to zero (and the current value is also already not zero).
-            defects.push(
-                "max_proposals_to_keep_per_topic must be positive.".to_string()
-            );
+            defects.push("max_proposals_to_keep_per_topic must be positive.".to_string());
         }
 
         // Substructs must be set.
@@ -128,14 +126,17 @@ impl NeuronsFundEconomics {
             defects.push("minimum_icp_xdr_rate must be set.".to_string());
         }
         if max_theoretical_neurons_fund_participation_amount_xdr.is_none() {
-            defects.push("max_theoretical_neurons_fund_participation_amount_xdr must be set.".to_string());
+            defects.push(
+                "max_theoretical_neurons_fund_participation_amount_xdr must be set.".to_string(),
+            );
         }
         if neurons_fund_matched_funding_curve_coefficients.is_none() {
-            defects.push("neurons_fund_matched_funding_curve_coefficients must be set.".to_string());
+            defects
+                .push("neurons_fund_matched_funding_curve_coefficients must be set.".to_string());
         }
 
         // Validate that max >= min.
-        match (maximum_icp_xdr_rate, minimum_icp_xdr_rate) { // Unwrap both at once.
+        match (maximum_icp_xdr_rate, minimum_icp_xdr_rate) {
             (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) => {
                 if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
                     defects.push(format!(
@@ -152,7 +153,9 @@ impl NeuronsFundEconomics {
         self.neurons_fund_matched_funding_curve_coefficients
             .as_ref()
             .map(|neurons_fund_matched_funding_curve_coefficients| {
-                if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) = neurons_fund_matched_funding_curve_coefficients.validate() {
+                if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
+                    neurons_fund_matched_funding_curve_coefficients.validate()
+                {
                     defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
                 }
             });
@@ -198,8 +201,12 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         }
 
         // All values must be valid (per their type).
-        fn try_convert_decimal(original: &Option<ProtoDecimal>) -> Result<NativeDecimal, /* human_readable */ &str> {
-            const DEFAULT_DECIMAL: ProtoDecimal = ProtoDecimal { human_readable: None };
+        fn try_convert_decimal(
+            original: &Option<ProtoDecimal>,
+        ) -> Result<NativeDecimal, /* human_readable */ &str> {
+            const DEFAULT_DECIMAL: ProtoDecimal = ProtoDecimal {
+                human_readable: None,
+            };
 
             let human_readable: &str = original
                 .as_ref()
@@ -214,19 +221,31 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
 
         let _contribution_threshold_xdr = try_convert_decimal(contribution_threshold_xdr)
             .inspect_err(|original| {
-                defects.push(format!("contribution_threshold_xdr ({}) is not a Decimal.", original));
+                defects.push(format!(
+                    "contribution_threshold_xdr ({}) is not a Decimal.",
+                    original
+                ));
             });
-        let one_third_participation_milestone_xdr = try_convert_decimal(one_third_participation_milestone_xdr)
-            .inspect_err(|original| {
-                defects.push(format!("one_third_participation_milestone_xdr ({}) is not a Decimal.", original));
+        let one_third_participation_milestone_xdr =
+            try_convert_decimal(one_third_participation_milestone_xdr).inspect_err(|original| {
+                defects.push(format!(
+                    "one_third_participation_milestone_xdr ({}) is not a Decimal.",
+                    original
+                ));
             });
-        let full_participation_milestone_xdr = try_convert_decimal(full_participation_milestone_xdr)
-            .inspect_err(|original| {
-                defects.push(format!("full_participation_milestone_xdr ({}) is not a Decimal.", original));
+        let full_participation_milestone_xdr =
+            try_convert_decimal(full_participation_milestone_xdr).inspect_err(|original| {
+                defects.push(format!(
+                    "full_participation_milestone_xdr ({}) is not a Decimal.",
+                    original
+                ));
             });
 
         // later milestones must be > earlier ones
-        match (one_third_participation_milestone_xdr, full_participation_milestone_xdr) { // Unwrap both at once.
+        match (
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+        ) {
             (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) => {
                 if one_third_participation_milestone_xdr <= full_participation_milestone_xdr {
                     defects.push(format!(

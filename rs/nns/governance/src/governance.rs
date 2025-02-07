@@ -4908,18 +4908,16 @@ impl Governance {
         // via proposal. What we probably want instead is to fetch this value
         // from ledger.
 
-        new_network_economics
-            .validate()
-            .map_err(|defects| {
-                let message = format!(
-                    "The resulting settings would not be valid for the \
+        new_network_economics.validate().map_err(|defects| {
+            let message = format!(
+                "The resulting settings would not be valid for the \
                      following reason(s):\n\
                      - {}",
-                    defects.join("\n  - "),
-                );
+                defects.join("\n  - "),
+            );
 
-                GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
-            })
+            GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
+        })
     }
 
     pub(crate) fn economics(&self) -> &NetworkEconomics {
@@ -4999,8 +4997,9 @@ impl Governance {
             Action::ManageNeuron(manage_neuron) => {
                 self.validate_manage_neuron_proposal(manage_neuron)
             }
-            Action::ManageNetworkEconomics(network_economics) =>
-                self.validate_manage_network_economics(network_economics),
+            Action::ManageNetworkEconomics(network_economics) => {
+                self.validate_manage_network_economics(network_economics)
+            }
 
             Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
