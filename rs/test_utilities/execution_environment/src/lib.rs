@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::embedders::{BestEffortResponsesFeature, MeteringType, StableMemoryPageLimit};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -2140,11 +2140,11 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+    pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
             .feature_flags
-            .best_effort_responses = status;
+            .best_effort_responses = stage;
         self
     }
 
