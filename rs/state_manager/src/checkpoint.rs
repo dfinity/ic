@@ -105,6 +105,7 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     metrics: &CheckpointMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
+    let start = Instant::now();
     maybe_parallel_map(
         &mut thread_pool,
         checkpoint_layout.all_existing_pagemaps()?.into_iter(),
@@ -112,7 +113,9 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     )
     .into_iter()
     .try_for_each(identity)?;
+    eprintln!("validate pagemaps took {}ms", start.elapsed().as_millis());
     if let Some(reference_state) = reference_state {
+        let start = Instant::now();
         validate_eq_checkpoint(
             checkpoint_layout,
             reference_state,
@@ -121,10 +124,19 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
             fd_factory,
             metrics,
         );
+        eprintln!(
+            "validate_eq_checkpoint took {}ms",
+            start.elapsed().as_millis()
+        );
     }
+    let start = Instant::now();
     checkpoint_layout
         .finalize_and_remove_unverified_marker(thread_pool)
         .map_err(CheckpointError::from)?;
+    eprintln!(
+        "finalize_and_remove_unverified_marker took {}ms",
+        start.elapsed().as_millis()
+    );
     Ok(())
 }
 
@@ -139,6 +151,7 @@ pub fn load_checkpoint_and_validate_parallel(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+    let start = Instant::now();
     let state = load_checkpoint(
         checkpoint_layout,
         own_subnet_type,
@@ -146,7 +159,11 @@ pub fn load_checkpoint_and_validate_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
-
+    eprintln!(
+        "load_checkpoint_and_validate_parallel load_checkpoint took {}ms",
+        start.elapsed().as_millis()
+    );
+    let start = Instant::now();
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
         checkpoint_layout,
         None,
@@ -155,6 +172,10 @@ pub fn load_checkpoint_and_validate_parallel(
         metrics,
         Some(&mut thread_pool),
     )?;
+    eprintln!(
+        "load_checkpoint_and_validate_parallel validate_and_finalize_checkpoint_and_remove_unverified_marker took {}ms",
+        start.elapsed().as_millis()
+    );
     Ok(state)
 }
 

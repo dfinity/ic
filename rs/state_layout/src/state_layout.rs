@@ -2755,6 +2755,7 @@ fn mark_files_readonly_and_sync(
     path: &Path,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
+    let start = Instant::now();
     let paths = dir_list_recursive(path)?;
     let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
         mark_readonly_if_file(p)?;
@@ -2762,10 +2763,13 @@ fn mark_files_readonly_and_sync(
         sync_path(p)?;
         Ok::<(), std::io::Error>(())
     });
+    let elapsed = start.elapsed();
+    eprintln!("mark_files_readonly took {:?}", elapsed);
 
     results.into_iter().try_for_each(identity)?;
     #[cfg(target_os = "linux")]
     {
+        let start = Instant::now();
         let f = std::fs::File::open(path)?;
         use std::os::fd::AsRawFd;
         unsafe {
@@ -2773,6 +2777,8 @@ fn mark_files_readonly_and_sync(
                 return Err(std::io::Error::last_os_error());
             }
         }
+        let elapsed = start.elapsed();
+        eprintln!("syncfs took {:?}", elapsed);
     }
     Ok(())
 }

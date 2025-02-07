@@ -1272,7 +1272,7 @@ fn switch_to_checkpoint(
                 )?);
         }
     }
-
+    let start = Instant::now();
     for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(tip_snapshot);
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
@@ -1305,7 +1305,10 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
     }
+    let elapsed = start.elapsed();
+    eprintln!("lazily loading pagemaps took {:?}", elapsed);
 
+    let start = Instant::now();
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
         if let Some(tip_state) = &mut tip_canister.execution_state {
             let canister_layout = layout.canister(tip_id).unwrap();
@@ -1333,6 +1336,8 @@ fn switch_to_checkpoint(
             tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
+    let elapsed = start.elapsed();
+    eprintln!("eagerly loading wasm took {:?}", elapsed);
     Ok(())
 }
 
@@ -1463,13 +1468,24 @@ impl StateManagerImpl {
         let state_layout =
             StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry)
                 .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        info!(
+            log,
+            "StateLayout::try_new took {:?}",
+            starting_time.elapsed()
+        );
         // Init scripts after upgrade change all files to be read write. This introduces a danger
         // of accidental modification of checkpoint data and also confuses hard-linking logic.
+        let start_mark_checkpoint_files_readonly = Instant::now();
         state_layout
             .mark_checkpoint_files_readonly(&mut Some(scoped_threadpool::Pool::new(
                 NUMBER_OF_CHECKPOINT_THREADS,
             )))
             .unwrap_or_else(|err| fatal!(&log, "Failed to mark checkpoints readonly: {:?}", err));
+        info!(
+            log,
+            "mark_checkpoint_files_readonly took {:?}",
+            start_mark_checkpoint_files_readonly.elapsed()
+        );
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         // Create the file descriptor factory that is used to create files for PageMaps.
