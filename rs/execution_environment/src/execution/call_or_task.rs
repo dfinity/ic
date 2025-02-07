@@ -372,8 +372,8 @@ impl CallOrTaskHelper {
                     }
                 }
             }
-            // TODO(RUN-957): Enforce the limit in heartbeat and timer after
-            // canister logging ships by removing the `if` above.
+            // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
+            // canister logging ships.
             CanisterCallOrTask::Task(_) => (),
             CanisterCallOrTask::Query(_) => {
                 if let WasmMethod::CompositeQuery(_) = &original.method {
