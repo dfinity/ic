@@ -146,7 +146,8 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     // so that it can host the large Wasm. To that end, the GM grants this user 10 ICP, for
     // the sake of testing, out of thin air.
     let icp = Tokens::from_tokens(10).unwrap();
-    cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
+    let original_cycles_balance =
+        cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
 
     let cli_arg = UpgradeSnsControlledCanisterArgs {
         sns_neuron_id: Some(ParsedSnsNeuron(sns_neuron_id)),
@@ -237,7 +238,18 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         .await
         .unwrap();
 
-    // 7. Assert that store canister has zero cycles left on its balance.
+    // 7. Assert that the unused cycles got back to the user Cycles Ledger account.
+    let final_cycles_balance = ic_nervous_system_agent::ii::cycles_ledger::icrc1_balance_of(
+        &pocket_ic_agent,
+        sender,
+        None,
+    )
+    .await;
+    // TODO: Consider strengthening these assertions.
+    assert!(final_cycles_balance < original_cycles_balance);
+    assert!(final_cycles_balance > 0);
+
+    // 8. Assert that store canister has been deleted.
     let err = canister_status(
         &pocket_ic_agent,
         CanisterId::unchecked_from_principal(store_canister_id),

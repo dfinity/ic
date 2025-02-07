@@ -5,7 +5,7 @@ use crate::Request;
 use crate::{CallCanisters, CanisterInfo};
 use candid::Principal;
 use pocket_ic::common::rest::RawEffectivePrincipal;
-use pocket_ic::management_canister::DefiniteCanisterSettings;
+use pocket_ic::management_canister::{DefiniteCanisterSettings, InstallCodeArgs};
 use pocket_ic::{management_canister::CanisterStatusResult, nonblocking::PocketIc};
 use thiserror::Error;
 
@@ -83,6 +83,11 @@ impl PocketIcAgent<'_> {
             }
             "delete_canister" => {
                 candid::decode_one::<DeleteCanisterArgs>(payload.as_slice())
+                    .map_err(PocketIcCallError::CandidDecode)?
+                    .canister_id
+            }
+            "install_code" => {
+                candid::decode_one::<InstallCodeArgs>(payload.as_slice())
                     .map_err(PocketIcCallError::CandidDecode)?
                     .canister_id
             }

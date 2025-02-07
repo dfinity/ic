@@ -12,6 +12,9 @@ path = "src/lib.rs"
 [dependencies]
 candid = { workspace = true }
 candid_parser = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-wasm = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

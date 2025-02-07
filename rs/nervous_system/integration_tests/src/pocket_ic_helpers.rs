@@ -587,7 +587,7 @@ pub fn load_registry_mutations<P: AsRef<Path>>(path: P) -> RegistryAtomicMutateR
 
 pub mod cycles_ledger {
     use super::{install_canister, nns};
-    use candid::{CandidType, Encode, Principal};
+    use candid::{CandidType, Encode, Nat, Principal};
     use canister_test::Wasm;
     use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
     use ic_base_types::PrincipalId;
@@ -645,11 +645,12 @@ pub mod cycles_ledger {
         .await;
     }
 
+    /// Returns the new cycles balance of `beneficiary`.
     pub async fn mint_icp_and_convert_to_cycles(
         pocket_ic: &PocketIc,
         beneficiary: PrincipalId,
         amount: Tokens,
-    ) {
+    ) -> Nat {
         nns::ledger::mint_icp(
             pocket_ic,
             AccountIdentifier::new(beneficiary, None),
@@ -679,8 +680,10 @@ pub mod cycles_ledger {
         let NotifyMintCyclesSuccess {
             block_index: _,
             minted: _,
-            balance: _,
+            balance,
         } = nns::cmc::notify_mint_cycles(pocket_ic, beneficiary, None, None, block_index).await;
+
+        balance
     }
 }
 

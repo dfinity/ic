@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
     "//rs/nervous_system/proto",
+    "//rs/nervous_system/store_canister:store_canister_embedder",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -30,7 +31,6 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-wasm",
     "@crate_index//:itertools",
     "@crate_index//:json-patch",
     "@crate_index//:pretty_assertions",
@@ -78,12 +78,6 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
     deps = DEPENDENCIES + [":cli"],
-    data = [
-        "//rs/nervous_system/store_canister:store",
-    ],
-    env = {
-        "STORE_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/store_canister:store)",
-    }
 )
 
 rust_test(

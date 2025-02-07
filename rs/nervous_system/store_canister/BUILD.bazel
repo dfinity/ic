@@ -1,15 +1,37 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-motoko_library(
-    name = "base",
-    srcs = ["@motoko_base//:sources"],
-)
-
 motoko_canister(
     name = "store",
     entry = "store.mo",
-    deps = ["base"],
+    deps = [],
+)
+
+rust_library(
+    name = "store_canister_embedder",
+    srcs = ["src/lib.rs"],
+    compile_data = [":store.wasm"],
+    rustc_env = {
+        "STORE_CANISTER_WASM_PATH": "$(location :store.wasm)",
+    },
+    deps = [
+        "//rs/types/base_types",
+    ]
+)
+
+rust_test(
+    name = "store_wasm_test",
+    compile_data = [":store.wasm"],
+    crate = ":store_canister_embedder",
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/candid_utils",
+        "//rs/types/base_types",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-wasm",
+        "@crate_index//:wasmprinter",
+    ],
 )

@@ -5,4 +5,5 @@ type WithdrawResult = variant {
 
 service: (authorized_principal : principal) -> {
   withdraw_cycles : (to : principal) -> (WithdrawResult);
+  foo : () -> ();
 }

@@ -1,40 +1,36 @@
 use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use anyhow::Result;
-use candid::{CandidType, Encode, Nat, Principal};
+use candid::{Encode, Nat};
 use candid_utils::{
     printing,
-    validation::{encode_upgrade_args, encode_upgrade_args_without_service},
+    validation::encode_upgrade_args_without_service,
+    wasm::{CandidError, InMemoryWasm, Wasm, WasmFile},
 };
 use clap::Parser;
 use core::convert::From;
-use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
+use cycles_minting_canister::{CanisterSettingsArgs, SubnetSelection};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
+    ii::cycles_ledger::{self, requests::CreateCanisterError},
     management_canister::{self, delete_canister, requests::Mode, stop_canister},
     nns,
     sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
     CallCanisters, CanisterInfo, Request,
 };
-use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response,
     proposal::{self, Action},
     ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
 };
-use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};
-use serde::Deserialize;
 use std::{
     collections::BTreeSet,
-    fs::File,
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
+use store_canister_embedder::{StoreCanisterInitArgs, STORE_CANISTER_WASM};
 use thiserror::Error;
-
-const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
-const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 
 // TODO: Compute more precisely the cycles amount needed for the store canister.
 // The cycle fee for create request is 0.1T cycles.
@@ -84,135 +80,14 @@ pub struct RefundAfterSnsControlledCanisterUpgradeArgs {
     pub proposal_id: u64,
 }
 
-pub struct Wasm {
-    path: PathBuf,
-    bytes: Vec<u8>,
-    module_hash: [u8; 32],
-}
-
-impl Wasm {
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    pub fn module_hash(&self) -> [u8; 32] {
-        self.module_hash
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl TryFrom<PathBuf> for Wasm {
-    type Error = String;
-
-    fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
-        let mut file = match File::open(&path) {
-            Err(err) => {
-                return Err(format!(
-                    "Cannot open Wasm file under {}: {}",
-                    path.display(),
-                    err,
-                ));
-            }
-            Ok(file) => file,
-        };
-
-        // Create a buffer to store the file's content
-        let mut bytes = Vec::new();
-
-        // Read the file's content into the buffer
-        if let Err(err) = file.read_to_end(&mut bytes) {
-            return Err(format!("Cannot read Wasm file {}: {}", path.display(), err,));
-        }
-
-        // Smoke test: Is this a ICP Wasm?
-        if !bytes.starts_with(&RAW_WASM_HEADER) && !bytes.starts_with(&GZIPPED_WASM_HEADER) {
-            return Err("The file does not look like a valid ICP Wasm module.".to_string());
-        }
-
-        let module_hash = ic_crypto_sha2::Sha256::hash(&bytes);
-
-        Ok(Self {
-            path,
-            bytes,
-            module_hash,
-        })
-    }
-}
-
-fn store_wasm_path() -> PathBuf {
-    let store_wasm_path = std::env::var("STORE_CANISTER_WASM_PATH")
-        .expect("Please ensure that this Bazel test target correctly specifies env and data.");
-
-    PathBuf::from(store_wasm_path)
-}
-
-/// Attempts to validate `args` against the Candid service defined in `wasm`.
-///
-/// If `args` is Some, returns the byte encoding of `args` in the Ok result.
-///
-/// This function prints warnings into STDERR.
-pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result<Option<Vec<u8>>> {
-    let wasm_module = parse_wasm(wasm.bytes(), false)?;
-
-    print!("Checking that the Wasm metadata contains Candid service definition ... ");
-    std::io::stdout().flush().unwrap();
-
-    let candid_service = metadata::list_metadata(&wasm_module)
-        .into_iter()
-        .find_map(|section| {
-            let mut section = section.split(' ').collect::<Vec<&str>>();
-            if section.is_empty() {
-                // This cannot practically happen, as it would imply that all characters of
-                // the section are whitespaces.
-                return None;
-            }
-
-            // Consume this section's visibility specification, e.g. "icp:public" or "icp:private".
-            let _visibility = section.remove(0).to_string();
-
-            // The conjunction of the remaining parts are the section's name.
-            let name = section.join(" ");
-
-            if name != "candid:service" {
-                return None;
-            }
-
-            // Read the actual contents of this section.
-            metadata::get_metadata(&wasm_module, &name).map(|contents| contents.to_vec())
-        })
-        .map(|bytes: Vec<u8>| std::str::from_utf8(&bytes).unwrap().to_string());
-
-    let canister_arg = if let Some(candid_service) = candid_service {
-        println!("✔️");
-
-        print!("Validating the upgrade arg against the Candid service definition ... ");
-        std::io::stdout().flush().unwrap();
-        let candid_arg_bytes = encode_upgrade_args(candid_service, args).unwrap();
-        println!("✔️");
-
-        candid_arg_bytes
-    } else {
-        eprintln!(
-            "\n\
-            ⚠️ Skipping upgrade argument validation: Wasm file has no Candid definition! \n\
-            ⚠️ Please consider adding it as follows:\n\
-            cargo install ic-wasm\n\
-            ic-wasm -o augmented-{} {} metadata -v public candid:service -f service.did",
-            wasm.path().display(),
-            wasm.path().display(),
-        );
-
-        // Proceed with whatever argument the user has specified without validation.
-        args.map(|args| encode_upgrade_args_without_service(args).unwrap())
-    };
-
-    std::io::stdout().flush().unwrap();
-    std::io::stderr().flush().unwrap();
-
-    Ok(canister_arg)
+#[derive(Debug, Error)]
+pub enum UpgradeSnsControlledCanisterError<AgentError> {
+    #[error("agent interaction failed: {0}")]
+    AgentError(AgentError),
+    #[error("observed bad state: {0}")]
+    Client(String),
+    #[error("candid service error: {0}")]
+    CandidArgsError(CandidError),
 }
 
 /// Attempts to create an empty canister on the same subnet as `next_to`.
@@ -232,7 +107,7 @@ pub async fn create_canister_next_to<C: CallCanisters>(
         .map(|subnet| SubnetSelection::Subnet { subnet })
         .ok();
 
-    let canister_id = cycles_ledger_create_canister(
+    let canister_id = cycles_ledger::create_canister(
         agent,
         cycles_amount,
         subnet_selection,
@@ -261,17 +136,9 @@ pub async fn create_canister_next_to<C: CallCanisters>(
     CanisterId::try_from_principal_id(canister_id).map_err(|err| anyhow::anyhow!(err))
 }
 
-#[derive(Debug, Error)]
-pub enum UpgradeSnsControlledCanisterError<AgentError> {
-    #[error("agent interaction failed: {0}")]
-    Agent(AgentError),
-    #[error("observed bad state: {0}")]
-    Client(String),
-}
-
 impl<E: std::error::Error> From<E> for UpgradeSnsControlledCanisterError<E> {
     fn from(err: E) -> Self {
-        Self::Agent(err)
+        Self::AgentError(err)
     }
 }
 
@@ -395,7 +262,7 @@ pub async fn exec<C: CallCanisters>(
 
     print!("Checking that we have a viable Wasm for this upgrade ... ");
     std::io::stdout().flush().unwrap();
-    let wasm = Wasm::try_from(wasm_path).unwrap();
+    let wasm = WasmFile::try_from(wasm_path).unwrap();
     assert_ne!(
         wasm.module_hash().to_vec(),
         current_module_hash,
@@ -404,10 +271,30 @@ pub async fn exec<C: CallCanisters>(
     );
     println!("✔️");
 
-    // Save `candid_arg` for reference, in case we need it for error reporting later on.
-    let upgrade_args = candid_arg.clone();
+    let canister_upgrade_arg = match wasm.encode_candid_args(&candid_arg) {
+        Ok(upgrade_args) => upgrade_args,
+        Err(CandidError::NoCandidService) => {
+            eprintln!(
+                "\n\
+                ⚠️ Skipping upgrade argument validation: Wasm file has no Candid definition! \n\
+                ⚠️ Please consider adding it as follows:\n\
+                cargo install ic-wasm\n\
+                ic-wasm -o augmented-{} {} metadata -v public candid:service -f service.did",
+                wasm.path().display(),
+                wasm.path().display(),
+            );
+            std::io::stderr().flush().unwrap();
 
-    let canister_upgrade_arg = validate_candid_arg_for_wasm(&wasm, upgrade_args).unwrap();
+            // Proceed with whatever argument the user has specified without validation.
+            candid_arg
+                .as_ref()
+                .map(|upgrade_args| encode_upgrade_args_without_service(upgrade_args).unwrap())
+        }
+        Err(err) => {
+            return Err(UpgradeSnsControlledCanisterError::CandidArgsError(err));
+        }
+    };
+    println!("✔️");
 
     print!("Creating a store canister on the same subnet as the target ... ");
     std::io::stdout().flush().unwrap();
@@ -432,13 +319,13 @@ pub async fn exec<C: CallCanisters>(
     .await
     .unwrap();
 
-    let store_wasm = Wasm::try_from(store_wasm_path()).unwrap();
-    let store_arg = validate_candid_arg_for_wasm(
-        &wasm,
-        Some(format!("(authorized_principal = {})", caller_principal)),
-    )
-    .unwrap();
-
+    print!("Install code into the store canister to enable withdrawing cycles ... ");
+    let store_wasm = InMemoryWasm::try_from(STORE_CANISTER_WASM).unwrap();
+    let store_arg = StoreCanisterInitArgs {
+        authorized_principal: caller_principal,
+    }
+    .render();
+    let store_arg = store_wasm.encode_candid_args(&Some(store_arg)).unwrap();
     management_canister::install_code(
         agent,
         store_canister_id,
@@ -448,7 +335,7 @@ pub async fn exec<C: CallCanisters>(
         None,
     )
     .await
-    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    .map_err(UpgradeSnsControlledCanisterError::AgentError)?;
     println!("✔️");
 
     print!("Uploading the chunks into the store canister ... ");
@@ -602,7 +489,7 @@ pub async fn refund<C: CallCanisters>(
     let get_proposal_result = sns_governance
         .get_proposal(agent, proposal_id)
         .await
-        .map_err(UpgradeSnsControlledCanisterError::Agent)?
+        .map_err(UpgradeSnsControlledCanisterError::AgentError)?
         .result
         .ok_or("Missing GetProposalResponse.result")
         .map_err(|err| UpgradeSnsControlledCanisterError::Client(err.to_string()))?;
@@ -648,7 +535,7 @@ pub async fn refund<C: CallCanisters>(
             )));
         }
     };
-    println!("✔️");
+    println!("{} ✔️", store_canister_id);
 
     print!("Withdrawing remaining cycles from the store canister ...");
     std::io::stdout().flush().unwrap();
@@ -668,110 +555,16 @@ pub async fn refund<C: CallCanisters>(
         CanisterId::unchecked_from_principal(store_canister_id),
     )
     .await
-    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    .map_err(UpgradeSnsControlledCanisterError::AgentError)?;
     delete_canister(
         agent,
         CanisterId::unchecked_from_principal(store_canister_id),
     )
     .await
-    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    .map_err(UpgradeSnsControlledCanisterError::AgentError)?;
     println!("✔️");
 
     Ok(amount_refunded)
-}
-
-pub type BlockIndex = Nat;
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub enum CreateCanisterError {
-    InsufficientFunds {
-        balance: Nat,
-    },
-    TooOld,
-    CreatedInFuture {
-        ledger_time: u64,
-    },
-    TemporarilyUnavailable,
-    Duplicate {
-        duplicate_of: Nat,
-        // If the original transaction created a canister then this field will contain the canister id.
-        canister_id: Option<Principal>,
-    },
-    FailedToCreate {
-        fee_block: Option<BlockIndex>,
-        refund_block: Option<BlockIndex>,
-        error: String,
-    },
-    GenericError {
-        message: String,
-        error_code: Nat,
-    },
-}
-
-// ```candid
-// type CreateCanisterArgs = record {
-//     from_subaccount : opt vec nat8;
-//     created_at_time : opt nat64;
-//     amount : nat;
-//     creation_args : opt CmcCreateCanisterArgs;
-// };
-// ```
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CreateCanisterArgs {
-    from_subaccount: Option<Vec<u8>>,
-    created_at_time: Option<u64>,
-    amount: Nat,
-    creation_args: Option<CreateCanister>,
-}
-
-// ```candid
-// type CreateCanisterSuccess = record {
-//     block_id : BlockIndex;
-//     canister_id : principal;
-// };
-// ```
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct CreateCanisterSuccess {
-    block_id: BlockIndex,
-    canister_id: PrincipalId,
-}
-
-impl Request for CreateCanisterArgs {
-    fn method(&self) -> &'static str {
-        "create_canister"
-    }
-
-    fn update(&self) -> bool {
-        true
-    }
-
-    fn payload(&self) -> std::result::Result<Vec<u8>, candid::Error> {
-        Encode!(self)
-    }
-
-    type Response = Result<CreateCanisterSuccess, CreateCanisterError>;
-}
-
-pub async fn cycles_ledger_create_canister<C: CallCanisters>(
-    agent: &C,
-    cycles_amount: u128,
-    subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
-) -> Result<CreateCanisterSuccess, CreateCanisterError> {
-    let request = CreateCanisterArgs {
-        from_subaccount: None,
-        created_at_time: None,
-        amount: Nat::from(cycles_amount),
-        creation_args: Some(CreateCanister {
-            subnet_selection,
-            settings,
-            ..Default::default()
-        }),
-    };
-    agent
-        .call(CYCLES_LEDGER_CANISTER_ID, request)
-        .await
-        .expect("Cannot create canister")
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
