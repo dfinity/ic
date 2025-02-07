@@ -138,8 +138,8 @@ impl BlockchainState {
     }
 
     /// Returns the hashes of all cached blocks.
-    pub fn get_cached_blocks(&self) -> Vec<BlockHash> {
-        self.block_cache.keys().cloned().collect()
+    pub(crate) fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().copied().collect()
     }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
