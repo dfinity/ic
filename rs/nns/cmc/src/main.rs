@@ -8,7 +8,7 @@ use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::call;
+use ic_cdk::{call, init, query, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -383,12 +383,9 @@ where
     println!("{}", yansi::Paint::yellow(s).to_string());
 }
 
-#[export_name = "canister_init"]
-fn main() {
-    over_init(|CandidOne(args)| init(args))
-}
+fn main() {}
 
-#[candid_method(init)]
+#[init]
 fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     let args =
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
@@ -431,21 +428,12 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     });
 }
 
-ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
-
-#[export_name = "canister_update set_authorized_subnetwork_list"]
-fn set_authorized_subnetwork_list_() {
-    over(
-        candid_one,
-        |SetAuthorizedSubnetworkListArgs { who, subnets }| {
-            set_authorized_subnetwork_list(who, subnets)
-        },
-    )
-}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Set the list of subnets in which a principal is allowed to create
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
+#[update(hidden = true)]
 fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetId>) {
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
@@ -714,7 +702,8 @@ fn remove_subnets_from_type(
     })
 }
 
-#[candid_method(query, rename = "get_subnet_types_to_subnets")]
+/// Retrieves the current mapping of subnet types to subnets.
+#[query]
 fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
     with_state(|state: &State| {
         let data: Vec<(String, Vec<SubnetId>)> = state
@@ -728,16 +717,8 @@ fn get_subnet_types_to_subnets() -> SubnetTypesToSubnetsResponse {
     })
 }
 
-/// Retrieves the current mapping of subnet types to subnets.
-#[export_name = "canister_query get_subnet_types_to_subnets"]
-fn get_subnet_types_to_subnets_() {
-    over(candid_one, |_: ()| get_subnet_types_to_subnets())
-}
-
-#[candid_method(
-    query,
-    rename = "get_principals_authorized_to_create_canisters_to_subnets"
-)]
+/// Returns the current mapping of authorized principals to subnets.
+#[query]
 fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubnetsResponse {
     with_state(|state| {
         let data = state
@@ -749,15 +730,8 @@ fn get_principals_authorized_to_create_canisters_to_subnets() -> AuthorizedSubne
     })
 }
 
-/// Returns the current mapping of authorized principals to subnets.
-#[export_name = "canister_query get_principals_authorized_to_create_canisters_to_subnets"]
-fn get_principals_authorized_to_create_canisters_to_subnets_() {
-    over(candid_one, |_: ()| {
-        get_principals_authorized_to_create_canisters_to_subnets()
-    })
-}
-
-#[candid_method(query, rename = "get_default_subnets")]
+/// Returns the list of default subnets to which anyone can deploy canisters to.
+#[query]
 fn get_default_subnets() -> Vec<PrincipalId> {
     with_state(|state| {
         state
@@ -767,12 +741,6 @@ fn get_default_subnets() -> Vec<PrincipalId> {
             .map(|s| s.get())
             .collect()
     })
-}
-
-/// Returns the list of default subnets to which anyone can deploy canisters to.
-#[export_name = "canister_query get_default_subnets"]
-fn get_default_subnets_() {
-    over(candid_one, |_: ()| get_default_subnets())
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
@@ -837,7 +805,8 @@ fn convert_conversion_rate_to_payload(
     serializer.into_inner()
 }
 
-#[candid_method(query, rename = "get_icp_xdr_conversion_rate")]
+/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
+#[query]
 fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
     with_state(|state| {
         let witness_generator = convert_data_to_mixed_hash_tree(state);
@@ -858,12 +827,6 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
             certificate: ic_cdk::api::data_certificate().unwrap_or_default(),
         }
     })
-}
-
-/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
-#[export_name = "canister_query get_icp_xdr_conversion_rate"]
-fn get_icp_xdr_conversion_rate_() {
-    over(candid_one, |_: ()| get_icp_xdr_conversion_rate())
 }
 
 #[export_name = "canister_query get_average_icp_xdr_conversion_rate"]
@@ -1144,26 +1107,6 @@ fn transaction_notification_() {
     over_async_may_reject(candid_one, transaction_notification)
 }
 
-#[export_name = "canister_update notify_top_up"]
-fn notify_top_up_() {
-    over_async(candid_one, notify_top_up)
-}
-
-#[export_name = "canister_update notify_create_canister"]
-fn notify_create_canister_() {
-    over_async(candid_one, notify_create_canister)
-}
-
-#[export_name = "canister_update create_canister"]
-fn create_canister_() {
-    over_async(candid_one, create_canister)
-}
-
-#[export_name = "canister_update notify_mint_cycles"]
-fn notify_mint_cycles_() {
-    over_async(candid_one, notify_mint_cycles)
-}
-
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1178,7 +1121,7 @@ fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
 /// * `canister_id` - Canister to be topped up.
-#[candid_method(update, rename = "notify_top_up")]
+#[update]
 async fn notify_top_up(
     NotifyTopUp {
         block_index,
@@ -1266,7 +1209,7 @@ async fn notify_top_up(
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
 /// * `to_subaccount` - Cycles ledger subaccount to which the cycles are minted to.
-#[candid_method(update, rename = "notify_mint_cycles")]
+#[update]
 async fn notify_mint_cycles(
     NotifyMintCyclesArg {
         block_index,
@@ -1374,7 +1317,7 @@ async fn notify_mint_cycles(
 ///   `controller`.
 /// * `subnet_selection` - Where to create the canister.
 /// * `subnet_type` - Deprecated. Use subnet_selection instead.
-#[candid_method(update, rename = "notify_create_canister")]
+#[update]
 #[allow(deprecated)]
 async fn notify_create_canister(
     NotifyCreateCanister {
@@ -1507,7 +1450,7 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
     Err(err)
 }
 
-#[candid_method(update, rename = "create_canister")]
+#[update]
 #[allow(deprecated)]
 async fn create_canister(
     CreateCanister {
