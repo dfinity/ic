@@ -66,7 +66,7 @@ assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = { workspace = true }
 wat = { workspace = true }

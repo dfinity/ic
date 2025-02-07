@@ -17,7 +17,7 @@ ic-canister-client-sender = { path = "./sender" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-certification = { path = "../certification" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-read-state-response-parser = { path = "./read_state_response_parser" }
 ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
