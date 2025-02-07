@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use ic_nns_handler_recovery_interface::recovery::{NewRecoveryProposal, RecoveryProposal};
+use ic_nns_handler_recovery_interface::recovery::{RecoveryPayload, RecoveryProposal};
 use ic_nns_handler_recovery_interface::{
     simple_node_operator_record::SimpleNodeOperatorRecord, Ballot,
 };
@@ -18,7 +18,7 @@ pub trait RecoveryCanister {
 
     async fn vote_on_latest_proposal(&self, ballot: Ballot) -> Result<()>;
 
-    async fn submit_new_recovery_proposal(&self, new_proposal: NewRecoveryProposal) -> Result<()>;
+    async fn submit_new_recovery_proposal(&self, new_proposal: RecoveryPayload) -> Result<()>;
 
     async fn fetch_latest_proposal(&self) -> Result<RecoveryProposal> {
         let proposal_chain = self.get_pending_recovery_proposals().await?;

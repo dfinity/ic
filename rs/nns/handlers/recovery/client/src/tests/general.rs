@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ed25519_dalek::SigningKey as EdSigningKey;
 use ic_agent::identity::{BasicIdentity, Prime256v1Identity, Secp256k1Identity};
 use ic_nns_handler_recovery_interface::{
-    recovery::{NewRecoveryProposal, RecoveryPayload},
+    recovery::RecoveryPayload,
     signing::{ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256, Verifier},
     Ballot,
 };
@@ -62,9 +62,7 @@ async fn can_place_proposals_edwards() {
     );
 
     let response = client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await;
 
     assert!(response.is_ok());
@@ -91,9 +89,7 @@ async fn can_place_proposals_prime256() {
     );
 
     let response = client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await;
 
     assert!(response.is_ok());
@@ -120,9 +116,7 @@ async fn can_place_proposals_secp256() {
     );
 
     let response = client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await;
 
     assert!(response.is_ok());
@@ -147,9 +141,7 @@ async fn can_vote_on_proposals_edwards() {
     );
 
     client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await
         .unwrap();
 
@@ -180,9 +172,7 @@ async fn can_vote_on_proposals_prime256() {
     );
 
     client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await
         .unwrap();
 
@@ -213,9 +203,7 @@ async fn can_vote_on_proposals_secp256() {
     );
 
     client
-        .submit_new_recovery_proposal(NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        })
+        .submit_new_recovery_proposal(RecoveryPayload::Halt)
         .await
         .unwrap();
 
