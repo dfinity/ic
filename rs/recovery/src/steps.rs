@@ -380,6 +380,61 @@ impl Step for DownloadIcStateStep {
     }
 }
 
+pub struct CopyLocalIcStateStep {
+    pub logger: Logger,
+    pub target: String,
+    pub working_dir: String,
+    pub require_confirmation: bool,
+    pub state_tool: PathBuf,
+}
+
+impl Step for CopyLocalIcStateStep {
+    fn descr(&self) -> String {
+        format!(
+            "Copy node state from {} and config from {} to {}.",
+            IC_DATA_PATH, IC_JSON5_PATH, self.working_dir
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES.iter().copied().collect();
+
+        // Do not copy state using rsync, we will use the state-tool instead
+        excludes.push(IC_STATE);
+
+        // If we already have some certifications, we do not copy them again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/certification")
+            .exists()
+        {
+            info!(self.logger, "Excluding certifications from download");
+            excludes.push("certification");
+            excludes.push("certifications");
+        }
+
+        rsync(
+            &self.logger,
+            excludes.clone(),
+            IC_DATA_PATH,
+            &self.working_dir,
+            self.require_confirmation,
+            None,
+        )?;
+
+        rsync(
+            &self.logger,
+            Vec::<String>::default(),
+            IC_JSON5_PATH,
+            &self.working_dir,
+            self.require_confirmation,
+            None,
+        )?;
+
+        ///TODO: Use state-tool to copy latest checkpoint
+        Ok(())
+    }
+}
+
 pub struct ReplaySubCmd {
     pub cmd: SubCommand,
     pub descr: String,

@@ -191,7 +191,7 @@ impl Recovery {
         }
 
         if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
+            if let Some(version) = args.replica_version.clone() {
                 block_on(download_binary(
                     &logger,
                     version,
@@ -203,6 +203,21 @@ impl Recovery {
             }
         } else {
             info!(logger, "ic-admin exists, skipping download.");
+        }
+
+        if !args.use_local_binaries && !binary_dir.join("state-tool").exists() {
+            if let Some(version) = args.replica_version.clone() {
+                block_on(download_binary(
+                    &logger,
+                    version,
+                    String::from("state-tool"),
+                    &binary_dir,
+                ))?;
+            } else {
+                info!(logger, "No state-tool version provided, skipping download.");
+            }
+        } else {
+            info!(logger, "state-tool exists, skipping download.");
         }
 
         let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
