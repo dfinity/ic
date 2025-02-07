@@ -1882,7 +1882,7 @@ async fn test_manage_network_economics_reject_invalid() {
 
     // Step 3: Verify results.
 
-    // Proposal creation failed.
+    // Step 3.1: Proposal creation failed.
     {
         let err = result.unwrap_err();
         assert_eq!(ErrorType::try_from(err.error_type), Ok(ErrorType::InvalidProposal));
@@ -1892,7 +1892,7 @@ async fn test_manage_network_economics_reject_invalid() {
         }
     }
 
-    // Step 3.1: No change.
+    // Step 3.2: No change.
     assert_eq!(gov.heap_data.economics, Some(NetworkEconomics::with_default_values()));
 }
 
