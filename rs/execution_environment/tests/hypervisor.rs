@@ -8,7 +8,7 @@ use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -1670,7 +1670,10 @@ fn ic0_msg_caller_size_works_in_heartbeat() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1687,7 +1690,10 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1705,7 +1711,7 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }
@@ -1736,7 +1742,10 @@ fn ic0_msg_caller_size_works_in_global_timer() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types_private::IC_00
+                .get()
+                .to_vec()
+                .len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1753,7 +1762,10 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
             wasm()
                 .msg_caller_copy(
                     0,
-                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                    ic_management_canister_types_private::IC_00
+                        .get()
+                        .to_vec()
+                        .len() as u32,
                 )
                 .set_global_data_from_stack()
                 .build(),
@@ -1771,7 +1783,7 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types_private::IC_00.get().to_vec()),
         result
     );
 }

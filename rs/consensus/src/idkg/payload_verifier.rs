@@ -37,7 +37,7 @@ use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifi
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     IDkgSignWithThresholdContext, SignWithThresholdContext,
 };
@@ -511,7 +511,7 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
+                use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
                     let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
                         .map_err(|err| {
@@ -629,7 +629,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{
+    use ic_management_canister_types_private::{
         MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
