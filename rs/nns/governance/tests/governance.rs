@@ -1806,6 +1806,97 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
 }
 
 #[tokio::test]
+async fn test_manage_network_economics_reject_invalid() {
+    // Step 1: Prepare the world. We only really need a super basic Governance.
+
+    let controller = PrincipalId::new_user_test_id(519_572_717);
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 1 }),
+        controller: Some(controller),
+        account: vec![42_u8; 32],
+        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        cached_neuron_stake_e8s: 100 * E8,
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            neurons: btreemap! { 1 => neuron },
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
+    // It gets executed immediately, since there is only one neuron.
+
+    let too_small = 7_u64;
+    // Assert that too_small is a problemmatic value if it were to be used a
+    // proposal (this is foreshadowing, in case you didn't notice).
+    {
+        let min = NetworkEconomics::with_default_values()
+            .neurons_fund_economics
+            .unwrap()
+            .neurons_fund_matched_funding_curve_coefficients
+            .unwrap()
+            .one_third_participation_milestone_xdr
+            .unwrap()
+            .human_readable;
+        let min = rust_decimal::Decimal::try_from(min.as_deref().unwrap()).unwrap();
+        assert!(rust_decimal::Decimal::from(too_small) < min, "{} vs. {}", too_small, min);
+    }
+
+    let neurons_fund_economics = Some(NeuronsFundEconomics {
+        neurons_fund_matched_funding_curve_coefficients: Some(
+            NeuronsFundMatchedFundingCurveCoefficients {
+                full_participation_milestone_xdr: Some(Decimal {
+                    human_readable: Some(format!("{}", too_small)),
+                }),
+                ..Default::default()
+            },
+        ),
+        ..Default::default()
+    });
+
+    let result = gov.make_proposal(
+        &NeuronId { id: 1 },
+        &controller,
+        &Proposal {
+            title: Some("Change start_reducing_voting_power_after_seconds to 42.".to_string()),
+            summary: "Best proposal of all time. Of all time.".to_string(),
+            url: "https://forum.dfinity.org".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                neurons_fund_economics,
+
+                // Do not touch other fields.
+                reject_cost_e8s: 0,
+                ..Default::default()
+            })),
+        },
+    )
+    .await;
+
+    // Step 3: Verify results.
+
+    // Proposal creation failed.
+    {
+        let err = result.unwrap_err();
+        assert_eq!(ErrorType::try_from(err.error_type), Ok(ErrorType::InvalidProposal));
+        let message = err.error_message.to_lowercase();
+        for key_word in ["one_third", "full_participation"] {
+            assert!(message.contains(key_word), "{} not in {:#?}", key_word, err);
+        }
+    }
+
+    // Step 3.1: No change.
+    assert_eq!(gov.heap_data.economics, Some(NetworkEconomics::with_default_values()));
+}
+
+#[tokio::test]
 async fn test_mint_monthly_node_provider_rewards() {
     // Step 1: prepare the canister state and the Governance minting account.
     let mut driver = fake::FakeDriver::default();
