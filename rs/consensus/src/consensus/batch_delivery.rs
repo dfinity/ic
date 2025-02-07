@@ -9,6 +9,7 @@ use crate::{
     },
     idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
+use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
@@ -135,8 +136,8 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        // TODO(CON-1419): Add vetKD keys to this map as well
-        let chain_key_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
             Ok(keys) => keys,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,
@@ -149,6 +150,23 @@ pub fn deliver_batches(
                 return Ok(last_delivered_batch_height);
             }
         };
+        chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
+
+        // Add vetKD keys to this map as well
+        // TODO(CON-1420: Deliver the ni_dkg_ids to the batch as well)
+        let (mut nidkg_subnet_public_keys, _ni_dkg_ids) =
+            match get_vetkey_public_keys(&block, pool, log) {
+                Ok((keys, ids)) => (keys, ids),
+                Err(e) => {
+                    warn!(
+                        every_n_seconds => 5,
+                        log,
+                        "Do not deliver height {:?}: {}", height, e
+                    );
+                    return Ok(last_delivered_batch_height);
+                }
+            };
+        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
 
         let mut batch_stats = BatchStats::new(height);
 
