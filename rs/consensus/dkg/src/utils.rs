@@ -8,8 +8,9 @@ use ic_types::{
     consensus::Block,
     crypto::{
         canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{
-            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript,
+        threshold_sig::{
+            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
+            ThresholdSigPublicKey,
         },
     },
     NodeId, RegistryVersion, SubnetId,
@@ -27,14 +28,17 @@ pub fn get_vetkey_public_keys(
     ),
     String,
 > {
+    // Get the latest summary block
     let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
         return Err(format!(
             "Failed to find dkg summary block for height {}",
             block.height
         ));
     };
-    let summary = summary.payload.as_ref().as_summary().dkg;
+    let summary = &summary.payload.as_ref().as_summary().dkg;
 
+    // Get all next transcripts
+    // If there is a current transcript, but no next transcript, use that one instead.
     let mut transcripts = summary
         .next_transcripts()
         .iter()
@@ -46,15 +50,28 @@ pub fn get_vetkey_public_keys(
         }
     }
 
-    let master_keys = transcripts
+    let (master_keys, dkg_ids) = transcripts
         .iter()
-        .map(|(tag, transcript)| todo!())
-        .collect::<BTreeMap<_, _>>();
-
-    let dkg_ids = transcripts
-        .iter()
-        .map(|(tag, transcript)| todo!())
-        .collect::<BTreeMap<_, _>>();
+        // Filter out transcripts that are not for VetKD
+        .filter_map(|(tag, &transcript)| match tag {
+            NiDkgTag::HighThresholdForKey(key_id) => Some((key_id, transcript)),
+            _ => None,
+        })
+        // Try to build the public key from the transcript
+        .filter_map(
+            |(key_id, transcript)| match ThresholdSigPublicKey::try_from(transcript) {
+                Err(err) => {
+                    warn!(
+                        logger,
+                        "Failed to get public key for key id {}: {:?}", key_id, err
+                    );
+                    return None;
+                }
+                Ok(pubkey) => Some((key_id, pubkey, transcript.dkg_id.clone())),
+            },
+        )
+        .map(|(key_id, pubkey, ni_dkg_id)| todo!())
+        .unzip();
 
     Ok((master_keys, dkg_ids))
 }
