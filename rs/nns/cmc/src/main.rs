@@ -3,19 +3,20 @@ use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{over, over_async, over_init, over_may_reject, stable};
-use dfn_protobuf::protobuf;
+use dfn_protobuf::{protobuf, ProtoBuf};
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
-use ic_cdk::{call, init, query, update};
+use ic_cdk::api::call::CallResult;
+use ic_cdk::api::call::{arg_data_raw, reply_raw, CallResult, ManualReply};
+use ic_cdk::{call, init, query, spawn, update};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
-use ic_cdk::api::call::CallResult;
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
@@ -1084,27 +1085,31 @@ fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
     });
 }
 
-/// Wrapper around over_async_may_reject that requires the future to
-/// be Send. Prevents us from holding a lock across .awaits.
-pub fn over_async_may_reject<In, Out, F, Witness, Fut>(w: Witness, f: F)
-where
-    In: FromWire + NewType,
-    Out: IntoWire + NewType,
-    F: FnOnce(In::Inner) -> Fut + 'static,
-    Fut: core::future::Future<Output = Result<Out::Inner, String>> + Send + 'static,
-    Witness: FnOnce(Out, In::Inner) -> (Out::Inner, In),
-{
-    dfn_core::over_async_may_reject(w, f)
-}
-
 #[export_name = "canister_update transaction_notification_pb"]
-fn transaction_notification_pb_() {
-    over_async_may_reject(protobuf, transaction_notification)
+fn transaction_notification_pb() {
+    let input = arg_data_raw();
+    spawn(async move {
+        ic_cdk::setup();
+        let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
+            .expect("Could not decode TransactionNotification")
+            .into_inner();
+
+        match do_transaction_notification(request).await {
+            Ok(response) => match ProtoBuf::new(response).into_bytes() {
+                Ok(buf) => reply_raw(&buf),
+                Err(e) => ic_cdk::trap(&format!("Error: {:?}", e)),
+            },
+            Err(e) => ic_cdk::trap(&format!("Error: {:?}", e)),
+        }
+    })
 }
 
-#[export_name = "canister_update transaction_notification"]
-fn transaction_notification_() {
-    over_async_may_reject(candid_one, transaction_notification)
+#[update(manual_reply = true, hidden = true)]
+async fn transaction_notification(tn: TransactionNotification) {
+    match do_transaction_notification(tn).await {
+        Ok(response) => ManualReply::<CyclesResponse>::one(response),
+        Err(e) => ManualReply::reject(&format!("Error: {:?}", e)),
+    };
 }
 
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
@@ -1878,7 +1883,9 @@ async fn issue_automatic_refund_if_memo_not_offerred(
 }
 
 /// Processes a legacy notification from the Ledger canister.
-async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesResponse, String> {
+async fn do_transaction_notification(
+    tn: TransactionNotification,
+) -> Result<CyclesResponse, String> {
     let caller = caller();
 
     print(format!(
