@@ -106,8 +106,9 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup = ic_consensus::make_registry_cup(&*registry, subnet_id, log)
-                    .expect("Couldn't create a registry CUP");
+                let registry_cup =
+                    ic_consensus::make_registry_cup(&*registry, subnet_id, None, log)
+                        .expect("Couldn't create a registry CUP");
 
                 info!(
                     log,

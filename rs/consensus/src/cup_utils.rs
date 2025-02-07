@@ -136,10 +136,11 @@ pub fn make_registry_cup_from_cup_contents(
 }
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the
-/// given subnet
+/// given subnet, unless it is below the local height.
 pub fn make_registry_cup(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
+    local_height: Option<Height>,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
     let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
@@ -155,13 +156,18 @@ pub fn make_registry_cup(
     };
 
     let cup_contents = versioned_record.value.expect("Missing CUP contents");
-    make_registry_cup_from_cup_contents(
-        registry,
-        subnet_id,
-        cup_contents,
-        versioned_record.version,
-        logger,
-    )
+
+    if local_height.is_some_and(|height| height.get() > cup_contents.height) {
+        None
+    } else {
+        make_registry_cup_from_cup_contents(
+            registry,
+            subnet_id,
+            cup_contents,
+            versioned_record.version,
+            logger,
+        )
+    }
 }
 
 fn bootstrap_idkg_summary_from_cup_contents(
@@ -233,6 +239,7 @@ mod tests {
 
     #[test]
     fn test_make_registry_cup() {
+        let height = Height::from(54321);
         let registry_client = MockRegistryClient::new(RegistryVersion::from(12345), |key, _| {
             use prost::Message;
             if key.starts_with("catch_up_package_contents_") {
@@ -246,7 +253,7 @@ mod tests {
                         initial_ni_dkg_transcript_high_threshold: Some(
                             dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
                         ),
-                        height: 54321,
+                        height: height.get(),
                         time: 1,
                         state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: None,
@@ -276,8 +283,9 @@ mod tests {
                 None
             }
         });
-        let result =
-            make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
+        let subnet_id = subnet_test_id(0);
+        let log = no_op_logger();
+        let result = make_registry_cup(&registry_client, subnet_id, None, &log).unwrap();
 
         assert_eq!(
             result.content.state_hash.get_ref(),
@@ -296,6 +304,22 @@ mod tests {
             &ReplicaVersion::try_from("TestID").unwrap()
         );
         assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+
+        // The registry CUP should be made if the local height is equal or lower than the registry's height
+        assert_eq!(
+            result,
+            make_registry_cup(&registry_client, subnet_id, Some(height), &log).unwrap()
+        );
+        assert_eq!(
+            result,
+            make_registry_cup(&registry_client, subnet_id, Some(height.decrement()), &log).unwrap()
+        );
+
+        // The registry CUP should not be made if the local height is greater than the registry's height
+        assert_eq!(
+            None,
+            make_registry_cup(&registry_client, subnet_id, Some(height.increment()), &log)
+        );
     }
 
     /// `RegistryClient` implementation that allows to provide a custom function

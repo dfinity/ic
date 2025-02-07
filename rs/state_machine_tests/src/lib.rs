@@ -1569,7 +1569,7 @@ impl StateMachine {
 
         // get the CUP from the registry
         let cup: CatchUpPackage =
-            make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
+            make_registry_cup(&registry_client, subnet_id, None, &replica_logger).unwrap();
         let cup_proto: pb::CatchUpPackage = cup.into();
         // now we can wrap the registry client into an Arc
         let registry_client = Arc::new(registry_client);
