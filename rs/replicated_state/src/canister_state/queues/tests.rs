@@ -2689,7 +2689,7 @@ fn test_reject_subnet_output_request() {
 
     // Reject an output request without having enqueued it first.
     queues
-        .reject_subnet_output_request(request, reject_context.clone(), &[])
+        .reject_subnet_output_request(request, reject_context.clone(), &BTreeSet::new())
         .unwrap();
 
     // There is now a reject response.

@@ -6,7 +6,7 @@ use ic_btc_replica_types::{
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
