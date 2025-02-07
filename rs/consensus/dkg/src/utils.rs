@@ -1,14 +1,63 @@
 use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
+use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::Block,
-    crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        threshold_sig::ni_dkg::{
+            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript,
+        },
+    },
     NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
+
+pub fn get_vetkey_public_keys(
+    block: &Block,
+    pool: &PoolReader<'_>,
+    logger: &ReplicaLogger,
+) -> Result<
+    (
+        BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        BTreeMap<MasterPublicKeyId, NiDkgId>,
+    ),
+    String,
+> {
+    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
+        return Err(format!(
+            "Failed to find dkg summary block for height {}",
+            block.height
+        ));
+    };
+    let summary = summary.payload.as_ref().as_summary().dkg;
+
+    let mut transcripts = summary
+        .next_transcripts()
+        .iter()
+        .collect::<BTreeMap<_, _>>();
+    for (tag, transcript) in summary.current_transcripts().iter() {
+        if !transcripts.contains_key(tag) {
+            warn!(logger, "Reusing current transcript for tag {:?}", tag);
+            transcripts.insert(tag, transcript);
+        }
+    }
+
+    let master_keys = transcripts
+        .iter()
+        .map(|(tag, transcript)| todo!())
+        .collect::<BTreeMap<_, _>>();
+
+    let dkg_ids = transcripts
+        .iter()
+        .map(|(tag, transcript)| todo!())
+        .collect::<BTreeMap<_, _>>();
+
+    Ok((master_keys, dkg_ids))
+}
 
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
