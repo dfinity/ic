@@ -391,7 +391,7 @@ impl TNet {
             }
         );
 
-        let _r = create_reservation(
+        create_reservation(
             vm_name.clone(),
             vm_name.clone(),
             self.unique_name.clone().expect("missing unique name"),
