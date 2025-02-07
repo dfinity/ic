@@ -295,7 +295,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
                 .output()
                 .expect("Failed to run NNS proposal text script")
         } else {
-            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "'()'")?;
+            let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
             Command::new(script)
                 .arg(canister)
                 .arg(&commit)
