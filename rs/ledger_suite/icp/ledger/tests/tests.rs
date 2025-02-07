@@ -107,6 +107,14 @@ fn encode_init_args(
         .unwrap()
 }
 
+fn encode_init_args_no_archiving(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerCanisterInitPayload {
+    let mut args = args.clone();
+    args.archive_options.trigger_threshold = 1_000_000_000;
+    encode_init_args(args)
+}
+
 fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
     LedgerCanisterUpgradePayload(LedgerCanisterPayload::Upgrade(None))
 }
@@ -1400,7 +1408,7 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_wasm_mainnet,
         ledger_wasm_low_instruction_limits(),
-        encode_init_args,
+        encode_init_args_no_archiving,
         vec![
             ("send_pb", send_pb_args),
             ("send_dfx", send_dfx_args),
