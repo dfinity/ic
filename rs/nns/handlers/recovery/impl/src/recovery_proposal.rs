@@ -50,6 +50,7 @@ pub fn submit_recovery_proposal(
                     RecoveryPayload::Halt => {
                         proposals.push(RecoveryProposal {
                             proposer: caller.0.clone(),
+                            // TODO: Use nanoseconds
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Halt,

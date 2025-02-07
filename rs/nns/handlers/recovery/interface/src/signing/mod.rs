@@ -1,4 +1,5 @@
 use ed25519::EdwardsCurve;
+use k256::Secp256k1;
 use p256::Prime256;
 
 use crate::RecoveryError;
@@ -6,6 +7,7 @@ use crate::RecoveryError;
 use super::Result;
 
 pub mod ed25519;
+pub mod k256;
 pub mod p256;
 
 pub trait Verifier {
@@ -24,6 +26,11 @@ pub fn verify_payload_naive(public_key_der: &[u8], payload: &[u8], signature: &[
     }
 
     match Prime256::from_public_key_der(public_key_der) {
+        Ok(verifier) => return verify_payload_naive_inner(verifier, payload, signature),
+        _ => {}
+    }
+
+    match Secp256k1::from_public_key_der(public_key_der) {
         Ok(verifier) => return verify_payload_naive_inner(verifier, payload, signature),
         _ => {}
     }

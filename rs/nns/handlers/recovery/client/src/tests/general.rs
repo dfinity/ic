@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use ed25519_dalek::SigningKey as EdSigningKey;
-use ic_agent::identity::{BasicIdentity, Prime256v1Identity};
+use ic_agent::identity::{BasicIdentity, Prime256v1Identity, Secp256k1Identity};
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload},
-    signing::{ed25519::EdwardsCurve, p256::Prime256, Verifier},
+    signing::{ed25519::EdwardsCurve, k256::Secp256k1, p256::Prime256, Verifier},
     Ballot,
 };
-use p256::{elliptic_curve::rand_core::OsRng, SecretKey};
+use k256::SecretKey as k256SecretKey;
+use p256::{elliptic_curve::rand_core::OsRng, SecretKey as p256SecretKey};
 
 use crate::{
     implementation::RecoveryCanisterImpl,
@@ -71,7 +72,7 @@ async fn can_place_proposals_edwards() {
 
 #[tokio::test]
 async fn can_place_proposals_prime256() {
-    let secret_key = SecretKey::random(&mut OsRng);
+    let secret_key = p256SecretKey::random(&mut OsRng);
     let signing_key = secret_key.clone().into();
 
     let signer = Prime256::new(signing_key);
@@ -82,6 +83,35 @@ async fn can_place_proposals_prime256() {
         init_pocket_ic(preconfigured_recovery_init_args(&node_operators_with_keys)).await;
 
     let identity = Prime256v1Identity::from_private_key(secret_key);
+
+    let client = RecoveryCanisterImpl::new(
+        get_ic_agent(Box::new(identity), pic.url().unwrap().as_str()).await,
+        canister,
+        Arc::new(signer),
+    );
+
+    let response = client
+        .submit_new_recovery_proposal(NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+        })
+        .await;
+
+    assert!(response.is_ok());
+}
+
+#[tokio::test]
+async fn can_place_proposals_secp256() {
+    let secret_key = k256SecretKey::random(&mut OsRng);
+    let signing_key = secret_key.clone().into();
+
+    let signer = Secp256k1::new(signing_key);
+
+    let node_operators_with_keys =
+        generate_node_operators(vec![signer.to_public_key_der().unwrap()]);
+    let (pic, canister) =
+        init_pocket_ic(preconfigured_recovery_init_args(&node_operators_with_keys)).await;
+
+    let identity = Secp256k1Identity::from_private_key(secret_key);
 
     let client = RecoveryCanisterImpl::new(
         get_ic_agent(Box::new(identity), pic.url().unwrap().as_str()).await,
@@ -131,7 +161,7 @@ async fn can_vote_on_proposals_edwards() {
 
 #[tokio::test]
 async fn can_vote_on_proposals_prime256() {
-    let secret_key = SecretKey::random(&mut OsRng);
+    let secret_key = p256SecretKey::random(&mut OsRng);
     let signing_key = secret_key.clone().into();
 
     let signer = Prime256::new(signing_key);
@@ -142,6 +172,39 @@ async fn can_vote_on_proposals_prime256() {
         init_pocket_ic(preconfigured_recovery_init_args(&node_operators_with_keys)).await;
 
     let identity = Prime256v1Identity::from_private_key(secret_key);
+
+    let client = RecoveryCanisterImpl::new(
+        get_ic_agent(Box::new(identity), pic.url().unwrap().as_str()).await,
+        canister,
+        Arc::new(signer),
+    );
+
+    client
+        .submit_new_recovery_proposal(NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+        })
+        .await
+        .unwrap();
+
+    let response = client.vote_on_latest_proposal(Ballot::Yes).await;
+    println!("{:?}", response);
+
+    assert!(response.is_ok());
+}
+
+#[tokio::test]
+async fn can_vote_on_proposals_secp256() {
+    let secret_key = k256SecretKey::random(&mut OsRng);
+    let signing_key = secret_key.clone().into();
+
+    let signer = Secp256k1::new(signing_key);
+
+    let node_operators_with_keys =
+        generate_node_operators(vec![signer.to_public_key_der().unwrap()]);
+    let (pic, canister) =
+        init_pocket_ic(preconfigured_recovery_init_args(&node_operators_with_keys)).await;
+
+    let identity = Secp256k1Identity::from_private_key(secret_key);
 
     let client = RecoveryCanisterImpl::new(
         get_ic_agent(Box::new(identity), pic.url().unwrap().as_str()).await,

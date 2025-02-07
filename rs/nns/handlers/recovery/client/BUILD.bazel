@@ -19,6 +19,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:p256",
     "@crate_index//:ed25519-dalek",
+    "@crate_index//:k256",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
