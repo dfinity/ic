@@ -21,7 +21,7 @@ use anyhow::Result;
 use canister_http::*;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;

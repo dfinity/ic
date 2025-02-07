@@ -41,15 +41,10 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          # unset honeycomb api key but use it latter for exporter
+          # unset honeycomb api key but use it later for exporter
           # TODO: remove exporter when users can use superset
-          KEY=${BUILDEVENT_APIKEY:-""}
-          unset BUILDEVENT_APIKEY
-
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
+          env -u BUILDEVENT_APIKEY ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
-
-          export BUILDEVENT_APIKEY="$KEY"
 
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures

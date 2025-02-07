@@ -28,6 +28,7 @@ use std::{
     sync::Once,
 };
 use tempfile::NamedTempFile;
+use upgrade_sns_controlled_canister::RefundAfterSnsControlledCanisterUpgradeArgs;
 pub mod deploy;
 pub mod health;
 pub mod init_config_file;
@@ -127,6 +128,8 @@ pub enum SubCommand {
     /// Uploads a given Wasm to a (newly deployed) store canister and submits a proposal to upgrade
     /// using that Wasm.
     UpgradeSnsControlledCanister(UpgradeSnsControlledCanisterArgs),
+    /// Attempts to refund the unused cycles after an SNS-controlled canister has been upgraded.
+    RefundAfterSnsControlledCanisterUpgrade(RefundAfterSnsControlledCanisterUpgradeArgs),
 }
 
 impl CliArgs {

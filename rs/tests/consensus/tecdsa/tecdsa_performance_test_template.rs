@@ -47,7 +47,7 @@ use ic_consensus_system_test_utils::{
 use ic_consensus_threshold_sig_system_test_utils::{
     run_chain_key_signature_test, ChainSignatureRequest,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
