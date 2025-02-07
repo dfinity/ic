@@ -50,7 +50,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_number_of_canisters: 100,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: None,
             };
 
@@ -87,9 +86,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
                 features: None,
-                ecdsa_config: None,
-                ecdsa_key_signing_enable: None,
-                ecdsa_key_signing_disable: None,
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -171,7 +167,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     max_number_of_canisters: 200,
                     ssh_readonly_access: vec!["pub_key_0".to_string()],
                     ssh_backup_access: vec!["pub_key_1".to_string()],
-                    ecdsa_config: None,
                     chain_key_config: None,
                 }
             );

@@ -1,6 +1,7 @@
 use super::*;
 use crate::canister_status::{
     CanisterStatusType, DefiniteCanisterSettingsFromManagementCanister, LogVisibility,
+    QueryStatsFromManagementCanister,
 };
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -119,6 +120,12 @@ async fn test_limit_outstanding_calls() {
         },
         status: CanisterStatusType::Running,
         reserved_cycles: zero.clone(),
+        query_stats: QueryStatsFromManagementCanister {
+            num_calls_total: zero.clone(),
+            num_instructions_total: zero.clone(),
+            request_payload_bytes_total: zero.clone(),
+            response_payload_bytes_total: zero.clone(),
+        },
     };
 
     // Step 2: Call code under test.
