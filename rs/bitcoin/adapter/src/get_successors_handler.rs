@@ -146,7 +146,7 @@ impl GetSuccessorsHandler {
             // There is also a chance that they are reachable from the anchor, just not through the cache.
             // Meaning that we still need to download some other blocks first. (hence we need to free the cache).
             let mut obsolete_blocks = request.processed_block_hashes;
-            if blocks.is_empty() {
+            if blocks.is_empty() && state.is_block_cache_full() {
                 obsolete_blocks.extend(state.get_cached_blocks())
             }
             (blocks, next, obsolete_blocks)
