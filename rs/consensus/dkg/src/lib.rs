@@ -33,7 +33,10 @@ pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
 
-pub use crate::payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
+pub use crate::{
+    payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
+    utils::get_vetkey_public_keys,
+};
 
 #[cfg(test)]
 mod test_utils;

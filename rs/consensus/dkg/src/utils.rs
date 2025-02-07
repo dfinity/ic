@@ -9,14 +9,16 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::{
-            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
+            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
             ThresholdSigPublicKey,
         },
+        AlgorithmId,
     },
     NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
 
+// TODO: Document
 pub fn get_vetkey_public_keys(
     block: &Block,
     pool: &PoolReader<'_>,
@@ -70,7 +72,19 @@ pub fn get_vetkey_public_keys(
                 Ok(pubkey) => Some((key_id, pubkey, transcript.dkg_id.clone())),
             },
         )
-        .map(|(key_id, pubkey, ni_dkg_id)| todo!())
+        // Unzip the data into the two maps that delivery needs
+        .map(|(key_id, pubkey, ni_dkg_id)| {
+            (
+                (
+                    key_id.clone().into(),
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        public_key: pubkey.into_bytes().to_vec(),
+                    },
+                ),
+                (key_id.clone().into(), ni_dkg_id),
+            )
+        })
         .unzip();
 
     Ok((master_keys, dkg_ids))
