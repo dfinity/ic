@@ -207,8 +207,7 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
                 .as_ref()
                 .unwrap_or(&DEFAULT_DECIMAL)
                 .human_readable
-                .as_ref()
-                .map(|human_readable: &String| -> &str { &*human_readable })
+                .as_deref()
                 .unwrap_or("");
 
             NativeDecimal::try_from(human_readable).map_err(|_ignore| human_readable)
