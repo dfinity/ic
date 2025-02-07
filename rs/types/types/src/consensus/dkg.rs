@@ -634,7 +634,7 @@ impl TryFrom<pb::DkgPayload> for Payload {
 mod tests {
 
     use super::*;
-    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use strum::EnumCount;
     use strum::IntoEnumIterator;
 
