@@ -17,7 +17,7 @@ http://dashboard.internetcomputer.org/proposals/135208
 
 ## Added
 
-* Added the `query_stats` field for `canister_status`/`get_sns_canisters_summary` methods.
+* Added the `query_stats` field for `get_root_canister_status` methods.
 * Fix a bug due to which SNS ledger logos were sometimes unset after changing unrelated
   SNS ledger metadata fields.
 
