@@ -2255,7 +2255,6 @@ impl StateManagerImpl {
         };
 
         let mut states = self.states.write();
-        eprintln!("remove_states_below_impl locked states.write");
 
         let number_of_checkpoints = states.states_metadata.len();
         let number_of_checkpoints_heights =
@@ -2406,7 +2405,6 @@ impl StateManagerImpl {
             eprintln!("remove_states_below_impl finish release_lock_and_persist_metadata");
         } else {
             drop(states);
-            eprintln!("remove_states_below_impl dropped states");
         }
 
         #[cfg(debug_assertions)]
@@ -2434,6 +2432,195 @@ impl StateManagerImpl {
                 .iter()
                 .all(|h| state_heights.contains(h)));
 
+            debug_assert!(state_heights.contains(&latest_state_height));
+            debug_assert!(state_heights.contains(&latest_certified_height));
+        }
+    }
+
+    /// Remove any inmemory state at height h with h < last_height_to_keep
+    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
+    /// any checkpoint at height h < last_checkpoint_to_keep
+    ///
+    /// Shared inner function of the public functions remove_states_below
+    /// and remove_inmemory_states_below
+    fn remove_inmemory_states_below_impl(
+        &self,
+        last_height_to_keep: Height,
+        last_checkpoint_to_keep: Height,
+        extra_inmemory_heights_to_keep: &BTreeSet<Height>,
+    ) {
+        debug_assert!(
+            last_height_to_keep >= last_checkpoint_to_keep,
+            "last_height_to_keep: {}, last_checkpoint_to_keep: {}",
+            last_height_to_keep,
+            last_checkpoint_to_keep
+        );
+        // In debug builds we store the latest_state_height here so
+        // that we can verify later that this height is retained.
+        #[cfg(debug_assertions)]
+        let latest_state_height = self.latest_state_height();
+        // Practically, Consensus does not ask state manager to keep states which are already removed.
+        // However, in debug builds, we filter `extra_inmemory_heights_to_keep` and store `existing_extra_inmemory_heights_to_keep`
+        // so that we can verify later that they are all retained.
+        #[cfg(debug_assertions)]
+        let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+        #[cfg(debug_assertions)]
+        let existing_extra_inmemory_heights_to_keep: Vec<Height> = extra_inmemory_heights_to_keep
+            .iter()
+            .filter(|h| state_heights.contains(h))
+            .copied()
+            .collect();
+        let heights_to_remove = std::ops::Range {
+            start: Height::new(1),
+            end: last_height_to_keep,
+        };
+
+        let mut states = self.states.write();
+
+        let number_of_checkpoints = states.states_metadata.len();
+
+        // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
+        let latest_certified_height = self.latest_certified_height();
+        let latest_manifest_height =
+            states
+                .states_metadata
+                .iter()
+                .rev()
+                .find_map(|(height, state_metadata)| {
+                    state_metadata.bundled_manifest.as_ref().map(|_| *height)
+                });
+        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
+        let checkpoint_heights_to_keep: BTreeSet<Height> = states
+            .states_metadata
+            .keys()
+            .copied()
+            .filter(|height| {
+                *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
+            })
+            .chain(latest_manifest_height)
+            .collect();
+        // In addition, we retain the latest certified state and any extra states specified to keep.
+        // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
+        // as decisions to retain a checkpoint or an in-memory state are made independently.
+        let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .collect::<BTreeSet<_>>();
+        let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
+            heights_to_remove.contains(&snapshot.height)
+                && !inmemory_heights_to_keep.contains(&snapshot.height)
+        });
+        states.snapshots = retained;
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+        let latest_height = states
+            .snapshots
+            .back()
+            .map_or(Self::INITIAL_STATE_HEIGHT, |s| s.height);
+        self.latest_state_height
+            .store(latest_height.get(), Ordering::Relaxed);
+        let min_resident_height: Option<Height> = states
+            .snapshots
+            .iter()
+            .map(|s| s.height)
+            .filter(|h| h.get() != 0)
+            .min();
+        if let Some(min_resident_height) = min_resident_height {
+            self.metrics
+                .min_resident_height
+                .set(min_resident_height.get() as i64);
+        }
+        self.metrics
+            .max_resident_height
+            .set(latest_height.get() as i64);
+        // Send removed snapshot to deallocator thread
+        self.deallocator_thread.send(Box::new(removed));
+        for (height, metadata) in states.states_metadata.range(heights_to_remove) {
+            if checkpoint_heights_to_keep.contains(height) {
+                continue;
+            }
+            if let Some(ref checkpoint_layout) = metadata.checkpoint_layout {
+                self.state_layout
+                    .remove_checkpoint_when_unused(checkpoint_layout.height());
+            }
+        }
+        let mut certifications_metadata = states
+            .certifications_metadata
+            .split_off(&last_height_to_keep);
+        for h in inmemory_heights_to_keep.iter() {
+            if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
+                certifications_metadata.insert(*h, cert_metadata);
+            }
+        }
+        std::mem::swap(
+            &mut certifications_metadata,
+            &mut states.certifications_metadata,
+        );
+        // Send removed certification metadata to deallocator thread.
+        self.deallocator_thread
+            .send(Box::new(certifications_metadata));
+        let latest_certified_height = states
+            .certifications_metadata
+            .iter()
+            .rev()
+            .find_map(|(h, m)| m.certification.as_ref().map(|_| *h))
+            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+        self.latest_certified_height
+            .store(latest_certified_height.get(), Ordering::Relaxed);
+        self.metrics
+            .latest_certified_height
+            .set(latest_certified_height.get() as i64);
+        let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
+        for h in checkpoint_heights_to_keep.iter() {
+            if let Some(metadata) = states.states_metadata.remove(h) {
+                metadata_to_keep.insert(*h, metadata);
+            }
+        }
+        std::mem::swap(&mut states.states_metadata, &mut metadata_to_keep);
+        if *ic_sys::IS_WSL {
+            // We send obsolete metadata to deallocation thread so that they are freed
+            // AFTER the in-memory states. We do this because in-memory states might
+            // have PageMap objects that are still referencing the checkpoints, and
+            // attempting to delete a file that is still open causes errors when
+            // running on WSL (even though it's a perfectly valid usage on UNIX systems).
+            //
+            // NOTE: we rely on deallocations happening sequentially, adding more
+            // deallocation threads might break the desired behavior.
+            //
+            // FIXME: Objects are not necessarily deleted in order: if the backlog is too
+            // large, we drop them synchronously.
+            self.deallocator_thread.send(Box::new(metadata_to_keep));
+        }
+
+        if number_of_checkpoints != states.states_metadata.len() {
+            // We removed a checkpoint, so states_metadata needs to be updated on disk
+            self.release_lock_and_persist_metadata(states);
+        } else {
+            drop(states);
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            let unfiltered_checkpoint_heights = self
+                .state_layout
+                .unfiltered_checkpoint_heights()
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        &self.log,
+                        "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                        err
+                    )
+                });
+            let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+            // All checkpoints to keep should exist on disk.
+            debug_assert!(checkpoint_heights_to_keep
+                .iter()
+                .all(|h| unfiltered_checkpoint_heights.contains(h)));
+            // If the in-memory states that Consensus ask to keep exist in the beginning, they should be all retained.
+            debug_assert!(existing_extra_inmemory_heights_to_keep
+                .iter()
+                .all(|h| state_heights.contains(h)));
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
         }
@@ -3276,7 +3463,6 @@ impl StateManager for StateManagerImpl {
     ///
     /// * We always keep the latest certified state
     fn remove_states_below(&self, requested_height: Height) {
-        eprintln!("Start remove_states_below({})", requested_height);
         let start = Instant::now();
         let _timer = self
             .metrics
@@ -3321,11 +3507,6 @@ impl StateManager for StateManagerImpl {
             oldest_height_to_keep,
             oldest_checkpoint_to_keep,
             &BTreeSet::new(),
-        );
-        eprintln!(
-            "StateManager::remove_states_below({}) took {:?} ms",
-            requested_height,
-            start.elapsed().as_millis()
         );
     }
 
@@ -3387,7 +3568,7 @@ impl StateManager for StateManagerImpl {
             }
         }
 
-        self.remove_states_below_impl(
+        self.remove_inmemory_states_below_impl(
             oldest_height_to_keep,
             Self::INITIAL_STATE_HEIGHT,
             extra_heights_to_keep,
