@@ -193,8 +193,9 @@ mod tests {
     use crate::idkg::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-            set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            fake_ecdsa_idkg_master_public_key_id,
+            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+            TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -234,7 +235,7 @@ mod tests {
     fn test_make_reshare_dealings_response() {
         let mut contexts = BTreeMap::new();
         let mut initial_dealings = BTreeMap::new();
-        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+        for (i, key_id) in fake_master_public_key_ids_for_all_idkg_algorithms()
             .iter()
             .enumerate()
         {
@@ -251,7 +252,7 @@ mod tests {
             );
         }
 
-        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+        for (i, key_id) in fake_master_public_key_ids_for_all_idkg_algorithms()
             .iter()
             .enumerate()
         {
@@ -289,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -306,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_good_path() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -328,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_incremental() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -359,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_should_not_accept_already_completed() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -380,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_update_completed_reshare_requests_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_ecdsa_update_completed_reshare_requests(key_id);
         }

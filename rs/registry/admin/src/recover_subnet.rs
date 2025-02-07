@@ -203,9 +203,6 @@ impl ProposeToUpdateRecoveryCupCmd {
             replacement_nodes,
             registry_store_uri,
             chain_key_config,
-
-            // Deprecated fields
-            ecdsa_config: None,
         }
     }
 }
@@ -242,7 +239,6 @@ mod tests {
                 .unwrap_or_else(|err| panic!("Invalid state hash: {}", err)),
             replacement_nodes: None,
             registry_store_uri: None,
-            ecdsa_config: None,
             chain_key_config: None,
         }
     }
