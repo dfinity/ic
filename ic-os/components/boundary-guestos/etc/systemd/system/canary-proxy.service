@@ -15,6 +15,7 @@ ExecStart=/opt/ic/bin/canary-proxy \
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
+StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target
