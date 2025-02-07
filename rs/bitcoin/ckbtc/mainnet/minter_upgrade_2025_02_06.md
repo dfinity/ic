@@ -20,7 +20,7 @@ Update the ckBTC minter to include the latest code changes, notably:
 
 * Remove empty ReceivedUtxos events from event log
 * Upgrade bitcoin crate
-* Place `update_balance` and `retrieve_btc` guards on user accounts to improve concurrency
+* Place `update_balance` and `retrieve_btc` guards on user ledger accounts to improve concurrency
 
 ## Upgrade args
 
