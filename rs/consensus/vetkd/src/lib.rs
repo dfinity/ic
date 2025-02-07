@@ -17,7 +17,9 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{MasterPublicKeyId, Payload, VetKdDeriveEncryptedKeyResult};
+use ic_management_canister_types_private::{
+    MasterPublicKeyId, Payload, VetKdDeriveEncryptedKeyResult,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
