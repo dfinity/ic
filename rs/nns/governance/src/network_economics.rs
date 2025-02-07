@@ -6,7 +6,7 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{Decimal as ProtoDecimal, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
-use rust_decimal::NativeDecimal;
+use rust_decimal::Decimal as NativeDecimal;
 use std::time::Duration;
 
 impl NetworkEconomics {
