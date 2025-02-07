@@ -16,8 +16,9 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
+    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -240,6 +241,8 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
+        clear_stable_blocks_data();
     }
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
