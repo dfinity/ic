@@ -240,7 +240,7 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
         ) {
-            if one_third_participation_milestone_xdr <= full_participation_milestone_xdr {
+            if one_third_participation_milestone_xdr >= full_participation_milestone_xdr {
                 defects.push(format!(
                     "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
                     one_third_participation_milestone_xdr,
