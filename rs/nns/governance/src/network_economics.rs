@@ -6,7 +6,7 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{Decimal as ProtoDecimal, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
-use rust_decimal::Decimal;
+use rust_decimal::NativeDecimal;
 use std::time::Duration;
 
 impl NetworkEconomics {
@@ -198,7 +198,7 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         }
 
         // All values must be valid (per their type).
-        fn try_convert_decimal(original: &Option<ProtoDecimal>) -> Result<Decimal, /* human_readable */ &str> {
+        fn try_convert_decimal(original: &Option<ProtoDecimal>) -> Result<NativeDecimal, /* human_readable */ &str> {
             const DEFAULT_DECIMAL: ProtoDecimal = ProtoDecimal { human_readable: None };
 
             let human_readable: &str = original
@@ -209,7 +209,7 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
                 .map(|human_readable: &String| -> &str { &*human_readable })
                 .unwrap_or("");
 
-            Decimal::try_from(human_readable).map_err(|_ignore| human_readable)
+            NativeDecimal::try_from(human_readable).map_err(|_ignore| human_readable)
         }
 
         let _contribution_threshold_xdr = try_convert_decimal(contribution_threshold_xdr)
@@ -277,10 +277,10 @@ impl VotingPowerEconomics {
     pub fn deciding_voting_power_adjustment_factor(
         &self,
         time_since_last_voting_power_refreshed: Duration,
-    ) -> Decimal {
+    ) -> NativeDecimal {
         self.deciding_voting_power_adjustment_factor_function()
             .apply(time_since_last_voting_power_refreshed.as_secs())
-            .clamp(Decimal::from(0), Decimal::from(1))
+            .clamp(NativeDecimal::from(0), NativeDecimal::from(1))
     }
 
     fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
