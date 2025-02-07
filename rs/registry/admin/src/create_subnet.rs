@@ -285,7 +285,6 @@ impl ProposeToCreateSubnetCmd {
             chain_key_config,
 
             // Deprecated fields.
-            ecdsa_config: None,
             ingress_bytes_per_block_soft_cap: Default::default(),
             gossip_max_artifact_streams_per_peer: Default::default(),
             gossip_max_chunk_wait_ms: Default::default(),

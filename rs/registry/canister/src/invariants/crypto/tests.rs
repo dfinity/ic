@@ -1020,11 +1020,11 @@ mod ecdsa_signing_subnet_lists {
                             max_queue_size: Default::default(),
                         })
                         .collect();
-                    let ecdsa_config = ChainKeyConfig {
+                    let chain_key_config = ChainKeyConfig {
                         key_configs,
                         ..Default::default()
                     };
-                    Some(ChainKeyConfigPb::from(ecdsa_config))
+                    Some(ChainKeyConfigPb::from(chain_key_config))
                 } else {
                     None
                 };

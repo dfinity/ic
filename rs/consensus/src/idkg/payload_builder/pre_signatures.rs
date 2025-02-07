@@ -539,7 +539,7 @@ pub(super) mod tests {
 
     use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
         fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
         fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
         set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
@@ -647,7 +647,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_make_new_pre_signatures_if_needed_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_make_new_pre_signatures_if_needed(key_id);
         }
@@ -1059,7 +1059,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_matched_pre_signatures_are_not_purged(key_id);
         }
@@ -1129,7 +1129,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
         }
@@ -1167,7 +1167,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
         }

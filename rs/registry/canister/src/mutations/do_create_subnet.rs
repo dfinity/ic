@@ -179,11 +179,6 @@ impl Registry {
     /// Ensures that a valid `subnet_id` is specified for `KeyConfigRequest`s.
     /// Ensures that master public keys (a) exist and (b) are present on the requested subnet.
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
-        assert_eq!(
-            payload.ecdsa_config, None,
-            "Field ecdsa_config is deprecated. Please use chain_key_config instead.",
-        );
-
         // Verify that all Nodes exist
         payload.node_ids.iter().for_each(|node_id| {
             match self.get(
@@ -284,9 +279,6 @@ pub struct CreateSubnetPayload {
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-
-    // Obsolete. Please use `chain_key_config` instead.
-    pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
 
@@ -524,7 +516,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                         .expect("Invalid InitialChainKeyConfig")
                 })
                 .map(ChainKeyConfigPb::from),
-            ecdsa_config: None, // obsolete (chain_key_config is used instead now)
         }
     }
 }
