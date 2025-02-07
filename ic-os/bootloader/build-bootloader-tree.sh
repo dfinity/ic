@@ -7,13 +7,12 @@
 set -exo pipefail
 
 cleanup() {
-  sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
-  rm -rf "${TMPDIR}"
-  sudo umount "${TMPFS}"
-  rm -rf "${TMPFS}"
+    sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
+    rm -rf "${TMPDIR}"
+    sudo umount "${TMPFS}"
+    rm -rf "${TMPFS}"
 }
 trap cleanup EXIT
-
 
 while getopts "o:" OPT; do
     case "${OPT}" in
@@ -51,7 +50,7 @@ sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
-IMAGE_ID=$(cut -d':' -f2 < "${TMPDIR}/iidfile")
+IMAGE_ID=$(cut -d':' -f2 <"${TMPDIR}/iidfile")
 
 CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
 
