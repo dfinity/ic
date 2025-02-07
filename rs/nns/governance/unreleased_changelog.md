@@ -20,6 +20,13 @@ neurons are found between this field and others, they will be deduplicated befor
 
 This new field works in the same way that the existing `neuron_ids` field works.
 
+### Migrating Active Neurons to Stable Memory
+
+In this release, we turn on the feature to migrate active neurons to stable memory:
+`migrate_active_neurons_to_stable_memory`. After the feature is turned on, a timer task will
+gradually move active neurons from the heap to stable memory. Clients should not expect any
+functional behavior changes, since no APIs rely on where the neurons are stored.
+
 ## Changed
 
 * The limit of the number of neurons is increased from 380K to 400K.
