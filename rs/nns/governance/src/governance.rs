@@ -4356,8 +4356,7 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(network_economics) => {
-                self.perform_manage_network_economics(network_economics);
-                self.set_proposal_execution_status(pid, Ok(()));
+                self.perform_manage_network_economics(pid, network_economics);
             }
             // A motion is not executed, just recorded for posterity.
             Action::Motion(_) => {
@@ -4522,20 +4521,56 @@ impl Governance {
         );
     }
 
-    fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
-        let Some(original_network_economics) = &self.heap_data.economics else {
-            // This wouldn't happen in production, but if it does, we try to do
-            // the best we can, because doing nothing seems more catastrophic.
+    fn perform_manage_network_economics(
+        &mut self,
+        proposal_id: u64,
+        proposed_network_economics: NetworkEconomics,
+    ) {
+        let mut main = || -> Result<(), GovernanceError> {
+            let default_network_economics = NetworkEconomics::with_default_values();
+
+            let original_network_economics = self
+                .heap_data
+                .economics
+                .as_ref()
+                // It does not seem possible for this to occur in practice, but
+                // if it did, it is probably better to make due, rather than
+                // give up.
+                .unwrap_or_else(|| {
+                    println!(
+                        "{}ERROR: No NetworkEconomics. Using default for the purposes \
+                         of executing a ManageNetworkEconomics proposal.",
+                        LOG_PREFIX
+                    );
+
+                    &default_network_economics
+                });
+
+            // Merge (and validate) proposed_network_economics into original.
+            let new_network_economics =
+                proposed_network_economics.inherit_from(original_network_economics);
+            new_network_economics
+                .validate()
+                .map_err(|defects| GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "The resulting NetworkEconomics is invalid for the following reason(s):\
+                         \n  - {}\n\nresulting NeworkEconomics:\n{:#?}",
+                        defects.join("\n  - "), new_network_economics,
+                    ),
+                ))?;
+
+            // Looks good. Therefore, commit.
             println!(
-                "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
+                "{}INFO: Committing new NetworkEconomics:\n{:#?}",
                 LOG_PREFIX, new_network_economics,
             );
             self.heap_data.economics = Some(new_network_economics);
-            return;
+            Ok(())
         };
 
-        self.heap_data.economics =
-            Some(new_network_economics.inherit_from(original_network_economics));
+        let result = main();
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
