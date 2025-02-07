@@ -17,7 +17,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{debug, error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
     CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method, StoredChunksReply,
@@ -1067,7 +1067,7 @@ impl CanisterManager {
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
 
-        info!(
+        debug!(
             self.log,
             "Canister {} created canister {} with {} initial balance on subnet {}.",
             sender,
