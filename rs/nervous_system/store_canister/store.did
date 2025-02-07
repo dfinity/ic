@@ -1,8 +1,8 @@
-type RefundResult = variant {
+type WithdrawResult = variant {
+  Ok : nat;
   Error : text;
-  RefundedCycles : nat;
 };
 
-service -> {
-  refund : (to : principal) -> (RefundResult);
+service: (authorized_principal : principal) -> {
+  withdraw_cycles : (to : principal) -> (WithdrawResult);
 }

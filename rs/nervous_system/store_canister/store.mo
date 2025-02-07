@@ -1,4 +1,6 @@
-actor {
+import Prim "mo:prim";
+
+actor class (authorized_principal : Principal) {
     type WithdrawArgs = {
         amount : Nat;
         to : Principal;
@@ -9,24 +11,18 @@ actor {
         #Err : Text;
     };
 
-    private let cycles_ledger = actor "aaaaa-aa" : actor {
-        WithdrawArgs
-        withdraw : WithdrawArgs -> async ({
-           
-        });
+    private let cyclesLedger = actor "um5iw-rqaaa-aaaaq-qaaba-cai" : actor {
+        withdraw : (WithdrawArgs) -> async (WithdrawResult);
     };
 
-    type RefundResult = {
-        #Error : Text;
-        #RefundedCycles : Nat;
-    };
-
-    public shared ({caller}) func refund(to : Principal) : async RefundResult {
-        assert Prim.isController(caller);
-        assert Prim.isController(to);
+    public shared ({caller}) func withdraw_cycles(to : Principal) : async WithdrawResult {
+        assert caller == authorized_principal;
 
         let balance = Prim.cyclesBalance();
 
-        balance
-    };
+        await cyclesLedger.withdraw({
+            amount = balance;
+            to = to;
+        })
+    }
 }

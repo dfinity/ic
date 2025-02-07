@@ -1,0 +1,15 @@
+load("@rules_motoko//motoko:defs.bzl", "motoko_library")
+load("//bazel:canisters.bzl", "motoko_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+motoko_library(
+    name = "base",
+    srcs = ["@motoko_base//:sources"],
+)
+
+motoko_canister(
+    name = "store",
+    entry = "store.mo",
+    deps = ["base"],
+)

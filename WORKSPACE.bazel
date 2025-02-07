@@ -156,6 +156,16 @@ crate_repositories()
 # Motoko support
 
 http_archive(
+    name = "motoko_base",
+    build_file_content = """
+filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
+      """,
+    sha256 = "0cab6b960d3ab463cfdf8180ed69e46d7d59d035b3ab95fb0abc55b267074acd",
+    strip_prefix = "motoko-base-moc-0.14.0/src",
+    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.14.0.zip"],
+)
+
+http_archive(
     name = "rules_motoko",
     sha256 = "f7cb0a906c8efe9d2ad8d27f0f6ac11f6409a771d74874f7e47d45959063dfe3",
     strip_prefix = "rules_motoko-0.2.1",

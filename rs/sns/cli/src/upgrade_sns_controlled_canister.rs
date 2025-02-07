@@ -142,6 +142,13 @@ impl TryFrom<PathBuf> for Wasm {
     }
 }
 
+fn store_wasm_path() -> PathBuf {
+    let store_wasm_path = std::env::var("STORE_CANISTER_WASM_PATH")
+        .expect("Please ensure that this Bazel test target correctly specifies env and data.");
+
+    PathBuf::from(store_wasm_path)
+}
+
 /// Attempts to validate `args` against the Candid service defined in `wasm`.
 ///
 /// If `args` is Some, returns the byte encoding of `args` in the Ok result.
@@ -215,6 +222,7 @@ pub async fn create_canister_next_to<C: CallCanisters>(
     agent: &C,
     next_to: CanisterId,
     controllers: Vec<PrincipalId>,
+    freezing_threshold: u128,
     cycles_amount: u128,
     name: &str,
 ) -> Result<CanisterId> {
@@ -230,6 +238,7 @@ pub async fn create_canister_next_to<C: CallCanisters>(
         subnet_selection,
         Some(CanisterSettingsArgs {
             controllers: Some(BoundedVec::new(controllers)),
+            freezing_threshold: Some(Nat::from(freezing_threshold)),
             ..Default::default()
         }),
     )
@@ -416,55 +425,30 @@ pub async fn exec<C: CallCanisters>(
         agent,
         target_canister_id,
         store_canister_controllers,
+        0,
         cycles_amount,
         "store",
     )
     .await
     .unwrap();
 
-    let wasm_module = {
-        let store_canister_impl = r#"
+    let store_wasm = Wasm::try_from(store_wasm_path()).unwrap();
+    let store_arg = validate_candid_arg_for_wasm(
+        &wasm,
+        Some(format!("(authorized_principal = {})", caller_principal)),
+    )
+    .unwrap();
 
-        (func $refund_cycles
-    ;; Define target canister ID: "um5iw-rqaaa-aaaaq-qaaba-cai"
-    (i32.const 0)  ;; Offset for the canister ID string
-    (i32.const 27) ;; Length of the canister ID string
-
-    ;; Define method name: "refund"
-    (i32.const 27)  ;; Offset for the method name
-    (i32.const 6)   ;; Length of the method name
-
-    ;; Set method type: oneway (no reply needed)
-    (i32.const 0)  ;; Unused payload (management canister API)
-    (i32.const 0)  ;; Unused payload length
-
-    ;; Call `call_new` to prepare an inter-canister call
-    (call $call_new)
-
-    ;; Define the argument: (record { amount = X, to = Y })
-    (i32.const 33) ;; Offset for argument data
-    (i32.const 12) ;; Length of argument data (adjust as needed)
-    (call $call_data_append)
-
-    ;; Perform the call
-    (call $call_perform)
-
-    ;; Reply to the caller
-    (call $msg_reply)
-)
-        "#;
-        wat::parse_str(store_canister_impl).unwrap()
-    };
     management_canister::install_code(
         agent,
         store_canister_id,
         Mode::Install,
-        wasm_module
-        None,
+        store_wasm.bytes().to_vec(),
+        store_arg,
         None,
     )
-        .await
-        .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    .await
+    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
     println!("✔️");
 
     print!("Uploading the chunks into the store canister ... ");
@@ -558,7 +542,7 @@ pub async fn exec<C: CallCanisters>(
 pub async fn refund<C: CallCanisters>(
     args: RefundAfterSnsControlledCanisterUpgradeArgs,
     agent: &C,
-) -> Result<(), UpgradeSnsControlledCanisterError<C::Error>> {
+) -> Result<Nat, UpgradeSnsControlledCanisterError<C::Error>> {
     let RefundAfterSnsControlledCanisterUpgradeArgs {
         target_canister_id,
         proposal_id,
@@ -666,7 +650,16 @@ pub async fn refund<C: CallCanisters>(
     };
     println!("✔️");
 
-    // TODO: Implement the actual reimbursement.
+    print!("Withdrawing remaining cycles from the store canister ...");
+    std::io::stdout().flush().unwrap();
+    let amount_refunded = withdraw_cycles(
+        agent,
+        CanisterId::unchecked_from_principal(store_canister_id),
+        caller_principal,
+    )
+    .await
+    .map_err(UpgradeSnsControlledCanisterError::Client)?;
+    println!("✔️");
 
     print!("Deleting the store canister {} ... ", store_canister_id);
     std::io::stdout().flush().unwrap();
@@ -684,7 +677,7 @@ pub async fn refund<C: CallCanisters>(
     .map_err(UpgradeSnsControlledCanisterError::Agent)?;
     println!("✔️");
 
-    Ok(())
+    Ok(amount_refunded)
 }
 
 pub type BlockIndex = Nat;
@@ -779,6 +772,38 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
         .call(CYCLES_LEDGER_CANISTER_ID, request)
         .await
         .expect("Cannot create canister")
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct WithdrawCyclesArg {
+    pub to: PrincipalId,
+}
+
+impl Request for WithdrawCyclesArg {
+    fn method(&self) -> &'static str {
+        "withdraw_cycles"
+    }
+
+    fn update(&self) -> bool {
+        true
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        Encode!(&self.to)
+    }
+
+    type Response = Result<Nat, String>;
+}
+
+pub async fn withdraw_cycles<C: CallCanisters>(
+    agent: &C,
+    store_canister_id: CanisterId,
+    to: PrincipalId,
+) -> Result<Nat, String> {
+    agent
+        .call(store_canister_id, WithdrawCyclesArg { to })
+        .await
+        .expect("Cannot withdraw cycles")
 }
 
 fn format_full_hash(hash: &[u8]) -> String {

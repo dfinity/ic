@@ -42,7 +42,6 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:url",
-    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -79,6 +78,12 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
     deps = DEPENDENCIES + [":cli"],
+    data = [
+        "//rs/nervous_system/store_canister:store",
+    ],
+    env = {
+        "STORE_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/store_canister:store)",
+    }
 )
 
 rust_test(
