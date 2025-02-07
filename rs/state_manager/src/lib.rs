@@ -2554,7 +2554,6 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
             )
         };
-
         let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
@@ -2619,7 +2618,6 @@ impl StateManagerImpl {
                 },
             );
         }
-
         let state = Arc::new(state);
         self.tip_channel
             .send(TipRequest::ValidateReplicatedStateAndFinalize {
@@ -2664,7 +2662,6 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-
             let tip_requests = vec![TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
                 pagemaptypes: PageMapType::list_all_including_snapshots(&state),

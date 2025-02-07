@@ -192,9 +192,9 @@ fn write_checkpoint(
         .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
-        log.clone(),
+        log,
         tip_handler,
-        state_layout.clone(),
+        state_layout,
         config.lsmt_config.clone(),
         metrics.clone(),
         MaliciousFlags::default(),
