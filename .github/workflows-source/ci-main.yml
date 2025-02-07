@@ -65,15 +65,6 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
-  bazel-upload: &bazel-upload
-    name: Upload bazel-targets
-    uses: actions/upload-artifact@v4
-    with:
-      name: bazel-targets
-      retention-days: 14
-      if-no-files-found: error
-      path: |
-        bazel-targets
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -155,7 +146,6 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - <<: *bazel-bep
-      - <<: *bazel-upload
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
@@ -307,6 +297,8 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # NOTE: this expects "build-ic" to have built the same set of targets
+    # as "bazel-test-all"
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
@@ -333,10 +325,6 @@ jobs:
             SETUPOS_FLAG: "true"
     steps:
       - <<: *checkout
-      - name: Download bazel-targets [bazel-test-all]
-        uses: actions/download-artifact@v4
-        with:
-          name: bazel-targets
       - name: Download build-ic.tar [build-ic]
         uses: actions/download-artifact@v4
         with:
