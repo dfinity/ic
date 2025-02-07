@@ -74,20 +74,16 @@ impl NetworkEconomics {
         }
 
         // Validate substructs (according to their type).
-        self.neurons_fund_economics
-            .as_ref()
-            .map(|neurons_fund_economics| {
-                if let Err(mut neurons_fund_defects) = neurons_fund_economics.validate() {
-                    defects.append(&mut neurons_fund_defects)
-                }
-            });
-        self.voting_power_economics
-            .as_ref()
-            .map(|voting_power_economics| {
-                if let Err(mut voting_power_defects) = voting_power_economics.validate() {
-                    defects.append(&mut voting_power_defects)
-                }
-            });
+        if let Some(neurons_fund_economics) = self.neurons_fund_economics.as_ref() {
+            if let Err(mut neurons_fund_defects) = neurons_fund_economics.validate() {
+                defects.append(&mut neurons_fund_defects)
+            }
+        };
+        if let Some(voting_power_economics) = self.voting_power_economics.as_ref() {
+            if let Err(mut voting_power_defects) = voting_power_economics.validate() {
+                defects.append(&mut voting_power_defects)
+            }
+        }
 
         if !defects.is_empty() {
             return Err(defects);
@@ -150,15 +146,16 @@ impl NeuronsFundEconomics {
         }
 
         // Validate substruct(s) (according to their type).
-        self.neurons_fund_matched_funding_curve_coefficients
+        if let Some(neurons_fund_matched_funding_curve_coefficients) = self
+            .neurons_fund_matched_funding_curve_coefficients
             .as_ref()
-            .map(|neurons_fund_matched_funding_curve_coefficients| {
-                if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
-                    neurons_fund_matched_funding_curve_coefficients.validate()
-                {
-                    defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
-                }
-            });
+        {
+            if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
+                neurons_fund_matched_funding_curve_coefficients.validate()
+            {
+                defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
+            }
+        }
 
         if !defects.is_empty() {
             return Err(defects);

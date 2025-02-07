@@ -4549,16 +4549,17 @@ impl Governance {
             // Merge (and validate) proposed_network_economics into original.
             let new_network_economics =
                 proposed_network_economics.inherit_from(original_network_economics);
-            new_network_economics
-                .validate()
-                .map_err(|defects| GovernanceError::new_with_message(
+            new_network_economics.validate().map_err(|defects| {
+                GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
                         "The resulting NetworkEconomics is invalid for the following reason(s):\
                          \n  - {}\n\nresulting NeworkEconomics:\n{:#?}",
-                        defects.join("\n  - "), new_network_economics,
+                        defects.join("\n  - "),
+                        new_network_economics,
                     ),
-                ))?;
+                )
+            })?;
 
             // Looks good. Therefore, commit.
             println!(
