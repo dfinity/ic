@@ -2580,7 +2580,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
-    use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;

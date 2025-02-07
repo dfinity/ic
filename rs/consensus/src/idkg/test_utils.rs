@@ -18,7 +18,7 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
