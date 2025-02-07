@@ -642,6 +642,8 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
             ("get_blocks", get_blocks_arg.clone()),
             ("get_transactions", get_blocks_arg),
             ("icrc3_get_blocks", icrc3_get_blocks_arg),
+            ("get_data_certificate", Encode!().unwrap()),
+            ("icrc3_get_tip_certificate", Encode!().unwrap()),
         ],
     );
 }
