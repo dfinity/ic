@@ -17,7 +17,7 @@ use std::ops::Range;
 // This is due to the fact that `HeapBlockData` doesn't store
 // block indices. Once `HeapBlockData` is removed, the getters
 // can be switched to global indices and `Blockchain` code can
-// be simplifies - it currently needs to offset indices passed
+// be simplified - it currently needs to offset indices passed
 // to getters.
 pub trait BlockData {
     // The `index` should take into account archived blocks.
