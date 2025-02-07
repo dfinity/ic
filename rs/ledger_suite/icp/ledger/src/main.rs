@@ -1332,18 +1332,18 @@ fn icrc1_total_supply_candid() {
 fn iter_blocks_() {
     panic_if_not_ready();
     over(protobuf, |IterBlocksArgs { start, length }| {
-        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
-        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks() as usize;
-        let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks as usize;
-        let start = archived_len + std::cmp::min(start, blocks_len);
-        let end = archived_len + std::cmp::min(start + length, blocks_len);
+        let length = std::cmp::min(length, max_blocks_per_request(&caller())) as u64;
+        let blocks_len = LEDGER.read().unwrap().blockchain.num_unarchived_blocks();
+        let start = std::cmp::min(start as u64, blocks_len);
+        let end = std::cmp::min(start + length, blocks_len);
+        let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
         let blocks = LEDGER
             .read()
             .unwrap()
             .blockchain
             .block_slice(std::ops::Range {
-                start: start as u64,
-                end: end as u64,
+                start: archived_len + start,
+                end: archived_len + end,
             });
         IterBlocksRes(blocks)
     });
