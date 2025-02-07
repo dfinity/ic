@@ -7,7 +7,7 @@ fn round_dp_4(dec: &Decimal) -> Decimal {
     dec.round_dp(4)
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Operation {
     Sum(Vec<Decimal>),
     Avg(Vec<Decimal>),
@@ -85,6 +85,7 @@ impl fmt::Display for Operation {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum LogEntry {
     RewardsXDRTotal(Decimal, Decimal),
     Execute {
@@ -238,13 +239,14 @@ impl fmt::Display for LogEntry {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum LogLevel {
     High,
     Mid,
     Low,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq, Debug)]
 pub struct RewardsLog {
     entries: Vec<(LogLevel, LogEntry)>,
 }

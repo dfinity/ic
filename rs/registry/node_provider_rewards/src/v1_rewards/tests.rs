@@ -1,5 +1,7 @@
 use super::*;
+use crate::v1_reward_period::NANOS_PER_DAY;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardRates;
+use ic_types::time::current_time;
 use num_traits::FromPrimitive;
 use std::collections::BTreeMap;
 
@@ -81,6 +83,47 @@ fn mocked_rewards_table() -> NodeRewardsTable {
     table.insert("A,B".to_string(), NodeRewardRates { rates: rates_outer });
 
     NodeRewardsTable { table }
+}
+
+#[test]
+fn test_invalid_subnet_metric_error() {
+    let yesterday_ts: u64 = current_time().as_nanos_since_unix_epoch() - NANOS_PER_DAY;
+    let from_ts: u64 = yesterday_ts - NANOS_PER_DAY;
+
+    let reward_period = RewardPeriod::new(from_ts.into(), yesterday_ts.into()).unwrap();
+    let subnet_id: SubnetId = PrincipalId::new_user_test_id(1).into();
+    let default_metrics = NodeMetrics::default();
+
+    let invalid_metric = NodeMetricsHistoryResponse {
+        timestamp_nanos: 500,
+        node_metrics: vec![default_metrics.clone()],
+    };
+
+    let mut subnet_metrics = HashMap::new();
+    subnet_metrics.insert(subnet_id, vec![invalid_metric.clone()]);
+
+    let rewards_table = NodeRewardsTable::default();
+    let rewardable_nodes: Vec<RewardableNode> = vec![RewardableNode {
+        node_id: default_metrics.node_id.into(),
+        node_provider_id: PrincipalId::new_user_test_id(1),
+        region: "region1".to_string(),
+        node_type: "type1".to_string(),
+    }];
+
+    let result = calculate_rewards(
+        reward_period.clone(),
+        &rewards_table,
+        subnet_metrics,
+        &rewardable_nodes,
+    );
+    assert_eq!(
+        result,
+        Err(RewardCalculationError::SubnetMetricsOutOfRange {
+            subnet_id,
+            timestamp: invalid_metric.timestamp_nanos,
+            reward_period
+        })
+    );
 }
 #[test]
 fn test_daily_node_metrics() {

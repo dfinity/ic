@@ -7,6 +7,8 @@ documentation.workspace = true
 edition.workspace = true
 
 [dependencies]
+chrono = { workspace = true }
+ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 ic-protobuf = { path = "../../protobuf" }
 itertools = { workspace = true }
@@ -14,3 +16,7 @@ num-traits = { workspace = true }
 rust_decimal = "1.36.0"
 rust_decimal_macros = "1.36.0"
 ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-cdk = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }

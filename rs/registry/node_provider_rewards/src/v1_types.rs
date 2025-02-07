@@ -72,12 +72,13 @@ impl DailyNodeMetrics {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: HashMap<PrincipalId, Rewards>,
     pub rewards_log_per_node_provider: HashMap<PrincipalId, RewardsLog>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rewards {
     pub xdr_permyriad: u64,
     pub xdr_permyriad_no_reduction: u64,
