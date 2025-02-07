@@ -2,7 +2,7 @@ use candid::{candid_method, CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{api::caller, over, over_async, over_init, over_may_reject, stable};
+use dfn_core::{over, over_async, over_init, over_may_reject, stable};
 use dfn_protobuf::protobuf;
 use environment::Environment;
 use exchange_rate_canister::{
