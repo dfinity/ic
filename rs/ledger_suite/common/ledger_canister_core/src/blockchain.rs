@@ -19,8 +19,9 @@ pub trait BlockData {
     fn add_block(&mut self, index: u64, block: EncodedBlock);
     fn get_blocks(&self, range: Range<u64>) -> Vec<EncodedBlock>;
     fn get_block(&self, index: u64) -> Option<EncodedBlock>;
-    fn remove_blocks(&mut self, num_blocks: u64);
-    // The number of blocks stored in the ledger, i.e. excluding archived blocks.
+    /// Removes `num_blocks` with the smallest index.
+    fn remove_oldest_blocks(&mut self, num_blocks: u64);
+    /// The number of blocks stored in the ledger, i.e. excluding archived blocks.
     fn len(&self) -> u64;
     fn is_empty(&self) -> bool;
     fn last(&self) -> Option<EncodedBlock>;
@@ -121,12 +122,12 @@ where
         self.num_archived_blocks..self.num_archived_blocks + self.blocks.len()
     }
 
-    /// Returns the slice of blocks stored locally.
+    /// Returns the blocks stored locally.
     ///
     /// # Panic
     ///
     /// This function panics if the specified range is not a subset of locally available blocks.
-    pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
+    pub fn get_blocks(&self, local_blocks: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         use crate::range_utils::is_subrange;
 
         assert!(
@@ -151,7 +152,7 @@ where
                 len
             );
         }
-        self.blocks.remove_blocks(len as u64);
+        self.blocks.remove_oldest_blocks(len as u64);
         self.num_archived_blocks += len as u64;
     }
 
@@ -163,7 +164,7 @@ where
         // Upon reaching the `trigger_threshold` we will archive
         // `num_blocks_to_archive`. For example, when set to (2000, 1000)
         // archiving will trigger when there are 2000 blocks in the ledger and
-        // the 1000 oldest bocks will be archived, leaving the remaining 1000
+        // the 1000 oldest blocks will be archived, leaving the remaining 1000
         // blocks in place.
         let num_blocks_before = self.num_unarchived_blocks();
 

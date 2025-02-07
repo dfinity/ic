@@ -16,8 +16,9 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
+    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -240,6 +241,8 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
+        clear_stable_blocks_data();
     }
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
@@ -814,6 +817,7 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 #[query]
 #[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
+    panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
@@ -932,6 +936,7 @@ fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
 #[query]
 #[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
+    panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];

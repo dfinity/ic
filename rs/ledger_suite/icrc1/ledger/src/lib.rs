@@ -981,7 +981,7 @@ impl Ledger {
 
         let local_blocks: Vec<B> = self
             .blockchain
-            .block_slice(local_blocks_range)
+            .get_blocks(local_blocks_range)
             .iter()
             .map(decode)
             .collect();
@@ -1158,6 +1158,12 @@ pub fn clear_stable_balances_data() {
     });
 }
 
+pub fn clear_stable_blocks_data() {
+    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+        blocks.clear_new();
+    });
+}
+
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
@@ -1324,7 +1330,7 @@ impl BlockData for StableBlockData {
         BLOCKS_MEMORY.with_borrow(|blocks| blocks.get(&index).map(EncodedBlock::from_vec))
     }
 
-    fn remove_blocks(&mut self, num_blocks: u64) {
+    fn remove_oldest_blocks(&mut self, num_blocks: u64) {
         BLOCKS_MEMORY.with_borrow_mut(|blocks| {
             let mut removed = 0;
             while !blocks.is_empty() && removed < num_blocks {

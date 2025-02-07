@@ -1341,10 +1341,7 @@ fn iter_blocks_() {
             .read()
             .unwrap()
             .blockchain
-            .block_slice(std::ops::Range {
-                start: archived_len + start,
-                end: archived_len + end,
-            });
+            .get_blocks(archived_len + start..archived_len + end);
         IterBlocksRes(blocks)
     });
 }
@@ -1383,7 +1380,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 
     let blocks: Vec<CandidBlock> = ledger
         .blockchain
-        .block_slice(local_blocks.clone())
+        .get_blocks(local_blocks.clone())
         .iter()
         .map(|enc_block| {
             CandidBlock::from(
@@ -1602,7 +1599,7 @@ fn query_encoded_blocks(
     let local_blocks =
         range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
 
-    let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
+    let blocks = ledger.blockchain.get_blocks(local_blocks.clone()).to_vec();
 
     let archived_blocks = locations
         .archived_blocks
