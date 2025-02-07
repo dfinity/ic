@@ -253,7 +253,7 @@ fn encode_init_args_no_archiving(
 ) -> LedgerArgument {
     match encode_init_args(args) {
         LedgerArgument::Init(mut init_args) => {
-            init_args.archive_options.trigger_threshold = 1_000_000_000_000;
+            init_args.archive_options.trigger_threshold = 1_000_000_000;
             LedgerArgument::Init(init_args)
         }
         LedgerArgument::Upgrade(_) => {
