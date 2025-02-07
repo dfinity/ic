@@ -102,8 +102,11 @@ pub(crate) fn ensure_gh_setup() -> Result<()> {
     if !output.status.success() {
         bail!("gh is not authenticated. Try running `gh auth login`")
     }
+    let stdout = String::from_utf8(output.stdout)?;
     let stderr = String::from_utf8(output.stderr)?;
-    if !stderr.contains("Logged in to github.com") {
+
+    let logged_in_message = "Logged in to github.com";
+    if !stderr.contains(logged_in_message) && !stdout.contains(logged_in_message) {
         bail!("gh is not logged in. Try running `gh auth login`")
     }
 
