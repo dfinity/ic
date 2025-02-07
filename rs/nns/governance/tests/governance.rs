@@ -2002,14 +2002,14 @@ async fn test_manage_network_economics_revalidate_at_execution_time() {
 
     // Step 2.2: Vote in the two proposals. This unleashes the chaos: the first
     // one works, but that causes the second one to fail.
-    for proposal_id in [&set_min_proposal_id, &set_max_proposal_id] {
+    for proposal_id in [set_min_proposal_id, set_max_proposal_id] {
         let result = gov
             .manage_neuron(
                 &controller,
                 &ManageNeuron {
                     command: Some(manage_neuron::Command::RegisterVote(
                         manage_neuron::RegisterVote {
-                            proposal: Some(proposal_id.clone()),
+                            proposal: Some(proposal_id),
                             vote: Vote::Yes as i32,
                         },
                     )),
