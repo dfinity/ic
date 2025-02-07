@@ -117,7 +117,10 @@ fn main() -> Result<()> {
         }
     };
 
+    ensure_coreutils_setup()?;
+    ensure_code_setup()?;
     ensure_gh_setup()?;
+
     print_header();
 
     match args.step {
@@ -341,28 +344,28 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         sns_proposal_text_paths.push(file_path);
     }
 
-    for proposal_text_path in &nns_proposal_text_paths {
-        println!(
-            "Viewing NNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view NNS proposal with vscode");
-    }
+    loop {
+        let proposals_with_todos = nns_proposal_text_paths
+            .iter()
+            .chain(sns_proposal_text_paths.iter())
+            .filter(|path| path.exists())
+            .filter(|path| std::fs::read_to_string(path).unwrap().contains("TODO"))
+            .collect::<Vec<_>>();
 
-    for proposal_text_path in &sns_proposal_text_paths {
-        println!(
-            "Viewing SNS proposal with vscode: {}",
-            proposal_text_path.display()
-        );
-        let mut cmd = Command::new("code");
-        cmd.arg(proposal_text_path);
-        cmd.current_dir(&ic);
-        cmd.output()
-            .expect("Failed to view SNS proposal with vscode");
+        if proposals_with_todos.is_empty() {
+            break;
+        }
+
+        println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
+        for proposal_text_path in &proposals_with_todos {
+            println!("  - {}", proposal_text_path.display());
+            let mut cmd = Command::new("code");
+            cmd.arg(proposal_text_path);
+            cmd.current_dir(&ic);
+            cmd.output()
+                .expect("Failed to view NNS proposal with vscode");
+        }
+        press_enter_to_continue()?;
     }
 
     use std::fmt::Write;
