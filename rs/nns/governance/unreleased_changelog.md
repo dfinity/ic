@@ -14,6 +14,8 @@ on the process that this file is part of, see
 * ManageNetworkEconomics proposals can now modify deep fields one at a time.
   Previously, this was only possible for top level fields.
 
+* Added validation for ManageNetworkEconomics proposals.
+
 ## Deprecated
 
 ## Removed
