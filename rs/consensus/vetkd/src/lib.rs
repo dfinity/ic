@@ -2,9 +2,8 @@
 //! payloads relevant to VetKd.
 
 use crate::utils::{
-    get_nidkg_chain_key_config_if_enabled, get_valid_keys_and_expiry, group_shares_by_callback_id,
-    invalid_artifact, invalid_artifact_err, parse_past_payload_ids, validation_failed,
-    validation_failed_err,
+    group_shares_by_callback_id, invalid_artifact, invalid_artifact_err, parse_past_payload_ids,
+    validation_failed, validation_failed_err,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, registry_version_at_height};
 use ic_error_types::RejectCode;
@@ -20,7 +19,8 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::{MasterPublicKeyId, Payload, VetKdDeriveEncryptedKeyResult};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_features::ChainKeyConfig;
+use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     ReplicatedState,
@@ -37,6 +37,7 @@ use ic_types::{
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
@@ -79,12 +80,13 @@ impl VetKdPayloadBuilderImpl {
         }
     }
 
-    /// Return the chain key config if there is at least one enabled VetKD key
-    /// at the registry version corresponding to the given block height.
-    fn get_chain_key_config_if_enabled(
+    /// Return the set of enabled VetKD key IDs and request expiry time according to
+    /// the chain key config at the registry version corresponding to the given block height.
+    fn get_enabled_keys_and_expiry(
         &self,
         height: Height,
-    ) -> Result<ChainKeyConfig, PayloadValidationError> {
+        context_time: Time,
+    ) -> Result<(BTreeSet<MasterPublicKeyId>, Option<Time>), PayloadValidationError> {
         let Some(registry_version) = registry_version_at_height(self.cache.as_ref(), height) else {
             warn!(
                 self.log,
@@ -95,11 +97,10 @@ impl VetKdPayloadBuilderImpl {
             ));
         };
 
-        let config = match get_nidkg_chain_key_config_if_enabled(
-            self.subnet_id,
-            registry_version,
-            self.registry.as_ref(),
-        ) {
+        let config = match self
+            .registry
+            .get_chain_key_config(self.subnet_id, registry_version)
+        {
             Ok(Some(config)) => config,
             Ok(None) => {
                 return Err(invalid_artifact(InvalidVetKdPayloadReason::Disabled));
@@ -115,21 +116,47 @@ impl VetKdPayloadBuilderImpl {
             }
         };
 
-        Ok(config)
+        let request_expiry_time = config
+            .signature_request_timeout_ns
+            .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
+
+        let enabled_subnets = self
+            .registry
+            .get_chain_key_signing_subnets(registry_version)
+            .map_err(|err| {
+                warn!(
+                    self.log,
+                    "VetKdPayloadBuilder: Registry unavailable: {:?}", err
+                );
+                validation_failed(VetKdPayloadValidationFailure::RegistryClientError(err))
+            })?
+            .unwrap_or_default();
+
+        let key_ids = config
+            .key_configs
+            .into_iter()
+            .map(|key_config| key_config.key_id)
+            // Skip keys that don't need to run NIDKG protocol
+            .filter(|key_id| !key_id.is_idkg_key())
+            // Skip keys that are disabled
+            .filter(|key_id| {
+                enabled_subnets
+                    .get(key_id)
+                    .is_some_and(|subnets| subnets.contains(&self.subnet_id))
+            })
+            .collect();
+
+        Ok((key_ids, request_expiry_time))
     }
 
     fn get_vetkd_payload_impl(
         &self,
-        context_time: Time,
-        config: ChainKeyConfig,
+        request_expiry_time: Option<Time>,
+        valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> VetKdPayload {
-        let mut candidates = BTreeMap::new();
-
-        let (valid_keys, request_expiry_time) = get_valid_keys_and_expiry(config, context_time);
-
         let grouped_shares = {
             let pool_access = self.pool.read().unwrap();
             group_shares_by_callback_id(
@@ -142,6 +169,7 @@ impl VetKdPayloadBuilderImpl {
         };
 
         // Iterate over all outstanding VetKD requests
+        let mut candidates = BTreeMap::new();
         let mut accumulated_size = 0;
         for (callback_id, context) in state.signature_request_contexts() {
             if !context.is_vetkd() {
@@ -195,13 +223,11 @@ impl VetKdPayloadBuilderImpl {
     fn validate_vetkd_payload_impl(
         &self,
         payload: VetKdPayload,
-        context_time: Time,
-        config: ChainKeyConfig,
+        request_expiry_time: Option<Time>,
+        valid_keys: BTreeSet<MasterPublicKeyId>,
         state: &ReplicatedState,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), PayloadValidationError> {
-        let (valid_keys, request_expiry_time) = get_valid_keys_and_expiry(config, context_time);
-
         let contexts = state.signature_request_contexts();
 
         for (id, agreement) in payload.vetkd_agreements {
@@ -214,7 +240,7 @@ impl VetKdPayloadBuilderImpl {
             };
 
             if !context.is_vetkd() {
-                return invalid_artifact_err(InvalidVetKdPayloadReason::IDkgContext(id));
+                return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
             }
 
             let expected_reject = reject_if_invalid(&valid_keys, context, request_expiry_time);
@@ -256,7 +282,7 @@ impl VetKdPayloadBuilderImpl {
         data: Vec<u8>,
     ) -> Result<(), PayloadValidationError> {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-            return invalid_artifact_err(InvalidVetKdPayloadReason::IDkgContext(id));
+            return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
         let _args = VetKdArgs {
             derivation_path: ExtendedDerivationPath {
@@ -290,7 +316,9 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        let Ok(config) = self.get_chain_key_config_if_enabled(height) else {
+        let Ok((valid_keys, request_expiry_time)) =
+            self.get_enabled_keys_and_expiry(height, context.time)
+        else {
             return vec![];
         };
 
@@ -300,8 +328,8 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
 
         let delivered_ids = parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_vetkd_payload_impl(
-            context.time,
-            config,
+            request_expiry_time,
+            valid_keys,
             state.get_ref(),
             delivered_ids,
             max_size,
@@ -321,7 +349,8 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
             return Ok(());
         }
 
-        let config = self.get_chain_key_config_if_enabled(height)?;
+        let (valid_keys, request_expiry_time) =
+            self.get_enabled_keys_and_expiry(height, context.validation_context.time)?;
 
         let state = match self
             .state_reader
@@ -339,8 +368,8 @@ impl BatchPayloadBuilder for VetKdPayloadBuilderImpl {
 
         self.validate_vetkd_payload_impl(
             payload,
-            context.validation_context.time,
-            config,
+            request_expiry_time,
+            valid_keys,
             state.get_ref(),
             delivered_ids,
         )
