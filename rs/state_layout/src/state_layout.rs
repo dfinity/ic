@@ -774,6 +774,10 @@ impl StateLayout {
     }
 
     fn remove_checkpoint_ref(&self, height: Height) {
+        eprintln!(
+            "Dropping a checkpoint layout remove_checkpoint_ref: {}",
+            height
+        );
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
             None => {
@@ -784,16 +788,22 @@ impl StateLayout {
                 debug_assert!(data.checkpoint_layout_counter >= 1);
                 data.checkpoint_layout_counter -= 1;
                 if data.checkpoint_layout_counter != 0 {
+                    eprintln!(
+                        "checkpoint_layout_counter > 0: {}",
+                        data.checkpoint_layout_counter
+                    );
                     return;
                 }
                 let mark_deleted = data.mark_deleted;
                 let _removed = checkpoint_ref_registry.remove(&height);
                 debug_assert!(_removed.is_some());
                 if !mark_deleted {
+                    eprintln!("checkpoint_layout_counter is 0, but not mark_deleted");
                     return;
                 }
             }
         }
+        eprintln!("checkpoint_layout_counter is 0 and mark_deleted. remove_checkpoint_ref calls remove_checkpoint_if_not_the_latest");
         self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry);
     }
 
@@ -802,8 +812,17 @@ impl StateLayout {
     pub fn remove_checkpoint_when_unused(&self, height: Height) {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
-            Some(ref mut data) => data.mark_deleted = true,
-            None => self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry),
+            Some(ref mut data) => {
+                eprintln!("remove_checkpoint_when_unused mark ref_data as deleted: {}", height);
+                data.mark_deleted = true;
+            }
+            None => {
+                eprintln!(
+                    "checkpoint_ref_registry no entry. remove_checkpoint_when_unused just calls remove_checkpoint_if_not_the_latest: {}",
+                    height
+                );
+                self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry);
+            }
         }
     }
 
@@ -894,6 +913,7 @@ impl StateLayout {
         height: Height,
         drop_after_rename: T,
     ) -> Result<(), LayoutError> {
+        eprintln!("start remove_checkpoint: {}", height);
         let start = Instant::now();
         let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);

@@ -1222,8 +1222,9 @@ fn handle_compute_manifest_request(
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
         metadata.bundled_manifest = Some(bundled_manifest);
     }
-
+    eprintln!("handle_compute_manifest_request start release_lock_and_persist_metadata");
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+    eprintln!("handle_compute_manifest_request finish release_lock_and_persist_metadata");
 }
 
 #[cfg(test)]

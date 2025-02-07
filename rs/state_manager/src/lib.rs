@@ -1369,7 +1369,9 @@ fn release_lock_and_persist_metadata(
     let states_metadata = states.states_metadata.clone();
     // This should be the only place where we lock this mutex
     let _guard = persist_metadata_lock.lock().unwrap();
+    eprintln!("release_lock_and_persist_metadata locked persist_metadata_lock");
     drop(states);
+    eprintln!("release_lock_and_persist_metadata dropped states");
     persist_metadata_or_die(log, metrics, state_layout, &states_metadata);
 }
 
@@ -1393,8 +1395,9 @@ fn persist_metadata_or_die(
     use std::io::Write;
 
     let started_at = Instant::now();
+    info!(log, "Start persist_metadata_or_die");
     let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
-
+    let heights = metadata.keys().cloned().collect::<Vec<_>>();
     ic_sys::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
         let mut pb_meta = pb::StatesMetadata::default();
         for (h, m) in metadata.iter() {
@@ -1422,7 +1425,10 @@ fn persist_metadata_or_die(
         .with_label_values(&["persist_meta"])
         .observe(elapsed.as_secs_f64());
 
-    debug!(log, "Persisted states metadata in {:?}", elapsed);
+    info!(
+        log,
+        "Finish persist_metadata_or_die for heights {:?} in {:?}", heights, elapsed
+    );
 }
 
 struct CreateCheckpointResult {
@@ -2190,8 +2196,9 @@ impl StateManagerImpl {
             self.metrics.max_resident_height.set(latest_height as i64);
             self.metrics.state_size.set(state_size_bytes);
         }
-
+        eprintln!("on_synced_checkpoint start release_lock_and_persist_metadata");
         self.release_lock_and_persist_metadata(states);
+        eprintln!("on_synced_checkpoint finish release_lock_and_persist_metadata");
 
         // Note: it might feel tempting to also set states.tip here.  We should
         // NOT do that.  We might be applying blocks and fetching states in
@@ -2248,8 +2255,11 @@ impl StateManagerImpl {
         };
 
         let mut states = self.states.write();
+        eprintln!("remove_states_below_impl locked states.write");
 
         let number_of_checkpoints = states.states_metadata.len();
+        let number_of_checkpoints_heights =
+            states.states_metadata.keys().cloned().collect::<Vec<_>>();
 
         // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
         let latest_certified_height = self.latest_certified_height();
@@ -2386,9 +2396,17 @@ impl StateManagerImpl {
 
         if number_of_checkpoints != states.states_metadata.len() {
             // We removed a checkpoint, so states_metadata needs to be updated on disk
+            eprintln!(
+                "remove_states_below_impl states_metadata before:{:?}, now :{:?}",
+                number_of_checkpoints_heights,
+                states.states_metadata.keys().cloned().collect::<Vec<_>>()
+            );
+            eprintln!("remove_states_below_impl start release_lock_and_persist_metadata");
             self.release_lock_and_persist_metadata(states);
+            eprintln!("remove_states_below_impl finish release_lock_and_persist_metadata");
         } else {
             drop(states);
+            eprintln!("remove_states_below_impl dropped states");
         }
 
         #[cfg(debug_assertions)]
@@ -3023,6 +3041,7 @@ impl StateManager for StateManagerImpl {
         root_hash: CryptoHashOfState,
         cup_interval_length: Height,
     ) {
+        eprintln!("Start fetch_state at height {}", height);
         let _timer = self
             .metrics
             .api_call_duration
@@ -3257,6 +3276,8 @@ impl StateManager for StateManagerImpl {
     ///
     /// * We always keep the latest certified state
     fn remove_states_below(&self, requested_height: Height) {
+        eprintln!("Start remove_states_below({})", requested_height);
+        let start = Instant::now();
         let _timer = self
             .metrics
             .api_call_duration
@@ -3300,6 +3321,11 @@ impl StateManager for StateManagerImpl {
             oldest_height_to_keep,
             oldest_checkpoint_to_keep,
             &BTreeSet::new(),
+        );
+        eprintln!(
+            "StateManager::remove_states_below({}) took {:?} ms",
+            requested_height,
+            start.elapsed().as_millis()
         );
     }
 
@@ -3528,7 +3554,9 @@ impl StateManager for StateManagerImpl {
         states.tip = next_tip;
 
         if scope == CertificationScope::Full {
+            eprintln!("commit_and_certify start release_lock_and_persist_metadata");
             self.release_lock_and_persist_metadata(states);
+            eprintln!("commit_and_certify finish release_lock_and_persist_metadata");
         }
         for req in follow_up_tip_requests {
             self.tip_channel
@@ -3578,9 +3606,9 @@ impl StateManager for StateManagerImpl {
         }
 
         states.states_metadata.split_off(&height);
-
+        eprintln!("report_diverged_checkpoint start release_lock_and_persist_metadata");
         self.release_lock_and_persist_metadata(states);
-
+        eprintln!("report_diverged_checkpoint finish release_lock_and_persist_metadata");
         fatal!(self.log, "Replica diverged at height {}", height)
     }
 }
