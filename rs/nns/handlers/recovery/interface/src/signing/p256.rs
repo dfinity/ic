@@ -10,7 +10,7 @@ pub struct Prime256 {
 }
 
 impl super::Signer for Prime256 {
-    fn sign_payload(&self, payload: &Vec<u8>) -> crate::Result<Vec<u8>> {
+    fn sign_payload(&self, payload: &[u8]) -> crate::Result<Vec<u8>> {
         let mut signing_key = self
             .signing_key
             .clone()
@@ -40,7 +40,7 @@ impl TryInto<Vec<u8>> for Prime256 {
 }
 
 impl super::Verifier for Prime256 {
-    fn verify_payload(&self, payload: &Vec<u8>, signature: &Vec<u8>) -> crate::Result<()> {
+    fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
         let signature = Signature::from_slice(&signature)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 

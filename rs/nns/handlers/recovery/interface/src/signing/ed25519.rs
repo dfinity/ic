@@ -9,7 +9,7 @@ pub struct EdwardsCurve {
 }
 
 impl super::Signer for EdwardsCurve {
-    fn sign_payload(&self, payload: &Vec<u8>) -> crate::Result<Vec<u8>> {
+    fn sign_payload(&self, payload: &[u8]) -> crate::Result<Vec<u8>> {
         let signing_key = self
             .signing_key
             .clone()
@@ -34,7 +34,7 @@ impl TryInto<Vec<u8>> for EdwardsCurve {
 }
 
 impl super::Verifier for EdwardsCurve {
-    fn verify_payload(&self, payload: &Vec<u8>, signature: &Vec<u8>) -> crate::Result<()> {
+    fn verify_payload(&self, payload: &[u8], signature: &[u8]) -> crate::Result<()> {
         let signature = Signature::from_slice(&signature)
             .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
 

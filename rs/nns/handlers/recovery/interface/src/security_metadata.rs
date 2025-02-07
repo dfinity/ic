@@ -1,9 +1,8 @@
+use crate::signing::verify_payload_naive;
+
 use super::*;
 use candid::{CandidType, Principal};
-use p256::ecdsa::signature::Verifier;
-use p256::pkcs8::DecodePublicKey;
 use serde::Deserialize;
-use spki::{Document, SubjectPublicKeyInfoRef};
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 /// Wrapper struct containing information regarding integrity.
@@ -44,7 +43,7 @@ impl SecurityMetadata {
 
     /// Verifies the signature authenticity of security metadata.
     pub fn verify_signature(&self) -> Result<()> {
-        valid_signature(&self.pub_key_der, &self.signature, &self.payload)
+        verify_payload_naive(&self.pub_key_der, &self.signature, &self.payload)
     }
 
     /// Verifies if the passed principal is derived from a given public key (also known as
@@ -59,40 +58,5 @@ impl SecurityMetadata {
                 loaded_principal, principal,
             ))),
         }
-    }
-}
-
-fn valid_signature(pub_key_der: &Vec<u8>, signature: &[u8], payload: &Vec<u8>) -> Result<()> {
-    let document: Document = Document::from_public_key_der(&pub_key_der)
-        .map_err(|e| RecoveryError::InvalidPubKey(e.to_string()))?;
-
-    let info: SubjectPublicKeyInfoRef = document.decode_msg().unwrap();
-
-    let maybe_ed25519: Result<ed25519_dalek::VerifyingKey> = info
-        .clone()
-        .try_into()
-        .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()));
-    let maybe_p256: Result<p256::ecdsa::VerifyingKey> = info
-        .try_into()
-        .map_err(|e: spki::Error| RecoveryError::InvalidPubKey(e.to_string()));
-
-    match (maybe_ed25519, maybe_p256) {
-        (Ok(k), _) => {
-            let signature = ed25519_dalek::Signature::from_slice(signature)
-                .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
-
-            k.verify_strict(&payload, &signature)
-                .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
-        }
-        (_, Ok(k)) => {
-            let signature = p256::ecdsa::Signature::from_slice(&signature)
-                .map_err(|e| RecoveryError::InvalidSignatureFormat(e.to_string()))?;
-
-            k.verify(payload, &signature)
-                .map_err(|e| RecoveryError::InvalidSignature(e.to_string()))
-        }
-        _ => Err(RecoveryError::InvalidPubKey(
-            "Unknown der format".to_string(),
-        )),
     }
 }
