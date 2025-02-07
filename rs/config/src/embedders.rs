@@ -173,7 +173,7 @@ impl Default for FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::Enabled,
+            best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(enabled_subnets),
             canister_backtrace: FlagStatus::Enabled,
         }
     }
