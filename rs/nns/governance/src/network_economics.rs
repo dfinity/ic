@@ -132,17 +132,15 @@ impl NeuronsFundEconomics {
         }
 
         // Validate that max >= min.
-        match (maximum_icp_xdr_rate, minimum_icp_xdr_rate) {
-            (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) => {
-                if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
-                    defects.push(format!(
-                        "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
-                        maximum_icp_xdr_rate, minimum_icp_xdr_rate,
-                    ));
-                }
+        if let (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) =
+            (maximum_icp_xdr_rate, minimum_icp_xdr_rate)
+        {
+            if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
+                defects.push(format!(
+                    "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
+                    maximum_icp_xdr_rate, minimum_icp_xdr_rate,
+                ));
             }
-            // Other cases are moot.
-            _ => (),
         }
 
         // Validate substruct(s) (according to their type).
@@ -239,21 +237,17 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
             });
 
         // later milestones must be > earlier ones
-        match (
+        if let (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) = (
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
         ) {
-            (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) => {
-                if one_third_participation_milestone_xdr <= full_participation_milestone_xdr {
-                    defects.push(format!(
-                        "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
-                        one_third_participation_milestone_xdr,
-                        full_participation_milestone_xdr,
-                    ));
-                }
+            if one_third_participation_milestone_xdr <= full_participation_milestone_xdr {
+                defects.push(format!(
+                    "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
+                    one_third_participation_milestone_xdr,
+                    full_participation_milestone_xdr,
+                ));
             }
-            // Other cases are moot.
-            _ => (),
         }
 
         if !defects.is_empty() {
