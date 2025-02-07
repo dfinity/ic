@@ -20,7 +20,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{debug, error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
     CanisterStatusResultV2, CanisterStatusType, ChunkHash, InstallChunkedCodeArgs,
@@ -1418,7 +1418,7 @@ impl CanisterManager {
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
 
-        info!(
+        debug!(
             self.log,
             "Canister {} created canister {} with {} initial balance on subnet {}.",
             sender,
