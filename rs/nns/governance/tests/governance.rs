@@ -32,7 +32,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
-use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image};
+use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Image, Percentage};
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -1894,6 +1894,189 @@ async fn test_manage_network_economics_reject_invalid() {
 
     // Step 3.1: No change.
     assert_eq!(gov.heap_data.economics, Some(NetworkEconomics::with_default_values()));
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_revalidate_at_execution_time() {
+    // Step 1: Prepare the world. We only really need a super basic Governance.
+
+    let controller = PrincipalId::new_user_test_id(519_572_717);
+    let proposer_neuron = Neuron {
+        id: Some(NeuronId { id: 1 }),
+        controller: Some(controller),
+        account: vec![42_u8; 32],
+        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        cached_neuron_stake_e8s: 100 * E8,
+        ..Default::default()
+    };
+    let decider_neuron = Neuron {
+        id: Some(NeuronId { id: 2 }),
+        account: vec![57_u8; 32], // This is purely for realism.
+        cached_neuron_stake_e8s: E8 * E8, // So voting power.
+        ..proposer_neuron.clone()
+    };
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            neurons: btreemap! {
+                1 => proposer_neuron,
+                2 => decider_neuron,
+            },
+            wait_for_quiet_threshold_seconds: 1,
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call the code under test. Make a ManageNetworkEconomics proposal.
+    // It gets executed immediately, since there is only one neuron.
+
+    // Step 2.1: Make two proposals. Both look good at the outset, but they are
+    // incompatible with one another.
+
+    // These values are individually compatible with the original parameters.
+    // This means that proposals can be made, but when the second one is
+    // executed, it fails.
+    let new_min = 500_000;
+    let new_max = 499_000;
+
+    let set_min_proposal_id = gov.make_proposal(
+        &NeuronId { id: 1 },
+        &controller,
+        &Proposal {
+            title: Some("Change start_reducing_voting_power_after_seconds to 42.".to_string()),
+            summary: "Best proposal of all time. Of all time.".to_string(),
+            url: "https://forum.dfinity.org".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                neurons_fund_economics: Some(NeuronsFundEconomics {
+                    minimum_icp_xdr_rate: Some(Percentage { basis_points: Some(new_min) }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        },
+    )
+    .await
+    .unwrap();
+
+    let set_max_proposal_id = gov.make_proposal(
+        &NeuronId { id: 1 },
+        &controller,
+        &Proposal {
+            title: Some("Change start_reducing_voting_power_after_seconds to 42.".to_string()),
+            summary: "Best proposal of all time. Of all time.".to_string(),
+            url: "https://forum.dfinity.org".to_string(),
+            action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
+                neurons_fund_economics: Some(NeuronsFundEconomics {
+                    maximum_icp_xdr_rate: Some(Percentage { basis_points: Some(new_max) }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        },
+    )
+    .await
+    .unwrap();
+
+    // Step 2.2: Vote in the two proposals. This unleashes the chaos: the first
+    // one works, but that causes the second one to fail.
+    for proposal_id in [&set_min_proposal_id, &set_max_proposal_id] {
+        let result = gov.manage_neuron(
+            &controller,
+            &ManageNeuron {
+                command: Some(manage_neuron::Command::RegisterVote(manage_neuron::RegisterVote {
+                    proposal: Some(proposal_id.clone()),
+                    vote: Vote::Yes as i32,
+                })),
+                neuron_id_or_subaccount: Some(manage_neuron::NeuronIdOrSubaccount::NeuronId(NeuronId { id: 2 })),
+                id: None,
+            }
+        )
+        .await;
+        // Assert vote successful.
+        match result.command {
+            Some(manage_neuron_response::Command::RegisterVote(_)) => (),
+            _ => panic!("{:#?}", result),
+        }
+    }
+
+    // Step 3: Verify results.
+
+    // Step 3.1: Only the frist proposal executed successfully.
+
+    let set_min_proposal = gov.get_proposal_info(
+        &controller,
+        set_min_proposal_id,
+    )
+    .unwrap();
+    assert_ne!(
+        set_min_proposal.decided_timestamp_seconds,
+        0,
+        "{:#?}",
+        set_min_proposal,
+    );
+    assert_ne!(
+        set_min_proposal.executed_timestamp_seconds,
+        0,
+        "{:#?}",
+        set_min_proposal,
+    );
+    assert_eq!(
+        set_min_proposal.failure_reason,
+        None,
+        "{:#?}",
+        set_min_proposal,
+    );
+
+    let set_max_proposal = gov.get_proposal_info(
+        &controller,
+        set_max_proposal_id,
+    )
+    .unwrap();
+    // Yes, it was decided, like the other proposal.
+    assert_ne!(
+        set_max_proposal.decided_timestamp_seconds,
+        0,
+        "{:#?}",
+        set_max_proposal,
+    );
+    // Sadly, though, it failed, unlike the other proposal.
+    assert_ne!(
+        set_max_proposal.failed_timestamp_seconds,
+        0,
+        "{:#?}",
+        set_max_proposal,
+    );
+    // And the reason it failed was...
+    let failure_reason = set_max_proposal.failure_reason.clone().unwrap();
+    assert_eq!(
+        ErrorType::try_from(failure_reason.error_type),
+        Ok(ErrorType::InvalidProposal),
+        "{:#?}",
+        set_max_proposal,
+    );
+    let message = failure_reason.error_message.to_lowercase();
+    for key_word in ["resulting", "economics", "valid", "reason", "maximum_icp_xdr_rate", "greater", "minimum_icp_xdr_rate"] {
+        assert!(
+            message.contains(key_word),
+            "{:#?}",
+            set_max_proposal,
+        );
+    }
+
+    // Step 3.2: Only the first proposal that got executed had an effect, not
+    // the second one.
+    let mut expected_network_economics = NetworkEconomics::with_default_values();
+    expected_network_economics
+        .neurons_fund_economics
+        .as_mut()
+        .unwrap()
+        .minimum_icp_xdr_rate = Some(Percentage { basis_points: Some(new_min) });
+    assert_eq!(gov.heap_data.economics, Some(expected_network_economics));
 }
 
 #[tokio::test]
