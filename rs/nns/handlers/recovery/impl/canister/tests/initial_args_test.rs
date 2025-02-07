@@ -1,10 +1,8 @@
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_handler_recovery_interface::{
-    recovery::{NewRecoveryProposal, RecoveryPayload},
-    recovery_init::RecoveryInitArgs,
-    simple_node_operator_record::SimpleNodeOperatorRecord,
-    Ballot, VerifyIntegirty,
+    recovery::RecoveryPayload, recovery_init::RecoveryInitArgs,
+    simple_node_operator_record::SimpleNodeOperatorRecord, Ballot, VerifyIntegirty,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
 
@@ -67,15 +65,8 @@ fn initial_operators_should_be_able_to_place_proposals_and_vote() {
 
     let (pic, canister) = setup_and_install_canister(initial_arg);
 
-    let first = initial_node_operators.first().unwrap();
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let first = initial_node_operators.first_mut().unwrap();
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 

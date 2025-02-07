@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload},
+    security_metadata::SecurityMetadata,
     Ballot,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -22,14 +23,7 @@ fn place_first_proposal() {
     let mut node_operators = extract_node_operators_from_init_data(&args);
     let first = node_operators.iter_mut().next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 
@@ -64,23 +58,19 @@ fn place_non_halt_first_proposal() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let first = node_operators.iter().next().unwrap();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let first = node_operators.iter_mut().next().unwrap();
 
     let invalid_first_proposals = vec![
-        NewRecoveryProposal {
-            payload: RecoveryPayload::DoRecovery {
-                height: 123,
-                state_hash: "123".to_string(),
-            },
+        RecoveryPayload::DoRecovery {
+            height: 123,
+            state_hash: "123".to_string(),
         },
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Unhalt,
-        },
+        RecoveryPayload::Unhalt,
     ];
 
     for proposal in invalid_first_proposals {
-        let response = submit_proposal(&pic, canister, first.principal.0.clone(), proposal);
+        let response = submit_proposal(&pic, canister, first, proposal);
 
         assert!(response.is_err());
         let pending_proposals = get_pending(&pic, canister);
@@ -97,25 +87,11 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_ok());
 
     // Try resubmitting
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_err());
 
     // To achieve byzantine majority in default setup 7
@@ -130,14 +106,7 @@ fn replace_first_proposal_after_voting_no_on_the_first() {
     }
 
     // Resubmit
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_ok());
 }
 
@@ -146,14 +115,21 @@ fn disallow_unknown_node_operators_from_placing_proposals() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        Principal::anonymous(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = pic
+        .update_call(
+            canister.into(),
+            Principal::anonymous(),
+            "submit_new_recovery_proposal",
+            candid::encode_one(NewRecoveryProposal {
+                payload: RecoveryPayload::Halt,
+                security_metadata: SecurityMetadata::empty(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let response: Result<(), String> = candid::decode_one(&response).unwrap();
+
     assert!(response.is_err());
 }
 
@@ -162,7 +138,7 @@ fn disallow_node_operators_from_different_subnets_from_placing_proposals() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let non_system_subnet = args
+    let mut non_system_subnet = args
         .subnet_node_operators
         .iter()
         .find_map(|subnet| match !subnet.subnet_type.eq(&SubnetType::System) {
@@ -170,16 +146,9 @@ fn disallow_node_operators_from_different_subnets_from_placing_proposals() {
             true => Some(subnet.node_operators.clone()),
         })
         .unwrap();
-    let first_node_operator = non_system_subnet.iter().next().unwrap();
+    let first_node_operator = non_system_subnet.iter_mut().next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first_node_operator.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first_node_operator, RecoveryPayload::Halt);
     assert!(response.is_err());
 }
 
@@ -193,14 +162,7 @@ fn place_and_execute_first_proposal(
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_ok());
 
     // To achieve byzantine majority in default setup 7
@@ -224,27 +186,20 @@ fn place_second_proposal_recovery() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_first_proposal(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     let pending_proposals = get_pending(&pic, canister);
     let latest_proposal = pending_proposals.last().unwrap();
-    assert!(latest_proposal.payload.eq(&new_proposal.payload));
+    assert!(latest_proposal.payload.eq(&new_proposal));
     assert!(
         !latest_proposal.is_byzantine_majority_no() && !latest_proposal.is_byzantine_majority_yes()
     )
@@ -255,24 +210,17 @@ fn place_second_proposal_unhalt() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_first_proposal(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     let pending_proposals = get_pending(&pic, canister);
     let latest_proposal = pending_proposals.last().unwrap();
-    assert!(latest_proposal.payload.eq(&new_proposal.payload));
+    assert!(latest_proposal.payload.eq(&new_proposal));
     assert!(
         !latest_proposal.is_byzantine_majority_no() && !latest_proposal.is_byzantine_majority_yes()
     )
@@ -283,18 +231,11 @@ fn place_second_proposal_halt() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_first_proposal(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_err());
 }
 
@@ -308,18 +249,11 @@ fn second_proposal_vote_against() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 votes to vote against this
@@ -344,18 +278,11 @@ fn second_proposal_recovery_vote_in() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 to vote in
@@ -382,18 +309,11 @@ fn second_proposal_recovery_vote_in_and_resubmit() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 to vote in
@@ -404,18 +324,11 @@ fn second_proposal_recovery_vote_in_and_resubmit() {
         assert!(response.is_ok())
     }
 
-    let resubmitted_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 456,
-            state_hash: "456".to_string(),
-        },
+    let resubmitted_proposal = RecoveryPayload::DoRecovery {
+        height: 456,
+        state_hash: "456".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        resubmitted_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, resubmitted_proposal.clone());
     assert!(response.is_ok());
 
     let pending = get_pending(&pic, canister);
@@ -423,7 +336,7 @@ fn second_proposal_recovery_vote_in_and_resubmit() {
 
     let last = pending.last().unwrap();
     assert!(!last.is_byzantine_majority_no() && !last.is_byzantine_majority_yes());
-    assert_eq!(last.payload, resubmitted_proposal.payload)
+    assert_eq!(last.payload, resubmitted_proposal)
 }
 
 #[test]
@@ -436,15 +349,8 @@ fn second_proposal_unhalt_vote_in() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 to vote it in
@@ -465,35 +371,21 @@ fn submit_first_two_second_not_voted_in_place_third() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_first_proposal(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // Place the third
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_err());
 }
 
@@ -507,18 +399,11 @@ fn place_and_execute_second_proposal(
     let first = node_operators_iterator.next().unwrap();
 
     // Place the second
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::DoRecovery {
-            height: 123,
-            state_hash: "123".to_string(),
-        },
+    let new_proposal = RecoveryPayload::DoRecovery {
+        height: 123,
+        state_hash: "123".to_string(),
     };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 to vote it in
@@ -540,20 +425,13 @@ fn place_and_execute_second_proposal(
 fn submit_first_two_second_voted_in_place_third() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_second_proposal(&mut args);
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
     // Place the third
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     let pending = get_pending(&pic, canister);
@@ -571,15 +449,8 @@ fn vote_against_last_proposal() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the third
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 votes to vote against this proposal
@@ -607,15 +478,8 @@ fn vote_in_last_proposal() {
     let first = node_operators_iterator.next().unwrap();
 
     // Place the third
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     // We need 7 votes to vote for this proposal
@@ -637,20 +501,13 @@ fn vote_in_last_proposal() {
 fn place_any_proposal_after_there_are_three() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = place_and_execute_second_proposal(&mut args);
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
     // Place the third
-    let new_proposal = NewRecoveryProposal {
-        payload: RecoveryPayload::Unhalt,
-    };
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        new_proposal.clone(),
-    );
+    let new_proposal = RecoveryPayload::Unhalt;
+    let response = submit_proposal(&pic, canister, first, new_proposal.clone());
     assert!(response.is_ok());
 
     let payloads = vec![
@@ -662,12 +519,7 @@ fn place_any_proposal_after_there_are_three() {
         RecoveryPayload::Unhalt,
     ];
     for payload in payloads {
-        let response = submit_proposal(
-            &pic,
-            canister,
-            first.principal.0.clone(),
-            NewRecoveryProposal { payload },
-        );
+        let response = submit_proposal(&pic, canister, first, payload);
 
         assert!(response.is_err())
     }

@@ -41,6 +41,9 @@ pub fn submit_recovery_proposal(
         return Err(message);
     }
 
+    // Verify metadata integrity
+    new_proposal.security_metadata.validate_metadata(&caller.0).map_err(|e| e.to_string())?;
+
     PROPOSALS.with_borrow_mut(|proposals| {
         match proposals.len() {
             0 => {
@@ -54,6 +57,7 @@ pub fn submit_recovery_proposal(
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Halt,
+                            security_metadata: new_proposal.security_metadata.clone()
                         });
                     }
                     _ => {
@@ -91,6 +95,7 @@ pub fn submit_recovery_proposal(
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: new_proposal.payload.clone(),
+                            security_metadata: new_proposal.security_metadata.clone()
                         });
                     }
                     _ => {
@@ -127,6 +132,7 @@ pub fn submit_recovery_proposal(
                             submission_timestamp_seconds: now_seconds(),
                             node_operator_ballots: initialize_ballots(&node_operators_in_nns),
                             payload: RecoveryPayload::Unhalt,
+                            security_metadata: new_proposal.security_metadata.clone()
                         });
                     },
                     // Allow submitting a new recovery proposal only if the current one
@@ -136,7 +142,13 @@ pub fn submit_recovery_proposal(
                         // Remove the second_one
                         proposals.pop();
 
-                        proposals.push(RecoveryProposal { proposer: caller.0.clone(), submission_timestamp_seconds: now_seconds(), node_operator_ballots: initialize_ballots(&node_operators_in_nns), payload: new_proposal.payload.clone() });
+                        proposals.push(RecoveryProposal {
+                            proposer: caller.0.clone(),
+                            submission_timestamp_seconds: now_seconds(), 
+                            security_metadata: new_proposal.security_metadata.clone(),
+                            node_operator_ballots: initialize_ballots(&node_operators_in_nns),
+                            payload: new_proposal.payload.clone() 
+                        });
                     },
                     (_, _) => {
                         let message = format!(

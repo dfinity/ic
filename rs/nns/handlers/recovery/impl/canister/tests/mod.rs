@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf, time::SystemTime};
 
 use candid::Principal;
 use ed25519_dalek::{ed25519::signature::SignerMut, pkcs8::EncodePublicKey, SigningKey};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
-    recovery::{NewRecoveryProposal, RecoveryProposal, VoteOnRecoveryProposal},
+    recovery::{NewRecoveryProposal, RecoveryPayload, RecoveryProposal, VoteOnRecoveryProposal},
     recovery_init::RecoveryInitArgs,
     security_metadata::SecurityMetadata,
     simple_node_operator_record::SimpleNodeOperatorRecord,
@@ -302,14 +302,33 @@ fn init_pocket_ic(arguments: &mut RegistryPreparationArguments) -> (PocketIc, Pr
 fn submit_proposal(
     pic: &PocketIc,
     canister: Principal,
-    sender: Principal,
-    arg: NewRecoveryProposal,
+    sender: &mut NodeOperatorArg,
+    arg: RecoveryPayload,
 ) -> Result<(), String> {
+    // Duration from epoch
+    let from_epoch = SystemTime::UNIX_EPOCH.elapsed().unwrap();
+    let seconds_payload = from_epoch.as_secs().to_le_bytes().to_vec();
+    let signature = sender.signing_key.sign(&seconds_payload);
+    let signature = signature.to_vec();
+
     let response = pic.update_call(
         canister.into(),
-        sender,
+        sender.principal.0.clone(),
         "submit_new_recovery_proposal",
-        candid::encode_one(arg).unwrap(),
+        candid::encode_one(NewRecoveryProposal {
+            payload: arg,
+            security_metadata: SecurityMetadata {
+                signature,
+                payload: seconds_payload,
+                pub_key_der: sender
+                    .signing_key
+                    .verifying_key()
+                    .to_public_key_der()
+                    .unwrap()
+                    .into_vec(),
+            },
+        })
+        .unwrap(),
     );
     let response: Result<(), String> = candid::decode_one(response.unwrap().as_slice()).unwrap();
     println!("{:?}", response);

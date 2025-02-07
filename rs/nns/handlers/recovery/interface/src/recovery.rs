@@ -62,12 +62,16 @@ pub struct RecoveryProposal {
     pub node_operator_ballots: Vec<NodeOperatorBallot>,
     /// Payload for the proposal.
     pub payload: RecoveryPayload,
+    /// Metadata used for verifying the user's identity and the integrity
+    /// of the proposal itself
+    pub security_metadata: SecurityMetadata,
 }
 
 #[derive(Debug, CandidType, Deserialize, Clone)]
 /// Conveniece struct used for submitting a new proposal
 pub struct NewRecoveryProposal {
     pub payload: RecoveryPayload,
+    pub security_metadata: SecurityMetadata,
 }
 
 #[derive(Debug, CandidType, Deserialize, Clone)]
@@ -81,6 +85,7 @@ impl RecoveryProposal {
     pub fn signature_payload(&self) -> Result<Vec<u8>> {
         let self_without_ballots = Self {
             node_operator_ballots: vec![],
+            security_metadata: SecurityMetadata::empty(),
             ..self.clone()
         };
         candid::encode_one(self_without_ballots)
@@ -138,6 +143,7 @@ impl VerifyIntegirty for NodeOperatorBallot {
 
 impl VerifyIntegirty for RecoveryProposal {
     fn verify_integrity(&self) -> Result<()> {
+        self.security_metadata.validate_metadata(&self.proposer)?;
         self.node_operator_ballots
             .iter()
             .filter(|ballot| !ballot.ballot.eq(&Ballot::Undecided))

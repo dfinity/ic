@@ -1,7 +1,7 @@
 use candid::Principal;
 use ed25519_dalek::{ed25519::signature::SignerMut, pkcs8::EncodePublicKey, SigningKey};
 use ic_nns_handler_recovery_interface::{
-    recovery::{NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal},
+    recovery::{RecoveryPayload, VoteOnRecoveryProposal},
     security_metadata::SecurityMetadata,
     Ballot,
 };
@@ -22,14 +22,7 @@ fn disallow_double_vote() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 
@@ -46,18 +39,11 @@ fn disallow_vote_anonymous() {
     let mut args = RegistryPreparationArguments::default();
     let (pic, canister) = init_pocket_ic(&mut args);
 
-    let node_operators = extract_node_operators_from_init_data(&args);
-    let mut node_operators_iterator = node_operators.iter();
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 
@@ -75,14 +61,7 @@ fn allow_votes_even_if_executed() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 
@@ -101,14 +80,7 @@ fn disallow_votes_bad_signature() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
 
     assert!(response.is_ok());
 
@@ -145,14 +117,7 @@ fn disallow_votes_wrong_public_key() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_ok());
 
     let pending = get_pending(&pic, canister);
@@ -195,14 +160,7 @@ fn disallow_votes_anonymous() {
     let mut node_operators_iterator = node_operators.iter_mut();
     let first = node_operators_iterator.next().unwrap();
 
-    let response = submit_proposal(
-        &pic,
-        canister,
-        first.principal.0.clone(),
-        NewRecoveryProposal {
-            payload: RecoveryPayload::Halt,
-        },
-    );
+    let response = submit_proposal(&pic, canister, first, RecoveryPayload::Halt);
     assert!(response.is_ok());
 
     let response = vote(
