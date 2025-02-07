@@ -1405,6 +1405,26 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
     })
     .unwrap();
 
+    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+        start: 0,
+        length: 1u64,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+        start: 0,
+        length: 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let get_blocks_args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: 1
+    })
+    .unwrap();
+
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_wasm_mainnet,
         ledger_wasm_low_instruction_limits(),
@@ -1413,6 +1433,10 @@ fn test_stable_migration_endpoints_disabled(ledger_wasm_mainnet: Vec<u8>) {
             ("send_pb", send_pb_args),
             ("send_dfx", send_dfx_args),
             ("transfer", transfer_args),
+            ("get_blocks_pb", get_blocks_pb_args),
+            ("iter_blocks_pb", iter_blocks_pb_args),
+            ("query_blocks", get_blocks_args.clone()),
+            ("query_encoded_blocks", get_blocks_args),
         ],
     );
 }
