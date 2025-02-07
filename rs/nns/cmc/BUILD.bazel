@@ -28,6 +28,8 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-xrc-types",
@@ -38,7 +40,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
     "@crate_index//:yansi",
-    "@crate_index//:ic-cdk"
 ]
 
 MACRO_DEPENDENCIES = [
