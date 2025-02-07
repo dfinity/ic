@@ -51,6 +51,11 @@ pub fn ic0_mint_cycles(amount: u64) -> u64 {
     unsafe { mint_cycles(amount) }
 }
 
+/// caller that returns principalId instead of Principal
+pub fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
+
 // Duplicating some functionality that is no longer available
 // after migration to ic_cdk
 pub async fn call_protobuf<Arg, Res>(
