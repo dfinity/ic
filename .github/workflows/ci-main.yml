@@ -115,47 +115,6 @@ jobs:
           path: |
             bazel-bep.pb.gpg
             profile.json
-  bazel-build-all-config-check:
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e8185171700872d48fdfb4b08e175fca5be27b3fbbc4d7bed681ec8486f8b1d
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
-    name: Bazel Build All Config Check
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Run bazel build --config=check //rs/...
-        id: bazel-build-config-check
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
