@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use candid::Principal;
-use ed25519_dalek::{pkcs8::EncodePublicKey, SigningKey};
+use ed25519_dalek::{ed25519::signature::SignerMut, pkcs8::EncodePublicKey, SigningKey};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_handler_recovery_interface::{
@@ -341,7 +341,9 @@ fn vote_with_only_ballot(
     // Add logic for signing so that this is valid
     let pending = get_pending(pic, canister);
     let last = pending.last().unwrap();
-    let signature = last.sign(&mut sender.signing_key).unwrap();
+    let payload = last.signature_payload().unwrap();
+    let signature = sender.signing_key.sign(&payload);
+    let signature = signature.to_vec();
 
     vote(
         pic,
@@ -349,9 +351,7 @@ fn vote_with_only_ballot(
         sender.principal.0.clone(),
         VoteOnRecoveryProposal {
             security_metadata: SecurityMetadata {
-                payload: last
-                    .signature_payload()
-                    .expect("Should be able to fetch payload"),
+                payload,
                 signature,
                 pub_key_der: sender
                     .signing_key

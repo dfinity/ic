@@ -43,7 +43,7 @@ impl SecurityMetadata {
 
     /// Verifies the signature authenticity of security metadata.
     pub fn verify_signature(&self) -> Result<()> {
-        verify_payload_naive(&self.pub_key_der, &self.signature, &self.payload)
+        verify_payload_naive(&self.pub_key_der, &self.payload, &self.signature)
     }
 
     /// Verifies if the passed principal is derived from a given public key (also known as

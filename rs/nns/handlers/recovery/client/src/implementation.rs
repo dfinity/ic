@@ -93,16 +93,15 @@ impl RecoveryCanister for RecoveryCanisterImpl {
     async fn vote_on_latest_proposal(&self, ballot: Ballot) -> Result<()> {
         self.ensure_not_anonymous()?;
         let last_proposal = self.fetch_latest_proposal().await?;
-        let signature = self
-            .signer
-            .sign_payload(&last_proposal.signature_payload()?)?;
+        let payload = last_proposal.signature_payload()?;
+        let signature = self.signer.sign_payload(&payload)?;
 
         self.update(
             "vote_on_proposal",
             candid::encode_one(VoteOnRecoveryProposal {
                 security_metadata: SecurityMetadata {
                     signature,
-                    payload: last_proposal.signature_payload()?,
+                    payload,
                     pub_key_der: self.signer.to_public_key_der()?,
                 },
                 ballot,

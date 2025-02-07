@@ -1,5 +1,5 @@
 use candid::Principal;
-use ed25519_dalek::{pkcs8::EncodePublicKey, SigningKey};
+use ed25519_dalek::{ed25519::signature::SignerMut, pkcs8::EncodePublicKey, SigningKey};
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload, VoteOnRecoveryProposal},
     security_metadata::SecurityMetadata,
@@ -120,7 +120,7 @@ fn disallow_votes_bad_signature() {
             ballot: Ballot::Yes,
             security_metadata: SecurityMetadata {
                 payload: vec![],
-                signature: [[0; 32]; 2],
+                signature: vec![],
                 pub_key_der: first
                     .signing_key
                     .verifying_key()
@@ -159,7 +159,11 @@ fn disallow_votes_wrong_public_key() {
     let last_proposal = pending.last().unwrap();
 
     let mut new_key_pair = SigningKey::generate(&mut rand::rngs::OsRng);
-    let signature = last_proposal.sign(&mut new_key_pair).unwrap();
+    let payload = last_proposal
+        .signature_payload()
+        .expect("Should be able to serialize payload");
+    let signature = new_key_pair.sign(&payload);
+    let signature = signature.to_vec();
 
     let response = vote(
         &pic,
@@ -167,9 +171,7 @@ fn disallow_votes_wrong_public_key() {
         first.principal.0.clone(),
         VoteOnRecoveryProposal {
             security_metadata: SecurityMetadata {
-                payload: last_proposal
-                    .signature_payload()
-                    .expect("Should be able to serialize payload"),
+                payload,
                 signature,
                 pub_key_der: new_key_pair
                     .verifying_key()
