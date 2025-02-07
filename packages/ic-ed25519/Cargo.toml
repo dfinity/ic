@@ -1,9 +1,13 @@
 [package]
-name = "ic-crypto-ed25519"
-version.workspace = true
+name = "ic-ed25519"
+version = "0.1.0"
+description = "A package created for the Internet Computer Protocol for creating and verifying Ed25519 signatures."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
 authors.workspace = true
 edition.workspace = true
-description.workspace = true
 documentation.workspace = true
 
 [dependencies]

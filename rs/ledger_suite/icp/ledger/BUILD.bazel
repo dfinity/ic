@@ -120,6 +120,7 @@ rust_ic_test(
         ":ledger-canister-wasm-next-version",
         "@mainnet_icp_ledger_canister-v1//file",
         "@mainnet_icp_ledger_canister-v2//file",
+        "@mainnet_icp_ledger_canister-v3//file",
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
@@ -128,6 +129,7 @@ rust_ic_test(
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "ICP_LEDGER_DEPLOYED_VERSION_V1_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v1//file)",
         "ICP_LEDGER_DEPLOYED_VERSION_V2_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v2//file)",
+        "ICP_LEDGER_DEPLOYED_VERSION_V3_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v3//file)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",

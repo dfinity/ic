@@ -34,7 +34,7 @@ ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }

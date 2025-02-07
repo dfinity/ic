@@ -9,11 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+* Added the `query_stats` field for `canister_status`/`get_sns_canisters_summary` methods.
 
-- The `LogVisibility` returned from `canister_status` has one more variant `allowed_viewers`,
-  consistent with the corresponding management canister API. Calling `canister_status` for a
-  canister with such a log visibility setting will no longer panic.
+## Changed
 
 ## Deprecated
 
