@@ -1,12 +1,7 @@
 [Unit]
 Description=Bootstrap the IC node
 After=upgrade-shared-data-store.service
-Requires=var-lib-ic-data.mount
-After=var-lib-ic-data.mount
-Requires=var-lib-ic-crypto.mount
-After=var-lib-ic-crypto.mount
-Requires=var-lib-ic-backup.mount
-After=var-lib-ic-backup.mount
+RequiresMountsFor=/boot/config /var/lib/ic/data /var/lib/ic/crypto
 Before=setup-ssh-user-keys.service
 
 [Install]

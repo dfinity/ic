@@ -15,7 +15,7 @@ use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
@@ -1124,7 +1124,7 @@ impl CanisterQueues {
         &mut self,
         request: Request,
         reject_context: RejectContext,
-        subnet_ids: &[PrincipalId],
+        subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),

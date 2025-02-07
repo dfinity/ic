@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_agent::export::Principal;
-use ic_management_canister_types::{CanisterStatusType, DefiniteCanisterSettingsArgs};
+use ic_management_canister_types_private::{CanisterStatusType, DefiniteCanisterSettingsArgs};
 pub use ic_utils::interfaces::management_canister::builders::InstallMode;
 use serde::Deserialize;
 

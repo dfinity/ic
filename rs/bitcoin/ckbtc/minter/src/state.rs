@@ -301,11 +301,11 @@ pub struct CkBtcMinterState {
     /// before being sent.
     pub max_time_in_queue_nanos: u64,
 
-    /// Per-principal lock for update_balance
-    pub update_balance_principals: BTreeSet<Principal>,
+    /// Per-account lock for update_balance
+    pub update_balance_accounts: BTreeSet<Account>,
 
-    /// Per-principal lock for retrieve_btc
-    pub retrieve_btc_principals: BTreeSet<Principal>,
+    /// Per-account lock for retrieve_btc
+    pub retrieve_btc_accounts: BTreeSet<Account>,
 
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
@@ -367,14 +367,13 @@ pub struct CkBtcMinterState {
     pub utxos_state_addresses: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// This map contains the UTXOs we removed due to a transaction finalization
-    /// while there was a concurrent update_balance call for the principal whose
-    /// UTXOs participated in the transaction. The UTXOs can belong to any
-    /// subaccount of the principal.
+    /// while there was a concurrent update_balance call for the account whose
+    /// UTXOs participated in the transaction.
     ///
     /// We insert a new entry into this map if we discover a concurrent
     /// update_balance calls during a transaction finalization and remove the
     /// entry once the update_balance call completes.
-    pub finalized_utxos: BTreeMap<Principal, BTreeSet<Utxo>>,
+    pub finalized_utxos: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// Process one timer event at a time.
     pub is_timer_running: bool,
@@ -696,9 +695,9 @@ impl CkBtcMinterState {
 
     fn forget_utxo(&mut self, utxo: &Utxo) {
         if let Some(account) = self.outpoint_account.remove(&utxo.outpoint) {
-            if self.update_balance_principals.contains(&account.owner) {
+            if self.update_balance_accounts.contains(&account) {
                 self.finalized_utxos
-                    .entry(account.owner)
+                    .entry(account)
                     .or_default()
                     .insert(utxo.clone());
             }
@@ -932,7 +931,7 @@ impl CkBtcMinterState {
     /// Return UTXOs of the given account that are known to the minter.
     pub fn known_utxos_for_account(&self, account: &Account) -> Vec<Utxo> {
         let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
+        let maybe_finalized_utxos = self.finalized_utxos.get(account);
         match (maybe_existing_utxos, maybe_finalized_utxos) {
             (Some(existing_utxos), Some(finalized_utxos)) => existing_utxos
                 .union(finalized_utxos)
@@ -965,7 +964,7 @@ impl CkBtcMinterState {
                 .unwrap_or(false)
                 || self
                     .finalized_utxos
-                    .get(&account.owner)
+                    .get(account)
                     .map(|utxos| utxos.contains(utxo))
                     .unwrap_or(false)
         };
@@ -1452,8 +1451,8 @@ impl From<InitArgs> for CkBtcMinterState {
                 .min_confirmations
                 .unwrap_or(crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS),
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
-            update_balance_principals: Default::default(),
-            retrieve_btc_principals: Default::default(),
+            update_balance_accounts: Default::default(),
+            retrieve_btc_accounts: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),

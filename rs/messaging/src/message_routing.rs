@@ -2,6 +2,7 @@ use crate::{
     routing, scheduling,
     state_machine::{StateMachine, StateMachineImpl},
 };
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
@@ -659,6 +660,11 @@ impl BatchProcessorImpl {
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .best_effort_responses
+                .clone(),
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(
@@ -1072,9 +1078,7 @@ impl BatchProcessorImpl {
             match optional_public_key_proto {
                 Some(public_key_proto) => {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
-                    match ic_crypto_ed25519::PublicKey::convert_raw_to_der(
-                        &public_key_proto.key_value,
-                    ) {
+                    match ic_ed25519::PublicKey::convert_raw_to_der(&public_key_proto.key_value) {
                         Ok(pk_der) => {
                             node_public_keys.insert(node_id, pk_der);
                         }
@@ -1513,6 +1517,7 @@ impl MessageRoutingImpl {
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
+            BestEffortResponsesFeature::Enabled,
             log.clone(),
         ));
 

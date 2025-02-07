@@ -23,7 +23,7 @@ use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_type::SubnetType;

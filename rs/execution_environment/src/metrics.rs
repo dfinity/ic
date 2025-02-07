@@ -1,5 +1,5 @@
 use ic_error_types::UserError;
-use ic_management_canister_types::QueryMethod;
+use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,

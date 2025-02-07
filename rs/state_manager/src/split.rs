@@ -189,12 +189,7 @@ fn write_checkpoint(
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(
-            &state_layout,
-            old_cp,
-            config.lsmt_config.lsmt_status,
-            Some(thread_pool),
-        )
+        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
@@ -215,14 +210,9 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
     );
 
-    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
-        state,
-        new_height,
-        &tip_channel,
-        &metrics.checkpoint_metrics,
-        config.lsmt_config.lsmt_status,
-    )
-    .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+    let (cp_layout, _has_downgrade) =
+        make_unvalidated_checkpoint(state, new_height, &tip_channel, &metrics.checkpoint_metrics)
+            .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
     validate_checkpoint_and_remove_unverified_marker(
         &cp_layout,
         None,
