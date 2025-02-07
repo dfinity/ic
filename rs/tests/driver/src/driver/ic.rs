@@ -8,7 +8,6 @@ use crate::driver::{
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -253,7 +252,7 @@ impl InternetComputer {
             let tnet = TNet::read_attribute(env)
                 .image_url(image_url.as_ref())
                 .image_sha(image_sha.as_ref());
-            block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
+            //block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
             tnet.write_attribute(env);
         }
 
@@ -284,6 +283,7 @@ impl InternetComputer {
         info!(env.logger(), "{topology_snapshot}");
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
+        std::thread::sleep(Duration::from_secs(15));
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }

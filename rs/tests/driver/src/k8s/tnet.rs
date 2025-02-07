@@ -11,9 +11,7 @@ use url::Url;
 use anyhow::{bail, Result};
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
-use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, Secret, Service, TypedLocalObjectReference,
-};
+use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
@@ -31,14 +29,15 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, PlaynetCertificate, VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
-use crate::k8s::persistentvolumeclaim::*;
+use crate::k8s::job::*;
+use crate::k8s::reservations::*;
 use crate::k8s::virtualmachine::*;
 
 const PLAYNET_POOL_SIZE: usize = 33;
@@ -391,24 +390,46 @@ impl TNet {
                     format!("{}-{}", self.nodes.len(), vm_req.name),
             }
         );
-        let pvc_name = format!("{}-guestos", vm_name.clone());
-        let data_source = Some(TypedLocalObjectReference {
-            api_group: None,
-            kind: "PersistentVolumeClaim".to_string(),
-            name: match vm_req.primary_image {
-                ImageLocation::PersistentVolumeClaim { name } => name,
-                _ => unimplemented!(),
-            },
-        });
 
-        create_pvc(
-            &k8s_client.api_pvc,
-            &pvc_name,
-            "100Gi",
-            None,
-            None,
-            data_source,
+        let _r = create_reservation(
+            vm_name.clone(),
+            vm_name.clone(),
+            self.unique_name.clone().expect("missing unique name"),
+            "1h".to_string().into(),
+            Some((
+                vm_req.vcpus.to_string(),
+                vm_req.memory_kibibytes.to_string() + "Ki",
+            )),
+        )
+        .await?;
+
+        // create a job to download the image and extract it
+        // TODO: only download it once and copy it if it's already downloaded
+        let args = format!(
+            "set -e; apk add zstd tar; \
+            mkdir -p /tnet/{vm_name}; \
+            wget -O /tnet/{vm_name}/img.tar.zst {image_url}; \
+            unzstd -d /tnet/{vm_name}/img.tar.zst; \
+            tar -xvf /tnet/{vm_name}/img.tar -C /tnet/{vm_name}; \
+            chmod -R 777 /tnet/{vm_name}; \
+            rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
+            vm_name = vm_name,
+            image_url = format!(
+                "http://server.bazel-remote.svc.cluster.local:8080/cas/{}",
+                self.image_sha
+            ),
+        );
+        let _j = create_job(
+            &vm_name.clone(),
+            "alpine:latest",
+            vec!["/bin/sh", "-c"],
+            vec![&args],
+            "/srv/tnet".into(),
             self.owner_reference(),
+            Some(vec![(
+                "tnet.internetcomputer.org/name".to_string(),
+                self.unique_name.clone().expect("missing unique name"),
+            )]),
         )
         .await?;
 

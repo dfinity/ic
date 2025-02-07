@@ -732,11 +732,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "k8s-openapi": crate.spec(
                 version = "^0.22.0",
                 features = [
-                    "v1_24",
+                    "v1_28",
+                    "schemars",
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.93.1",
+                version = "^0.94.0",
+                features = [
+                    "client",
+                    "derive",
+                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
@@ -1120,7 +1125,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "schemars": crate.spec(
-                version = "^0.8.16",
+                version = "^0.8.21",
+                features = [
+                    "derive",
+                ],
             ),
             "scoped_threadpool": crate.spec(
                 version = "^0.1.9",

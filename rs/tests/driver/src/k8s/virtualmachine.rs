@@ -28,6 +28,7 @@ spec:
       labels:
         kubevirt.io/vm: {name}
     spec:
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
@@ -116,6 +117,7 @@ spec:
       labels:
         kubevirt.io/vm: {name}
     spec:
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
@@ -149,8 +151,9 @@ spec:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
         - containerDisk:
             image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
