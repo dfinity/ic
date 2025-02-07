@@ -305,9 +305,12 @@ fn submit_proposal(
     sender: &mut NodeOperatorArg,
     arg: RecoveryPayload,
 ) -> Result<(), String> {
+    // Update time so that it doesn't fail the threshold
+    pic.set_time(SystemTime::now());
+
     // Duration from epoch
-    let from_epoch = SystemTime::UNIX_EPOCH.elapsed().unwrap();
-    let seconds_payload = from_epoch.as_secs().to_le_bytes().to_vec();
+    let now = SystemTime::UNIX_EPOCH.elapsed().unwrap();
+    let seconds_payload = now.as_secs().to_le_bytes().to_vec();
     let signature = sender.signing_key.sign(&seconds_payload);
     let signature = signature.to_vec();
 

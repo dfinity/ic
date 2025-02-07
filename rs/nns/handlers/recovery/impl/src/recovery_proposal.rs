@@ -43,6 +43,9 @@ pub fn submit_recovery_proposal(
 
     // Verify metadata integrity
     new_proposal.security_metadata.validate_metadata(&caller.0).map_err(|e| e.to_string())?;
+    // Ensure that timestamp sent doesn't differ more than
+    // the threshold
+    check_secs_difference(&new_proposal.security_metadata.payload)?;
 
     PROPOSALS.with_borrow_mut(|proposals| {
         match proposals.len() {
@@ -241,4 +244,26 @@ fn vote_on_last_proposal(
     }
 
     Ok(())
+}
+
+const ALLOWED_LAG: u64 = 10 * 60; // 10 minutes
+
+fn check_secs_difference(seconds_payload: &[u8]) -> Result<(), String> {
+    let now = now_seconds();
+    
+    if seconds_payload.len() != 8 {
+        return Err(format!("Incorect signature lenght: {}", seconds_payload.len()));
+    }
+
+    let mut total_input = [0; 8];
+    total_input.copy_from_slice(seconds_payload);
+
+    let payload_seconds = u64::from_le_bytes(total_input);
+    ic_cdk::println!("NOW {}, Sent {}", now, payload_seconds);
+    let abs_diff = now.abs_diff(payload_seconds);
+
+    match abs_diff > ALLOWED_LAG {
+        true => Err(format!("Proposal submittion timestamp lags more than allowed {} seconds", ALLOWED_LAG)),
+        false => Ok(())
+    }
 }

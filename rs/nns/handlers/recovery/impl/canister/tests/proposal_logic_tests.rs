@@ -1,4 +1,8 @@
+use std::time::{Duration, SystemTime};
+
 use candid::Principal;
+use ed25519_dalek::pkcs8::EncodePublicKey;
+use ed25519_dalek::Signer;
 use ic_nns_handler_recovery_interface::{
     recovery::{NewRecoveryProposal, RecoveryPayload},
     security_metadata::SecurityMetadata,
@@ -523,4 +527,45 @@ fn place_any_proposal_after_there_are_three() {
 
         assert!(response.is_err())
     }
+}
+
+#[test]
+fn submit_proposal_lag_more_than_threshold() {
+    let mut args = RegistryPreparationArguments::default();
+    let (pic, canister) = init_pocket_ic(&mut args);
+
+    let mut node_operators = extract_node_operators_from_init_data(&args);
+    let first = node_operators.iter_mut().next().unwrap();
+
+    // Duration from epoch
+    let from_epoch = SystemTime::UNIX_EPOCH.elapsed().unwrap();
+    let before_one_hour = from_epoch
+        .checked_sub(Duration::from_secs(1 * 60 * 60))
+        .unwrap();
+    let seconds_payload = before_one_hour.as_secs().to_le_bytes().to_vec();
+    let signature = first.signing_key.sign(&seconds_payload);
+    let signature = signature.to_vec();
+
+    let response = pic.update_call(
+        canister.into(),
+        first.principal.0.clone(),
+        "submit_new_recovery_proposal",
+        candid::encode_one(NewRecoveryProposal {
+            payload: RecoveryPayload::Halt,
+            security_metadata: SecurityMetadata {
+                signature,
+                payload: seconds_payload,
+                pub_key_der: first
+                    .signing_key
+                    .verifying_key()
+                    .to_public_key_der()
+                    .unwrap()
+                    .into_vec(),
+            },
+        })
+        .unwrap(),
+    );
+    let response: Result<(), String> = candid::decode_one(response.unwrap().as_slice()).unwrap();
+
+    assert!(response.is_err());
 }
