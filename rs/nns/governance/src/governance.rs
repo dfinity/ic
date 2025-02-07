@@ -4939,9 +4939,9 @@ impl Governance {
         &self,
         // (Note that this is the value associated with ManageNetworkEconomics,
         // not the resulting NetworkEconomics.)
-        network_economics: &NetworkEconomics,
+        proposed_network_economics: &NetworkEconomics,
     ) -> Result<(), GovernanceError> {
-        let new_network_economics = network_economics.inherit_from(self.economics());
+        let new_network_economics = proposed_network_economics.inherit_from(self.economics());
 
         // It maybe does not make sense to be able to set transaction_fee_e8s
         // via proposal. What we probably want instead is to fetch this value
