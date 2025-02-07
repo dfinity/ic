@@ -4883,6 +4883,45 @@ impl Governance {
         Ok(())
     }
 
+    /// This verifies the following:
+    ///
+    ///     1. When the changes are applied, the resulting NetworkEconomics is
+    ///        valid. See NetworkEconomics::validate.
+    ///
+    /// Since self.heap_data.economics can be different when a proposal is
+    /// executed (compared to when it is created), this should be performed both
+    /// at proposal creation time AND execution time.
+    ///
+    /// Note that it is not considered "invalid" when the "modified" result is
+    /// the same as the original (i.e. setting F to V even though the current
+    /// value of F is ALREADY V). This is because such a proposal is not
+    /// actually harmful to the system; just maybe confusing to users.
+    fn validate_manage_network_economics(
+        &self,
+        // (Note that this is the value associated with ManageNetworkEconomics,
+        // not the resulting NetworkEconomics.)
+        network_economics: &NetworkEconomics,
+    ) -> Result<(), GovernanceError> {
+        let new_network_economics = network_economics.inherit_from(self.economics());
+
+        // It maybe does not make sense to be able to set transaction_fee_e8s
+        // via proposal. What we probably want instead is to fetch this value
+        // from ledger.
+
+        new_network_economics
+            .validate()
+            .map_err(|defects| {
+                let message = format!(
+                    "The resulting settings would not be valid for the \
+                     following reason(s):\n\
+                     - {}",
+                    defects.join("\n  - "),
+                );
+
+                GovernanceError::new_with_message(ErrorType::InvalidProposal, message)
+            })
+    }
+
     pub(crate) fn economics(&self) -> &NetworkEconomics {
         self.heap_data
             .economics
@@ -4960,8 +4999,10 @@ impl Governance {
             Action::ManageNeuron(manage_neuron) => {
                 self.validate_manage_neuron_proposal(manage_neuron)
             }
-            Action::ManageNetworkEconomics(_)
-            | Action::ApproveGenesisKyc(_)
+            Action::ManageNetworkEconomics(network_economics) =>
+                self.validate_manage_network_economics(network_economics),
+
+            Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::RewardNodeProviders(_)

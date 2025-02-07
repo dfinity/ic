@@ -4,7 +4,7 @@ use crate::pb::v1::{
 };
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_linear_map::LinearMap;
-use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_proto::pb::v1::{Decimal as ProtoDecimal, Percentage};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use rust_decimal::Decimal;
 use std::time::Duration;
@@ -28,6 +28,223 @@ impl NetworkEconomics {
             neurons_fund_economics: Some(NeuronsFundEconomics::with_default_values()),
             voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
         }
+    }
+
+    /// This verifies the following:
+    ///
+    ///     1. max_proposals_to_keep_per_topic > 0. The problem with 0 is that
+    ///        all future proposals would be blocked. Of course, in practice,
+    ///        this would never occur, because ManageNetworkEconomics does not
+    ///        have the ability to set this field to 0, and it already has
+    ///        positive value.
+    ///
+    ///     2. neurons_fund_economics and voting_power_economics are
+    ///
+    ///         i.  set. In practice, we would not encounter None here, for
+    ///             reasons similar to why we would not see
+    ///             max_proposals_to_keep_per_topic being set to 0.
+    ///
+    ///         ii. valid, according to their types. See their respective
+    ///             validate methods.
+    ///
+    /// If Err is returned, it will be a nonempty Vec of defects.
+    ///
+    // Other fields are allowed to be 0, but this would never occur in practice
+    // for the same reason that in practice, we we would observe that
+    // max_proposals_to_keep_per_topic is set to 0.
+    //
+    // It is redundant that Vec<String> is wrapped in Result. We do this for
+    // consistency with other validate methods.
+    pub(crate) fn validate(&self) -> Result<(), Vec<String>> {
+        let mut defects = vec![];
+
+        if self.max_proposals_to_keep_per_topic == 0 {
+            // This would not occur in practice, because ManageNetworkEconomics
+            // proposals do not have the ability to set this (nor any other
+            // field) to zero (and the current value is also already not zero).
+            defects.push(
+                "max_proposals_to_keep_per_topic must be positive.".to_string()
+            );
+        }
+
+        // Substructs must be set.
+        if self.neurons_fund_economics.is_none() {
+            defects.push("neurons_fund_economics must be set.".to_string());
+        }
+        if self.voting_power_economics.is_none() {
+            defects.push("voting_power_economics must be set.".to_string());
+        }
+
+        // Validate substructs (according to their type).
+        self.neurons_fund_economics
+            .as_ref()
+            .map(|neurons_fund_economics| {
+                if let Err(mut neurons_fund_defects) = neurons_fund_economics.validate() {
+                    defects.append(&mut neurons_fund_defects)
+                }
+            });
+        self.voting_power_economics
+            .as_ref()
+            .map(|voting_power_economics| {
+                if let Err(mut voting_power_defects) = voting_power_economics.validate() {
+                    defects.append(&mut voting_power_defects)
+                }
+            });
+
+        if !defects.is_empty() {
+            return Err(defects);
+        }
+
+        Ok(())
+    }
+}
+
+impl NeuronsFundEconomics {
+    /// This verifies the following:
+    ///
+    ///     1. All fields are set.
+    ///
+    ///     2. max >= min. In particular, maximum_icp_xdr_rate vs. minimum_icp_xdr_rate.
+    ///
+    ///     3. neurons_fund_matched_funding_curve_coefficients is valid per its
+    ///     type. (See NeuronsFundMatchedFundingCurveCoefficients::validate).
+    ///
+    /// If Err is returned, it will be a nonempty Vec of defects.
+    fn validate(&self) -> Result<(), Vec<String>> {
+        let Self {
+            maximum_icp_xdr_rate,
+            minimum_icp_xdr_rate,
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            neurons_fund_matched_funding_curve_coefficients,
+        } = self;
+
+        let mut defects = vec![];
+
+        // Everything must be set.
+        if maximum_icp_xdr_rate.is_none() {
+            defects.push("maximum_icp_xdr_rate must be set.".to_string());
+        }
+        if minimum_icp_xdr_rate.is_none() {
+            defects.push("minimum_icp_xdr_rate must be set.".to_string());
+        }
+        if max_theoretical_neurons_fund_participation_amount_xdr.is_none() {
+            defects.push("max_theoretical_neurons_fund_participation_amount_xdr must be set.".to_string());
+        }
+        if neurons_fund_matched_funding_curve_coefficients.is_none() {
+            defects.push("neurons_fund_matched_funding_curve_coefficients must be set.".to_string());
+        }
+
+        // Validate that max >= min.
+        match (maximum_icp_xdr_rate, minimum_icp_xdr_rate) { // Unwrap both at once.
+            (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) => {
+                if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
+                    defects.push(format!(
+                        "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
+                        maximum_icp_xdr_rate, minimum_icp_xdr_rate,
+                    ));
+                }
+            }
+            // Other cases are moot.
+            _ => (),
+        }
+
+        // Validate substruct(s) (according to their type).
+        self.neurons_fund_matched_funding_curve_coefficients
+            .as_ref()
+            .map(|neurons_fund_matched_funding_curve_coefficients| {
+                if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) = neurons_fund_matched_funding_curve_coefficients.validate() {
+                    defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
+                }
+            });
+
+        if !defects.is_empty() {
+            return Err(defects);
+        }
+
+        Ok(())
+    }
+}
+
+impl NeuronsFundMatchedFundingCurveCoefficients {
+    /// This verifies the following:
+    ///
+    ///     1. All fields are set.
+    ///
+    ///     2. All (Decimal) values are valid for their type (i.e. can be
+    ///        converted to rust_decimal::Decimal).
+    ///
+    ///     3. one_third_participation_milestone_xdr <
+    ///        full_participation_milestone_xdr.
+    ///
+    /// If Err is returned, it will be a nonempty Vec of defects.
+    fn validate(&self) -> Result<(), Vec<String>> {
+        let Self {
+            contribution_threshold_xdr,
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+        } = self;
+
+        let mut defects = vec![];
+
+        // Everything must be set.
+        if contribution_threshold_xdr.is_none() {
+            defects.push("contribution_threshold_xdr must be set.".to_string());
+        }
+        if one_third_participation_milestone_xdr.is_none() {
+            defects.push("one_third_participation_milestone_xdr must be set.".to_string());
+        }
+        if full_participation_milestone_xdr.is_none() {
+            defects.push("full_participation_milestone_xdr must be set.".to_string());
+        }
+
+        // All values must be valid (per their type).
+        fn try_convert_decimal(original: &Option<ProtoDecimal>) -> Result<Decimal, /* human_readable */ &str> {
+            const DEFAULT_DECIMAL: ProtoDecimal = ProtoDecimal { human_readable: None };
+
+            let human_readable: &str = original
+                .as_ref()
+                .unwrap_or(&DEFAULT_DECIMAL)
+                .human_readable
+                .as_ref()
+                .map(|human_readable: &String| -> &str { &*human_readable })
+                .unwrap_or("");
+
+            Decimal::try_from(human_readable).map_err(|_ignore| human_readable)
+        }
+
+        let _contribution_threshold_xdr = try_convert_decimal(contribution_threshold_xdr)
+            .inspect_err(|original| {
+                defects.push(format!("contribution_threshold_xdr ({}) is not a Decimal.", original));
+            });
+        let one_third_participation_milestone_xdr = try_convert_decimal(one_third_participation_milestone_xdr)
+            .inspect_err(|original| {
+                defects.push(format!("one_third_participation_milestone_xdr ({}) is not a Decimal.", original));
+            });
+        let full_participation_milestone_xdr = try_convert_decimal(full_participation_milestone_xdr)
+            .inspect_err(|original| {
+                defects.push(format!("full_participation_milestone_xdr ({}) is not a Decimal.", original));
+            });
+
+        // later milestones must be > earlier ones
+        match (one_third_participation_milestone_xdr, full_participation_milestone_xdr) { // Unwrap both at once.
+            (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) => {
+                if one_third_participation_milestone_xdr <= full_participation_milestone_xdr {
+                    defects.push(format!(
+                        "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
+                        one_third_participation_milestone_xdr,
+                        full_participation_milestone_xdr,
+                    ));
+                }
+            }
+            // Other cases are moot.
+            _ => (),
+        }
+
+        if !defects.is_empty() {
+            return Err(defects);
+        }
+
+        Ok(())
     }
 }
 
@@ -88,6 +305,38 @@ impl VotingPowerEconomics {
     pub fn get_clear_following_after_seconds(&self) -> u64 {
         self.clear_following_after_seconds
             .unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
+    }
+
+    /// This just validates that all fields are set.
+    ///
+    /// They are allowed to be set to 0 though.
+    ///
+    /// In practice, we would never see None in any fields, because
+    /// ManageNetworkEconomics has no way to set fields to None (see impl
+    /// InheritFrom for Option), and in production, these fields are already set
+    /// to Some.
+    ///
+    /// If Err is returned, it will be a nonempty Vec of defects.
+    pub fn validate(&self) -> Result<(), Vec<String>> {
+        let mut defects = vec![];
+
+        if self.start_reducing_voting_power_after_seconds.is_none() {
+            // In practice, this cannot occur, because there is no way for
+            // ManageNetworkEconomics proposals to set this to None, and its
+            // current value is already Some.
+            defects.push("start_reducing_voting_power_after_seconds must be set.".to_string());
+        }
+
+        if self.clear_following_after_seconds.is_none() {
+            // Ditto comment regarding start_reducing_voting_power_after_seconds.
+            defects.push("clear_following_after_seconds must be set.".to_string());
+        }
+
+        if !defects.is_empty() {
+            return Err(defects);
+        }
+
+        Ok(())
     }
 }
 
